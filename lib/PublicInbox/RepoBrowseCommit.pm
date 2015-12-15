@@ -26,7 +26,7 @@ sub git_commit_stream {
 
 	my $rel = $req->{relcmd};
 	my $x = "<html><head><title>$s</title></head><body>" .
-		"<pre\nstyle='white-space:pre-wrap'>" .
+		PublicInbox::Hval::PRE .
 		"   commit $H" .
 		"   author $au\t$ad\n" .
 		"committer $cu\t$cd\n" .

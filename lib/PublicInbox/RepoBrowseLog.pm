@@ -76,9 +76,9 @@ sub git_log_stream {
 				PublicInbox::Hval->new_oneline($an)->as_html;
 			$b = PublicInbox::Hval->new($b)->as_html;
 			$s .= "<td>$ah</td></tr>" .
-				"<tr><td colspan=3><pre\n" .
-				"style='white-space:pre-wrap'>$b</pre>".
-				'</td></tr>';
+				'<tr><td colspan=3>' .
+				PublicInbox::Hval::PRE .
+				$b . '</pre></td></tr>';
 		} else {
 			$s .= '</tr>';
 		}
