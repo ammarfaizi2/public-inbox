@@ -5,7 +5,6 @@ package PublicInbox::RepoBrowseLog;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
-require POSIX; # strftime
 use PublicInbox::Git;
 
 sub call_git {
@@ -20,9 +19,9 @@ sub call_git {
 	my $h = $q->{h};
 	$h eq '' and $h = 'HEAD';
 
-	my $fmt = '%h%x00%ct%x00%s%x00%D';
-	$fmt .= '%x00%an%x00%b' if $q->{showmsg};
-	$fmt .= '%x00%n';
+	my $fmt = '%h%x00%s%x00%D';
+	$fmt .= '%x00%ai%x00%an%x00%b' if $q->{showmsg};
+	$fmt .= '%x00%x00';
 
 	my $ofs = $q->{ofs};
 	$h .= "~$ofs" if $ofs =~ /\A\d+\z/;
@@ -47,45 +46,39 @@ sub git_log_stream {
 
 	if ($showmsg) {
 		my $qs = $q->qs(showmsg => '');
-		$x = qq{(<a\nhref="./$qs">collapse</a></th><th>Author};
+		$qs = $req->{cgi}->path_info if ($qs eq '');
+		$x = qq{<a\nhref="$qs">collapse</a>};
 	} else {
 		my $qs = $q->qs(showmsg => 1);
-		$x = qq{(<a\nhref="./$qs">expand</a>)};
+		$x = qq{<a\nhref="$qs">expand</a>};
 	}
 
 	$fh->write("<html><head><title>$desc" .
-		"</title></head><body><p>$desc</p><table><tr>" .
-		"<th>Date</th><th>Commit message $x</th></tr>");
+		"</title></head><body><tt><b>$desc</b></tt>".
+		PublicInbox::Hval::PRE . "<b>Commit Log</b> ($x)\n");
 	my %ac;
-	local $/ = "\0\n\n";
+	local $/ = "\0\0\n";
 	my $rel = $req->{relcmd};
 	while (defined(my $line = <$log>)) {
-		my ($id, $ct, $s, $D, $an, $b) = split("\0", $line);
+		my ($id, $s, $D, $ai, $an, $b) = split("\0", $line);
 		$line = undef;
 		$s = PublicInbox::Hval->new_oneline($s)->as_html;
 
-		# cannot rely on --date=format-local:... yet,
-		# it is too new (September 2015)
-		$ct = POSIX::strftime('%Y-%m-%d', gmtime($ct));
-
 		# TODO: handle $D (decorate)
-		$s = "<tr><td>$ct</td>" .
-			qq(<td><a\nhref="${rel}commit?id=$id">$s</a></td>);
+		$s = qq(<a\nhref="${rel}commit?id=$id">$s</a>);
 		if (defined $b) {
+			# cannot rely on --date=format-local:... yet,
+			# it is too new (September 2015)
 			my $ah = $ac{$an} ||=
 				PublicInbox::Hval->new_oneline($an)->as_html;
 			$b = PublicInbox::Hval->new($b)->as_html;
-			$s .= "<td>$ah</td></tr>" .
-				'<tr><td colspan=3>' .
-				PublicInbox::Hval::PRE .
-				$b . '</pre></td></tr>';
+			$fh->write("<b>$s</b>\n- by $ah @ $ai\n\n$b\n\n");
 		} else {
-			$s .= '</tr>';
+			$fh->write($s . "\n");
 		}
-		$fh->write($s);
 	}
 
-	$fh->write('</table></body></html>');
+	$fh->write('</pre></body></html>');
 }
 
 1;
