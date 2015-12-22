@@ -24,6 +24,8 @@ use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepoConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree);
+my %VCS = (git => 'Git');
+my %LOADED;
 
 sub new {
 	my ($class, $file) = @_;
@@ -61,15 +63,16 @@ sub run {
 
 	my $cmd = shift @extra;
 	if (defined $cmd && length $cmd) {
-		my $mod = $CMD{$cmd};
-		return r404() unless defined $mod;
-		if (index($mod, ':') < 0) {
-			$mod = "PublicInbox::RepoBrowse$mod";
+		my $vcs = $VCS{$repo_info->{vcs}} or return r404();
+		my $mod = $CMD{$cmd} or return r404();
+		return r404() unless defined $mod && defined $vcs;
+		$mod = "PublicInbox::RepoBrowse$vcs$mod";
+		unless ($LOADED{$mod}) {
 			eval "require $mod";
-			$CMD{$cmd} = $mod unless $@;
+			$LOADED{$mod} = 1;
 		}
 		$req->{relcmd} = '../' x scalar(@extra);
-		my $rv = eval { $mod->new->call($req) };
+		my $rv = eval { $mod->new->call($cmd, $req) };
 		$rv || r404();
 	} else {
 		$req->{relcmd} = defined $cmd ? ''  : './';

@@ -1,7 +1,7 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-package PublicInbox::RepoBrowseCommit;
+package PublicInbox::RepoBrowseGitCommit;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
@@ -84,7 +84,7 @@ sub git_commit_stream {
 	$fh->write('</pre></body></html>');
 }
 
-sub call_git {
+sub call_git_commit {
 	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
 	my $path = $repo_info->{path};

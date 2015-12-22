@@ -9,11 +9,11 @@ require PublicInbox::Hval;
 sub new { bless {}, shift }
 
 sub call {
-	my ($self, $req) = @_;
+	my ($self, $cmd, $req) = @_;
 	my $vcs = $req->{repo_info}->{vcs};
 	my $rv = eval {
 		no strict 'refs';
-		my $sub = 'call_'.$vcs;
+		my $sub = "call_${vcs}_$cmd";
 		$self->$sub($req);
 	};
 	$@ ? [ 500, ['Content-Type'=>'text/plain'], [] ] : $rv;

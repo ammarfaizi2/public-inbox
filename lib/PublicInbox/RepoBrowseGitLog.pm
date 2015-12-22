@@ -1,13 +1,13 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-package PublicInbox::RepoBrowseLog;
+package PublicInbox::RepoBrowseGitLog;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Git;
 
-sub call_git {
+sub call_git_log {
 	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
 	my $path = $repo_info->{path};
