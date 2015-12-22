@@ -23,7 +23,7 @@ use warnings;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepoConfig;
 
-my %CMD = map { lc($_) => $_ } qw(Log Commit);
+my %CMD = map { lc($_) => $_ } qw(Log Commit Tree);
 
 sub new {
 	my ($class, $file) = @_;
@@ -39,9 +39,10 @@ sub run {
 
 	# URL syntax: / repo [ / cmd [ / path ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
-	# repo and path may both contain '/'
+	# repo and path (@extra) may both contain '/'
 	my $rconfig = $self->{rconfig};
-	my (undef, $repo_path, @extra) = split(m{/+}, $cgi->path_info, -1);
+	my $path_info = uri_unescape($cgi->path_info);
+	my (undef, $repo_path, @extra) = split(m{/+}, $path_info, -1);
 
 	return r404() unless $repo_path;
 	my $repo_info;
@@ -53,7 +54,7 @@ sub run {
 
 	my $req = {
 		repo_info => $repo_info,
-		path => \@extra,
+		extra => \@extra, # path
 		cgi => $cgi,
 		rconfig => $rconfig,
 	};

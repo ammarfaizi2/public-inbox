@@ -108,7 +108,7 @@ sub call_git {
 
 sub git_blob_hrefs {
 	my ($rel, @ids) = @_;
-	map { "<a\nhref=\"${rel}blob?id=$_\"" } @ids;
+	map { "<a\nhref=\"${rel}tree?id=$_\"" } @ids;
 }
 
 sub git_blob_links {
