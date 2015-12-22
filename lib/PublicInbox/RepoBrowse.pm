@@ -69,7 +69,7 @@ sub run {
 		$mod = "PublicInbox::RepoBrowse$vcs$mod";
 		unless ($LOADED{$mod}) {
 			eval "require $mod";
-			$LOADED{$mod} = 1;
+			$LOADED{$mod} = 1 unless $@;
 		}
 		$req->{relcmd} = '../' x scalar(@extra);
 		my $rv = eval { $mod->new->call($cmd, $req) };

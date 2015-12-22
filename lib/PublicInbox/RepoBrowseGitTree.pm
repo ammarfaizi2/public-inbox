@@ -6,8 +6,6 @@ use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Git;
 use URI::Escape qw(uri_escape_utf8);
-use Encode qw/find_encoding/;
-my $enc_utf8 = find_encoding('UTF-8');
 
 my %GIT_MODE = (
 	'100644' => ' ', # blob
@@ -86,8 +84,7 @@ sub blob_show {
 			$buf = pop @buf; # last line, careful...
 			$n += scalar @buf;
 			foreach my $l (@buf) {
-				$l = $enc_utf8->decode($l);
-				$l = PublicInbox::Hval::ascii_html($l);
+				$l = PublicInbox::Hval->new_bin($l)->as_html;
 				$l .= "\n";
 				$fh->write($l);
 			}

@@ -18,7 +18,18 @@ our @EXPORT_OK = qw/ascii_html/;
 use constant STYLE => '<style>pre{white-space:pre-wrap}</style>';
 use constant PRE => "<pre\nstyle=\"white-space:pre-wrap\">"; # legacy
 
+my $enc_utf8 = find_encoding('UTF-8');
 my $enc_ascii = find_encoding('us-ascii');
+
+sub new_bin {
+	my ($class, $raw, $href) = @_;
+
+	$raw = $enc_utf8->decode($raw);
+	bless {
+		raw => $raw,
+		href => defined $href ? $href : $raw,
+	}, $class;
+}
 
 sub new {
 	my ($class, $raw, $href) = @_;

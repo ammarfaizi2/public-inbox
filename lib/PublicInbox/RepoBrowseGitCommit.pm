@@ -58,28 +58,28 @@ sub git_commit_stream {
 			my @l = ($1, $2);
 			@href = git_blob_hrefs($rel, @l);
 			@l = git_blob_links(\@href, \@l);
-			$l = "index $l[0]..$l[1]$end";
+			$l = "index $l[0]..$l[1]$end\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			my $ctx = $3;
 			my @l = ($1, $2);
 			@l = git_blob_links(\@href, \@l);
-			$l = "@@ $l[0] $l[1] @@".$ctx;
+			$l = "@@ $l[0] $l[1] \@\@$ctx\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			my @l = (split(',', $1), $2);
 			my $end = $3;
 			@href = git_blob_hrefs($rel, @l);
 			@l = git_blob_links(\@href, \@l);
 			my $res = pop @l;
-			$l = 'index '.join(',', @l)."..$res$end";
+			$l = 'index '.join(',', @l)."..$res$end\n";
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			my ($at, $ctx) = ($1, $3);
 			my @l = split(' ', $2);
 			@l = git_blob_links(\@href, \@l);
-			$l = join(' ', $at, @l, $at) . $ctx;
+			$l = join(' ', $at, @l, $at) . $ctx . "\n";
 		} else {
-			$l = PublicInbox::Hval->new($l)->as_html;
+			$l = PublicInbox::Hval->new_bin($l)->as_html;
 		}
-		$fh->write($l . "\n");
+		$fh->write($l);
 	}
 	$fh->write('</pre></body></html>');
 }
