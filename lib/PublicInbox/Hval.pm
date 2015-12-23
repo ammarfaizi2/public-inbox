@@ -74,6 +74,12 @@ sub ascii_html {
 sub as_html { ascii_html($_[0]->{raw}) }
 sub as_href { ascii_html(uri_escape_utf8($_[0]->{href})) }
 
+sub as_path {
+	my $p = uri_escape_utf8($_[0]->{href});
+	$p =~ s!%2[fF]!/!g;
+	ascii_html($p);
+}
+
 sub raw {
 	if (defined $_[1]) {
 		$_[0]->{raw} = $_[1];
