@@ -12,6 +12,7 @@ my $have_deflater = eval { require Plack::Middleware::Deflater; 1 };
 my $repo_browse = PublicInbox::RepoBrowse->new;
 
 builder {
+	enable 'Plack::Middleware::Chunked';
 	if ($have_deflater) {
 		enable 'Deflater',
 			content_type => [ 'text/html', 'text/plain',
