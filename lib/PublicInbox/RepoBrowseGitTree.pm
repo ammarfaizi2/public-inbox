@@ -5,7 +5,6 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Git;
-use URI::Escape qw(uri_escape_utf8);
 
 my %GIT_MODE = (
 	'100644' => ' ', # blob
@@ -44,9 +43,9 @@ sub git_tree_stream {
 			 PublicInbox::Hval::PRE);
 
 	if ($type eq 'tree') {
-		tree_show($fh, $git, $hex, $q, \@extra, $tslash);
+		git_tree_show($fh, $git, $hex, $q, \@extra, $tslash);
 	} elsif ($type eq 'blob') {
-		blob_show($fh, $git, $hex);
+		git_blob_show($fh, $git, $hex);
 	}
 	$fh->write('</body></html>');
 	$fh->close;
@@ -57,12 +56,12 @@ sub call_git_tree {
 	sub { git_tree_stream($self, $req, @_) };
 }
 
-sub blob_binary {
+sub git_blob_binary {
 	my ($fh) = @_;
 	$fh->write("Binary file cannot be displayed\n");
 }
 
-sub blob_show {
+sub git_blob_show {
 	my ($fh, $git, $hex) = @_;
 	# ref: buffer_is_binary in git.git
 	my $to_read = 8000; # git uses this size to detect binary files
@@ -75,7 +74,7 @@ sub blob_show {
 		return unless defined($r) && $r > 0;
 		$$left -= $r;
 
-		return blob_binary($fh) if (index($buf, "\0") >= 0);
+		return git_blob_binary($fh) if (index($buf, "\0") >= 0);
 
 		$text_p = 1;
 		$fh->write('<table><tr><td>'.PublicInbox::Hval::PRE);
@@ -106,13 +105,15 @@ sub blob_show {
 	});
 }
 
-sub tree_show {
+sub git_tree_show {
 	my ($fh, $git, $hex, $q, $extra, $tslash) = @_;
 
 	my $ls = $git->popen(qw(ls-tree --abbrev=16 -l -z), $hex);
 	local $/ = "\0";
-	my $pfx = $tslash ? './' :
-		(@$extra ? uri_escape_utf8($extra->[-1]).'/' : 'tree/');
+	my $pfx = $tslash ? '.' :
+		(@$extra ?  PublicInbox::Hval->new_bin($extra->[-1])->as_path :
+		 'tree');
+	$pfx .= '/';
 
 	my $qs = $q->qs;
 	while (defined(my $l = <$ls>)) {
@@ -120,9 +121,9 @@ sub tree_show {
 		my ($m, $t, $x, $s, $path) =
 			($l =~ /\A(\S+) (\S+) (\S+)( *\S+)\t(.+)\z/s);
 		$m = $GIT_MODE{$m} or next;
-
-		my $ref = uri_escape_utf8($path);
-		$path = PublicInbox::Hval::ascii_html($path);
+		$path = PublicInbox::Hval->new_bin($path);
+		my $ref = $path->as_path;
+		$path = $path->as_html;
 
 		if ($m eq 'g') {
 			# TODO: support cross-repository gitlinks
@@ -133,7 +134,7 @@ sub tree_show {
 		elsif ($m eq 'x') { $path = "<b>$path</b>" }
 		elsif ($m eq 'l') { $path = "<i>$path</i>" }
 
-		$ref = $pfx.PublicInbox::Hval::ascii_html($ref).$qs;
+		$ref = $pfx.$ref.$qs;
 		$fh->write("$m log raw $s <a\nhref=\"$ref\">$path</a>\n");
 	}
 	$fh->write('</pre>');
