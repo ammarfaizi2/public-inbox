@@ -6,13 +6,11 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Git;
-use PublicInbox::RepoBrowseGit qw(git_unquote);
+use PublicInbox::RepoBrowseGit qw(git_unquote git_commit_title);
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
 	'%t', '%p', '%D', '%b%x00');
-
-*ascii_html = *PublicInbox::Hval::ascii_html;
 
 sub git_commit_stream {
 	my ($req, $q, $H, $log, $fh) = @_;
@@ -27,23 +25,40 @@ sub git_commit_stream {
 	chomp(my $p = <$log>); # parents
 	my @p = split(' ', $p);
 	chomp(my $D = <$log>); # TODO: decorate
+	my $git = $req->{repo_info}->{git};
 
 	my $rel = $req->{relcmd};
 	my $x = "<html><head><title>$s</title></head><body>" .
 		PublicInbox::Hval::PRE .
 		"   commit $H" .
-		"   author $au\t$ad\n" .
-		"committer $cu\t$cd\n" .
-		"     tree <a\nhref=\"${rel}tree?id=$t\">$t</a>\n";
+		"     tree <a\nhref=\"${rel}tree?id=$h\">$t</a>";
+	my $extra = $req->{extra};
+	if (@$extra) {
+		my @t;
+		$x .= ' [';
+		$x .= join('/', map {
+			push @t, $_;
+			my $e = PublicInbox::Hval->new_bin($_, join('/', @t));
+			my $ep = $e->as_path;
+			my $eh = $e->as_html;
+			"<a\nhref=\"${rel}tree/$ep?id=$h\">$eh</a>";
+		} @$extra);
+		$x .= ']';
+	}
+	$x .= "\n   author $au\t$ad\ncommitter $cu\t$cd\n";
 	if (scalar(@p) == 1) {
 		$x .= '   parent ';
-		$x .= qq(<a\nhref="${rel}commit?id=$p[0]">$p[0]</a>\n);
+		my $p = $p[0];
+		my $t = git_commit_title_html($git, $p);
+		$x .= qq(<a\nhref="${rel}commit?id=$p">$p</a> $t\n);
 	} elsif (scalar(@p) > 1) {
 		foreach my $p (@p) {
 			$x .= '    merge ';
 			$x .= "<a\nhref=\"${rel}commit?id=$p\">$p</a> (";
 			$x .= "<a\nhref=\"${rel}diff?id=$p&id2=$h\">";
-			$x .= "diff</a>)\n";
+			$x .= "diff</a>) ";
+			$x .= git_commit_title_html($git, $p);
+			$x .= "\n";
 		}
 	}
 	$fh->write($x .= "\n$s\n\n");
@@ -55,12 +70,13 @@ sub git_commit_stream {
 	$x = PublicInbox::Hval->new_bin($l)->as_html; # body
 	$fh->write($x."\n");
 
-	git_show_diffstat($fh, $log);
+	git_show_diffstat($req, $h, $fh, $log);
 
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
 	my $diff = { h => $h, p => \@p, rel => $rel };
+	my $cc_add;
 	while (defined($l = <$log>)) {
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
 			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
@@ -70,12 +86,14 @@ sub git_commit_stream {
 			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			$l = git_diff_ab_hunk($diff, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^\+/) { # added hunk
+		} elsif ($l =~ /^\+/ || (defined($cc_add) && $l =~ $cc_add)) {
+			# added hunk
 			chomp $l;
 			$l = '<b>'.PublicInbox::Hval->new_bin($l)->as_html.
 				"</b>\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			$l = git_diff_cc_index($diff, $1, $2, $3) . "\n";
+			$cc_add ||= $diff->{cc_add};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			$l = git_diff_cc_hunk($diff, $1, $2, $3) . "\n";
 		} else {
@@ -89,15 +107,26 @@ sub git_commit_stream {
 sub call_git_commit {
 	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
-	my $path = $repo_info->{path};
+	my $dir = $repo_info->{path};
 
 	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
-	my $git = $repo_info->{git} ||= PublicInbox::Git->new($path);
-	my $log = $git->popen(qw(show -z --numstat -p --no-notes --no-color
-				 --abbrev=16),
-				 GIT_FMT, $id);
+	my $git = $repo_info->{git} ||= PublicInbox::Git->new($dir);
+
+	my @cmd = qw(show -z --numstat -p --cc
+			--no-notes --no-color --abbrev=10);
+	my @path;
+
+	# kill trailing slash
+	my $extra = $req->{extra};
+	if (@$extra) {
+		pop @$extra if $extra->[-1] eq '';
+		@path = (join('/', @$extra));
+		push @cmd, '--follow';
+	}
+
+	my $log = $git->popen(@cmd, GIT_FMT, $id, '--', @path);
 	my $H = <$log>;
 	defined $H or return;
 	sub {
@@ -108,25 +137,15 @@ sub call_git_commit {
 	}
 }
 
-sub git_blob_hrefs {
-	my ($rel, @ids) = @_;
-	map { "<a\nhref=\"${rel}tree?id=$_\"" } @ids;
-}
-
-sub git_blob_links {
-	my ($hrefs, $labels) = @_;
-	my $i = 0;
-	map { $hrefs->[$i++].">$_</a>" } @$labels;
-}
-
 sub git_show_diffstat {
-	my ($fh, $log) = @_;
+	my ($req, $h, $fh, $log) = @_;
 	local $/ = "\0\0";
 	my $l = <$log>;
 	chomp $l;
 	my @stat = split("\0", $l);
 	my $nr = 0;
 	my ($nadd, $ndel) = (0, 0);
+	my $rel = $req->{relcmd};
 	while (defined($l = shift @stat)) {
 		$l =~ s/\n?(\S+)\t+(\S+)\t+// or next;
 		my ($add, $del) = ($1, $2);
@@ -137,12 +156,17 @@ sub git_show_diffstat {
 			$del = "-$del";
 		}
 		my $num = sprintf('% 6s/%-6s', $del, $add);
-		unless (length $l) {
+		if (length $l) {
+			$l = PublicInbox::Hval->new_bin($l);
+			my $lp = $l->as_path;
+			my $lh = $l->as_html;
+			$l = "<a\nhref=\"${rel}commit/$lp?id=$h\">$lh</a>";
+
+		} else {
 			my $from = shift @stat;
 			my $to = shift @stat;
-			$l = "$from => $to";
+			$l = git_diffstat_rename($rel, $h, $from, $to);
 		}
-		$l = PublicInbox::Hval->new_bin($l)->as_html;
 		++$nr;
 		$fh->write($num."\t".$l."\n");
 	}
@@ -190,13 +214,23 @@ sub git_diff_ab_hunk {
 	my ($nb) = ($cb =~ /\A\+(\d+),/);
 
 	my $rel = $diff->{rel};
-	my $p = $diff->{p}->[0];
-	my $h = $diff->{h};
-
-	'@@ ' .
-	"<a\nhref=\"${rel}tree/$diff->{path_a}?id=$p#n$na\">$ca</a> " .
-	"<a\nhref=\"${rel}tree/$diff->{path_b}?id=$h#n$nb\"><b>$cb</b></a> " .
-	'@@' . PublicInbox::Hval->new_bin($ctx)->as_html;
+	my $rv = '@@ ';
+	if ($na == 0) { # new file
+		$rv .= $ca;
+	} else {
+		my $p = $diff->{p}->[0];
+		$rv .= "<a\nhref=\"${rel}tree/$diff->{path_a}?id=$p#n$na\">";
+		$rv .= "$ca</a>";
+	}
+	$rv .= ' ';
+	if ($nb == 0) { # deleted file
+		$rv .= $cb;
+	} else {
+		my $h = $diff->{h};
+		$rv .= "<a\nhref=\"${rel}tree/$diff->{path_b}?id=$h#n$nb\">";
+		$rv .= "<b>$cb</b></a>";
+	}
+	$rv . ' @@' . PublicInbox::Hval->new_bin($ctx)->as_html;
 }
 
 sub git_diff_cc_hdr {
@@ -211,7 +245,12 @@ sub git_diff_cc_hdr {
 sub git_diff_cc_index {
 	my ($diff, $before, $last, $end) = @_;
 	$end = PublicInbox::Hval->new_bin($end)->as_html;
-	$diff->{pobj_cc} = [ split(',', $before) ];
+	my @before = split(',', $before);
+	$diff->{pobj_cc} = \@before;
+	$diff->{cc_add} ||= eval {
+		my $n = scalar(@before) - 1;
+		qr/^ {0,$n}\+/;
+	};
 
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
@@ -235,14 +274,54 @@ sub git_diff_cc_hunk {
 		my $p = shift @p;
 		my $obj = shift @pobj; # blob SHA-1
 		my ($n) = ($off =~ /\A-(\d+),/); # line number
-		$rv .= " <a\nhref=\"$ppath?id=$p&obj=$obj#n$n\">$off</a>";
+
+		if ($n == 0) { # new file (does this happen with --cc?)
+			$rv .= " $off";
+		} else {
+			$rv .= " <a\nhref=\"$ppath?id=$p&obj=$obj#n$n\">";
+			$rv .= "$off</a>";
+		}
 	}
 
 	# we can use the normal 'tree' endpoint for the result
 	my ($n) = ($last =~ /\A\+(\d+),/); # line number
-	my $h = $diff->{h};
-	$rv .= " <a\nhref=\"${rel}tree/$path?id=$h#n$n\"><b>$last</b></a>";
+	if ($n == 0) { # deleted file (does this happen with --cc?)
+		$rv .= " <b>$last</b>";
+	} else {
+		my $h = $diff->{h};
+		$rv .= " <a\nhref=\"${rel}tree/$path?id=$h#n$n\">";
+		$rv .= "<b>$last</b></a>";
+	}
 	$rv .= " $at" . PublicInbox::Hval->new_bin($ctx)->as_html;
+}
+
+sub git_commit_title_html {
+	my ($git, $id) = @_;
+	my $t = git_commit_title($git, $id);
+	return '' unless defined $t; # BUG?
+	'[' . PublicInbox::Hval->new_bin($t)->as_html . ']';
+}
+
+sub git_diffstat_rename {
+	my ($rel, $h, $from, $to) = @_;
+	my @from = split('/', $from);
+	my @to = split('/', $to);
+	my $orig_to = $to;
+	my ($base, @base);
+	while (@to && @from && $to[0] eq $from[0]) {
+		push @base, shift(@to);
+		shift @from;
+	}
+	if (@base) {
+		$base = PublicInbox::Hval->new_bin(join('/', @base))->as_html;
+	}
+
+	$from = PublicInbox::Hval->new_bin(join('/', @from))->as_html;
+	$to = PublicInbox::Hval->new_bin(join('/', @to), $orig_to);
+	my $tp = $to->as_path;
+	my $th = $to->as_html;
+	$to = "<a\nhref=\"${rel}/commit/$tp?id=$h\">$th</a>";
+	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
 }
 
 1;
