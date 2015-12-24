@@ -59,6 +59,7 @@ sub run {
 		extra => \@extra, # path
 		cgi => $cgi,
 		rconfig => $rconfig,
+		tslash => 0,
 	};
 
 	my $cmd = shift @extra;
@@ -70,8 +71,12 @@ sub run {
 		$mod = load_once("PublicInbox::RepoBrowse$vcs$mod");
 		$vcs = load_once("PublicInbox::$vcs");
 		$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
-
 		$req->{relcmd} = '../' x scalar(@extra);
+		while (@extra && $extra[-1] eq '') {
+			pop @extra;
+			++$req->{tslash};
+		}
+		$req->{expath} = join('/', @extra);
 		my $rv = eval { $mod->new->call($cmd, $req) };
 		$rv || r404();
 	} else {

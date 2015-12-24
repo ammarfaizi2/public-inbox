@@ -17,17 +17,11 @@ my %GIT_MODE = (
 sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
 	my @extra = @{$req->{extra}};
-	my $tslash;
-	if (@extra && $extra[-1] eq '') { # no trailing slash
-		pop @extra;
-		$tslash = 1;
-	}
-	my $tree_path = join('/', @extra);
 	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 
-	my $obj = "$id:$tree_path";
+	my $obj = "$id:$req->{expath}";
 	my $git = $req->{repo_info}->{git};
 	my ($hex, $type, $size) = $git->check($obj);
 
@@ -41,7 +35,7 @@ sub git_tree_stream {
 			 PublicInbox::Hval::PRE);
 
 	if ($type eq 'tree') {
-		git_tree_show($fh, $git, $hex, $q, \@extra, $tslash);
+		git_tree_show($req, $fh, $git, $hex, $q);
 	} elsif ($type eq 'blob') {
 		git_blob_show($fh, $git, $hex);
 	}
@@ -96,16 +90,40 @@ sub git_blob_show {
 }
 
 sub git_tree_show {
-	my ($fh, $git, $hex, $q, $extra, $tslash) = @_;
+	my ($req, $fh, $git, $hex, $q) = @_;
 
 	my $ls = $git->popen(qw(ls-tree --abbrev=16 -l -z), $hex);
 	local $/ = "\0";
-	my $pfx = $tslash ? '.' :
-		(@$extra ?  PublicInbox::Hval->new_bin($extra->[-1])->as_path :
-		 'tree');
-	$pfx .= '/';
-
+	my $pfx;
 	my $qs = $q->qs;
+	my @ex = @{$req->{extra}};
+	my $rel = $req->{relcmd};
+	my $t;
+	if (@ex) {
+		$t = "<a\nhref=\"${rel}/tree$qs\">root</a>/";
+		my $cur = pop @ex;
+		my @t;
+		$t .= join('/', (map {
+			push @t, $_;
+			my $e = PublicInbox::Hval->new_bin($_, join('/', @t));
+			my $ep = $e->as_path;
+			my $eh = $e->as_html;
+			"<a\nhref=\"${rel}tree/$ep$qs\">$eh</a>";
+		} @ex), '<b>'.utf8_html($cur).'</b>');
+		push @ex, $cur;
+	} else {
+		$t = '<b>root</b>';
+	}
+	$fh->write("$t\n");
+
+	if ($req->{tslash}) {
+		$pfx = './';
+	} elsif (@ex) {
+		$pfx = $ex[-1] . '/';
+	} else {
+		$pfx = 'tree/';
+	}
+
 	while (defined(my $l = <$ls>)) {
 		chomp $l;
 		my ($m, $t, $x, $s, $path) =
