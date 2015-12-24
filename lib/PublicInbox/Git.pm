@@ -43,10 +43,10 @@ sub cat_file {
 	my $in = $self->{in};
 	my $head = $in->getline;
 	$head =~ / missing$/ and return undef;
-	$head =~ /^[0-9a-f]{40} \S+ (\d+)$/ or
+	$head =~ /^([0-9a-f]{40}) (\S+) (\d+)$/ or
 		fail($self, "Unexpected result from git cat-file: $head");
 
-	my $size = $1;
+	my ($hex, $type, $size) = ($1, $2, $3);
 	my $ref_type = $ref ? ref($ref) : '';
 
 	my $rv;
@@ -55,7 +55,7 @@ sub cat_file {
 	my $cb_err;
 
 	if ($ref_type eq 'CODE') {
-		$rv = eval { $ref->($in, \$left) };
+		$rv = eval { $ref->($in, \$left, $type, $hex) };
 		$cb_err = $@;
 		# drain the rest
 		my $max = 8192;
