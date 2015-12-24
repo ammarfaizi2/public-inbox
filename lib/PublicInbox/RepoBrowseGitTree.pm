@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Git;
+use PublicInbox::Hval qw(utf8_html);
 
 my %GIT_MODE = (
 	'100644' => ' ', # blob
@@ -77,15 +78,13 @@ sub git_blob_show {
 		return git_blob_binary($fh) if (index($buf, "\0") >= 0);
 
 		$text_p = 1;
-		$fh->write('<table><tr><td>'.PublicInbox::Hval::PRE);
 		while (1) {
-			my @buf = split("\n", $buf, -1);
+			my @buf = split(/\r?\n/, $buf, -1);
 			$buf = pop @buf; # last line, careful...
-			$n += scalar @buf;
 			foreach my $l (@buf) {
-				$l = PublicInbox::Hval->new_bin($l)->as_html;
-				$l .= "\n";
-				$fh->write($l);
+				++$n;
+				$fh->write("<a\nid=n$n>". utf8_html($l).
+						"</a>\n");
 			}
 			last if ($$left == 0 || !defined $buf);
 
@@ -95,12 +94,6 @@ sub git_blob_show {
 			return unless defined($r) && $r > 0;
 			$$left -= $r;
 		}
-
-		$fh->write('</pre></td><td><pre>');
-		foreach my $i (1..$n) {
-			$fh->write("<a id=n$i href='#n$i'>$i</a>\n");
-		}
-		$fh->write('</pre></td></tr></table>');
 		0;
 	});
 }
