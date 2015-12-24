@@ -19,4 +19,31 @@ sub call {
 	$@ ? [ 500, ['Content-Type'=>'text/plain'], [] ] : $rv;
 }
 
+sub mime_load {
+	my ($self, $file) = @_;
+	my %rv;
+	open my $fh, '<', $file or return \%rv;
+	foreach (<$fh>) {
+		next if /^#/; # no comments
+		my ($type, @ext) = split(/\s+/);
+
+		# XSS protection.  Assume the browser knows what to do
+		# with images/audio/video...
+		if (defined $type && $type =~ m!\A(?:image|audio|video)/!) {
+			$rv{$_} = $type foreach @ext;
+		}
+	}
+	\%rv;
+}
+
+# returns undef if missing, so users can scan the blob if needed
+sub mime_type {
+	my ($self, $fn) = @_;
+	$fn =~ /\.([^\.]+)\z/ or return;
+	my $ext = $1;
+	my $m = $self->{mime_types} ||= $self->mime_load('/etc/mime.types');
+
+	$m->{$ext};
+}
+
 1;
