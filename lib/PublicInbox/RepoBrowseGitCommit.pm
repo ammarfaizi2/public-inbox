@@ -1,10 +1,12 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
+# shows the /commit/ endpoint for git repositories
 package PublicInbox::RepoBrowseGitCommit;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
+use PublicInbox::Hval qw(utf8_html);
 use PublicInbox::Git;
 use PublicInbox::RepoBrowseGit qw(git_unquote git_commit_title);
 
@@ -16,10 +18,10 @@ sub git_commit_stream {
 	my ($req, $q, $H, $log, $fh) = @_;
 	chomp(my $h = <$log>); # abbreviated commit
 	my $l;
-	my $s = PublicInbox::Hval->new_oneline($l = <$log>)->as_html; # subject
-	my $au = PublicInbox::Hval->new_oneline($l = <$log>)->as_html; # author
+	chomp(my $s = utf8_html($l = <$log>)); # subject
+	chomp(my $au = utf8_html($l = <$log>)); # author
 	chomp(my $ad = <$log>);
-	my $cu = PublicInbox::Hval->new_oneline($l = <$log>)->as_html;
+	chomp(my $cu = utf8_html($l = <$log>));
 	chomp(my $cd = <$log>);
 	chomp(my $t = <$log>); # tree
 	chomp(my $p = <$log>); # parents
@@ -28,55 +30,64 @@ sub git_commit_stream {
 	my $git = $req->{repo_info}->{git};
 
 	my $rel = $req->{relcmd};
+	my $qs = $q->qs(id => $h);
+	chomp $H;
 	my $x = "<html><head><title>$s</title></head><body>" .
 		PublicInbox::Hval::PRE .
-		"   commit $H" .
+		"   commit $H (<a\nhref=\"${rel}patch$qs\">patch</a>)\n" .
 		"     tree <a\nhref=\"${rel}tree?id=$h\">$t</a>";
+
+	# extra show path information, if any
 	my $extra = $req->{extra};
+	my $path = '';
 	if (@$extra) {
 		my @t;
-		$x .= ' [';
+		my $ep;
+		$x .= ' -- ';
 		$x .= join('/', map {
 			push @t, $_;
 			my $e = PublicInbox::Hval->new_bin($_, join('/', @t));
-			my $ep = $e->as_path;
+			$ep = $e->as_path;
 			my $eh = $e->as_html;
 			"<a\nhref=\"${rel}tree/$ep?id=$h\">$eh</a>";
 		} @$extra);
-		$x .= ']';
+		$path = "/$ep";
 	}
+
 	$x .= "\n   author $au\t$ad\ncommitter $cu\t$cd\n";
 	if (scalar(@p) == 1) {
 		$x .= '   parent ';
 		my $p = $p[0];
 		my $t = git_commit_title_html($git, $p);
-		$x .= qq(<a\nhref="${rel}commit?id=$p">$p</a> $t\n);
+		$qs = $q->qs(id => $p);
+		$x .= qq(<a\nhref="${rel}commit$path$qs">$p</a> $t\n);
 	} elsif (scalar(@p) > 1) {
 		foreach my $p (@p) {
 			$x .= '    merge ';
-			$x .= "<a\nhref=\"${rel}commit?id=$p\">$p</a> (";
-			$x .= "<a\nhref=\"${rel}diff?id=$p&id2=$h\">";
+			$qs = $q->qs(id => $p);
+			$x .= "<a\nhref=\"${rel}commit$path$qs\">$p</a> (";
+			$qs = $q->qs(id => $p, id2 => $h);
+			$x .= "<a\nhref=\"${rel}diff$path$qs\">";
 			$x .= "diff</a>) ";
 			$x .= git_commit_title_html($git, $p);
 			$x .= "\n";
 		}
 	}
-	$fh->write($x .= "\n$s\n\n");
+	$fh->write($x .= "\n<b>$s</b>\n\n");
 
 	# body:
 	local $/ = "\0";
 	$l = <$log>;
 	chomp $l;
-	$x = PublicInbox::Hval->new_bin($l)->as_html; # body
-	$fh->write($x."\n");
-
+	$x = utf8_html($l); # body
+	$fh->write($x."---\n");
 	git_show_diffstat($req, $h, $fh, $log);
 
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
 	my $diff = { h => $h, p => \@p, rel => $rel };
-	my $cc_add;
+	my $cc_mod;
 	while (defined($l = <$log>)) {
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
 			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
@@ -86,18 +97,15 @@ sub git_commit_stream {
 			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			$l = git_diff_ab_hunk($diff, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^\+/ || (defined($cc_add) && $l =~ $cc_add)) {
-			# added hunk
-			chomp $l;
-			$l = '<b>'.PublicInbox::Hval->new_bin($l)->as_html.
-				"</b>\n";
+		} elsif ($l =~ /^[-\+]/ || ($cc_mod && $l =~ $cc_mod)) {
+			$l = git_diff_mod($l) . "\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			$l = git_diff_cc_index($diff, $1, $2, $3) . "\n";
-			$cc_add ||= $diff->{cc_add};
+			$cc_mod ||= $diff->{cc_mod};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			$l = git_diff_cc_hunk($diff, $1, $2, $3) . "\n";
 		} else {
-			$l = PublicInbox::Hval->new_bin($l)->as_html;
+			$l = utf8_html($l);
 		}
 		$fh->write($l);
 	}
@@ -114,7 +122,7 @@ sub call_git_commit {
 	$id eq '' and $id = 'HEAD';
 	my $git = $repo_info->{git} ||= PublicInbox::Git->new($dir);
 
-	my @cmd = qw(show -z --numstat -p --cc
+	my @cmd = qw(show -z --numstat -p --cc --encoding=UTF-8
 			--no-notes --no-color --abbrev=10);
 	my @path;
 
@@ -128,13 +136,36 @@ sub call_git_commit {
 
 	my $log = $git->popen(@cmd, GIT_FMT, $id, '--', @path);
 	my $H = <$log>;
-	defined $H or return;
+
+	# maybe the path didn't exist, yet, zip them back up
+	return git_commit_404($req, $q, $path[0]) unless defined $H;
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
 		git_commit_stream($req, $q, $H, $log, $fh);
 		$fh->close;
 	}
+}
+
+sub git_commit_404 {
+	my ($req, $q, $path) = @_;
+	my $x = 'Missing commit or path';
+	my $pfx = "$req->{relcmd}commit";
+
+	# print STDERR "path: $path\n";
+	my $try = 'try';
+	$x = "<html><head><title>$x</title></head><body><pre><b>$x</b>\n\n";
+	if (defined $path) {
+		my $qs = $q->qs;
+		$x .= "<a\nhref=\"$pfx$qs\">" .
+			"try without the path <s>$path</s></a>\n";
+		$try = 'or';
+	}
+	my $qs = $q->qs(id => '');
+	$x .= "<a\nhref=\"$pfx$qs\">$try the latest commit in HEAD</a>\n";
+	$x .= '</pre></body>';
+
+	[ 404, ['Content-Type'=>'text/html'], [ $x ] ];
 }
 
 sub git_show_diffstat {
@@ -168,9 +199,9 @@ sub git_show_diffstat {
 			$l = git_diffstat_rename($rel, $h, $from, $to);
 		}
 		++$nr;
-		$fh->write($num."\t".$l."\n");
+		$fh->write(' '.$num."\t".$l."\n");
 	}
-	$l = "\n$nr ";
+	$l = "\n $nr ";
 	$l .= $nr == 1 ? 'file changed, ' : 'files changed, ';
 	$l .= $nadd;
 	$l .= $nadd == 1 ? ' insertion(+), ' : ' insertions(+), ';
@@ -184,15 +215,15 @@ sub git_diff_ab_index {
 	my ($diff, $xa, $xb, $end) = @_;
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
-	$end = PublicInbox::Hval->new_bin($end)->as_html;
+	$end = utf8_html($end);
 	"index $xa..<b>$xb</b>$end";
 }
 
 # diff --git a/foo.c b/bar.c
 sub git_diff_ab_hdr {
 	my ($diff, $fa, $fb) = @_;
-	my $html_a = PublicInbox::Hval->new_bin($fa)->as_html;
-	my $html_b = PublicInbox::Hval->new_bin($fb)->as_html;
+	my $html_a = utf8_html($fa);
+	my $html_b = utf8_html($fb);
 	$fa = git_unquote($fa);
 	$fb = git_unquote($fb);
 	$fa =~ s!\Aa/!!;
@@ -230,12 +261,12 @@ sub git_diff_ab_hunk {
 		$rv .= "<a\nhref=\"${rel}tree/$diff->{path_b}?id=$h#n$nb\">";
 		$rv .= "<b>$cb</b></a>";
 	}
-	$rv . ' @@' . PublicInbox::Hval->new_bin($ctx)->as_html;
+	$rv . ' @@' . utf8_html($ctx);
 }
 
 sub git_diff_cc_hdr {
 	my ($diff, $path) = @_;
-	my $html_path = PublicInbox::Hval->new_bin($path)->as_html;
+	my $html_path = utf8_html($path);
 	my $cc = $diff->{cc} = PublicInbox::Hval->new_bin(git_unquote($path));
 	$diff->{path_cc} = $cc->as_path;
 	"diff --cc <b>$html_path</b>";
@@ -244,12 +275,12 @@ sub git_diff_cc_hdr {
 # index abcdef09,01234567..76543210
 sub git_diff_cc_index {
 	my ($diff, $before, $last, $end) = @_;
-	$end = PublicInbox::Hval->new_bin($end)->as_html;
+	$end = utf8_html($end);
 	my @before = split(',', $before);
 	$diff->{pobj_cc} = \@before;
-	$diff->{cc_add} ||= eval {
+	$diff->{cc_mod} ||= eval {
 		my $n = scalar(@before) - 1;
-		qr/^ {0,$n}\+/;
+		qr/^ {0,$n}[-\+]/;
 	};
 
 	# not wasting bandwidth on links here, yet
@@ -292,14 +323,14 @@ sub git_diff_cc_hunk {
 		$rv .= " <a\nhref=\"${rel}tree/$path?id=$h#n$n\">";
 		$rv .= "<b>$last</b></a>";
 	}
-	$rv .= " $at" . PublicInbox::Hval->new_bin($ctx)->as_html;
+	$rv .= " $at" . utf8_html($ctx);
 }
 
 sub git_commit_title_html {
 	my ($git, $id) = @_;
 	my $t = git_commit_title($git, $id);
 	return '' unless defined $t; # BUG?
-	'[' . PublicInbox::Hval->new_bin($t)->as_html . ']';
+	'[' . utf8_html($t) . ']';
 }
 
 sub git_diffstat_rename {
@@ -312,16 +343,30 @@ sub git_diffstat_rename {
 		push @base, shift(@to);
 		shift @from;
 	}
-	if (@base) {
-		$base = PublicInbox::Hval->new_bin(join('/', @base))->as_html;
-	}
 
-	$from = PublicInbox::Hval->new_bin(join('/', @from))->as_html;
+	$base = utf8_html(join('/', @base)) if @base;
+	$from = utf8_html(join('/', @from));
 	$to = PublicInbox::Hval->new_bin(join('/', @to), $orig_to);
 	my $tp = $to->as_path;
 	my $th = $to->as_html;
 	$to = "<a\nhref=\"${rel}/commit/$tp?id=$h\">$th</a>";
 	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
+}
+
+sub git_diff_mod {
+	my ($l) = @_;
+	chomp $l;
+	my ($pfx, $t);
+	if ($l =~ s/\A([\s\+]+)//) {
+		$pfx = "<b>$1</b>";
+		$t = 'ins';
+	} else {
+		$l =~ s/\A([\s\-]+)//;
+		$pfx = $1;
+		$t = 'del';
+	}
+	$l = utf8_html($l);
+	$pfx . (length($l) ? "<$t>$l</$t>" : $l);
 }
 
 1;

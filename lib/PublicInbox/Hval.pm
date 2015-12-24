@@ -10,7 +10,7 @@ use Encode qw(find_encoding);
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::MID qw/mid_clean/;
 use base qw/Exporter/;
-our @EXPORT_OK = qw/ascii_html/;
+our @EXPORT_OK = qw/ascii_html utf8_html/;
 
 # for user-generated content (UGC) which may have excessively long lines
 # and screw up rendering on some browsers.  This is the only CSS style
@@ -69,6 +69,11 @@ sub ascii_html {
 	$s =~ s/\r\n/\n/sg; # fixup bad line endings
 	$s =~ s/([<>&'"])/$xhtml_map{$1}/ge;
 	$enc_ascii->encode($s, Encode::HTMLCREF);
+}
+
+sub utf8_html {
+	my ($raw) = @_;
+	ascii_html($enc_utf8->decode($raw));
 }
 
 sub as_html { ascii_html($_[0]->{raw}) }
