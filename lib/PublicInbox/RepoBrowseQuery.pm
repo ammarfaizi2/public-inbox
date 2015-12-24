@@ -1,16 +1,18 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
+# query parameter management for repobrowse
 package PublicInbox::RepoBrowseQuery;
 use strict;
 use warnings;
 use PublicInbox::Hval;
+my @KNOWN_PARAMS = qw(id id2 h showmsg ofs);
 
 sub new {
 	my ($class, $cgi) = @_;
 	my $self = bless {}, $class;
 
-	foreach my $k (qw(id h showmsg ofs)) {
+	foreach my $k (@KNOWN_PARAMS) {
 		my $v = $cgi->param($k);
 		$self->{$k} = defined $v ? $v : '';
 	}
@@ -27,7 +29,7 @@ sub qs {
 	}
 
 	my @qs;
-	foreach my $k (qw(id h showmsg ofs)) {
+	foreach my $k (@KNOWN_PARAMS) {
 		my $v = $self->{$k};
 
 		next if ($v eq '');
