@@ -6,14 +6,10 @@ package PublicInbox::RepoBrowseGitPatch;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::Git;
 
 sub call_git_patch {
 	my ($self, $req) = @_;
-	my $repo_info = $req->{repo_info};
-	my $dir = $repo_info->{path};
-	my $git = $repo_info->{git} ||= PublicInbox::Git->new($dir);
-
+	my $git = $req->{repo_info}->{git};
 	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';

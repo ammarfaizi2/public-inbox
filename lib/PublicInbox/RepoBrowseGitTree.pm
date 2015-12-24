@@ -4,7 +4,6 @@ package PublicInbox::RepoBrowseGitTree;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::Git;
 use PublicInbox::Hval qw(utf8_html);
 
 my %GIT_MODE = (
@@ -17,8 +16,6 @@ my %GIT_MODE = (
 
 sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
-	my $repo_info = $req->{repo_info};
-	my $dir = $repo_info->{path};
 	my @extra = @{$req->{extra}};
 	my $tslash;
 	if (@extra && $extra[-1] eq '') { # no trailing slash
@@ -31,7 +28,7 @@ sub git_tree_stream {
 	$id eq '' and $id = 'HEAD';
 
 	my $obj = "$id:$tree_path";
-	my $git = $repo_info->{git} ||= PublicInbox::Git->new($dir);
+	my $git = $req->{repo_info}->{git};
 	my ($hex, $type, $size) = $git->check($obj);
 
 	if (!defined($type) || ($type ne 'blob' && $type ne 'tree')) {

@@ -63,14 +63,14 @@ sub run {
 
 	my $cmd = shift @extra;
 	if (defined $cmd && length $cmd) {
-		my $vcs = $VCS{$repo_info->{vcs}} or return r404();
+		my $vcs_lc = $repo_info->{vcs};
+		my $vcs = $VCS{$vcs_lc} or return r404();
 		my $mod = $CMD{$cmd} or return r404();
 		return r404() unless defined $mod && defined $vcs;
-		$mod = "PublicInbox::RepoBrowse$vcs$mod";
-		unless ($LOADED{$mod}) {
-			eval "require $mod";
-			$LOADED{$mod} = 1 unless $@;
-		}
+		$mod = load_once("PublicInbox::RepoBrowse$vcs$mod");
+		$vcs = load_once("PublicInbox::$vcs");
+		$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
+
 		$req->{relcmd} = '../' x scalar(@extra);
 		my $rv = eval { $mod->new->call($cmd, $req) };
 		$rv || r404();
@@ -85,5 +85,14 @@ sub summary {
 }
 
 sub r404 { r(404, 'Not Found') }
+
+sub load_once {
+	my ($mod) = @_;
+
+	return $mod if $LOADED{$mod};
+	eval "require $mod";
+	$LOADED{$mod} = 1 unless $@;
+	$mod;
+}
 
 1;

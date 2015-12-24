@@ -5,12 +5,10 @@ package PublicInbox::RepoBrowseGitLog;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::Git;
 
 sub call_git_log {
 	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
-	my $path = $repo_info->{path};
 	my $max = $repo_info->{max_commit_count} || 50;
 	$max = int($max);
 	$max = 50 if $max == 0;
@@ -26,7 +24,7 @@ sub call_git_log {
 	my $ofs = $q->{ofs};
 	$h .= "~$ofs" if $ofs =~ /\A\d+\z/;
 
-	my $git = $repo_info->{git} ||= PublicInbox::Git->new($path);
+	my $git = $repo_info->{git};
 	my $log = $git->popen(qw(log --no-notes --no-color
 				--abbrev-commit --abbrev=16),
 				"--format=$fmt", "-$max", $h);

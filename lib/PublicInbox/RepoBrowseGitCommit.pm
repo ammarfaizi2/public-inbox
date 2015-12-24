@@ -7,7 +7,6 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepoBrowseBase);
 use PublicInbox::Hval qw(utf8_html);
-use PublicInbox::Git;
 use PublicInbox::RepoBrowseGit qw(git_unquote git_commit_title);
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
@@ -114,14 +113,11 @@ sub git_commit_stream {
 
 sub call_git_commit {
 	my ($self, $req) = @_;
-	my $repo_info = $req->{repo_info};
-	my $dir = $repo_info->{path};
 
 	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
-	my $git = $repo_info->{git} ||= PublicInbox::Git->new($dir);
-
+	my $git = $req->{repo_info}->{git};
 	my @cmd = qw(show -z --numstat -p --cc --encoding=UTF-8
 			--no-notes --no-color --abbrev=10);
 	my @path;
