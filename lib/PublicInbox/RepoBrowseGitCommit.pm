@@ -55,21 +55,14 @@ sub git_commit_stream {
 
 	$x .= "\n   author $au\t$ad\ncommitter $cu\t$cd\n";
 	if (scalar(@p) == 1) {
-		$x .= '   parent ';
 		my $p = $p[0];
-		my $t = git_commit_title_html($git, $p);
-		$qs = $q->qs(id => $p);
-		$x .= qq(<a\nhref="${rel}commit$path$qs">$p</a> $t\n);
+		$x .= git_parent_line('   parent', $p, $q, $git, $rel, $path);
 	} elsif (scalar(@p) > 1) {
-		foreach my $p (@p) {
-			$x .= '    merge ';
-			$qs = $q->qs(id => $p);
-			$x .= "<a\nhref=\"${rel}commit$path$qs\">$p</a> (";
-			$qs = $q->qs(id => $p, id2 => $h);
-			$x .= "<a\nhref=\"${rel}diff$path$qs\">";
-			$x .= "diff</a>) ";
-			$x .= git_commit_title_html($git, $p);
-			$x .= "\n";
+		my @common = ($q, $git, $rel, $path);
+		my $p = shift @p;
+		$x .= git_parent_line('  parents', $p, @common);
+		foreach $p (@p) {
+			$x .= git_parent_line('         ', $p, @common);
 		}
 	}
 	$fh->write($x .= "\n<b>$s</b>\n\n");
@@ -322,13 +315,6 @@ sub git_diff_cc_hunk {
 	$rv .= " $at" . utf8_html($ctx);
 }
 
-sub git_commit_title_html {
-	my ($git, $id) = @_;
-	my $t = git_commit_title($git, $id);
-	return '' unless defined $t; # BUG?
-	'[' . utf8_html($t) . ']';
-}
-
 sub git_diffstat_rename {
 	my ($rel, $h, $from, $to) = @_;
 	my @from = split('/', $from);
@@ -363,6 +349,14 @@ sub git_diff_mod {
 	}
 	$l = utf8_html($l);
 	$pfx . (length($l) ? "<$t>$l</$t>" : $l);
+}
+
+sub git_parent_line {
+	my ($pfx, $p, $q, $git, $rel, $path) = @_;
+	my $qs = $q->qs(id => $p);
+	my $t = git_commit_title($git, $p);
+	$t = defined $t ? utf8_html($t) : '';
+	$pfx . " <a\nhref=\"${rel}commit$path$qs\">$p</a> ". $t . "\n";
 }
 
 1;
