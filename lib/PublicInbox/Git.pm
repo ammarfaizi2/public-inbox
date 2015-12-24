@@ -34,9 +34,8 @@ sub _bidi_pipe {
 	$self->{$in} = $in_r;
 }
 
-sub cat_file {
-	my ($self, $obj, $ref) = @_;
-
+sub cat_file_begin {
+	my ($self, $obj) = @_;
 	$self->_bidi_pipe(qw(--batch in out pid));
 	$self->{out}->print($obj, "\n") or fail($self, "write error: $!");
 
@@ -46,7 +45,31 @@ sub cat_file {
 	$head =~ /^([0-9a-f]{40}) (\S+) (\d+)$/ or
 		fail($self, "Unexpected result from git cat-file: $head");
 
-	my ($hex, $type, $size) = ($1, $2, $3);
+	($in, $1, $2, $3);
+}
+
+sub cat_file_finish {
+	my ($self, $left) = @_;
+	my $max = 8192;
+	my $in = $self->{in};
+	my $buf;
+	while ($left > 0) {
+		my $r = read($in, $buf, $left > $max ? $max : $left);
+		defined($r) or fail($self, "read failed: $!");
+		$r == 0 and fail($self, 'exited unexpectedly');
+		$left -= $r;
+	}
+
+	my $r = read($in, $buf, 1);
+	defined($r) or fail($self, "read failed: $!");
+	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
+}
+
+sub cat_file {
+	my ($self, $obj, $ref) = @_;
+
+	my ($in, $hex, $type, $size) = $self->cat_file_begin($obj);
+	return unless $in;
 	my $ref_type = $ref ? ref($ref) : '';
 
 	my $rv;
@@ -57,14 +80,6 @@ sub cat_file {
 	if ($ref_type eq 'CODE') {
 		$rv = eval { $ref->($in, \$left, $type, $hex) };
 		$cb_err = $@;
-		# drain the rest
-		my $max = 8192;
-		while ($left > 0) {
-			my $r = read($in, my $x, $left > $max ? $max : $left);
-			defined($r) or fail($self, "read failed: $!");
-			$r == 0 and fail($self, 'exited unexpectedly');
-			$left -= $r;
-		}
 	} else {
 		my $offset = 0;
 		my $buf = '';
@@ -77,10 +92,7 @@ sub cat_file {
 		}
 		$rv = \$buf;
 	}
-
-	my $r = read($in, my $buf, 1);
-	defined($r) or fail($self, "read failed: $!");
-	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
+	$self->cat_file_finish($left);
 	die $cb_err if $cb_err;
 
 	$rv;
