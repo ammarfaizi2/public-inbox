@@ -27,9 +27,7 @@ sub mime_load {
 		next if /^#/; # no comments
 		my ($type, @ext) = split(/\s+/);
 
-		# XSS protection.  Assume the browser knows what to do
-		# with images/audio/video...
-		if (defined $type && $type =~ m!\A(?:image|audio|video)/!) {
+		if (defined $type) {
 			$rv{$_} = $type foreach @ext;
 		}
 	}
@@ -37,13 +35,22 @@ sub mime_load {
 }
 
 # returns undef if missing, so users can scan the blob if needed
-sub mime_type {
+sub mime_type_unsafe {
 	my ($self, $fn) = @_;
 	$fn =~ /\.([^\.]+)\z/ or return;
 	my $ext = $1;
 	my $m = $self->{mime_types} ||= $self->mime_load('/etc/mime.types');
-
 	$m->{$ext};
+}
+
+sub mime_type {
+	my ($self, $fn) = @_;
+	my $ct = $self->mime_type_unsafe($fn);
+
+	# XSS protection.  Assume the browser knows what to do
+	# with images/audio/video; but don't allow random HTML from
+	# a repository to be served
+	(defined($ct) && $ct =~ m!\A(?:image|audio|video)/!) ? $ct : undef;
 }
 
 1;

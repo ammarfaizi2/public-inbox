@@ -66,8 +66,11 @@ sub run {
 	if (defined $cmd && length $cmd) {
 		my $vcs_lc = $repo_info->{vcs};
 		my $vcs = $VCS{$vcs_lc} or return r404();
-		my $mod = $CMD{$cmd} or return r404();
-		return r404() unless defined $mod && defined $vcs;
+		my $mod = $CMD{$cmd};
+		unless ($mod) {
+			unshift @extra, $cmd;
+			$mod = 'Fallback';
+		}
 		$mod = load_once("PublicInbox::RepoBrowse$vcs$mod");
 		$vcs = load_once("PublicInbox::$vcs");
 		$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
