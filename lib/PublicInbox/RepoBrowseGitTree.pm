@@ -105,7 +105,7 @@ sub git_tree_show {
 		my @t;
 		$t .= join('/', (map {
 			push @t, $_;
-			my $e = PublicInbox::Hval->new_bin($_, join('/', @t));
+			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			my $ep = $e->as_path;
 			my $eh = $e->as_html;
 			"<a\nhref=\"${rel}tree/$ep$qs\">$eh</a>";
@@ -129,7 +129,7 @@ sub git_tree_show {
 		my ($m, $t, $x, $s, $path) =
 			($l =~ /\A(\S+) (\S+) (\S+)( *\S+)\t(.+)\z/s);
 		$m = $GIT_MODE{$m} or next;
-		$path = PublicInbox::Hval->new_bin($path);
+		$path = PublicInbox::Hval->utf8($path);
 		my $ref = $path->as_path;
 		$path = $path->as_html;
 

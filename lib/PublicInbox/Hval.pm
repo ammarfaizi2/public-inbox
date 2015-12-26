@@ -21,7 +21,7 @@ use constant PRE => "<pre\nstyle=\"white-space:pre-wrap\">"; # legacy
 my $enc_utf8 = find_encoding('UTF-8');
 my $enc_ascii = find_encoding('us-ascii');
 
-sub new_bin {
+sub utf8 {
 	my ($class, $raw, $href) = @_;
 
 	$raw = $enc_utf8->decode($raw);

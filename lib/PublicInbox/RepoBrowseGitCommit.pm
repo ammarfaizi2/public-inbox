@@ -45,7 +45,7 @@ sub git_commit_stream {
 		$x .= ' -- ';
 		$x .= join('/', map {
 			push @t, $_;
-			my $e = PublicInbox::Hval->new_bin($_, join('/', @t));
+			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			$ep = $e->as_path;
 			my $eh = $e->as_html;
 			"<a\nhref=\"${rel}tree/$ep?id=$h\">$eh</a>";
@@ -177,7 +177,7 @@ sub git_show_diffstat {
 		}
 		my $num = sprintf('% 6s/%-6s', $del, $add);
 		if (length $l) {
-			$l = PublicInbox::Hval->new_bin($l);
+			$l = PublicInbox::Hval->utf8($l);
 			my $lp = $l->as_path;
 			my $lh = $l->as_html;
 			$l = "<a\nhref=\"${rel}commit/$lp?id=$h\">$lh</a>";
@@ -217,8 +217,8 @@ sub git_diff_ab_hdr {
 	$fb = git_unquote($fb);
 	$fa =~ s!\Aa/!!;
 	$fb =~ s!\Ab/!!;
-	$fa = $diff->{fa} = PublicInbox::Hval->new_bin($fa);
-	$fb = $diff->{fb} = PublicInbox::Hval->new_bin($fb);
+	$fa = $diff->{fa} = PublicInbox::Hval->utf8($fa);
+	$fb = $diff->{fb} = PublicInbox::Hval->utf8($fb);
 	$diff->{path_a} = $fa->as_path;
 	$diff->{path_b} = $fb->as_path;
 
@@ -256,7 +256,7 @@ sub git_diff_ab_hunk {
 sub git_diff_cc_hdr {
 	my ($diff, $path) = @_;
 	my $html_path = utf8_html($path);
-	my $cc = $diff->{cc} = PublicInbox::Hval->new_bin(git_unquote($path));
+	my $cc = $diff->{cc} = PublicInbox::Hval->utf8(git_unquote($path));
 	$diff->{path_cc} = $cc->as_path;
 	"diff --cc <b>$html_path</b>";
 }
@@ -328,7 +328,7 @@ sub git_diffstat_rename {
 
 	$base = utf8_html(join('/', @base)) if @base;
 	$from = utf8_html(join('/', @from));
-	$to = PublicInbox::Hval->new_bin(join('/', @to), $orig_to);
+	$to = PublicInbox::Hval->utf8(join('/', @to), $orig_to);
 	my $tp = $to->as_path;
 	my $th = $to->as_html;
 	$to = "<a\nhref=\"${rel}/commit/$tp?id=$h\">$th</a>";
