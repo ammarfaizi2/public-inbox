@@ -6,6 +6,7 @@ use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
 use base qw(PublicInbox::RepoBrowseBase);
+use PublicInbox::RepoBrowseGit qw(git_dec_links);
 
 # enable if we can speed it up..., over 100ms is unnacceptable
 my @graph; # = qw(--graph);
@@ -76,9 +77,12 @@ sub git_log_stream {
 
 		$s =~ s/\As//;
 		$s = utf8_html($s);
-
-		# TODO: handle $D (decorate)
 		$s = qq(<a\nhref="${rel}commit?id=$id">$s</a>);
+
+		if ($D =~ /\AD(.+)/) {
+			$s .= ' ('. join(', ', git_dec_links($rel, $1)) . ')';
+		}
+
 		if (defined $b) {
 			$an =~ s/\Aa//;
 			$b =~ s/\Ab//;
@@ -95,7 +99,7 @@ sub git_log_stream {
 				$gr =~ s/([^\n]+)\z/($1."\n") x $nl/es;
 			}
 			$b = utf8_html($b);
-			$b = "<b>$s</b>\n- $ah @ $ai\n\n$b";
+			$b = "$s\n- $ah @ $ai\n\n$b";
 			if (@graph) {
 				$fh->write('<table><tr><td><pre>'. $gr .
 					'</pre></td><td><pre>' . $b .

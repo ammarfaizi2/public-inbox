@@ -6,7 +6,8 @@ package PublicInbox::RepoBrowseGit;
 use strict;
 use warnings;
 use base qw(Exporter);
-our @EXPORT_OK = qw(git_unquote git_commit_title);
+our @EXPORT_OK = qw(git_unquote git_commit_title git_dec_links);
+use PublicInbox::Hval qw(utf8_html);
 
 my %GIT_ESC = (
 	a => "\a",
@@ -35,6 +36,33 @@ sub git_commit_title {
 		($rv) = ($$buf =~ /\r?\n\r?\n([^\r\n]+)\r?\n?/);
 	};
 	$rv;
+}
+
+# example inputs: "HEAD -> master", "tag: v1.0.0",
+sub git_dec_links {
+	my ($rel, $D) = @_;
+	my @l;
+	foreach (split /, /, $D) {
+		if (/\A(\S+) -> (\S+)/) { # 'HEAD -> master'
+			my ($s, $h) = ($1, $2);
+			$s = utf8_html($s);
+			$h = PublicInbox::Hval->utf8($h);
+			my $r = $h->as_href;
+			$h = $h->as_html;
+			push @l, qq($s -&gt; <a\nhref="${rel}log?h=$r">$h</a>);
+		} elsif (s/\Atag: //) {
+			my $h = PublicInbox::Hval->utf8($_);
+			my $r = $h->as_href;
+			$h = $h->as_html;
+			push @l, qq(<a\nhref="${rel}tag?h=$r"><b>$h</b></a>);
+		} else {
+			my $h = PublicInbox::Hval->utf8($_);
+			my $r = $h->as_href;
+			$h = $h->as_html;
+			push @l, qq(<a\nhref="${rel}log?h=$r">$h</a>);
+		}
+	}
+	@l;
 }
 
 1;
