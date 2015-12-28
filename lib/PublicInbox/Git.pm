@@ -40,6 +40,7 @@ sub cat_file_begin {
 	$self->{out}->print($obj, "\n") or fail($self, "write error: $!");
 
 	my $in = $self->{in};
+	local $/ = "\n";
 	my $head = $in->getline;
 	$head =~ / missing$/ and return undef;
 	$head =~ /^([0-9a-f]{40}) (\S+) (\d+)$/ or
@@ -102,6 +103,7 @@ sub check {
 	my ($self, $obj) = @_;
 	$self->_bidi_pipe(qw(--batch-check in_c out_c pid_c));
 	$self->{out_c}->print($obj, "\n") or fail($self, "write error: $!");
+	local $/ = "\n";
 	chomp(my $line = $self->{in_c}->getline);
 	my ($hex, $type, $size) = split(' ', $line);
 	return if $type eq 'missing';
