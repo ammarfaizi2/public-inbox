@@ -79,7 +79,7 @@ sub git_commit_stream {
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
 	my $diff = { h => $h, p => \@p, rel => $rel };
-	my $cc_mod;
+	my $cc_add;
 	while (defined($l = <$log>)) {
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
 			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
@@ -89,11 +89,11 @@ sub git_commit_stream {
 			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			$l = git_diff_ab_hunk($diff, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^[-\+]/ || ($cc_mod && $l =~ $cc_mod)) {
-			$l = git_diff_mod($l) . "\n";
+		} elsif ($l =~ /^\+/ || ($cc_add && $l =~ $cc_add)) {
+			$l = git_diff_add($l) . "\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			$l = git_diff_cc_index($diff, $1, $2, $3) . "\n";
-			$cc_mod ||= $diff->{cc_mod};
+			$cc_add ||= $diff->{cc_add};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			$l = git_diff_cc_hunk($diff, $1, $2, $3) . "\n";
 		} else {
@@ -267,9 +267,9 @@ sub git_diff_cc_index {
 	$end = utf8_html($end);
 	my @before = split(',', $before);
 	$diff->{pobj_cc} = \@before;
-	$diff->{cc_mod} ||= eval {
+	$diff->{cc_add} ||= eval {
 		my $n = scalar(@before) - 1;
-		qr/^ {0,$n}[-\+]/;
+		qr/^ {0,$n}[\+]/;
 	};
 
 	# not wasting bandwidth on links here, yet
@@ -335,20 +335,10 @@ sub git_diffstat_rename {
 	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
 }
 
-sub git_diff_mod {
+sub git_diff_add {
 	my ($l) = @_;
 	chomp $l;
-	my ($pfx, $t);
-	if ($l =~ s/\A([\s\+]+)//) {
-		$pfx = "<b>$1</b>";
-		$t = 'ins';
-	} else {
-		$l =~ s/\A([\s\-]+)//;
-		$pfx = $1;
-		$t = 'del';
-	}
-	$l = utf8_html($l);
-	$pfx . (length($l) ? "<$t>$l</$t>" : $l);
+	'<b>'.utf8_html($l).'</b>';
 }
 
 sub git_parent_line {
