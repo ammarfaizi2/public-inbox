@@ -6,14 +6,10 @@ use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
 use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::RepoBrowseGit qw(git_dec_links);
-
-# enable if we can speed it up..., over 100ms is unnacceptable
-my @graph; # = qw(--graph);
-
+use PublicInbox::RepoBrowseGit qw(git_dec_links git_commit_title);
 # cannot rely on --date=format-local:... yet, it is too new (September 2015)
 my $LOG_FMT = '--pretty=tformat:'.
-		join('%x00', (@graph ? '' : '%n'), qw(%h s%s D%D));
+		join('%x00', qw(%h %p %s D%D));
 my $MSG_FMT = join('%x00', '', qw(%ai a%an b%b));
 
 sub call_git_log {
@@ -33,52 +29,49 @@ sub call_git_log {
 
 	my $git = $repo_info->{git};
 	my $log = $git->popen(qw(log --no-notes --no-color
-				--abbrev-commit --abbrev=10),
-				@graph, $fmt, "-$max", $h);
+				--abbrev-commit --abbrev=12),
+				$fmt, "-$max", $h);
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
-		git_log_stream($req, $q, $log, $fh);
+		git_log_stream($req, $q, $log, $fh, $git);
 		$fh->close;
 	}
 }
 
 sub git_log_stream {
-	my ($req, $q, $log, $fh) = @_;
+	my ($req, $q, $log, $fh, $git) = @_;
 	my $desc = $req->{repo_info}->{desc_html};
-	my ($x, $author);
 	my $showmsg = $q->{showmsg};
 
+	my $x = 'commit log ';
 	if ($showmsg) {
+		$showmsg = "&showmsg=1";
 		my $qs = $q->qs(showmsg => '');
 		$qs = $req->{cgi}->path_info if ($qs eq '');
-		$x = qq{<a\nhref="$qs">collapse</a>};
+		$x .= qq{[<a\nhref="$qs">oneline</a>|<b>expand</b>]};
 	} else {
 		my $qs = $q->qs(showmsg => 1);
-		$x = qq{<a\nhref="$qs">expand</a>};
+		$x .= qq{[<b>oneline</b>|<a\nhref="$qs">expand</a>]};
 	}
 
-	$fh->write("<html><head><title>$desc" .
-		"</title></head><body><pre><b>$desc</b>\n\n".
-		"<b>Commit Log</b> ($x)\n");
-	$fh->write(@graph && $showmsg ? '</pre>' : "\n");
-	my %ac;
-	local $/ = "\0\0\n";
 	my $rel = $req->{relcmd};
+	$fh->write('<html><head>' . PublicInbox::Hval::STYLE .
+		"<title>$desc</title></head><body><pre><b>$desc</b>\n\n".
+		qq!follow log\t$x\n!);
+	$fh->write($showmsg ? '</pre>' : "\n");
+	my %acache;
+	local $/ = "\0\0\n";
+	my $nr = 0;
+	my (@parents, %seen);
 	while (defined(my $line = <$log>)) {
-		my @x;
-		my ($gr, $id, $s, $D, $ai, $an, $b) = @x = split("\0", $line);
+		my ($id, $p, $s, $D, $ai, $an, $b) = split("\0", $line);
+		$seen{$id} = 1;
+		my @p = split(' ', $p);
+		push @parents, @p;
 
-		# --graph may output graph-only lines without a commit
-		unless (defined $id) {
-			$fh->write($gr . "\n");
-			next;
-		}
-
-		$s =~ s/\As//;
 		$s = utf8_html($s);
 		$s = qq(<a\nhref="${rel}commit?id=$id">$s</a>);
-
 		if ($D =~ /\AD(.+)/) {
 			$s .= ' ('. join(', ', git_dec_links($rel, $1)) . ')';
 		}
@@ -88,31 +81,44 @@ sub git_log_stream {
 			$b =~ s/\Ab//;
 			$b =~ s/\s*\z//s;
 
-			my $ah = $ac{$an} ||= utf8_html($an);
-
-			if (@graph) {
-				# duplicate the last line of graph as many
-				# times at it takes to match the number of
-				# lines in the body:
-				my $nl = ($b =~ tr/\n/\n/) + 4;
-				$nl -= ($gr =~ tr/\n/\n/);
-				$gr =~ s/([^\n]+)\z/($1."\n") x $nl/es;
-			}
-			$b = utf8_html($b);
-			$b = "$s\n- $ah @ $ai\n\n$b";
-			if (@graph) {
-				$fh->write('<table><tr><td><pre>'. $gr .
-					'</pre></td><td><pre>' . $b .
-					'</pre></td></tr></table>');
+			my $ah = $acache{$an} ||= utf8_html($an);
+			my $x = "<table><tr><td\nvalign=top><pre>";
+			if (@p && $nr) {
+				$x .= qq(<a\nhref="?h=$id$showmsg">$id</a>);
 			} else {
-				$fh->write($b. "\n\n");
+				$x .= $id;
 			}
+			my $nl = $b eq '' ? '' : "\n";
+			$b = $x . '  </pre></td><td><pre>' .
+				"<b>$s</b>\n- $ah @ $ai\n$nl" .
+				utf8_html($b) . '</pre></td></tr></table>';
+		} elsif (@p && $nr) {
+			$b = qq(<a\nhref="?h=$id$showmsg">$id</a>\t$s\n);
 		} else {
-			$fh->write((@graph ? $gr : '') . $s . "\n");
+			$b = qq($id\t$s\n);
 		}
+		$fh->write($b);
+		++$nr;
 	}
 
-	$fh->write((@graph && $showmsg ? '</pre>' : '') . '</body></html>');
+	my $m = '';
+	my $np = 0;
+	foreach my $p (@parents) {
+		next if $seen{$p};
+		$seen{$p} = ++$np;
+		my $s = git_commit_title($git, $p);
+		$s = defined($s) ? utf8_html($s) : '';
+		$m .= qq(\n<a\nhref="?h=$p$showmsg">$p</a>\t$s);
+	}
+	my $foot = $showmsg ? "<pre>\t\t$x\n\n" : "\n\t\t$x\n\n";
+	if ($np == 0) {
+		$foot .= "No commits follow";
+	} elsif ($np > 1) {
+		$foot .= "Parent commits to follow (multiple choice):\n";
+	} else {
+		$foot .= "Next parent:\n";
+	}
+	$fh->write($foot .= $m . '</pre></body></html>');
 }
 
 1;
