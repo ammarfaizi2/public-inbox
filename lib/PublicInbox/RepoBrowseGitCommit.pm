@@ -59,9 +59,10 @@ sub git_commit_stream {
 		$x .= git_parent_line('   parent', $p, $q, $git, $rel, $path);
 	} elsif (scalar(@p) > 1) {
 		my @common = ($q, $git, $rel, $path);
-		my $p = shift @p;
+		my @t = @p;
+		my $p = shift @t;
 		$x .= git_parent_line('  parents', $p, @common);
-		foreach $p (@p) {
+		foreach $p (@t) {
 			$x .= git_parent_line('         ', $p, @common);
 		}
 	}
@@ -75,6 +76,20 @@ sub git_commit_stream {
 	$fh->write($x."---\n");
 	git_show_diffstat($req, $h, $fh, $log);
 
+	if (scalar @p > 1) {
+		my $m = ' This is a merge, showing combined diff: ';
+		if ($q->{c}) {
+			my $qs = $q->qs(c => '', id => $h);
+			$m .= qq{[<a\nhref="$qs">--cc (less)</a>};
+			$m .= q{|<b>-c (more)</b>]};
+		} else {
+			$m .= q{[<b>--cc (less)</b>};
+			my $qs = $q->qs(c => 1, id => $h);
+			$m .= qq{|<a\nhref="$qs">-c (more)</a>]};
+		}
+		$fh->write($m .= "\n\n");
+	}
+
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
@@ -83,8 +98,8 @@ sub git_commit_stream {
 	while (defined($l = <$log>)) {
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
 			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
-		} elsif ($l =~ m{^diff --cc (.+)$}) { # --cc
-			$l = git_diff_cc_hdr($diff, $1) . "\n";
+		} elsif ($l =~ m{^diff --(cc|combined) (.+)$}) {
+			$l = git_diff_cc_hdr($diff, $1, $2) . "\n";
 		} elsif ($l =~ /^index ($cmt)\.\.($cmt)(.*)$/o) { # regular
 			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
@@ -111,8 +126,9 @@ sub call_git_commit {
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 	my $git = $req->{repo_info}->{git};
-	my @cmd = qw(show -z --numstat -p --cc --encoding=UTF-8
+	my @cmd = qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color --abbrev=10);
+	push @cmd, ($q->{c} ? '-c' : '--cc');
 	my @path;
 
 	# kill trailing slash
@@ -254,11 +270,11 @@ sub git_diff_ab_hunk {
 }
 
 sub git_diff_cc_hdr {
-	my ($diff, $path) = @_;
+	my ($diff, $combined, $path) = @_;
 	my $html_path = utf8_html($path);
 	my $cc = $diff->{cc} = PublicInbox::Hval->utf8(git_unquote($path));
 	$diff->{path_cc} = $cc->as_path;
-	"diff --cc <b>$html_path</b>";
+	"diff --$combined <b>$html_path</b>";
 }
 
 # index abcdef09,01234567..76543210

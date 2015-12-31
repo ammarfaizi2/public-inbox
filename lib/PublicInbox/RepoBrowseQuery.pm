@@ -6,7 +6,7 @@ package PublicInbox::RepoBrowseQuery;
 use strict;
 use warnings;
 use PublicInbox::Hval;
-my @KNOWN_PARAMS = qw(id id2 h showmsg ofs);
+my @KNOWN_PARAMS = qw(id id2 h showmsg ofs c);
 
 sub new {
 	my ($class, $cgi) = @_;
