@@ -107,8 +107,9 @@ sub git_log_stream {
 		next if $seen{$p};
 		$seen{$p} = ++$np;
 		my $s = git_commit_title($git, $p);
+		$m .= qq(\n<a\nhref="?h=$p$showmsg">$p</a>\t);
 		$s = defined($s) ? utf8_html($s) : '';
-		$m .= qq(\n<a\nhref="?h=$p$showmsg">$p</a>\t$s);
+		$m .= qq(<a\nhref="${rel}commit?id=$p">$s</a>);
 	}
 	my $foot = $showmsg ? "<pre>\t\t$x\n\n" : "\n\t\t$x\n\n";
 	if ($np == 0) {
@@ -116,7 +117,7 @@ sub git_log_stream {
 	} elsif ($np > 1) {
 		$foot .= "Parent commits to follow (multiple choice):\n";
 	} else {
-		$foot .= "Next parent:\n";
+		$foot .= "Next parent to follow:\n";
 	}
 	$fh->write($foot .= $m . '</pre></body></html>');
 }
