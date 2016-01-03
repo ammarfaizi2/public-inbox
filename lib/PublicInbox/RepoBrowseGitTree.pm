@@ -145,10 +145,8 @@ sub git_tree_show {
 		$pfx = 'tree/';
 	}
 
-	my $plain_pfx = join('/', "$req->{relcmd}plain", @{$req->{extra}}, '');
-	$plain_pfx = PublicInbox::Hval->utf8($plain_pfx)->as_path;
 	local $/ = "\0";
-	$fh->write("<b>mode\t\t\tsize\tname</b>\n");
+	$fh->write("<b>mode\tsize\tname</b>\n");
 	while (defined(my $l = <$ls>)) {
 		chomp $l;
 		my ($m, $t, $x, $s, $path) =
@@ -168,9 +166,10 @@ sub git_tree_show {
 		elsif ($m eq 'l') { $path = "<i>$path</i>" }
 		$s =~ s/\s+//g;
 
-		$fh->write(qq($m\tlog ).
-			qq(<a\nhref="$plain_pfx$ref$qs">plain</a>) .
-			qq(\t$s\t<a\nhref="$pfx$ref$qs">$path</a>\n));
+		# 'plain' and 'log' links intentionally omitted for brevity
+		# and speed
+		$fh->write(qq($m\t).
+			qq($s\t<a\nhref="$pfx$ref$qs">$path</a>\n));
 	}
 	$fh->write('</pre>');
 }
