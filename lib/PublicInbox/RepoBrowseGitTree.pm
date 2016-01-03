@@ -14,6 +14,8 @@ my %GIT_MODE = (
 	'160000' => 'g', # commit (gitlink)
 );
 
+my $BINARY_MSG = "Binary file, save using the 'plain' link above";
+
 sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
 	my @extra = @{$req->{extra}};
@@ -40,7 +42,7 @@ sub git_tree_stream {
 	if ($type eq 'tree') {
 		git_tree_show($req, $fh, $git, $hex, $q);
 	} elsif ($type eq 'blob') {
-		git_blob_show($fh, $git, $hex);
+		git_blob_show($req, $fh, $git, $hex, $q);
 	} else {
 		# TODO
 	}
@@ -53,17 +55,40 @@ sub call_git_tree {
 	sub { git_tree_stream($self, $req, @_) };
 }
 
-sub git_blob_binary {
-	my ($fh) = @_;
-	$fh->write('<pre>Binary file cannot be displayed</pre>');
+sub cur_path {
+	my ($req, $q) = @_;
+	my $qs = $q->qs;
+	my @ex = @{$req->{extra}} or return '<b>root</b>';
+	my $s;
+
+	my $rel = $req->{relcmd};
+	# avoid relative paths, here, we don't want to propagate
+	# trailing-slash URLs although we tolerate them
+	$s = "<a\nhref=\"${rel}tree$qs\">root</a>/";
+	my $cur = pop @ex;
+	my @t;
+	$s .= join('/', (map {
+		push @t, $_;
+		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
+		my $ep = $e->as_path;
+		my $eh = $e->as_html;
+		"<a\nhref=\"${rel}tree/$ep$qs\">$eh</a>";
+	} @ex), '<b>'.utf8_html($cur).'</b>');
 }
 
 sub git_blob_show {
-	my ($fh, $git, $hex) = @_;
+	my ($req, $fh, $git, $hex, $q) = @_;
 	# ref: buffer_is_binary in git.git
 	my $to_read = 8000; # git uses this size to detect binary files
 	my $text_p;
 	my $n = 0;
+
+	my $rel = $req->{relcmd};
+	my $plain = join('/', "${rel}plain", @{$req->{extra}});
+	$plain = PublicInbox::Hval->utf8($plain)->as_path . $q->qs;
+	my $t = cur_path($req, $q);
+	my $h = qq{<pre>path: $t\n\nblob: $hex (<a\nhref="$plain">plain</a>)};
+
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
 		$to_read = $$left if $to_read > $$left;
@@ -71,9 +96,11 @@ sub git_blob_show {
 		return unless defined($r) && $r > 0;
 		$$left -= $r;
 
-		return git_blob_binary($fh) if (index($buf, "\0") >= 0);
-
-		$fh->write('<table><tr><td><pre>');
+		if (index($buf, "\0") >= 0) {
+			$fh->write("$h\n$BINARY_MSG</pre>");
+			return;
+		}
+		$fh->write($h . '</pre><hr/><table><tr><td><pre>');
 		$text_p = 1;
 
 		while (1) {
@@ -105,38 +132,23 @@ sub git_tree_show {
 	my ($req, $fh, $git, $hex, $q) = @_;
 	$fh->write('<pre>');
 	my $ls = $git->popen(qw(ls-tree --abbrev=16 -l -z), $hex);
-	local $/ = "\0";
+	my $t = cur_path($req, $q);
 	my $pfx;
+	$fh->write("path: $t\n\n");
 	my $qs = $q->qs;
-	my @ex = @{$req->{extra}};
-	my $rel = $req->{relcmd};
-	my $t;
-	if (@ex) {
-		$t = "<a\nhref=\"${rel}/tree$qs\">root</a>/";
-		my $cur = pop @ex;
-		my @t;
-		$t .= join('/', (map {
-			push @t, $_;
-			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
-			my $ep = $e->as_path;
-			my $eh = $e->as_html;
-			"<a\nhref=\"${rel}tree/$ep$qs\">$eh</a>";
-		} @ex), '<b>'.utf8_html($cur).'</b>');
-		push @ex, $cur;
-	} else {
-		$t = '<b>root</b>';
-	}
-	$fh->write("$t\n");
 
 	if ($req->{tslash}) {
 		$pfx = './';
-	} elsif (@ex) {
-		$pfx = $ex[-1] . '/';
+	} elsif (defined(my $last = $req->{extra}->[-1])) {
+		$pfx = PublicInbox::Hval->utf8($last)->as_path . '/';
 	} else {
 		$pfx = 'tree/';
 	}
 
-	my $plain_pfx = join('/', "${rel}plain", @{$req->{extra}}, '');
+	my $plain_pfx = join('/', "$req->{relcmd}plain", @{$req->{extra}}, '');
+	$plain_pfx = PublicInbox::Hval->utf8($plain_pfx)->as_path;
+	local $/ = "\0";
+	$fh->write("<b>mode\t\t\tsize\tname</b>\n");
 	while (defined(my $l = <$ls>)) {
 		chomp $l;
 		my ($m, $t, $x, $s, $path) =
@@ -154,9 +166,11 @@ sub git_tree_show {
 		elsif ($m eq 'd') { $path = "<b>$path/</b>" }
 		elsif ($m eq 'x') { $path = "<b>$path</b>" }
 		elsif ($m eq 'l') { $path = "<i>$path</i>" }
+		$s =~ s/\s+//g;
 
-		$fh->write(qq($m log <a\nhref="$plain_pfx$ref$qs">raw</a>) .
-			qq( $s <a\nhref="$pfx$ref$qs">$path</a>\n));
+		$fh->write(qq($m\tlog ).
+			qq(<a\nhref="$plain_pfx$ref$qs">plain</a>) .
+			qq(\t$s\t<a\nhref="$pfx$ref$qs">$path</a>\n));
 	}
 	$fh->write('</pre>');
 }
