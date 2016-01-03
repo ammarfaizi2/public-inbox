@@ -17,12 +17,15 @@ my %GIT_MODE = (
 sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
 	my @extra = @{$req->{extra}};
+	my $git = $req->{repo_info}->{git};
 	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
-	$id eq '' and $id = 'HEAD';
+	if ($id eq '') {
+		chomp($id = $git->qx(qw(rev-parse --short=10 HEAD)));
+		$q->{id} = $id;
+	}
 
 	my $obj = "$id:$req->{expath}";
-	my $git = $req->{repo_info}->{git};
 	my ($hex, $type, $size) = $git->check($obj);
 
 	if (!defined($type) || ($type ne 'blob' && $type ne 'tree')) {
@@ -31,13 +34,15 @@ sub git_tree_stream {
 	}
 
 	my $fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
-	$fh->write('<html><head><title></title></head><body>'.
-			 PublicInbox::Hval::PRE);
+	$fh->write('<html><head>'. PublicInbox::Hval::STYLE .
+		'<title></title></head><body>');
 
 	if ($type eq 'tree') {
 		git_tree_show($req, $fh, $git, $hex, $q);
 	} elsif ($type eq 'blob') {
 		git_blob_show($fh, $git, $hex);
+	} else {
+		# TODO
 	}
 	$fh->write('</body></html>');
 	$fh->close;
@@ -50,7 +55,7 @@ sub call_git_tree {
 
 sub git_blob_binary {
 	my ($fh) = @_;
-	$fh->write("Binary file cannot be displayed\n");
+	$fh->write('<pre>Binary file cannot be displayed</pre>');
 }
 
 sub git_blob_show {
@@ -58,9 +63,9 @@ sub git_blob_show {
 	# ref: buffer_is_binary in git.git
 	my $to_read = 8000; # git uses this size to detect binary files
 	my $text_p;
+	my $n = 0;
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
-		my $n = 0;
 		$to_read = $$left if $to_read > $$left;
 		my $r = read($cat, my $buf, $to_read);
 		return unless defined($r) && $r > 0;
@@ -68,7 +73,9 @@ sub git_blob_show {
 
 		return git_blob_binary($fh) if (index($buf, "\0") >= 0);
 
+		$fh->write('<table><tr><td><pre>');
 		$text_p = 1;
+
 		while (1) {
 			my @buf = split(/\r?\n/, $buf, -1);
 			$buf = pop @buf; # last line, careful...
@@ -87,11 +94,16 @@ sub git_blob_show {
 		}
 		0;
 	});
+
+	# line numbers go in a second column:
+	$fh->write('</pre></td><td><pre>');
+	$fh->write(qq(<a\nhref="#n$_">$_</a>\n)) foreach (1..$n);
+	$fh->write('</pre></td></tr></table>');
 }
 
 sub git_tree_show {
 	my ($req, $fh, $git, $hex, $q) = @_;
-
+	$fh->write('<pre>');
 	my $ls = $git->popen(qw(ls-tree --abbrev=16 -l -z), $hex);
 	local $/ = "\0";
 	my $pfx;
@@ -124,6 +136,7 @@ sub git_tree_show {
 		$pfx = 'tree/';
 	}
 
+	my $plain_pfx = join('/', "${rel}plain", @{$req->{extra}}, '');
 	while (defined(my $l = <$ls>)) {
 		chomp $l;
 		my ($m, $t, $x, $s, $path) =
@@ -142,8 +155,8 @@ sub git_tree_show {
 		elsif ($m eq 'x') { $path = "<b>$path</b>" }
 		elsif ($m eq 'l') { $path = "<i>$path</i>" }
 
-		$ref = $pfx.$ref.$qs;
-		$fh->write("$m log raw $s <a\nhref=\"$ref\">$path</a>\n");
+		$fh->write(qq($m log <a\nhref="$plain_pfx$ref$qs">raw</a>) .
+			qq( $s <a\nhref="$pfx$ref$qs">$path</a>\n));
 	}
 	$fh->write('</pre>');
 }

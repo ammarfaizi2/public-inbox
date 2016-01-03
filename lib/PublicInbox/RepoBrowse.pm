@@ -23,7 +23,7 @@ use warnings;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepoConfig;
 
-my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob);
+my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain);
 my %VCS = (git => 'Git');
 my %LOADED;
 
