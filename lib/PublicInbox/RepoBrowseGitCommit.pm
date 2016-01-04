@@ -246,8 +246,8 @@ sub git_diff_ab_hdr {
 # @@ -1,2 +3,4 @@ (regular diff)
 sub git_diff_ab_hunk {
 	my ($diff, $ca, $cb, $ctx) = @_;
-	my ($na) = ($ca =~ /\A-(\d+),/);
-	my ($nb) = ($cb =~ /\A\+(\d+),/);
+	my ($na) = ($ca =~ /\A-(\d+)/);
+	my ($nb) = ($cb =~ /\A\+(\d+)/);
 
 	my $rel = $diff->{rel};
 	my $rv = '@@ ';
@@ -309,7 +309,7 @@ sub git_diff_cc_hunk {
 	foreach my $off (@offs) {
 		my $p = shift @p;
 		my $obj = shift @pobj; # blob SHA-1
-		my ($n) = ($off =~ /\A-(\d+),/); # line number
+		my ($n) = ($off =~ /\A-(\d+)/); # line number
 
 		if ($n == 0) { # new file (does this happen with --cc?)
 			$rv .= " $off";
@@ -320,7 +320,7 @@ sub git_diff_cc_hunk {
 	}
 
 	# we can use the normal 'tree' endpoint for the result
-	my ($n) = ($last =~ /\A\+(\d+),/); # line number
+	my ($n) = ($last =~ /\A\+(\d+)/); # line number
 	if ($n == 0) { # deleted file (does this happen with --cc?)
 		$rv .= " <b>$last</b>";
 	} else {
