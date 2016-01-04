@@ -58,7 +58,7 @@ sub git_log_stream {
 	my $rel = $req->{relcmd};
 	$fh->write('<html><head>' . PublicInbox::Hval::STYLE .
 		"<title>$desc</title></head><body><pre><b>$desc</b>\n\n".
-		qq!follow log\t$x\n!);
+		qq!commit\t\t$x\n!);
 	$fh->write($showmsg ? '</pre>' : "\n");
 	my %acache;
 	local $/ = "\0\0\n";
@@ -82,18 +82,11 @@ sub git_log_stream {
 			$b =~ s/\s*\z//s;
 
 			my $ah = $acache{$an} ||= utf8_html($an);
-			my $x = "<table><tr><td\nvalign=top><pre>";
-			if (@p && $nr) {
-				$x .= qq(<a\nhref="?h=$id$showmsg">$id</a>);
-			} else {
-				$x .= $id;
-			}
-			my $nl = $b eq '' ? '' : "\n";
+			my $x = "<table><tr><td\nvalign=top><pre>$id";
+			my $nl = $b eq '' ? '' : "\n"; # empty bodies :<
 			$b = $x . '  </pre></td><td><pre>' .
 				"<b>$s</b>\n- $ah @ $ai\n$nl" .
 				utf8_html($b) . '</pre></td></tr></table>';
-		} elsif (@p && $nr) {
-			$b = qq(<a\nhref="?h=$id$showmsg">$id</a>\t$s\n);
 		} else {
 			$b = qq($id\t$s\n);
 		}
@@ -115,7 +108,7 @@ sub git_log_stream {
 	if ($np == 0) {
 		$foot .= "No commits follow";
 	} elsif ($np > 1) {
-		$foot .= "Parent commits to follow (multiple choice):\n";
+		$foot .= "Unseen parent commits to follow (multiple choice):\n";
 	} else {
 		$foot .= "Next parent to follow:\n";
 	}
