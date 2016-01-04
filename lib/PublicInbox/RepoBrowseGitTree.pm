@@ -88,6 +88,7 @@ sub git_blob_show {
 	$plain = PublicInbox::Hval->utf8($plain)->as_path . $q->qs;
 	my $t = cur_path($req, $q);
 	my $h = qq{<pre>path: $t\n\nblob: $hex (<a\nhref="$plain">plain</a>)};
+	my $end = '';
 
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
@@ -111,7 +112,16 @@ sub git_blob_show {
 				$fh->write("<a\nid=n$n>". utf8_html($l).
 						"</a>\n");
 			}
-			last if ($$left == 0 || !defined $buf);
+			# no trailing newline:
+			if ($$left == 0 && $buf ne '') {
+				++$n;
+				$buf = utf8_html($buf);
+				$fh->write("<a\nid=n$n>". $buf ."</a>");
+				$end = '<pre>\ No newline at end of file</pre>';
+				last;
+			}
+
+			last unless defined($buf);
 
 			$to_read = $$left if $to_read > $$left;
 			my $off = length $buf; # last line from previous read
@@ -125,7 +135,7 @@ sub git_blob_show {
 	# line numbers go in a second column:
 	$fh->write('</pre></td><td><pre>');
 	$fh->write(qq(<a\nhref="#n$_">$_</a>\n)) foreach (1..$n);
-	$fh->write('</pre></td></tr></table>');
+	$fh->write("</pre></td></tr></table><hr />$end");
 }
 
 sub git_tree_show {
