@@ -79,7 +79,7 @@ sub feed_entry {
 	my ($class, $mime, $full_pfx) = @_;
 
 	# no <head> here for <style>...
-	PublicInbox::Hval::PRE .
+	qq(<pre\nstyle="white-space:pre-wrap">) .
 		multipart_text_as_html($mime, $full_pfx) . '</pre>';
 }
 
