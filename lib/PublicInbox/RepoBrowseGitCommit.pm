@@ -54,10 +54,11 @@ sub git_commit_stream {
 	}
 
 	$x .= "\n   author $au\t$ad\ncommitter $cu\t$cd\n";
-	if (scalar(@p) == 1) {
+	my $np = scalar @p;
+	if ($np == 1) {
 		my $p = $p[0];
 		$x .= git_parent_line('   parent', $p, $q, $git, $rel, $path);
-	} elsif (scalar(@p) > 1) {
+	} elsif ($np > 1) {
 		my @common = ($q, $git, $rel, $path);
 		my @t = @p;
 		my $p = shift @t;
@@ -72,23 +73,10 @@ sub git_commit_stream {
 	local $/ = "\0";
 	$l = <$log>;
 	chomp $l;
-	$x = utf8_html($l); # body
-	$fh->write($x."---\n");
+	$fh->write(utf8_html($l)."---\n");
 	git_show_diffstat($req, $h, $fh, $log);
-
-	if (scalar @p > 1) {
-		my $m = ' This is a merge, showing combined diff: ';
-		if ($q->{c}) {
-			my $qs = $q->qs(c => '', id => $h);
-			$m .= qq{[<a\nhref="$qs">--cc (less)</a>};
-			$m .= q{|<b>-c (more)</b>]};
-		} else {
-			$m .= q{[<b>--cc (less)</b>};
-			my $qs = $q->qs(c => 1, id => $h);
-			$m .= qq{|<a\nhref="$qs">-c (more)</a>]};
-		}
-		$fh->write($m .= "\n\n");
-	}
+	my $help;
+	$help = " This is a merge, showing combined diff:\n\n" if ($np > 1);
 
 	# diff
 	local $/ = "\n";
@@ -96,6 +84,10 @@ sub git_commit_stream {
 	my $diff = { h => $h, p => \@p, rel => $rel };
 	my $cc_add;
 	while (defined($l = <$log>)) {
+		if ($help) {
+			$fh->write($help);
+			$help = undef;
+		}
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
 			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
 		} elsif ($l =~ m{^diff --(cc|combined) (.+)$}) {
@@ -116,6 +108,10 @@ sub git_commit_stream {
 		}
 		$fh->write($l);
 	}
+
+	if ($help) {
+		$fh->write(" This is a merge, combined diff is empty.\n");
+	}
 	$fh->write('</pre></body></html>');
 }
 
@@ -127,8 +123,7 @@ sub call_git_commit {
 	$id eq '' and $id = 'HEAD';
 	my $git = $req->{repo_info}->{git};
 	my @cmd = qw(show -z --numstat -p --encoding=UTF-8
-			--no-notes --no-color --abbrev=10);
-	push @cmd, ($q->{c} ? '-c' : '--cc');
+			--no-notes --no-color --abbrev=10 -c);
 	my @path;
 
 	# kill trailing slash
