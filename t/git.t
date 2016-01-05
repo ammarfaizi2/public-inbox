@@ -139,4 +139,29 @@ if (1) {
 	ok($nl > 1, "qx returned array length of $nl");
 }
 
+{
+	my $git = PublicInbox::Git->new($dir);
+	open my $tmperr, '>&', \*STDERR or die "dup stderr failed: $!\n";
+
+	open STDERR, '>', '/dev/null' or die "redirect stderr failed: $!\n";
+	my $err = $git->popen(qw(cat-file blob non-existent));
+	my @out = <$err>;
+	my $close_ret = close $err;
+	my $close_err = $?;
+	open STDERR, '>&', $tmperr or die "restore stderr failed: $!\n";
+	is(join('', @out), '', 'no output on stdout on error');
+	isnt($close_err, 0, 'close set $? on bad command');
+	ok(!$close_ret, 'close returned error on bad command');
+
+	open STDERR, '>', '/dev/null' or die "redirect stderr failed: $!\n";
+	$err = $git->popen(qw(tag -l));
+	@out = <$err>;
+	$close_ret = close $err;
+	$close_err = $?;
+	open STDERR, '>&', $tmperr or die "restore stderr failed: $!\n";
+	is(join('', @out), '', 'no output on stdout on error');
+	ok(!$close_err, 'close clobbered $? on empty output');
+	ok($close_ret, 'close returned error on empty output');
+}
+
 done_testing();
