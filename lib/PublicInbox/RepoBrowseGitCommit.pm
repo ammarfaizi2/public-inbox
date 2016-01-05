@@ -31,8 +31,8 @@ sub git_commit_stream {
 	my $rel = $req->{relcmd};
 	my $qs = $q->qs(id => $h);
 	chomp $H;
-	my $x = "<html><head><title>$s</title></head><body>" .
-		PublicInbox::Hval::PRE .
+	my $x = "<html><head><title>$s</title>" .
+		PublicInbox::Hval::STYLE . '</head><body><pre>' .
 		"   commit $H (<a\nhref=\"${rel}patch$qs\">patch</a>)\n" .
 		"     tree <a\nhref=\"${rel}tree?id=$h\">$t</a>";
 
