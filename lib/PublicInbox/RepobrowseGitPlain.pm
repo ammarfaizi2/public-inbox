@@ -1,16 +1,16 @@
 # Copyright (C) 2015-2016 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::RepoBrowseGitPlain;
+package PublicInbox::RepobrowseGitPlain;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::RepoBrowseGitBlob;
+use base qw(PublicInbox::RepobrowseBase);
+use PublicInbox::RepobrowseGitBlob;
 use PublicInbox::Hval qw(utf8_html);
 
 sub call_git_plain {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 

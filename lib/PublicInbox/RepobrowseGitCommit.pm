@@ -2,12 +2,12 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # shows the /commit/ endpoint for git repositories
-package PublicInbox::RepoBrowseGitCommit;
+package PublicInbox::RepobrowseGitCommit;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
+use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::Hval qw(utf8_html);
-use PublicInbox::RepoBrowseGit qw(git_unquote git_commit_title);
+use PublicInbox::RepobrowseGit qw(git_unquote git_commit_title);
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
@@ -118,7 +118,7 @@ sub git_commit_stream {
 sub call_git_commit {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 	my $git = $req->{repo_info}->{git};

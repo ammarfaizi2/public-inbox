@@ -1,12 +1,12 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-package PublicInbox::RepoBrowseGitLog;
+package PublicInbox::RepobrowseGitLog;
 use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
-use base qw(PublicInbox::RepoBrowseBase);
-use PublicInbox::RepoBrowseGit qw(git_dec_links git_commit_title);
+use base qw(PublicInbox::RepobrowseBase);
+use PublicInbox::RepobrowseGit qw(git_dec_links git_commit_title);
 # cannot rely on --date=format-local:... yet, it is too new (September 2015)
 my $LOG_FMT = '--pretty=tformat:'.
 		join('%x00', qw(%h %p %s D%D));
@@ -19,7 +19,7 @@ sub call_git_log {
 	$max = int($max);
 	$max = 50 if $max == 0;
 
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $h = $q->{h};
 	$h eq '' and $h = 'HEAD';
 

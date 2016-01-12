@@ -1,8 +1,8 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ (https://www.gnu.org/licenses/agpl-3.0.txt)
 
-# common functions used by other RepoBrowseGit* modules
-package PublicInbox::RepoBrowseGit;
+# common functions used by other RepobrowseGit* modules
+package PublicInbox::RepobrowseGit;
 use strict;
 use warnings;
 use base qw(Exporter);

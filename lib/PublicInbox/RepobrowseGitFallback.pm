@@ -3,13 +3,13 @@
 
 # when no endpoints match, fallback to this and serve a static file
 # This can serve Smart HTTP in the future.
-package PublicInbox::RepoBrowseGitFallback;
+package PublicInbox::RepobrowseGitFallback;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
+use base qw(PublicInbox::RepobrowseBase);
 use Fcntl qw(:seek);
 
-# overrides PublicInbox::RepoBrowseBase::call
+# overrides PublicInbox::RepobrowseBase::call
 sub call {
 	my ($self, undef, $req) = @_;
 	my $expath = $req->{expath};

@@ -64,4 +64,4 @@ bless {
 	psgi => $psgi,
 	git_dir => $git_dir,
 	app => $app,
-}, 'RepoBrowse::TestGit';
+}, 'Repobrowse::TestGit';

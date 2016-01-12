@@ -1,9 +1,9 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::RepoBrowseGitTree;
+package PublicInbox::RepobrowseGitTree;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
+use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::Hval qw(utf8_html);
 
 my %GIT_MODE = (
@@ -20,7 +20,7 @@ sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
 	my @extra = @{$req->{extra}};
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	if ($id eq '') {
 		chomp($id = $git->qx(qw(rev-parse --short=10 HEAD)));

@@ -2,17 +2,17 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Show a blob as-is
-package PublicInbox::RepoBrowseGitBlob;
+package PublicInbox::RepobrowseGitBlob;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
+use base qw(PublicInbox::RepobrowseBase);
 use base qw(Exporter);
 our @EXPORT = qw(git_blob_mime_type git_blob_stream_response);
 
 sub call_git_blob {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 

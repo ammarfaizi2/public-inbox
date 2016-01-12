@@ -5,11 +5,11 @@
 # Usage: plackup [OPTIONS] /path/to/this/file
 use strict;
 use warnings;
-use PublicInbox::RepoBrowse;
+use PublicInbox::Repobrowse;
 use Plack::Request;
 use Plack::Builder;
 my $have_deflater = eval { require Plack::Middleware::Deflater; 1 };
-my $repo_browse = PublicInbox::RepoBrowse->new;
+my $repo_browse = PublicInbox::Repobrowse->new;
 
 builder {
 	enable 'Plack::Middleware::Chunked';

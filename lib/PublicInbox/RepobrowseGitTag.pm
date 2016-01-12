@@ -2,10 +2,10 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # shows the /tag/ endpoint for git repositories
-package PublicInbox::RepoBrowseGitTag;
+package PublicInbox::RepobrowseGitTag;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepoBrowseBase);
+use base qw(PublicInbox::RepobrowseBase);
 use POSIX qw(strftime);
 use PublicInbox::Hval qw(utf8_html);
 
@@ -18,7 +18,7 @@ my %cmd_map = ( # type => action
 sub call_git_tag {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepoBrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
 	my $h = $q->{h};
 	$h eq '' and return sub {
 		my ($res) = @_;

@@ -1,6 +1,6 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::RepoConfig;
+package PublicInbox::RepobrowseConfig;
 use strict;
 use warnings;
 use PublicInbox::Config qw/try_cat/;
@@ -17,7 +17,7 @@ sub new {
 sub default_file {
 	my $f = $ENV{PI_REPO_CONFIG};
 	return $f if defined $f;
-	PublicInbox::Config::config_dir() . '/repo_config';
+	PublicInbox::Config::config_dir() . '/repobrowse_config';
 }
 
 # Returns something like:

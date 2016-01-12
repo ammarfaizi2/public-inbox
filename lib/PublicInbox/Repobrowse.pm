@@ -12,16 +12,16 @@
 #
 # This allows an M:N relationship between "normal" repos for project
 # and public-inbox (ssoma) git repositories where N may be zero.
-# In other words, RepoBrowse must work for repositories without
+# In other words, repobrowse must work for repositories without
 # any public-inbox at all; or with multiple public-inboxes.
 # And the rest of public-inbox will always work without a "normal"
 # code repo for the project.
 
-package PublicInbox::RepoBrowse;
+package PublicInbox::Repobrowse;
 use strict;
 use warnings;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
-use PublicInbox::RepoConfig;
+use PublicInbox::RepobrowseConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain Tag);
 my %VCS = (git => 'Git');
@@ -29,7 +29,7 @@ my %LOADED;
 
 sub new {
 	my ($class, $file) = @_;
-	bless { rconfig => PublicInbox::RepoConfig->new($file) }, $class;
+	bless { rconfig => PublicInbox::RepobrowseConfig->new($file) }, $class;
 }
 
 # simple response for errors
@@ -71,7 +71,7 @@ sub run {
 			unshift @extra, $cmd;
 			$mod = 'Fallback';
 		}
-		$mod = load_once("PublicInbox::RepoBrowse$vcs$mod");
+		$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
 		$vcs = load_once("PublicInbox::$vcs");
 		$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
 		$req->{relcmd} = '../' x scalar(@extra);
