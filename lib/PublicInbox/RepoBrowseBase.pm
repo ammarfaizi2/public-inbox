@@ -4,7 +4,7 @@ package PublicInbox::RepoBrowseBase;
 use strict;
 use warnings;
 require PublicInbox::RepoBrowseQuery;
-require PublicInbox::Hval;
+use PublicInbox::Hval;
 
 sub new { bless {}, shift }
 
@@ -51,6 +51,16 @@ sub mime_type {
 	# with images/audio/video; but don't allow random HTML from
 	# a repository to be served
 	(defined($ct) && $ct =~ m!\A(?:image|audio|video)/!) ? $ct : undef;
+}
+
+# starts an HTML page for Repobrowse in a consistent way
+sub html_start {
+	my ($self, $req, $title_html) = @_;
+	my $desc = $req->{repo_info}->{desc_html};
+
+	"<html><head><title>$title_html</title>" .
+		PublicInbox::Hval::STYLE .
+		"</head><body><pre><b>$desc</b>";
 }
 
 1;
