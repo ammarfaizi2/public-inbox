@@ -36,6 +36,7 @@ sub lookup {
 	my $path = $self->{"repo.$repo_path.path"};
 	(defined $path && -d $path) or return;
 	$rv->{path} = $path;
+	$rv->{path_info} = $repo_path;
 
 	foreach my $key (qw(description cloneurl)) {
 		$rv->{$key} = try_cat("$path/$key");
