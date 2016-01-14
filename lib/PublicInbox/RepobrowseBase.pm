@@ -3,7 +3,7 @@
 package PublicInbox::RepobrowseBase;
 use strict;
 use warnings;
-require PublicInbox::RepobrowseQuery;
+require PublicInbox::RepobrowseGitQuery;
 use PublicInbox::Hval;
 
 sub new { bless {}, shift }

@@ -18,7 +18,7 @@ my %cmd_map = ( # type => action
 sub call_git_tag {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $h = $q->{h};
 	$h eq '' and return sub {
 		my ($res) = @_;

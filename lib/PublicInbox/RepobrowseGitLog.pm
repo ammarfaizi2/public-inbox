@@ -19,7 +19,7 @@ sub call_git_log {
 	$max = int($max);
 	$max = 50 if $max == 0;
 
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $h = $q->{h};
 	$h eq '' and $h = 'HEAD';
 

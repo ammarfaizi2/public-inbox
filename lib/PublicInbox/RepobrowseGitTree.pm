@@ -20,7 +20,7 @@ sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
 	my @extra = @{$req->{extra}};
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $id = $q->{id};
 	if ($id eq '') {
 		chomp($id = $git->qx(qw(rev-parse --short=10 HEAD)));

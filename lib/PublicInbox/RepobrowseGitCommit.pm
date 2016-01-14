@@ -118,7 +118,7 @@ sub git_commit_stream {
 sub call_git_commit {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 	my $git = $req->{repo_info}->{git};

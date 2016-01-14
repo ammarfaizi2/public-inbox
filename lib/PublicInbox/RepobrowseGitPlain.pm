@@ -10,7 +10,7 @@ use PublicInbox::Hval qw(utf8_html);
 sub call_git_plain {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 

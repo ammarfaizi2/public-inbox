@@ -15,7 +15,7 @@ my $sig = '--signature=git '.join(' ', @CMD);
 sub call_git_patch {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id =~ /\A[\w-]+([~\^][~\^\d])*\z/ or $id = 'HEAD';
 
