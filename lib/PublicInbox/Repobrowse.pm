@@ -63,33 +63,41 @@ sub run {
 	};
 
 	my $cmd = shift @extra;
+	my $vcs_lc = $repo_info->{vcs};
+	my $vcs = $VCS{$vcs_lc} or return r404();
+	my $mod;
 	if (defined $cmd && length $cmd) {
-		my $vcs_lc = $repo_info->{vcs};
-		my $vcs = $VCS{$vcs_lc} or return r404();
-		my $mod = $CMD{$cmd};
+		$mod = $CMD{$cmd};
 		unless ($mod) {
 			unshift @extra, $cmd;
 			$mod = 'Fallback';
 		}
-		$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
-		$vcs = load_once("PublicInbox::$vcs");
-		$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
 		$req->{relcmd} = '../' x scalar(@extra);
-		while (@extra && $extra[-1] eq '') {
-			pop @extra;
-			++$req->{tslash};
-		}
-		$req->{expath} = join('/', @extra);
-		my $rv = eval { $mod->new->call($cmd, $req) };
-		$rv || r404();
 	} else {
-		$req->{relcmd} = defined $cmd ? ''  : './';
-		summary($req);
+		$mod = 'Summary';
+		$cmd = 'summary';
+		if ($path_info =~ m!/\z!) {
+			$req->{tslash} = $path_info =~ tr!/!!;
+			$req->{relcmd} = '';
+		} else {
+			my @repo = split('/', $repo_path);
+			if (@repo > 1) {
+				$req->{relcmd} = "./$repo[-1]/";
+			} else {
+				$req->{relcmd} = "/$repo[-1]/";
+			}
+		}
 	}
-}
-
-sub summary {
-	r404();
+	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
+	$vcs = load_once("PublicInbox::$vcs");
+	$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
+	while (@extra && $extra[-1] eq '') {
+		pop @extra;
+		++$req->{tslash};
+	}
+	$req->{expath} = join('/', @extra);
+	my $rv = eval { $mod->new->call($cmd, $req) }; # RepobrowseBase::call
+	$rv || r404();
 }
 
 sub r404 { r(404, 'Not Found') }

@@ -45,7 +45,7 @@ sub lookup {
 	$rv->{desc_html} =
 		PublicInbox::Hval->new_oneline($rv->{description})->as_html;
 
-	foreach my $key (qw(publicinbox vcs)) {
+	foreach my $key (qw(publicinbox vcs readme)) {
 		$rv->{$key} = $self->{"repo.$repo_path.$key"};
 	}
 
