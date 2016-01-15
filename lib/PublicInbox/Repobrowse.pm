@@ -35,6 +35,32 @@ sub new {
 # simple response for errors
 sub r { [ $_[0], ['Content-Type' => 'text/plain'], [ join(' ', @_, "\n") ] ] }
 
+# Remove trailing slash in URLs which regular humans are likely to read
+# in an attempt to improve cache hit ratios.  Do not redirect
+# plain|patch|blob|fallback endpoints since those could be using
+# automated tools which may not follow redirects automatically
+# (e.g. curl does not follow 301 unless given "-L")
+my %NO_TSLASH = map { $_ => 1 } qw(Log Commit Tree Summary Tag);
+sub no_tslash {
+	my ($cgi) = @_;
+	my ($base, $uri);
+	if (ref($cgi) eq 'CGI') {
+		$base = $cgi->url(-base);
+		$uri = $ENV{REQUEST_URI};
+	} else { # Plack::Request
+		$base = $cgi->base;
+		$base =~ s!/+\z!!;
+		$uri = $cgi->request_uri;
+	}
+	if ($uri !~ s!/+\z!!) {
+		warn "W: buggy redirect? base=$base request_uri=$uri\n";
+	}
+	my $url = $base . $uri;
+	[ 301,
+	  [ Location => $url, 'Content-Type' => 'text/plain' ],
+	  [ "Redirecting to $url\n" ] ]
+}
+
 sub run {
 	my ($self, $cgi, $method) = @_;
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD\z/);
@@ -59,9 +85,8 @@ sub run {
 		extra => \@extra, # path
 		cgi => $cgi,
 		rconfig => $rconfig,
-		tslash => 0,
 	};
-
+	my $tslash = 0;
 	my $cmd = shift @extra;
 	my $vcs_lc = $repo_info->{vcs};
 	my $vcs = $VCS{$vcs_lc} or return r404();
@@ -77,8 +102,7 @@ sub run {
 		$mod = 'Summary';
 		$cmd = 'summary';
 		if ($path_info =~ m!/\z!) {
-			$req->{tslash} = $path_info =~ tr!/!!;
-			$req->{relcmd} = '';
+			$tslash = $path_info =~ tr!/!!;
 		} else {
 			my @repo = split('/', $repo_path);
 			if (@repo > 1) {
@@ -88,13 +112,20 @@ sub run {
 			}
 		}
 	}
+	while (@extra && $extra[-1] eq '') {
+		pop @extra;
+		++$tslash;
+	}
+
+	if ($tslash && $path_info ne '/' && $NO_TSLASH{$mod}) {
+		return no_tslash($cgi);
+	}
+
+	$req->{tslash} = $tslash;
 	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
 	$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
-	while (@extra && $extra[-1] eq '') {
-		pop @extra;
-		++$req->{tslash};
-	}
+
 	$req->{expath} = join('/', @extra);
 	my $rv = eval { $mod->new->call($cmd, $req) }; # RepobrowseBase::call
 	$rv || r404();

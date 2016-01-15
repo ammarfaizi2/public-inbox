@@ -16,10 +16,8 @@ test_psgi($test->{app}, sub {
 
 	my $slash = $req . '/';
 	my $r2 = $cb->(GET($slash));
-	is(200, $r2->code, 'got 200 response from dir');
-	my $slash_body = dechunk($r2);
-	like($slash_body, qr{href="\./dur\?id=\w+\"><b>dur/</b></a>},
-		'path ok w/ slash');
+	is(301, $r2->code, 'got 301 response from dir with slash');
+	is($req, $r2->header('Location'), 'redirected w/o slash');
 
 	$req = 'http://example.com/test.git/tree/foo.txt';
 	my $blob = $cb->(GET($req));
