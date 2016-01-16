@@ -141,7 +141,7 @@ sub git_blob_show {
 sub git_tree_show {
 	my ($req, $fh, $git, $hex, $q) = @_;
 	$fh->write('<pre>');
-	my $ls = $git->popen(qw(ls-tree --abbrev=16 -l -z), $hex);
+	my $ls = $git->popen(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $t = cur_path($req, $q);
 	my $pfx;
 	$fh->write("path: $t\n\n");

@@ -57,7 +57,7 @@ sub git_tree_plain {
 			$pfx = "$last/";
 		}
 	}
-	my $ls = $git->popen(qw(ls-tree --name-only -z --abbrev=12), $hex);
+	my $ls = $git->popen(qw(ls-tree --name-only -z), $git->abbrev, $hex);
 	sub {
 		my ($res) = @_;
 		my $fh = $res->([ 200, ['Content-Type' => 'text/html']]);

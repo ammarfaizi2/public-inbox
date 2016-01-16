@@ -13,6 +13,11 @@ use POSIX qw(dup2);
 require IO::Handle;
 use PublicInbox::Spawn qw(spawn popen_rd);
 
+# Documentation/SubmittingPatches recommends 12 (Linux v4.4)
+my $abbrev = `git config core.abbrev` || 12;
+
+sub abbrev { "--abbrev=$abbrev" }
+
 sub new {
 	my ($class, $git_dir) = @_;
 	bless { git_dir => $git_dir }, $class

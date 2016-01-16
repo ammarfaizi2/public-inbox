@@ -122,8 +122,8 @@ sub call_git_commit {
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 	my $git = $req->{repo_info}->{git};
-	my @cmd = qw(show -z --numstat -p --encoding=UTF-8
-			--no-notes --no-color --abbrev=10 -c);
+	my @cmd = (qw(show -z --numstat -p --encoding=UTF-8
+			--no-notes --no-color -c), $git->abbrev);
 	my @path;
 
 	# kill trailing slash

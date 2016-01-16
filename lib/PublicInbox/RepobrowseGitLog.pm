@@ -25,7 +25,7 @@ sub call_git_log {
 
 	my $git = $repo_info->{git};
 	my $log = $git->popen(qw(log --no-notes --no-color --abbrev-commit),
-				$LOG_FMT, "-$max", $h, '--');
+				$git->abbrev, $LOG_FMT, "-$max", $h, '--');
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);

@@ -216,7 +216,7 @@ sub each_recent_blob {
 	# leave us with filenames with spaces in them..
 	my $git = $ctx->{git} ||= PublicInbox::Git->new($ctx->{git_dir});
 	my $log = $git->popen(qw/log --no-notes --no-color --raw -r
-				--abbrev=16 --abbrev-commit/,
+				--abbrev-commit/, $git->abbrev,
 				"--format=%h%x00%ct%x00%an%x00%s%x00",
 				$range);
 	my %deleted; # only an optimization at this point
