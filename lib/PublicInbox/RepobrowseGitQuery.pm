@@ -6,7 +6,7 @@ package PublicInbox::RepobrowseGitQuery;
 use strict;
 use warnings;
 use PublicInbox::Hval;
-my @KNOWN_PARAMS = qw(id id2 h showmsg ofs);
+my @KNOWN_PARAMS = qw(id id2 h ofs);
 
 sub new {
 	my ($class, $cgi) = @_;
