@@ -49,13 +49,13 @@ ok(-f $psgi, 'psgi example for repobrowse.psgi found');
 	}
 	waitpid $pid, 0;
 	is($?, 0, 'fast-import succeeded');
-	my $repo_config = "$git_dir/pi_repo_config";
+	my $repobrowse_config = "$git_dir/pi_repobrowse_config";
 	my $fh;
-	ok((open $fh, '>', $repo_config and
+	ok((open $fh, '>', $repobrowse_config and
 		print $fh '[repo "test.git"]', "\n",
 			"\t", "path = $git_dir", "\n" and
-		close $fh), 'created repo config');
-	local $ENV{PI_REPO_CONFIG} = $repo_config;
+		close $fh), 'created repobrowse config');
+	local $ENV{PI_REPOBROWSE_CONFIG} = $repobrowse_config;
 	ok($app = require $psgi, 'loaded PSGI app');
 }
 

@@ -15,7 +15,7 @@ sub new {
 }
 
 sub default_file {
-	my $f = $ENV{PI_REPO_CONFIG};
+	my $f = $ENV{PI_REPOBROWSE_CONFIG};
 	return $f if defined $f;
 	PublicInbox::Config::config_dir() . '/repobrowse_config';
 }
