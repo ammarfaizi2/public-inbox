@@ -37,7 +37,7 @@ sub emit_summary {
 	$fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
 	# ref names are unpredictable in length and requires tables :<
 	$fh->write($self->html_start($req,
-				"$repo_info->{path_info}: overview") .
+				"$repo_info->{repo}: overview") .
 			'</pre><table>');
 
 	my $rel = $req->{relcmd};

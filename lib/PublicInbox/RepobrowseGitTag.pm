@@ -133,7 +133,7 @@ sub git_tag_list {
 
 	# tag names are unpredictable in length and requires tables :<
 	$fh->write($self->html_start($req,
-				"$repo_info->{path_info}: tag list") .
+				"$repo_info->{repo}: tag list") .
 		'</pre><table><tr>' .
 		join('', map { "<th><tt>$_</tt></th>" } qw(tag subject date)).
 		'</tr>');
@@ -166,7 +166,7 @@ sub unknown_tag_type {
 	my $obj_link = qq(<a\nhref="$rel$cmd?id=$hex">$label</a>\n);
 
 	$fh->write($self->html_start($req,
-				"$repo_info->{path_info}: ref: $h") .
+				"$repo_info->{repo}: ref: $h") .
 		"\n\n       <b>$h</b> (lightweight tag)\nobject $obj_link\n");
 }
 

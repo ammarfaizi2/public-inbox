@@ -61,6 +61,12 @@ sub no_tslash {
 	  [ "Redirecting to $url\n" ] ]
 }
 
+sub root_index {
+	my ($self) = @_;
+	my $mod = load_once('PublicInbox::RepobrowseRoot');
+	$mod->new->call($self->{rconfig}); # RepobrowseRoot::call
+}
+
 sub run {
 	my ($self, $cgi, $method) = @_;
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD\z/);
@@ -68,11 +74,12 @@ sub run {
 	# URL syntax: / repo [ / cmd [ / path ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
 	# repo and path (@extra) may both contain '/'
-	my $rconfig = $self->{rconfig};
 	my $path_info = uri_unescape($cgi->path_info);
 	my (undef, $repo_path, @extra) = split(m{/+}, $path_info, -1);
 
-	return r404() unless $repo_path;
+	return $self->root_index($self) unless length($repo_path);
+
+	my $rconfig = $self->{rconfig}; # RepobrowseConfig
 	my $repo_info;
 	until ($repo_info = $rconfig->lookup($repo_path)) {
 		my $p = shift @extra or last;
@@ -104,12 +111,8 @@ sub run {
 		if ($path_info =~ m!/\z!) {
 			$tslash = $path_info =~ tr!/!!;
 		} else {
-			my @repo = split('/', $repo_path);
-			if (@repo > 1) {
-				$req->{relcmd} = "./$repo[-1]/";
-			} else {
-				$req->{relcmd} = "/$repo[-1]/";
-			}
+			my @x = split('/', $repo_path);
+			$req->{relcmd} = @x > 1 ? "./$x[-1]/" : "/$x[-1]/";
 		}
 	}
 	while (@extra && $extra[-1] eq '') {
@@ -117,9 +120,7 @@ sub run {
 		++$tslash;
 	}
 
-	if ($tslash && $path_info ne '/' && $NO_TSLASH{$mod}) {
-		return no_tslash($cgi);
-	}
+	return no_tslash($cgi) if ($tslash && $NO_TSLASH{$mod});
 
 	$req->{tslash} = $tslash;
 	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");

@@ -29,7 +29,7 @@ sub call_git_log {
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
-		my $title = utf8_html("log: $repo_info->{path_info} ($h)");
+		my $title = "log: $repo_info->{repo} ".utf8_html("($h)");
 		$fh->write($self->html_start($req, $title));
 		git_log_stream($req, $q, $log, $fh, $git);
 		$fh->close;

@@ -11,6 +11,8 @@ sub new {
 	$file = default_file() unless defined($file);
 	my $self = bless PublicInbox::Config::git_config_dump($file), $class;
 	$self->{-cache} = {};
+	# for root
+	$self->{-groups} = { -hidden => [], -none => [] };
 	$self;
 }
 
@@ -36,8 +38,9 @@ sub lookup {
 	my $path = $self->{"repo.$repo_path.path"};
 	(defined $path && -d $path) or return;
 	$rv->{path} = $path;
-	$rv->{path_info} = $repo_path;
+	$rv->{repo} = $repo_path;
 
+	# gitweb compatibility
 	foreach my $key (qw(description cloneurl)) {
 		$rv->{$key} = try_cat("$path/$key");
 	}
@@ -45,8 +48,16 @@ sub lookup {
 	$rv->{desc_html} =
 		PublicInbox::Hval->new_oneline($rv->{description})->as_html;
 
-	foreach my $key (qw(publicinbox vcs readme)) {
+	foreach my $key (qw(publicinbox vcs readme group)) {
 		$rv->{$key} = $self->{"repo.$repo_path.$key"};
+	}
+
+	my $g = $rv->{group};
+	defined $g or $g = '-none';
+	if (ref($g) eq 'ARRAY') {
+		push @{$self->{-groups}->{$_} ||= []}, $repo_path foreach @$g;
+	} else {
+		push @{$self->{-groups}->{$g} ||= []}, $repo_path;
 	}
 
 	# of course git is the default VCS
