@@ -82,7 +82,7 @@ sub git_commit_stream {
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
 	my $diff = { h => $h, p => \@p, rel => $rel };
-	my $cc_add;
+	my ($cc_ins, $cc_del);
 	while (defined($l = <$log>)) {
 		if ($help) {
 			$fh->write($help);
@@ -96,11 +96,16 @@ sub git_commit_stream {
 			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			$l = git_diff_ab_hunk($diff, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^\+/ || ($cc_add && $l =~ $cc_add)) {
-			$l = git_diff_add($l) . "\n";
+
+		} elsif ($l =~ /^\+{1,3}\s*/ || ($cc_ins && $l =~ $cc_ins)) {
+			$l = git_diff_ins($l) . "\n";
+		} elsif ($l =~ s/^(\-{1,3}\s*)// ||
+					($cc_del && $l =~ s/$cc_del//)) {
+			$l = git_diff_del($1, $l) . "\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			$l = git_diff_cc_index($diff, $1, $2, $3) . "\n";
-			$cc_add ||= $diff->{cc_add};
+			$cc_ins ||= $diff->{cc_ins};
+			$cc_del ||= $diff->{cc_del};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			$l = git_diff_cc_hunk($diff, $1, $2, $3) . "\n";
 		} else {
@@ -278,10 +283,11 @@ sub git_diff_cc_index {
 	$end = utf8_html($end);
 	my @before = split(',', $before);
 	$diff->{pobj_cc} = \@before;
-	$diff->{cc_add} ||= eval {
+	unless ($diff->{cc_ins}) {
 		my $n = scalar(@before) - 1;
-		qr/^ {0,$n}[\+]/;
-	};
+		$diff->{cc_ins} = qr/^ {0,$n}[\+]\s*/;
+		$diff->{cc_del} = qr/^( {0,$n}[\-]\s*)/;
+	}
 
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
@@ -346,10 +352,30 @@ sub git_diffstat_rename {
 	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
 }
 
-sub git_diff_add {
+# It would be nice to be able to use colors for showing diff hunks.
+# Unfortunately, the default green+red colors in common web viewers
+# (gitweb, cgit, etc) are difficult to read for some people, myself
+# included.
+#
+# We cannot rely on CSS styling since it is unsafe and incompatible with
+# some browsers.
+#
+# Tried using semantic tags (ins and del).  Unfortunately, alignment
+# gets completely screwed in text-only browsers.  On common GUI browsers,
+# <del> renders unreadably by default (strike-throughs) and <ins> is
+# visually too noisy (with underlines).  So we'll bold added lines and
+# leave deleted lines alone (prefixed with '-')
+sub git_diff_ins {
 	my ($l) = @_;
 	chomp $l;
 	'<b>'.utf8_html($l).'</b>';
+}
+
+sub git_diff_del {
+	my ($pfx, $l) = @_;
+	chomp $l;
+	# underline fallbacks look ugly with leading whitespace
+	$pfx. '<i>'.utf8_html($l).'</i>';
 }
 
 sub git_parent_line {
