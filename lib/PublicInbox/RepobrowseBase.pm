@@ -5,6 +5,7 @@ use strict;
 use warnings;
 require PublicInbox::RepobrowseGitQuery;
 use PublicInbox::Hval;
+our %MIME_TYPE_WHITELIST = ( 'application/pdf' => 1 );
 
 sub new { bless {}, shift }
 
@@ -46,11 +47,13 @@ sub mime_type_unsafe {
 sub mime_type {
 	my ($self, $fn) = @_;
 	my $ct = $self->mime_type_unsafe($fn);
+	return unless defined $ct;
 
 	# XSS protection.  Assume the browser knows what to do
 	# with images/audio/video; but don't allow random HTML from
 	# a repository to be served
-	(defined($ct) && $ct =~ m!\A(?:image|audio|video)/!) ? $ct : undef;
+	($ct =~ m!\A(?:image|audio|video)/! || $MIME_TYPE_WHITELIST{$ct}) ?
+		$ct : undef;
 }
 
 # starts an HTML page for Repobrowse in a consistent way
