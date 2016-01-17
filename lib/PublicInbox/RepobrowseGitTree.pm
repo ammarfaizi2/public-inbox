@@ -14,7 +14,7 @@ my %GIT_MODE = (
 	'160000' => 'g', # commit (gitlink)
 );
 
-my $BINARY_MSG = "Binary file, save using the 'plain' link above";
+my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 
 sub git_tree_stream {
 	my ($self, $req, $res) = @_; # res: Plack callback
@@ -87,11 +87,12 @@ sub git_blob_show {
 	my $plain = join('/', "${rel}plain", @{$req->{extra}});
 	$plain = PublicInbox::Hval->utf8($plain)->as_path . $q->qs;
 	my $t = cur_path($req, $q);
-	my $h = qq{<pre>path: $t\n\nblob: $hex (<a\nhref="$plain">plain</a>)};
+	my $h = qq{<pre>path: $t\n\nblob $hex};
 	my $end = '';
 
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
+		$h .= qq{\t$$left bytes (<a\nhref="$plain">raw</a>)};
 		$to_read = $$left if $to_read > $$left;
 		my $r = read($cat, my $buf, $to_read);
 		return unless defined($r) && $r > 0;
@@ -101,7 +102,7 @@ sub git_blob_show {
 			$fh->write("$h\n$BINARY_MSG</pre>");
 			return;
 		}
-		$fh->write($h . '</pre><hr/><table><tr><td><pre>');
+		$fh->write($h."</pre><hr/><table\nsummary=blob><tr><td><pre>");
 		$text_p = 1;
 
 		while (1) {
