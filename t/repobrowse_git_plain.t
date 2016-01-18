@@ -21,7 +21,8 @@ test_psgi($test->{app}, sub {
 
 	$req = 'http://example.com/test.git/plain/foo.txt';
 	my $blob = $cb->(GET($req));
-	is($blob->header('Content-Type'), 'text/plain', 'got text/plain blob');
+	like($blob->header('Content-Type'), qr!\Atext/plain\b!,
+		'got text/plain blob');
 	is($blob->content, "-----\nhello\nworld\n", 'raw blob passed');
 });
 

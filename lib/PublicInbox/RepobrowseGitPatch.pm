@@ -33,7 +33,8 @@ sub call_git_patch {
 	return unless (defined $n && $n > 0);
 	sub {
 		my ($res) = @_; # Plack callback
-		my $fh = $res->([200, ['Content-Type' => 'text/plain']]);
+		my $fh = $res->([200, [
+			'Content-Type' => 'text/plain; charset=UTF-8']]);
 		$fh->write($buf);
 		while (1) {
 			$n = read($fp, $buf, 8192);

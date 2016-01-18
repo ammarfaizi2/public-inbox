@@ -27,7 +27,7 @@ sub call_git_blob {
 	if ($type eq 'blob') {
 		$type = git_blob_mime_type($self, $req, $cat, \$buf, \$left);
 	} elsif ($type eq 'commit' || $type eq 'tag') {
-		$type = 'text/plain';
+		$type = 'text/plain; charset=UTF-8';
 	} else {
 		$type = 'application/octet-stream';
 	}
@@ -49,7 +49,8 @@ sub git_blob_mime_type {
 		return;
 	}
 	$$left -= $r;
-	(index($buf, "\0") < 0) ?  'text/plain' : 'application/octet-stream';
+	(index($buf, "\0") < 0) ? 'text/plain; charset=UTF-8'
+				: 'application/octet-stream';
 }
 
 sub git_blob_stream_response {
