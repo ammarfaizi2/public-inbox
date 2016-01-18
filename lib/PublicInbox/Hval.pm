@@ -10,7 +10,7 @@ use Encode qw(find_encoding);
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::MID qw/mid_clean/;
 use base qw/Exporter/;
-our @EXPORT_OK = qw/ascii_html utf8_html/;
+our @EXPORT_OK = qw/ascii_html utf8_html to_attr from_attr/;
 
 # for user-generated content (UGC) which may have excessively long lines
 # and screw up rendering on some browsers.  This is the only CSS style
@@ -95,6 +95,37 @@ sub raw {
 sub prurl {
 	my ($env, $u) = @_;
 	index($u, '//') == 0 ? "$env->{'psgi.url_scheme'}:$u" : $u;
+}
+
+# convert a filename (or any string) to HTML attribute
+
+my %ESCAPES = map { chr($_) => sprintf('::%02x', $_) } (0..255);
+$ESCAPES{'/'} = ':'; # common
+
+sub to_attr ($) {
+	my ($str) = @_;
+
+	# git would never do this to us:
+	die "invalid filename: $str" if index($str, '//') >= 0;
+
+	my $first = '';
+	if ($str =~ s/\A([^A-Ya-z])//ms) { # start with a letter
+		  $first = sprintf('Z%02x', ord($1));
+	}
+	$str =~ s/([^A-Za-z0-9_\.\-])/$ESCAPES{$1}/egms;
+	$first . $str;
+}
+
+# reverse the result of to_attr
+sub from_attr ($) {
+	my ($str) = @_;
+	my $first = '';
+	if ($str =~ s/\AZ([a-f0-9]{2})//ms) {
+		$first = chr(hex($1));
+	}
+	$str =~ s!::([a-f0-9]{2})!chr(hex($1))!egms;
+	$str =~ tr!:!/!;
+	$first . $str;
 }
 
 1;
