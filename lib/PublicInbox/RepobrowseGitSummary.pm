@@ -29,7 +29,7 @@ sub emit_summary {
 
 	# n.b. we would use %(HEAD) in for-each-ref --format if we could
 	# rely on git 1.9.0+, but it's too soon for that in early 2016...
-	chomp(my $head_ref = $git->qx(qw(rev-parse HEAD~0)));
+	chomp(my $head_ref = $git->qx(qw(symbolic-ref HEAD)));
 
 	my $refs = $git->popen(qw(for-each-ref --sort=-creatordate),
 				EACH_REF_FMT, "--count=$count",
@@ -43,6 +43,7 @@ sub emit_summary {
 	my $rel = $req->{relcmd};
 	foreach (<$refs>) {
 		my ($ref, $type, $hex, $date, $s) = split(' ', $_, 5);
+		my $x = $ref eq $head_ref ? ' (HEAD)' : '';
 		$ref =~ s!\Arefs/(?:heads|tags)/!!;
 		$ref = PublicInbox::Hval->utf8($ref);
 		my $h = $ref->as_html;
@@ -60,7 +61,6 @@ sub emit_summary {
 			next;
 		}
 		chomp $s;
-		my $x = $hex eq $head_ref ? ' (HEAD)' : '';
 		$fh->write(qq(<tr><td><tt><a\nhref="$ref">$h</a>$x</tt></td>) .
 			qq(<td><tt>$date <a\nhref="$sref">) . utf8_html($s) .
 			'</a></tt></td></tr>');
