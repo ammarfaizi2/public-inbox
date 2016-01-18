@@ -2,11 +2,20 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # shows the /commit/ endpoint for git repositories
+#
+# anchors used:
+#	D - diffstat
+#	P - parents
+#	...and various filenames from to_attr
+# The 'D' and 'P' anchors may conflict with odd filenames, but we won't
+# punish the common case with extra bytes if somebody uses 'D' or 'P'
+# in filenames.
+
 package PublicInbox::RepobrowseGitCommit;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepobrowseBase);
-use PublicInbox::Hval qw(utf8_html);
+use PublicInbox::Hval qw(utf8_html to_attr);
 use PublicInbox::RepobrowseGit qw(git_unquote git_commit_title);
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
@@ -73,15 +82,15 @@ sub git_commit_stream {
 	local $/ = "\0";
 	$l = <$log>;
 	chomp $l;
-	$fh->write(utf8_html($l)."---\n");
-	git_show_diffstat($req, $h, $fh, $log);
+	$fh->write(utf8_html($l)."<a\nid=D>---</a>\n");
+	my $diff = { anchors => {}, h => $h, p => \@p, rel => $rel };
+	git_show_diffstat($diff, $req, $h, $fh, $log);
 	my $help;
 	$help = " This is a merge, showing combined diff:\n\n" if ($np > 1);
 
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
-	my $diff = { h => $h, p => \@p, rel => $rel };
 	my ($cc_ins, $cc_del);
 	while (defined($l = <$log>)) {
 		if ($help) {
@@ -117,6 +126,8 @@ sub git_commit_stream {
 	if ($help) {
 		$fh->write(" This is a merge, combined diff is empty.\n");
 	}
+
+	show_unchanged($fh, $diff, $qs);
 	$fh->write('</pre></body></html>');
 }
 
@@ -174,14 +185,13 @@ sub git_commit_404 {
 }
 
 sub git_show_diffstat {
-	my ($req, $h, $fh, $log) = @_;
+	my ($diff, $req, $h, $fh, $log) = @_;
 	local $/ = "\0\0";
 	my $l = <$log>;
 	chomp $l;
 	my @stat = split("\0", $l);
 	my $nr = 0;
 	my ($nadd, $ndel) = (0, 0);
-	my $rel = $req->{relcmd};
 	while (defined($l = shift @stat)) {
 		$l =~ s/\n?(\S+)\t+(\S+)\t+// or next;
 		my ($add, $del) = ($1, $2);
@@ -193,15 +203,14 @@ sub git_show_diffstat {
 		}
 		my $num = sprintf('% 6s/%-6s', $del, $add);
 		if (length $l) {
-			$l = PublicInbox::Hval->utf8($l);
-			my $lp = $l->as_path;
-			my $lh = $l->as_html;
-			$l = "<a\nhref=\"${rel}commit/$lp?id=$h\">$lh</a>";
-
+			my $anchor = to_attr(git_unquote($l));
+			$diff->{anchors}->{$anchor} = $l;
+			$l = utf8_html($l);
+			$l = qq(<a\nhref="#$anchor">$l</a>);
 		} else {
 			my $from = shift @stat;
 			my $to = shift @stat;
-			$l = git_diffstat_rename($rel, $h, $from, $to);
+			$l = git_diffstat_rename($diff, $h, $from, $to);
 		}
 		++$nr;
 		$fh->write(' '.$num."\t".$l."\n");
@@ -233,6 +242,8 @@ sub git_diff_ab_hdr {
 	$fb = git_unquote($fb);
 	$fa =~ s!\Aa/!!;
 	$fb =~ s!\Ab/!!;
+	my $anchor = to_attr($fb);
+	delete $diff->{anchors}->{$anchor};
 	$fa = $diff->{fa} = PublicInbox::Hval->utf8($fa);
 	$fb = $diff->{fb} = PublicInbox::Hval->utf8($fb);
 	$diff->{path_a} = $fa->as_path;
@@ -240,7 +251,7 @@ sub git_diff_ab_hdr {
 
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
-	"diff --git $html_a <b>$html_b</b>";
+	qq(<a\nhref=#D\nid="$anchor">diff</a> --git $html_a <b>$html_b</b>);
 }
 
 # @@ -1,2 +3,4 @@ (regular diff)
@@ -272,9 +283,12 @@ sub git_diff_ab_hunk {
 sub git_diff_cc_hdr {
 	my ($diff, $combined, $path) = @_;
 	my $html_path = utf8_html($path);
-	my $cc = $diff->{cc} = PublicInbox::Hval->utf8(git_unquote($path));
+	$path = git_unquote($path);
+	my $anchor = to_attr($path);
+	delete $diff->{anchors}->{$anchor};
+	my $cc = $diff->{cc} = PublicInbox::Hval->utf8($path);
 	$diff->{path_cc} = $cc->as_path;
-	"diff --$combined <b>$html_path</b>";
+	qq(<a\nhref=#D\nid="$anchor">diff</a> --$combined <b>$html_path</b>);
 }
 
 # index abcdef09,01234567..76543210
@@ -333,7 +347,9 @@ sub git_diff_cc_hunk {
 }
 
 sub git_diffstat_rename {
-	my ($rel, $h, $from, $to) = @_;
+	my ($diff, $h, $from, $to) = @_;
+	my $anchor = to_attr(git_unquote($to));
+	$diff->{anchors}->{$anchor} = $to;
 	my @from = split('/', $from);
 	my @to = split('/', $to);
 	my $orig_to = $to;
@@ -348,7 +364,7 @@ sub git_diffstat_rename {
 	$to = PublicInbox::Hval->utf8(join('/', @to), $orig_to);
 	my $tp = $to->as_path;
 	my $th = $to->as_html;
-	$to = "<a\nhref=\"${rel}/commit/$tp?id=$h\">$th</a>";
+	$to = qq(<a\nhref="#$anchor">$th</a>);
 	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
 }
 
@@ -383,7 +399,29 @@ sub git_parent_line {
 	my $qs = $q->qs(id => $p);
 	my $t = git_commit_title($git, $p);
 	$t = defined $t ? utf8_html($t) : '';
-	$pfx . " <a\nhref=\"${rel}commit$path$qs\">$p</a> ". $t . "\n";
+	$pfx . qq( <a\nid=P\nhref="${rel}commit$path$qs">$p</a> $t\n);
+}
+
+# do not break anchor links if the combined diff doesn't show changes:
+sub show_unchanged {
+	my ($fh, $diff, $qs) = @_;
+
+	my @unchanged = sort keys %{$diff->{anchors}};
+	return unless @unchanged;
+	my $anchors = $diff->{anchors};
+	my $s = "\n There are uninteresting changes from this merge.\n" .
+		qq( See <a\nhref="#P">parents</a>, ) .
+		"or view final state(s) below:\n";
+	my $rel = $diff->{rel};
+	foreach my $anchor (@unchanged) {
+		my $fn = $anchors->{$anchor};
+		my $p = PublicInbox::Hval->utf8(git_unquote($fn));
+		$p = $p->as_path;
+		$fn = utf8_html($fn);
+		$s .= qq(\t<a\nid="$anchor"\nhref="${rel}tree/$p$qs">);
+		$s .= "$fn</a>\n";
+	}
+	$fh->write($s);
 }
 
 1;
