@@ -23,7 +23,7 @@ use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%t', '%p', '%D', '%b%x00');
 
 sub git_commit_stream {
-	my ($req, $q, $H, $log, $fh) = @_;
+	my ($self, $req, $q, $H, $log, $fh) = @_;
 	chomp(my $h = <$log>); # abbreviated commit
 	my $l;
 	chomp(my $s = utf8_html($l = <$log>)); # subject
@@ -40,10 +40,9 @@ sub git_commit_stream {
 	my $rel = $req->{relcmd};
 	my $qs = $q->qs(id => $h);
 	chomp $H;
-	my $x = "<html><head><title>$s</title>" .
-		PublicInbox::Hval::STYLE . '</head><body><pre>' .
-		"   commit $H (<a\nhref=\"${rel}patch$qs\">patch</a>)\n" .
-		"     tree <a\nhref=\"${rel}tree?id=$h\">$t</a>";
+	my $x = $self->html_start($req, $s) . "\n" .
+		qq(   commit $H (<a\nhref="${rel}patch$qs">patch</a>)\n) .
+		qq(     tree <a\nrel=nofollow\nhref="${rel}tree?id=$h">$t</a>);
 
 	# extra show path information, if any
 	my $extra = $req->{extra};
@@ -57,7 +56,8 @@ sub git_commit_stream {
 			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			$ep = $e->as_path;
 			my $eh = $e->as_html;
-			"<a\nhref=\"${rel}tree/$ep?id=$h\">$eh</a>";
+			$ep = "${rel}tree/$ep?id=$h";
+			qq(<a\nrel=nofollow\nhref="$ep">$eh</a>);
 		} @$extra);
 		$path = "/$ep";
 	}
@@ -158,7 +158,7 @@ sub call_git_commit {
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
-		git_commit_stream($req, $q, $H, $log, $fh);
+		git_commit_stream($self, $req, $q, $H, $log, $fh);
 		$fh->close;
 	}
 }
@@ -266,7 +266,8 @@ sub git_diff_ab_hunk {
 		$rv .= $ca;
 	} else {
 		my $p = $diff->{p}->[0];
-		$rv .= "<a\nhref=\"${rel}tree/$diff->{path_a}?id=$p#n$na\">";
+		$rv .= qq(<a\nrel=nofollow);
+		$rv .= qq(\nhref="${rel}tree/$diff->{path_a}?id=$p#n$na">);
 		$rv .= "$ca</a>";
 	}
 	$rv .= ' ';
@@ -274,7 +275,8 @@ sub git_diff_ab_hunk {
 		$rv .= $cb;
 	} else {
 		my $h = $diff->{h};
-		$rv .= "<a\nhref=\"${rel}tree/$diff->{path_b}?id=$h#n$nb\">";
+		$rv .= qq(<a\nrel=nofollow);
+		$rv .= qq(\nhref="${rel}tree/$diff->{path_b}?id=$h#n$nb">);
 		$rv .= "<b>$cb</b></a>";
 	}
 	$rv . ' @@' . utf8_html($ctx);
@@ -340,7 +342,8 @@ sub git_diff_cc_hunk {
 		$rv .= " <b>$last</b>";
 	} else {
 		my $h = $diff->{h};
-		$rv .= " <a\nhref=\"${rel}tree/$path?id=$h#n$n\">";
+		$rv .= qq( <a\nrel=nofollow);
+		$rv .= qq(\nhref="${rel}tree/$path?id=$h#n$n">);
 		$rv .= "<b>$last</b></a>";
 	}
 	$rv .= " $at" . utf8_html($ctx);
@@ -418,7 +421,8 @@ sub show_unchanged {
 		my $p = PublicInbox::Hval->utf8(git_unquote($fn));
 		$p = $p->as_path;
 		$fn = utf8_html($fn);
-		$s .= qq(\t<a\nid="$anchor"\nhref="${rel}tree/$p$qs">);
+		$s .= qq(\t<a\nrel=nofollow);
+		$s .= qq(\nid="$anchor"\nhref="${rel}tree/$p$qs">);
 		$s .= "$fn</a>\n";
 	}
 	$fh->write($s);

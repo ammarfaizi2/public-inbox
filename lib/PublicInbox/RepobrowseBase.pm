@@ -58,11 +58,21 @@ sub mime_type {
 
 # starts an HTML page for Repobrowse in a consistent way
 sub html_start {
-	my ($self, $req, $title_html) = @_;
+	my ($self, $req, $title_html, $opts) = @_;
 	my $desc = $req->{repo_info}->{desc_html};
+	my $meta;
+
+	if ($opts) {
+		my @robots;
+		foreach (qw(nofollow noindex)) {
+			push @robots, $_ if $opts->{$_};
+		}
+		$meta = qq(<meta\nname=robots\ncontent=") .
+			join(',', @robots) . '" />';
+	}
 
 	"<html><head><title>$title_html</title>" .
-		PublicInbox::Hval::STYLE .
+		PublicInbox::Hval::STYLE . $meta .
 		"</head><body><pre><b>$desc</b>";
 }
 

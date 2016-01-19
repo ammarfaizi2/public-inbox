@@ -36,12 +36,16 @@ sub git_tree_stream {
 	}
 
 	my $fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
-	$fh->write('<html><head>'. PublicInbox::Hval::STYLE .
-		'<title></title></head><body>');
+	my $opts = { nofollow => 1 };
+	my $title = $req->{expath};
+	$title = $title eq '' ? 'tree' : utf8_html($title);
 
 	if ($type eq 'tree') {
+		$opts->{noindex} = 1;
+		$fh->write($self->html_start($req, $title, $opts) . "\n");
 		git_tree_show($req, $fh, $git, $hex, $q);
 	} elsif ($type eq 'blob') {
+		$fh->write($self->html_start($req, $title, $opts) . "\n");
 		git_blob_show($req, $fh, $git, $hex, $q);
 	} else {
 		# TODO
@@ -87,7 +91,7 @@ sub git_blob_show {
 	my $plain = join('/', "${rel}plain", @{$req->{extra}});
 	$plain = PublicInbox::Hval->utf8($plain)->as_path . $q->qs;
 	my $t = cur_path($req, $q);
-	my $h = qq{<pre>path: $t\n\nblob $hex};
+	my $h = qq{\npath: $t\n\nblob $hex};
 	my $end = '';
 
 	$git->cat_file($hex, sub {
@@ -141,11 +145,10 @@ sub git_blob_show {
 
 sub git_tree_show {
 	my ($req, $fh, $git, $hex, $q) = @_;
-	$fh->write('<pre>');
 	my $ls = $git->popen(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $t = cur_path($req, $q);
 	my $pfx;
-	$fh->write("path: $t\n\n");
+	$fh->write("\npath: $t\n\n");
 	my $qs = $q->qs;
 
 	if ($req->{tslash}) {
