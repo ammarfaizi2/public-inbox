@@ -137,24 +137,23 @@ sub call_git_commit {
 	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
+
+	my $expath = $req->{expath};
+	if ($expath ne '') {
+		my $relup = join('', map { '../' } @{$req->{extra}});
+		my $qs = $q->qs;
+		return $self->r(301, $req, "$relup$qs#".to_attr($expath));
+	}
+
 	my $git = $req->{repo_info}->{git};
 	my @cmd = (qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c), $git->abbrev);
-	my @path;
 
-	# kill trailing slash
-	my $extra = $req->{extra};
-	if (@$extra) {
-		pop @$extra if $extra->[-1] eq '';
-		@path = (join('/', @$extra));
-		push @cmd, '--follow';
-	}
-
-	my $log = $git->popen(@cmd, GIT_FMT, $id, '--', @path);
+	my $log = $git->popen(@cmd, GIT_FMT, $id, '--');
 	my $H = <$log>;
 
 	# maybe the path didn't exist, yet, zip them back up
-	return git_commit_404($req, $q, $path[0]) unless defined $H;
+	return git_commit_404($req, $q) unless defined $H;
 	sub {
 		my ($res) = @_; # Plack callback
 		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
@@ -164,19 +163,12 @@ sub call_git_commit {
 }
 
 sub git_commit_404 {
-	my ($req, $q, $path) = @_;
+	my ($req, $q) = @_;
 	my $x = 'Missing commit or path';
 	my $pfx = "$req->{relcmd}commit";
 
-	# print STDERR "path: $path\n";
 	my $try = 'try';
 	$x = "<html><head><title>$x</title></head><body><pre><b>$x</b>\n\n";
-	if (defined $path) {
-		my $qs = $q->qs;
-		$x .= "<a\nhref=\"$pfx$qs\">" .
-			"try without the path <s>$path</s></a>\n";
-		$try = 'or';
-	}
 	my $qs = $q->qs(id => '');
 	$x .= "<a\nhref=\"$pfx$qs\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';

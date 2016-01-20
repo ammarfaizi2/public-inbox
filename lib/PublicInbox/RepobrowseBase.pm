@@ -60,7 +60,7 @@ sub mime_type {
 sub html_start {
 	my ($self, $req, $title_html, $opts) = @_;
 	my $desc = $req->{repo_info}->{desc_html};
-	my $meta;
+	my $meta = '';
 
 	if ($opts) {
 		my @robots;
@@ -74,6 +74,44 @@ sub html_start {
 	"<html><head><title>$title_html</title>" .
 		PublicInbox::Hval::STYLE . $meta .
 		"</head><body><pre><b>$desc</b>";
+}
+
+sub r {
+	my ($self, $status, $req, @extra) = @_;
+	my @h;
+
+	my $body = '';
+	if ($status == 301 || $status == 302) {
+		# The goal is to be able to make redirects like we make
+		# <a href=> tags with '../'
+		my $cgi = $req->{cgi};
+		my $base;
+		$base = ref($cgi) eq 'CGI' ? $cgi->url(-base).'/' : $cgi->base;
+		my ($redir) = @extra;
+		if ($redir =~ m!\A\.\./!) { # relative redirect
+			my @orig = split(m!/+!, $cgi->path_info, -1);
+			shift @orig; # drop leading '/'
+			my @dest = split(m!/+!, $redir);
+
+			while ($dest[0] eq '..') {
+				pop @orig;
+				shift @dest;
+			}
+			my $end = '';
+			$end = pop @dest if $dest[-1] =~ /\A[#\?]/;
+			$redir = $base . join('/', @orig, @dest) . $end;
+		} else {
+			$redir = $base . '/' . $redir;
+		}
+		push @h, qw(Content-Type text/plain Location), $redir;
+
+		# mainly for curl (no-'-L') users:
+		$body = "Redirecting to $redir\n";
+	} else {
+		die "not implemented, yet: $status";
+	}
+
+	[ $status, \@h, [ $body ] ]
 }
 
 1;
