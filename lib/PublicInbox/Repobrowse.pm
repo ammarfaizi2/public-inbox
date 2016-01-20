@@ -52,10 +52,14 @@ sub no_tslash {
 		$base =~ s!/+\z!!;
 		$uri = $cgi->request_uri;
 	}
+	my $qs = '';
+	if ($uri =~ s/(\?.+)\z//) {
+		$qs = $1;
+	}
 	if ($uri !~ s!/+\z!!) {
 		warn "W: buggy redirect? base=$base request_uri=$uri\n";
 	}
-	my $url = $base . $uri;
+	my $url = $base . $uri . $qs;
 	[ 301,
 	  [ Location => $url, 'Content-Type' => 'text/plain' ],
 	  [ "Redirecting to $url\n" ] ]
