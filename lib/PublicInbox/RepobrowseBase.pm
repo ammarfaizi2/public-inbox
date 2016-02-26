@@ -85,8 +85,7 @@ sub r {
 		# The goal is to be able to make redirects like we make
 		# <a href=> tags with '../'
 		my $cgi = $req->{cgi};
-		my $base;
-		$base = ref($cgi) eq 'CGI' ? $cgi->url(-base).'/' : $cgi->base;
+		my $base = $cgi->base;
 		my ($redir) = @extra;
 		if ($redir =~ m!\A\.\./!) { # relative redirect
 			my @orig = split(m!/+!, $cgi->path_info, -1);

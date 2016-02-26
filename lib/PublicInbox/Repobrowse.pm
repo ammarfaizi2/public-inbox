@@ -42,16 +42,11 @@ sub r { [ $_[0], ['Content-Type' => 'text/plain'], [ join(' ', @_, "\n") ] ] }
 # (e.g. curl does not follow 301 unless given "-L")
 my %NO_TSLASH = map { $_ => 1 } qw(Log Commit Tree Summary Tag);
 sub no_tslash {
-	my ($cgi) = @_;
+	my ($cgi) = @_; # Plack::Request
 	my ($base, $uri);
-	if (ref($cgi) eq 'CGI') {
-		$base = $cgi->url(-base);
-		$uri = $ENV{REQUEST_URI};
-	} else { # Plack::Request
-		$base = $cgi->base;
-		$base =~ s!/+\z!!;
-		$uri = $cgi->request_uri;
-	}
+	$base = $cgi->base;
+	$base =~ s!/+\z!!;
+	$uri = $cgi->request_uri;
 	my $qs = '';
 	if ($uri =~ s/(\?.+)\z//) {
 		$qs = $1;
