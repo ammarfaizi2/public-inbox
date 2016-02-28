@@ -132,8 +132,16 @@ sub fail {
 
 sub popen {
 	my ($self, @cmd) = @_;
-	@cmd = ('git', "--git-dir=$self->{git_dir}", @cmd);
-	popen_rd(\@cmd);
+	my $cmd = [ 'git', "--git-dir=$self->{git_dir}" ];
+	my ($env, $opt);
+	if (ref $cmd[0]) {
+		push @$cmd, @{$cmd[0]};
+		$env = $cmd[1];
+		$opt = $cmd[2];
+	} else {
+		push @$cmd, @cmd;
+	}
+	popen_rd($cmd, $env, $opt);
 }
 
 sub qx {
