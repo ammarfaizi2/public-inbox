@@ -23,7 +23,12 @@ use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%t', '%p', '%D', '%b%x00');
 
 sub git_commit_stream {
-	my ($self, $req, $q, $H, $log, $fh) = @_;
+	my ($self, $req) = @_;
+	my $log = $req->{log};
+	my $H = <$log>;
+	defined $H or return git_commit_404($req);
+	my $fh = delete($req->{res})->([200, ['Content-Type'=>'text/html']]);
+	$req->{fh} = $fh;
 	chomp(my $h = <$log>); # abbreviated commit
 	my $l;
 	chomp(my $s = utf8_html($l = <$log>)); # subject
@@ -38,6 +43,7 @@ sub git_commit_stream {
 	my $git = $req->{repo_info}->{git};
 
 	my $rel = $req->{relcmd};
+	my $q = $req->{'q'};
 	my $qs = $q->qs(id => $h);
 	chomp $H;
 	my $x = $self->html_start($req, $s) . "\n" .
@@ -146,34 +152,47 @@ sub call_git_commit {
 	}
 
 	my $git = $req->{repo_info}->{git};
-	my @cmd = (qw(show -z --numstat -p --encoding=UTF-8
-			--no-notes --no-color -c), $git->abbrev);
-
-	my $log = $git->popen(@cmd, GIT_FMT, $id, '--');
-	my $H = <$log>;
-
-	# maybe the path didn't exist, yet, zip them back up
-	return git_commit_404($req, $q) unless defined $H;
+	my $cmd = [ qw(show -z --numstat -p --encoding=UTF-8
+			--no-notes --no-color -c),
+			$git->abbrev, GIT_FMT, $id, '--' ];
+	$req->{log} = $git->popen($cmd, undef, { 2 => $git->err_begin });
+	$req->{end} = sub {
+		$req->{cb} = $req->{end} = undef;
+		if (my $fh = delete $req->{fh}) {
+			$fh->close;
+		} elsif (my $res = delete $req->{res}) {
+			$res->(r(500));
+		}
+		if (my $log = delete $req->{log}) {
+			$log->close; # _may_ be Danga::Socket::close
+		}
+		# zero the error file for now, be careful about printing
+		# $id to psgi.errors w/o sanitizing...
+		$git->err;
+	};
+	$req->{'q'} = $q;
+	$req->{cb} = sub { # read git-show output and stream to client
+		git_commit_stream($self, $req);
+		$req->{end}->();
+	};
 	sub {
-		my ($res) = @_; # Plack callback
-		my $fh = $res->([200, ['Content-Type'=>'text/html']]);
-		git_commit_stream($self, $req, $q, $H, $log, $fh);
-		$fh->close;
+		$req->{res} = $_[0];
+		$req->{cb}->();
 	}
 }
 
 sub git_commit_404 {
-	my ($req, $q) = @_;
+	my ($req) = @_;
 	my $x = 'Missing commit or path';
 	my $pfx = "$req->{relcmd}commit";
 
 	my $try = 'try';
 	$x = "<html><head><title>$x</title></head><body><pre><b>$x</b>\n\n";
-	my $qs = $q->qs(id => '');
+	my $qs = $req->{'q'}->qs(id => '');
 	$x .= "<a\nhref=\"$pfx$qs\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';
 
-	[ 404, ['Content-Type'=>'text/html'], [ $x ] ];
+	delete($req->{res})->([404, ['Content-Type'=>'text/html'], [ $x ]]);
 }
 
 sub git_show_diffstat {
