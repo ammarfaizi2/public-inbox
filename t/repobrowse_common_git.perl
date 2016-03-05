@@ -55,7 +55,7 @@ ok(-f $psgi, 'psgi example for repobrowse.psgi found');
 		print $fh '[repo "test.git"]', "\n",
 			"\t", "path = $git_dir", "\n" and
 		close $fh), 'created repobrowse config');
-	local $ENV{PI_REPOBROWSE_CONFIG} = $repobrowse_config;
+	local $ENV{REPOBROWSE_CONFIG} = $repobrowse_config;
 	ok($app = require $psgi, 'loaded PSGI app');
 }
 
