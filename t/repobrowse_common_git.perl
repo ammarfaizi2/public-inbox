@@ -4,7 +4,6 @@
 use strict;
 use warnings;
 use Test::More;
-use Data::Dumper;
 use File::Temp qw/tempdir/;
 use Cwd qw/getcwd/;
 my @mods = qw(HTTP::Request::Common Plack::Request Plack::Test URI::Escape);
@@ -31,8 +30,9 @@ sub dechunk ($) {
 }
 
 use_ok $_ foreach @mods;
-my $git_dir = tempdir(CLEANUP => 1);
+my $git_dir = tempdir('repobrowse-XXXXXX', CLEANUP => 1, TMPDIR => 1);
 my $psgi = "examples/repobrowse.psgi";
+my $repobrowse_config = "$git_dir/repobrowse_config";
 my $app;
 ok(-f $psgi, 'psgi example for repobrowse.psgi found');
 {
@@ -49,7 +49,6 @@ ok(-f $psgi, 'psgi example for repobrowse.psgi found');
 	}
 	waitpid $pid, 0;
 	is($?, 0, 'fast-import succeeded');
-	my $repobrowse_config = "$git_dir/pi_repobrowse_config";
 	my $fh;
 	ok((open $fh, '>', $repobrowse_config and
 		print $fh '[repo "test.git"]', "\n",
@@ -64,4 +63,5 @@ bless {
 	psgi => $psgi,
 	git_dir => $git_dir,
 	app => $app,
+	repobrowse_config => $repobrowse_config,
 }, 'Repobrowse::TestGit';

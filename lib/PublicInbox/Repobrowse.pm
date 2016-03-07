@@ -68,7 +68,7 @@ sub root_index {
 
 sub run {
 	my ($self, $cgi, $method) = @_;
-	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD\z/);
+	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD|POST\z/);
 
 	# URL syntax: / repo [ / cmd [ / path ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
