@@ -20,6 +20,7 @@
 package PublicInbox::Repobrowse;
 use strict;
 use warnings;
+use Plack::Request;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepobrowseConfig;
 
@@ -66,8 +67,10 @@ sub root_index {
 	$mod->new->call($self->{rconfig}); # RepobrowseRoot::call
 }
 
-sub run {
-	my ($self, $cgi, $method) = @_;
+sub call {
+	my ($self, $env) = @_;
+	my $cgi = Plack::Request->new($env);
+	my $method = $cgi->method;
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD|POST\z/);
 
 	# URL syntax: / repo [ / cmd [ / path ] ]

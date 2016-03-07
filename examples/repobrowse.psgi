@@ -6,7 +6,6 @@
 use strict;
 use warnings;
 use PublicInbox::Repobrowse;
-use Plack::Request;
 use Plack::Builder;
 my $have_deflater = eval { require Plack::Middleware::Deflater; 1 };
 my $repo_browse = PublicInbox::Repobrowse->new;
@@ -19,8 +18,5 @@ builder {
 					  'application/atom+xml' ];
 	}
 	enable 'Head';
-	sub {
-		my $req = Plack::Request->new(@_);
-		$repo_browse->run($req, $req->method);
-	}
+	sub { $repo_browse->call(@_) }
 }
