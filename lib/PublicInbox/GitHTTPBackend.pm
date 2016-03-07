@@ -34,8 +34,15 @@ sub serve {
 	if ($service =~ /\Agit-\w+-pack\z/ || $path =~ /\Agit-\w+-pack\z/) {
 		my $ok = serve_smart($cgi, $git, $path);
 		return $ok if $ok;
+		# fall through to dumb HTTP...
 	}
+	serve_dumb($cgi, $git, $path);
+}
 
+sub serve_dumb {
+	my ($cgi, $git, $path) = @_;
+
+	# serve dumb HTTP...
 	my $type;
 	if ($path =~ /\A(?:$BIN)\z/o) {
 		$type = 'application/octet-stream';
@@ -123,7 +130,6 @@ sub prepare_range {
 	($code, $len);
 }
 
-# returns undef if 403 so it falls back to dumb HTTP
 sub serve_smart {
 	my ($cgi, $git, $path) = @_;
 	my $env = $cgi->{env};
@@ -158,7 +164,8 @@ sub serve_smart {
 	my $git_dir = $git->{git_dir};
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git_dir/$path";
-	my %rdr = ( 0 => fileno($in), 1 => fileno($wpipe) );
+	my %rdr = ( 0 => fileno($in), 1 => fileno($wpipe),
+			2 => $git->err_begin );
 	my $pid = spawn([qw(git http-backend)], \%env, \%rdr);
 	unless (defined $pid) {
 		$err->print("error spawning: $!\n");
@@ -202,7 +209,8 @@ sub serve_smart {
 		if ($fh) { # stream body from git-http-backend to HTTP client
 			$fh->write($buf);
 			$buf = '';
-		} elsif ($buf =~ s/\A(.*?)\r\n\r\n//s) { # parse headers
+		} elsif (defined $res && $buf =~ s/\A(.*?)\r\n\r\n//s) {
+			# parse headers
 			my $h = $1;
 			my $code = 200;
 			my @h;
@@ -214,11 +222,23 @@ sub serve_smart {
 					push @h, $k, $v;
 				}
 			}
-			# write response header:
-			$fh = $res->([ $code, \@h ]);
-			$res = undef;
-			$fh->write($buf);
-			$buf = '';
+			# incredibly convoluted, ugh...
+			if ($code == 403) {
+				my $d = serve_dumb($cgi, $git, $path);
+				if (ref($d) eq 'ARRAY') { # 404
+					$res->($d);
+				} else {
+					$d->($res);
+				}
+				$res = undef;
+				$end->();
+			} else {
+				# write response header:
+				$fh = $res->([ $code, \@h ]);
+				$res = undef;
+				$fh->write($buf);
+				$buf = '';
+			}
 		} # else { keep reading ... }
 	};
 	if (my $async = $env->{'pi-httpd.async'}) {
