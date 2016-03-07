@@ -29,8 +29,9 @@ my %VCS = (git => 'Git');
 my %LOADED;
 
 sub new {
-	my ($class, $file) = @_;
-	bless { rconfig => PublicInbox::RepobrowseConfig->new($file) }, $class;
+	my ($class, $rconfig) = @_;
+	$rconfig ||= PublicInbox::RepobrowseConfig->new;
+	bless { rconfig => $rconfig }, $class;
 }
 
 # simple response for errors
