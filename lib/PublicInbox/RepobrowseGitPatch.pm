@@ -26,22 +26,54 @@ sub call_git_patch {
 	if (defined(my $expath = $req->{expath})) {
 		push @cmd, $expath;
 	}
-	my $fp = $git->popen(@cmd);
-	my ($buf, $n);
-
-	$n = read($fp, $buf, 8192);
-	return unless (defined $n && $n > 0);
-	sub {
-		my ($res) = @_; # Plack callback
-		my $fh = $res->([200, [
-			'Content-Type' => 'text/plain; charset=UTF-8']]);
-		$fh->write($buf);
-		while (1) {
-			$n = read($fp, $buf, 8192);
-			last unless (defined $n && $n > 0);
-			$fh->write($buf);
+	my $rpipe = $git->popen(@cmd);
+	my $env = $req->{cgi}->env;
+	my $err = $env->{'psgi.errors'};
+	my ($buf, $n, $res, $vin, $fh);
+	my $end = sub {
+		if ($fh) {
+			$fh->close;
+			$fh = undef;
+		} elsif ($res) {
+			$res->($self->r(500));
 		}
-		$fh->close;
+		if ($rpipe) {
+			$rpipe->close; # _may_ be Danga::Socket::close
+			$rpipe = undef;
+		}
+	};
+	my $fail = sub {
+		if ($!{EAGAIN} || $!{EINTR}) {
+			select($vin, undef, undef, undef) if defined $vin;
+			# $vin is undef on async, so this is a noop on EAGAIN
+			return;
+		}
+		my $e = $!;
+		$end->();
+		$err->print("git format-patch ($git->{git_dir}): $e\n");
+	};
+	my $cb = sub {
+		$n = $rpipe->sysread($buf, 8192);
+		return $fail->() unless defined $n;
+		return $end->() if $n == 0;
+		if ($res) {
+			my $h = ['Content-Type', 'text/plain; charset=UTF-8'];
+			$fh = $res->([200, $h]);
+			$res = undef;
+		}
+		$fh->write($buf) if $fh;
+	};
+
+	if (my $async = $env->{'pi-httpd.async'}) {
+		$rpipe = $async->($rpipe, $cb);
+		sub { ($res) = @_ } # let Danga::Socket handle the rest.
+	} else { # synchronous loop for other PSGI servers
+		$vin = '';
+		vec($vin, fileno($rpipe), 1) = 1;
+		sub {
+			($res) = @_;
+			while ($rpipe) { $cb->() }
+		}
 	}
 }
 
