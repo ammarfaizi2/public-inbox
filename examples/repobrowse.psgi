@@ -15,7 +15,9 @@ use Plack::Builder;
 my $repobrowse = PublicInbox::Repobrowse->new;
 
 builder {
-	enable 'Chunked';
+	# Chunked middleware conflicts with Starman:
+	# https://github.com/miyagawa/Starman/issues/23
+	# enable 'Chunked';
 	eval {
 		enable 'Deflater',
 			content_type => [ 'text/html', 'text/plain',

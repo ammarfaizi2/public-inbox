@@ -15,7 +15,7 @@ foreach my $mod (@mods) {
 sub dechunk ($) {
 	my ($res) = @_;
 	my $s = $res->content;
-	if (lc($res->header('Transfer-Encoding')) eq 'chunked') {
+	if (lc($res->header('Transfer-Encoding') || '') eq 'chunked') {
 		my $rv = '';
 		while ($s =~ s/\A([a-f0-9]+)\r\n//i) { # no comment support :x
 			my $n = hex($1) or last;
