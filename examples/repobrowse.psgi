@@ -12,7 +12,7 @@ use strict;
 use warnings;
 use PublicInbox::Repobrowse;
 use Plack::Builder;
-my $repo_browse = PublicInbox::Repobrowse->new;
+my $repobrowse = PublicInbox::Repobrowse->new;
 
 builder {
 	enable 'Chunked';
@@ -41,5 +41,5 @@ builder {
 	#	format => '%t "%r" %>s %b %D';
 
 	enable 'Head';
-	sub { $repo_browse->call(@_) }
+	sub { $repobrowse->call(@_) }
 }
