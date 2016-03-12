@@ -90,7 +90,7 @@ sub git_commit_stream {
 	chomp $l;
 	$fh->write(utf8_html($l)."<a\nid=D>---</a>\n");
 	my $diff = { anchors => {}, h => $h, p => \@p, rel => $rel };
-	git_show_diffstat($diff, $req, $h, $fh, $log);
+	git_show_diffstat($diff, $req, $fh, $log);
 	my $help;
 	$help = " This is a merge, showing combined diff:\n\n" if ($np > 1);
 
@@ -196,7 +196,7 @@ sub git_commit_404 {
 }
 
 sub git_show_diffstat {
-	my ($diff, $req, $h, $fh, $log) = @_;
+	my ($diff, $req, $fh, $log) = @_;
 	local $/ = "\0\0";
 	my $l = <$log>;
 	chomp $l;
@@ -221,7 +221,7 @@ sub git_show_diffstat {
 		} else {
 			my $from = shift @stat;
 			my $to = shift @stat;
-			$l = git_diffstat_rename($diff, $h, $from, $to);
+			$l = git_diffstat_rename($diff, $from, $to);
 		}
 		++$nr;
 		$fh->write(' '.$num."\t".$l."\n");
@@ -361,7 +361,7 @@ sub git_diff_cc_hunk {
 }
 
 sub git_diffstat_rename {
-	my ($diff, $h, $from, $to) = @_;
+	my ($diff, $from, $to) = @_;
 	my $anchor = to_attr(git_unquote($to));
 	$diff->{anchors}->{$anchor} = $to;
 	my @from = split('/', $from);
