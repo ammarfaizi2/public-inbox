@@ -17,6 +17,8 @@ use warnings;
 use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::Hval qw(utf8_html to_attr);
 use PublicInbox::RepobrowseGit qw(git_unquote git_commit_title);
+use PublicInbox::RepobrowseGitDiffCommon qw/git_diffstat_emit
+	git_diff_ab_index git_diff_ab_hdr git_diff_ab_hunk/;
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
@@ -89,8 +91,16 @@ sub git_commit_stream {
 	$l = <$log>;
 	chomp $l;
 	$fh->write(utf8_html($l)."<a\nid=D>---</a>\n");
-	my $diff = { anchors => {}, h => $h, p => \@p, rel => $rel };
-	git_show_diffstat($diff, $req, $fh, $log);
+	$req->{anchors} = {};
+	$req->{h} = $h;
+	$req->{p} = \@p;
+	$req->{rel} = $rel;
+	{
+		local $/ = "\0\0";
+		my $l = <$log>;
+		chomp $l;
+		git_diffstat_emit($req, $fh, $l);
+	}
 	my $help;
 	$help = " This is a merge, showing combined diff:\n\n" if ($np > 1);
 
@@ -104,25 +114,24 @@ sub git_commit_stream {
 			$help = undef;
 		}
 		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
-			$l = git_diff_ab_hdr($diff, $1, $2) . "\n";
+			$l = git_diff_ab_hdr($req, $1, $2) . "\n";
 		} elsif ($l =~ m{^diff --(cc|combined) (.+)$}) {
-			$l = git_diff_cc_hdr($diff, $1, $2) . "\n";
+			$l = git_diff_cc_hdr($req, $1, $2) . "\n";
 		} elsif ($l =~ /^index ($cmt)\.\.($cmt)(.*)$/o) { # regular
-			$l = git_diff_ab_index($diff, $1, $2, $3) . "\n";
+			$l = git_diff_ab_index($1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
-			$l = git_diff_ab_hunk($diff, $1, $2, $3) . "\n";
-
+			$l = git_diff_ab_hunk($req, $1, $2, $3) . "\n";
 		} elsif ($l =~ /^\+{1,3}\s*/ || ($cc_ins && $l =~ $cc_ins)) {
 			$l = git_diff_ins($l) . "\n";
 		} elsif ($l =~ s/^(\-{1,3}\s*)// ||
 					($cc_del && $l =~ s/$cc_del//)) {
 			$l = git_diff_del($1, $l) . "\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
-			$l = git_diff_cc_index($diff, $1, $2, $3) . "\n";
-			$cc_ins ||= $diff->{cc_ins};
-			$cc_del ||= $diff->{cc_del};
+			$l = git_diff_cc_index($req, $1, $2, $3) . "\n";
+			$cc_ins ||= $req->{cc_ins};
+			$cc_del ||= $req->{cc_del};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
-			$l = git_diff_cc_hunk($diff, $1, $2, $3) . "\n";
+			$l = git_diff_cc_hunk($req, $1, $2, $3) . "\n";
 		} else {
 			$l = utf8_html($l);
 		}
@@ -133,7 +142,7 @@ sub git_commit_stream {
 		$fh->write(" This is a merge, combined diff is empty.\n");
 	}
 
-	show_unchanged($fh, $diff, $qs);
+	show_unchanged($fh, $req, $qs);
 	$fh->write('</pre></body></html>');
 }
 
@@ -193,104 +202,6 @@ sub git_commit_404 {
 	$x .= '</pre></body>';
 
 	delete($req->{res})->([404, ['Content-Type'=>'text/html'], [ $x ]]);
-}
-
-sub git_show_diffstat {
-	my ($diff, $req, $fh, $log) = @_;
-	local $/ = "\0\0";
-	my $l = <$log>;
-	chomp $l;
-	my @stat = split("\0", $l);
-	my $nr = 0;
-	my ($nadd, $ndel) = (0, 0);
-	while (defined($l = shift @stat)) {
-		$l =~ s/\n?(\S+)\t+(\S+)\t+// or next;
-		my ($add, $del) = ($1, $2);
-		if ($add =~ /\A\d+\z/) {
-			$nadd += $add;
-			$ndel += $del;
-			$add = "+$add";
-			$del = "-$del";
-		}
-		my $num = sprintf('% 6s/%-6s', $del, $add);
-		if (length $l) {
-			my $anchor = to_attr(git_unquote($l));
-			$diff->{anchors}->{$anchor} = $l;
-			$l = utf8_html($l);
-			$l = qq(<a\nhref="#$anchor">$l</a>);
-		} else {
-			my $from = shift @stat;
-			my $to = shift @stat;
-			$l = git_diffstat_rename($diff, $from, $to);
-		}
-		++$nr;
-		$fh->write(' '.$num."\t".$l."\n");
-	}
-	$l = "\n $nr ";
-	$l .= $nr == 1 ? 'file changed, ' : 'files changed, ';
-	$l .= $nadd;
-	$l .= $nadd == 1 ? ' insertion(+), ' : ' insertions(+), ';
-	$l .= $ndel;
-	$l .= $ndel == 1 ? " deletion(-)\n\n" : " deletions(-)\n\n";
-	$fh->write($l);
-}
-
-# index abcdef89..01234567
-sub git_diff_ab_index {
-	my ($diff, $xa, $xb, $end) = @_;
-	# not wasting bandwidth on links here, yet
-	# links in hunk headers are far more useful with line offsets
-	$end = utf8_html($end);
-	"index $xa..<b>$xb</b>$end";
-}
-
-# diff --git a/foo.c b/bar.c
-sub git_diff_ab_hdr {
-	my ($diff, $fa, $fb) = @_;
-	my $html_a = utf8_html($fa);
-	my $html_b = utf8_html($fb);
-	$fa = git_unquote($fa);
-	$fb = git_unquote($fb);
-	$fa =~ s!\Aa/!!;
-	$fb =~ s!\Ab/!!;
-	my $anchor = to_attr($fb);
-	delete $diff->{anchors}->{$anchor};
-	$fa = $diff->{fa} = PublicInbox::Hval->utf8($fa);
-	$fb = $diff->{fb} = PublicInbox::Hval->utf8($fb);
-	$diff->{path_a} = $fa->as_path;
-	$diff->{path_b} = $fb->as_path;
-
-	# not wasting bandwidth on links here, yet
-	# links in hunk headers are far more useful with line offsets
-	qq(<a\nhref=#D\nid="$anchor">diff</a> --git $html_a <b>$html_b</b>);
-}
-
-# @@ -1,2 +3,4 @@ (regular diff)
-sub git_diff_ab_hunk {
-	my ($diff, $ca, $cb, $ctx) = @_;
-	my ($na) = ($ca =~ /\A-(\d+)/);
-	my ($nb) = ($cb =~ /\A\+(\d+)/);
-
-	my $rel = $diff->{rel};
-	my $rv = '@@ ';
-	if ($na == 0) { # new file
-		$rv .= $ca;
-	} else {
-		my $p = $diff->{p}->[0];
-		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$diff->{path_a}?id=$p#n$na">);
-		$rv .= "$ca</a>";
-	}
-	$rv .= ' ';
-	if ($nb == 0) { # deleted file
-		$rv .= $cb;
-	} else {
-		my $h = $diff->{h};
-		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$diff->{path_b}?id=$h#n$nb">);
-		$rv .= "<b>$cb</b></a>";
-	}
-	$rv . ' @@' . utf8_html($ctx);
 }
 
 sub git_diff_cc_hdr {
@@ -358,28 +269,6 @@ sub git_diff_cc_hunk {
 		$rv .= "<b>$last</b></a>";
 	}
 	$rv .= " $at" . utf8_html($ctx);
-}
-
-sub git_diffstat_rename {
-	my ($diff, $from, $to) = @_;
-	my $anchor = to_attr(git_unquote($to));
-	$diff->{anchors}->{$anchor} = $to;
-	my @from = split('/', $from);
-	my @to = split('/', $to);
-	my $orig_to = $to;
-	my ($base, @base);
-	while (@to && @from && $to[0] eq $from[0]) {
-		push @base, shift(@to);
-		shift @from;
-	}
-
-	$base = utf8_html(join('/', @base)) if @base;
-	$from = utf8_html(join('/', @from));
-	$to = PublicInbox::Hval->utf8(join('/', @to), $orig_to);
-	my $tp = $to->as_path;
-	my $th = $to->as_html;
-	$to = qq(<a\nhref="#$anchor">$th</a>);
-	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
 }
 
 # It would be nice to be able to use colors for showing diff hunks.
