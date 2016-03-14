@@ -84,7 +84,7 @@ sub git_commit_stream {
 			$x .= git_parent_line('         ', $p, @common);
 		}
 	}
-	$fh->write($x .= "\n<b>$s</b>\n\n");
+	$fh->write($x .= "\n$s\n\n");
 
 	# body:
 	local $/ = "\0";
@@ -107,7 +107,6 @@ sub git_commit_stream {
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
-	my ($cc_ins, $cc_del);
 	while (defined($l = <$log>)) {
 		if ($help) {
 			$fh->write($help);
@@ -121,15 +120,8 @@ sub git_commit_stream {
 			$l = git_diff_ab_index($1, $2, $3) . "\n";
 		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
 			$l = git_diff_ab_hunk($req, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^\+{1,3}\s*/ || ($cc_ins && $l =~ $cc_ins)) {
-			$l = git_diff_ins($l) . "\n";
-		} elsif ($l =~ s/^(\-{1,3}\s*)// ||
-					($cc_del && $l =~ s/$cc_del//)) {
-			$l = git_diff_del($1, $l) . "\n";
 		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
 			$l = git_diff_cc_index($req, $1, $2, $3) . "\n";
-			$cc_ins ||= $req->{cc_ins};
-			$cc_del ||= $req->{cc_del};
 		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
 			$l = git_diff_cc_hunk($req, $1, $2, $3) . "\n";
 		} else {
@@ -212,7 +204,7 @@ sub git_diff_cc_hdr {
 	delete $diff->{anchors}->{$anchor};
 	my $cc = $diff->{cc} = PublicInbox::Hval->utf8($path);
 	$diff->{path_cc} = $cc->as_path;
-	qq(<a\nhref=#D\nid="$anchor">diff</a> --$combined <b>$html_path</b>);
+	qq(<a\nhref=#D\nid="$anchor">diff</a> --$combined $html_path);
 }
 
 # index abcdef09,01234567..76543210
@@ -221,15 +213,10 @@ sub git_diff_cc_index {
 	$end = utf8_html($end);
 	my @before = split(',', $before);
 	$diff->{pobj_cc} = \@before;
-	unless ($diff->{cc_ins}) {
-		my $n = scalar(@before) - 1;
-		$diff->{cc_ins} = qr/^ {0,$n}[\+]\s*/;
-		$diff->{cc_del} = qr/^( {0,$n}[\-]\s*)/;
-	}
 
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
-	"index $before..<b>$last</b>$end";
+	"index $before..$last$end";
 }
 
 # @@@ -1,2 -3,4 +5,6 @@@ (combined diff)
@@ -261,40 +248,13 @@ sub git_diff_cc_hunk {
 	# we can use the normal 'tree' endpoint for the result
 	my ($n) = ($last =~ /\A\+(\d+)/); # line number
 	if ($n == 0) { # deleted file (does this happen with --cc?)
-		$rv .= " <b>$last</b>";
+		$rv .= " $last";
 	} else {
 		my $h = $diff->{h};
 		$rv .= qq( <a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$path?id=$h#n$n">);
-		$rv .= "<b>$last</b></a>";
+		$rv .= qq(\nhref="${rel}tree/$path?id=$h#n$n">$last</a>);
 	}
 	$rv .= " $at" . utf8_html($ctx);
-}
-
-# It would be nice to be able to use colors for showing diff hunks.
-# Unfortunately, the default green+red colors in common web viewers
-# (gitweb, cgit, etc) are difficult to read for some people, myself
-# included.
-#
-# We cannot rely on CSS styling since it is unsafe and incompatible with
-# some browsers.
-#
-# Tried using semantic tags (ins and del).  Unfortunately, alignment
-# gets completely screwed in text-only browsers.  On common GUI browsers,
-# <del> renders unreadably by default (strike-throughs) and <ins> is
-# visually too noisy (with underlines).  So we'll bold added lines and
-# leave deleted lines alone (prefixed with '-')
-sub git_diff_ins {
-	my ($l) = @_;
-	chomp $l;
-	'<b>'.utf8_html($l).'</b>';
-}
-
-sub git_diff_del {
-	my ($pfx, $l) = @_;
-	chomp $l;
-	# underline fallbacks look ugly with leading whitespace
-	$pfx. '<i>'.utf8_html($l).'</i>';
 }
 
 sub git_parent_line {
