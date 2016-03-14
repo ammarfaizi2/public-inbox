@@ -70,13 +70,13 @@ sub emit_summary {
 
 	# some people will use README.md or even README.sh here...
 	my $readme = $repo_info->{readme};
-	defined $readme or $readme = 'README';
-	my $doc = $git->cat_file('HEAD:'.$readme);
-	if (defined $doc) {
-		$fh->write('<pre>' .
-			readme_path_links($rel, $readme) . " (HEAD)\n\n");
-		$fh->write(utf8_html($$doc));
-		$fh->write('</pre>');
+	defined $readme or $readme = [ 'README', 'README.md' ];
+	$readme = [ $readme ] if (ref($readme) ne 'ARRAY');
+	foreach my $r (@$readme) {
+		my $doc = $git->cat_file('HEAD:'.$r);
+		defined $doc or next;
+		$fh->write('<pre>' . readme_path_links($rel, $r) .
+			" (HEAD)\n\n" . utf8_html($$doc) . '</pre>');
 	}
 	$fh->write('</body></html>');
 	$fh->close;
