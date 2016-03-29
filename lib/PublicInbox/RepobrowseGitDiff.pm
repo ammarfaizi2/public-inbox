@@ -30,16 +30,16 @@ sub call_git_diff {
 	if (defined(my $expath = $req->{expath})) {
 		push @cmd, $expath;
 	}
-	my $rpipe = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
+	$req->{rpipe} = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
 	my $env = $req->{cgi}->env;
 	my $err = $env->{'psgi.errors'};
-	my ($res, $vin, $fh);
+	my ($vin);
 	$req->{dbuf} = '';
 	$req->{p} = [ $id2 ];
 	$req->{h} = $id;
-
-	my $end = sub {
-		if ($fh) {
+	$req->{end} = sub {
+		$req->{fail} = $req->{cb} = $req->{end} = undef;
+		if (my $fh = delete $req->{fh}) {
 			# write out the last bit that was buffered
 			my @buf = split(/\n/, delete $req->{dbuf}, -1);
 			my $s = '';
@@ -48,48 +48,47 @@ sub call_git_diff {
 			$fh->write($s);
 
 			$fh->close;
-			$fh = undef;
-		} elsif ($res) {
+		} elsif (my $res = delete $req->{res}) {
 			$res->($self->r(500));
 		}
-		if ($rpipe) {
+		if (my $rpipe = delete $req->{rpipe}) {
 			$rpipe->close; # _may_ be Danga::Socket::close
-			$rpipe = undef;
 		}
 	};
-	my $fail = sub {
+	$req->{fail} = sub {
 		if ($!{EAGAIN} || $!{EINTR}) {
 			select($vin, undef, undef, undef) if defined $vin;
 			# $vin is undef on async, so this is a noop on EAGAIN
 			return;
 		}
 		my $e = $!;
-		$end->();
+		$req->{end}->();
 		$err->print("git diff ($git->{git_dir}): $e\n");
 	};
-	my $cb = sub {
+	$req->{cb} = sub {
 		my $off = length($req->{dbuf});
-		my $n = $rpipe->sysread($req->{dbuf}, 8192, $off);
-		return $fail->() unless defined $n;
-		return $end->() if $n == 0;
-		if ($res) {
+		my $n = $req->{rpipe}->sysread($req->{dbuf}, 8192, $off);
+		return $req->{fail}->() unless defined $n;
+		return $req->{end}->() if $n == 0;
+		if (my $res = delete $req->{res}) {
 			my $h = ['Content-Type', 'text/html; charset=UTF-8'];
-			$fh = $res->([200, $h]);
-			$res = undef;
+			my $fh = $req->{fh} = $res->([200, $h]);
 			my $o = { nofollow => 1, noindex => 1 };
 			$fh->write($self->html_start($req, 'diff', $o)."\n");
 		}
-		git_diff_to_html($req, $fh) if $fh;
+		if (my $fh = $req->{fh}) {
+			git_diff_to_html($req, $fh);
+		}
 	};
 	if (my $async = $env->{'pi-httpd.async'}) {
-		$rpipe = $async->($rpipe, $cb);
-		sub { ($res) = @_ } # let Danga::Socket handle the rest.
+		$req->{rpipe} = $async->($req->{rpipe}, $req->{cb});
+		sub { $req->{res} = $_[0] } # let Danga::Socket handle the rest.
 	} else { # synchronous loop for other PSGI servers
 		$vin = '';
-		vec($vin, fileno($rpipe), 1) = 1;
+		vec($vin, fileno($req->{rpipe}), 1) = 1;
 		sub {
-			($res) = @_;
-			while ($rpipe) { $cb->() }
+			$req->{res} = $_[0];
+			while ($req->{rpipe}) { $req->{cb}->() }
 		}
 	}
 }
