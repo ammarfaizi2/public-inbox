@@ -26,22 +26,22 @@ use constant GIT_FMT => '--pretty=format:'.join('%n',
 
 sub git_commit_stream {
 	my ($self, $req) = @_;
-	my $log = $req->{log};
-	my $H = <$log>;
+	my $rpipe = $req->{rpipe};
+	my $H = <$rpipe>;
 	defined $H or return git_commit_404($req);
 	my $fh = delete($req->{res})->([200, ['Content-Type'=>'text/html']]);
 	$req->{fh} = $fh;
-	chomp(my $h = <$log>); # abbreviated commit
+	chomp(my $h = <$rpipe>); # abbreviated commit
 	my $l;
-	chomp(my $s = utf8_html($l = <$log>)); # subject
-	chomp(my $au = utf8_html($l = <$log>)); # author
-	chomp(my $ad = <$log>);
-	chomp(my $cu = utf8_html($l = <$log>));
-	chomp(my $cd = <$log>);
-	chomp(my $t = <$log>); # tree
-	chomp(my $p = <$log>); # parents
+	chomp(my $s = utf8_html($l = <$rpipe>)); # subject
+	chomp(my $au = utf8_html($l = <$rpipe>)); # author
+	chomp(my $ad = <$rpipe>);
+	chomp(my $cu = utf8_html($l = <$rpipe>));
+	chomp(my $cd = <$rpipe>);
+	chomp(my $t = <$rpipe>); # tree
+	chomp(my $p = <$rpipe>); # parents
 	my @p = split(' ', $p);
-	chomp(my $D = <$log>); # TODO: decorate
+	chomp(my $D = <$rpipe>); # TODO: decorate
 	my $git = $req->{repo_info}->{git};
 
 	my $rel = $req->{relcmd};
@@ -88,7 +88,7 @@ sub git_commit_stream {
 
 	# body:
 	local $/ = "\0";
-	$l = <$log>;
+	$l = <$rpipe>;
 	chomp $l;
 	$fh->write(utf8_html($l)."<a\nid=D>---</a>\n");
 	$req->{anchors} = {};
@@ -97,7 +97,7 @@ sub git_commit_stream {
 	$req->{rel} = $rel;
 	{
 		local $/ = "\0\0";
-		my $l = <$log>;
+		my $l = <$rpipe>;
 		chomp $l;
 		git_diffstat_emit($req, $fh, $l);
 	}
@@ -107,7 +107,7 @@ sub git_commit_stream {
 	# diff
 	local $/ = "\n";
 	my $cmt = '[a-f0-9]+';
-	while (defined($l = <$log>)) {
+	while (defined($l = <$rpipe>)) {
 		if ($help) {
 			$fh->write($help);
 			$help = undef;
@@ -156,7 +156,7 @@ sub call_git_commit {
 	my $cmd = [ qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c),
 			$git->abbrev, GIT_FMT, $id, '--' ];
-	$req->{log} = $git->popen($cmd, undef, { 2 => $git->err_begin });
+	$req->{rpipe} = $git->popen($cmd, undef, { 2 => $git->err_begin });
 	$req->{end} = sub {
 		$req->{cb} = $req->{end} = undef;
 		if (my $fh = delete $req->{fh}) {
@@ -164,8 +164,8 @@ sub call_git_commit {
 		} elsif (my $res = delete $req->{res}) {
 			$res->(r(500));
 		}
-		if (my $log = delete $req->{log}) {
-			$log->close; # _may_ be Danga::Socket::close
+		if (my $rpipe = delete $req->{rpipe}) {
+			$rpipe->close; # _may_ be Danga::Socket::close
 		}
 		# zero the error file for now, be careful about printing
 		# $id to psgi.errors w/o sanitizing...
@@ -197,22 +197,22 @@ sub git_commit_404 {
 }
 
 sub git_diff_cc_hdr {
-	my ($diff, $combined, $path) = @_;
+	my ($req, $combined, $path) = @_;
 	my $html_path = utf8_html($path);
 	$path = git_unquote($path);
 	my $anchor = to_attr($path);
-	delete $diff->{anchors}->{$anchor};
-	my $cc = $diff->{cc} = PublicInbox::Hval->utf8($path);
-	$diff->{path_cc} = $cc->as_path;
+	delete $req->{anchors}->{$anchor};
+	my $cc = $req->{cc} = PublicInbox::Hval->utf8($path);
+	$req->{path_cc} = $cc->as_path;
 	qq(<a\nhref=#D\nid="$anchor">diff</a> --$combined $html_path);
 }
 
 # index abcdef09,01234567..76543210
 sub git_diff_cc_index {
-	my ($diff, $before, $last, $end) = @_;
+	my ($req, $before, $last, $end) = @_;
 	$end = utf8_html($end);
 	my @before = split(',', $before);
-	$diff->{pobj_cc} = \@before;
+	$req->{pobj_cc} = \@before;
 
 	# not wasting bandwidth on links here, yet
 	# links in hunk headers are far more useful with line offsets
@@ -221,13 +221,13 @@ sub git_diff_cc_index {
 
 # @@@ -1,2 -3,4 +5,6 @@@ (combined diff)
 sub git_diff_cc_hunk {
-	my ($diff, $at, $offs, $ctx) = @_;
+	my ($req, $at, $offs, $ctx) = @_;
 	my @offs = split(' ', $offs);
 	my $last = pop @offs;
-	my @p = @{$diff->{p}};
-	my @pobj = @{$diff->{pobj_cc}};
-	my $path = $diff->{path_cc};
-	my $rel = $diff->{rel};
+	my @p = @{$req->{p}};
+	my @pobj = @{$req->{pobj_cc}};
+	my $path = $req->{path_cc};
+	my $rel = $req->{rel};
 	my $rv = $at;
 
 	# special 'cc' action as we don't have reliable paths from parents
@@ -250,7 +250,7 @@ sub git_diff_cc_hunk {
 	if ($n == 0) { # deleted file (does this happen with --cc?)
 		$rv .= " $last";
 	} else {
-		my $h = $diff->{h};
+		my $h = $req->{h};
 		$rv .= qq( <a\nrel=nofollow);
 		$rv .= qq(\nhref="${rel}tree/$path?id=$h#n$n">$last</a>);
 	}
@@ -267,15 +267,15 @@ sub git_parent_line {
 
 # do not break anchor links if the combined diff doesn't show changes:
 sub show_unchanged {
-	my ($fh, $diff, $qs) = @_;
+	my ($fh, $req, $qs) = @_;
 
-	my @unchanged = sort keys %{$diff->{anchors}};
+	my @unchanged = sort keys %{$req->{anchors}};
 	return unless @unchanged;
-	my $anchors = $diff->{anchors};
+	my $anchors = $req->{anchors};
 	my $s = "\n There are uninteresting changes from this merge.\n" .
 		qq( See <a\nhref="#P">parents</a>, ) .
 		"or view final state(s) below:\n";
-	my $rel = $diff->{rel};
+	my $rel = $req->{rel};
 	foreach my $anchor (@unchanged) {
 		my $fn = $anchors->{$anchor};
 		my $p = PublicInbox::Hval->utf8(git_unquote($fn));
