@@ -24,34 +24,28 @@ use constant GIT_FMT => '--pretty=format:'.join('%n',
 	'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
 	'%t', '%p', '%D', '%b%x00');
 
-sub git_commit_stream {
+use constant CC_EMPTY => " This is a merge, and the combined diff is empty.\n";
+use constant CC_MERGE => " This is a merge, showing combined diff:\n\n";
+
+sub commit_header {
 	my ($self, $req) = @_;
-	my $rpipe = $req->{rpipe};
-	my $H = <$rpipe>;
-	defined $H or return git_commit_404($req);
-	my $fh = delete($req->{res})->([200, ['Content-Type'=>'text/html']]);
-	$req->{fh} = $fh;
-	chomp(my $h = <$rpipe>); # abbreviated commit
-	my $l;
-	chomp(my $s = utf8_html($l = <$rpipe>)); # subject
-	chomp(my $au = utf8_html($l = <$rpipe>)); # author
-	chomp(my $ad = <$rpipe>);
-	chomp(my $cu = utf8_html($l = <$rpipe>));
-	chomp(my $cd = <$rpipe>);
-	chomp(my $t = <$rpipe>); # tree
-	chomp(my $p = <$rpipe>); # parents
+	my $res = delete $req->{res} or die "BUG: missing res\n";
+	my ($H, $h, $s, $au, $ad, $cu, $cd, $t, $p, $D, $rest) =
+		split("\n", $req->{dbuf}, 11);
+	$s = utf8_html($s);
+	$au = utf8_html($au);
+	$cu = utf8_html($cu);
 	my @p = split(' ', $p);
-	chomp(my $D = <$rpipe>); # TODO: decorate
-	my $git = $req->{repo_info}->{git};
+	my $fh = $req->{fh} = $res->([200, ['Content-Type'=>'text/html']]);
 
 	my $rel = $req->{relcmd};
 	my $q = $req->{'q'};
-	my $qs = $q->qs(id => $h);
-	chomp $H;
+	my $qs = $req->{qs} = $q->qs(id => $h);
 	my $x = $self->html_start($req, $s) . "\n" .
 		qq(   commit $H (<a\nhref="${rel}patch$qs">patch</a>)\n) .
 		qq(     tree <a\nrel=nofollow\nhref="${rel}tree?id=$h">$t</a>);
 
+	my $git = $req->{repo_info}->{git};
 	# extra show path information, if any
 	my $extra = $req->{extra};
 	my $path = '';
@@ -76,6 +70,7 @@ sub git_commit_stream {
 		my $p = $p[0];
 		$x .= git_parent_line('   parent', $p, $q, $git, $rel, $path);
 	} elsif ($np > 1) {
+		$req->{help} = CC_MERGE;
 		my @common = ($q, $git, $rel, $path);
 		my @t = @p;
 		my $p = shift @t;
@@ -84,58 +79,66 @@ sub git_commit_stream {
 			$x .= git_parent_line('         ', $p, @common);
 		}
 	}
-	$fh->write($x .= "\n$s\n\n");
-
-	# body:
-	local $/ = "\0";
-	$l = <$rpipe>;
-	chomp $l;
-	$fh->write(utf8_html($l)."<a\nid=D>---</a>\n");
+	$x .= "\n<b>";
+	$x .= $s;
+	$x .= "</b>\n\n";
+	my $bx00;
+	($bx00, $req->{dbuf}) = split("\0", $rest, 2);
+	$fh->write($x .= utf8_html($bx00) . "<a\nid=D>---</a>\n");
 	$req->{anchors} = {};
 	$req->{h} = $h;
 	$req->{p} = \@p;
-	$req->{rel} = $rel;
-	{
-		local $/ = "\0\0";
-		my $l = <$rpipe>;
-		chomp $l;
-		git_diffstat_emit($req, $fh, $l);
-	}
-	my $help;
-	$help = " This is a merge, showing combined diff:\n\n" if ($np > 1);
+}
 
-	# diff
-	local $/ = "\n";
+sub git_diff_cc_line_i ($$) {
+	my ($req, $l) = @_;
 	my $cmt = '[a-f0-9]+';
-	while (defined($l = <$rpipe>)) {
-		if ($help) {
-			$fh->write($help);
-			$help = undef;
-		}
-		if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
-			$l = git_diff_ab_hdr($req, $1, $2) . "\n";
-		} elsif ($l =~ m{^diff --(cc|combined) (.+)$}) {
-			$l = git_diff_cc_hdr($req, $1, $2) . "\n";
-		} elsif ($l =~ /^index ($cmt)\.\.($cmt)(.*)$/o) { # regular
-			$l = git_diff_ab_index($1, $2, $3) . "\n";
-		} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
-			$l = git_diff_ab_hunk($req, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
-			$l = git_diff_cc_index($req, $1, $2, $3) . "\n";
-		} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
-			$l = git_diff_cc_hunk($req, $1, $2, $3) . "\n";
-		} else {
-			$l = utf8_html($l);
-		}
-		$fh->write($l);
-	}
 
-	if ($help) {
-		$fh->write(" This is a merge, combined diff is empty.\n");
+	if ($l =~ m{^diff --git ("?a/.+) ("?b/.+)$}) { # regular
+		git_diff_ab_hdr($req, $1, $2) . "\n";
+	} elsif ($l =~ m{^diff --(cc|combined) (.+)$}) {
+		git_diff_cc_hdr($req, $1, $2) . "\n";
+	} elsif ($l =~ /^index ($cmt)\.\.($cmt)(.*)$/o) { # regular
+		git_diff_ab_index($1, $2, $3) . "\n";
+	} elsif ($l =~ /^@@ (\S+) (\S+) @@(.*)$/) { # regular
+		git_diff_ab_hunk($req, $1, $2, $3) . "\n";
+	} elsif ($l =~ /^index ($cmt,[^\.]+)\.\.($cmt)(.*)$/o) { # --cc
+		git_diff_cc_index($req, $1, $2, $3) . "\n";
+	} elsif ($l =~ /^(@@@+) (\S+.*\S+) @@@+(.*)$/) { # --cc
+		git_diff_cc_hunk($req, $1, $2, $3) . "\n";
+	} else {
+		utf8_html($l) . "\n";
 	}
+}
 
-	show_unchanged($fh, $req, $qs);
-	$fh->write('</pre></body></html>');
+sub git_commit_stream ($$) {
+	my ($self, $req) = @_;
+	my $dbuf = \($req->{dbuf});
+	my $off = length($$dbuf);
+	my $n = $req->{rpipe}->sysread($$dbuf, 8192, $off);
+	return $req->{fail}->() unless defined $n;
+	return $req->{end}->() if $n == 0;
+	my $res = $req->{res};
+	if ($res) {
+		return if index($$dbuf, "\0") < 0;
+		commit_header($self, $req);
+		return if $$dbuf eq '';
+	}
+	my $fh = $req->{fh};
+	if (!$req->{diff_state}) {
+		my ($stat, $buf) = split("\0\0", $$dbuf, 2);
+		return unless defined $buf;
+		$$dbuf = $buf;
+		git_diffstat_emit($req, $fh, $stat);
+		$req->{diff_state} = 1;
+	}
+	my @buf = split("\n", $$dbuf, -1);
+	$$dbuf = pop @buf; # last line, careful...
+	if (@buf) {
+		my $s = delete($req->{help}) || '';
+		$s .= git_diff_cc_line_i($req, $_) foreach @buf;
+		$fh->write($s) if $s ne '';
+	}
 }
 
 sub call_git_commit {
@@ -157,12 +160,32 @@ sub call_git_commit {
 			--no-notes --no-color -c),
 			$git->abbrev, GIT_FMT, $id, '--' ];
 	$req->{rpipe} = $git->popen($cmd, undef, { 2 => $git->err_begin });
+	my $env = $req->{cgi}->env;
+	my $err = $env->{'psgi.errors'};
+	my $vin;
+	$req->{dbuf} = '';
 	$req->{end} = sub {
-		$req->{cb} = $req->{end} = undef;
+		$req->{end} = undef;
 		if (my $fh = delete $req->{fh}) {
+			my $dbuf = delete $req->{dbuf};
+			if (!$req->{diff_state}) {
+				my ($stat, $buf) = split("\0\0", $dbuf, 2);
+				$dbuf = defined $buf ? $buf : '';
+				git_diffstat_emit($req, $fh, $stat);
+				$req->{diff_state} = 1;
+			}
+			my @buf = split("\n", $dbuf, -1);
+			if (@buf) {
+				my $s = delete($req->{help}) || '';
+				$s .= git_diff_cc_line_i($req, $_) foreach @buf;
+				$fh->write($s) if $s ne '';
+			}
+			$fh->write(CC_EMPTY) if delete($req->{help});
+			show_unchanged($req, $fh);
+			$fh->write('</pre></body></html>');
 			$fh->close;
 		} elsif (my $res = delete $req->{res}) {
-			$res->(r(500));
+			git_commit_404($req, $res);
 		}
 		if (my $rpipe = delete $req->{rpipe}) {
 			$rpipe->close; # _may_ be Danga::Socket::close
@@ -171,19 +194,35 @@ sub call_git_commit {
 		# $id to psgi.errors w/o sanitizing...
 		$git->err;
 	};
-	$req->{'q'} = $q;
-	$req->{cb} = sub { # read git-show output and stream to client
-		git_commit_stream($self, $req);
+	$req->{fail} = sub {
+		if ($!{EAGAIN} || $!{EINTR}) {
+			select($vin, undef, undef, undef) if defined $vin;
+			# $vin is undef on async, so this is a noop on EAGAIN
+			return;
+		}
+		my $e = $!;
 		$req->{end}->();
+		$err->print("git show ($git->{git_dir}): $e\n");
 	};
-	sub {
-		$req->{res} = $_[0];
-		$req->{cb}->();
+	$req->{'q'} = $q;
+	my $cb = sub { # read git-show output and stream to client
+		git_commit_stream($self, $req);
+	};
+	if (my $async = $env->{'pi-httpd.async'}) {
+		$req->{rpipe} = $async->($req->{rpipe}, $cb);
+		sub { $req->{res} = $_[0] } # let Danga::Socket handle the rest
+	} else { # synchronous loop for other PSGI servers
+		$vin = '';
+		vec($vin, fileno($req->{rpipe}), 1) = 1;
+		sub {
+			$req->{res} = $_[0];
+			while ($req->{rpipe}) { $cb->() }
+		}
 	}
 }
 
 sub git_commit_404 {
-	my ($req) = @_;
+	my ($req, $res) = @_;
 	my $x = 'Missing commit or path';
 	my $pfx = "$req->{relcmd}commit";
 
@@ -193,7 +232,7 @@ sub git_commit_404 {
 	$x .= "<a\nhref=\"$pfx$qs\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';
 
-	delete($req->{res})->([404, ['Content-Type'=>'text/html'], [ $x ]]);
+	$res->([404, ['Content-Type'=>'text/html'], [ $x ]]);
 }
 
 sub git_diff_cc_hdr {
@@ -227,7 +266,7 @@ sub git_diff_cc_hunk {
 	my @p = @{$req->{p}};
 	my @pobj = @{$req->{pobj_cc}};
 	my $path = $req->{path_cc};
-	my $rel = $req->{rel};
+	my $rel = $req->{relcmd};
 	my $rv = $at;
 
 	# special 'cc' action as we don't have reliable paths from parents
@@ -267,15 +306,16 @@ sub git_parent_line {
 
 # do not break anchor links if the combined diff doesn't show changes:
 sub show_unchanged {
-	my ($fh, $req, $qs) = @_;
+	my ($req, $fh) = @_;
 
 	my @unchanged = sort keys %{$req->{anchors}};
 	return unless @unchanged;
 	my $anchors = $req->{anchors};
 	my $s = "\n There are uninteresting changes from this merge.\n" .
-		qq( See <a\nhref="#P">parents</a>, ) .
-		"or view final state(s) below:\n";
-	my $rel = $req->{rel};
+		qq( See the <a\nhref="#P">parents</a>, ) .
+		"or view final state(s) below:\n\n";
+	my $rel = $req->{relcmd};
+	my $qs = $req->{qs};
 	foreach my $anchor (@unchanged) {
 		my $fn = $anchors->{$anchor};
 		my $p = PublicInbox::Hval->utf8(git_unquote($fn));
