@@ -243,7 +243,7 @@ sub git_diff_cc_hdr {
 	delete $req->{anchors}->{$anchor};
 	my $cc = $req->{cc} = PublicInbox::Hval->utf8($path);
 	$req->{path_cc} = $cc->as_path;
-	qq(<a\nhref=#D\nid="$anchor">diff</a> --$combined $html_path);
+	qq(<a\nid="$anchor">diff</a> --$combined $html_path);
 }
 
 # index abcdef09,01234567..76543210

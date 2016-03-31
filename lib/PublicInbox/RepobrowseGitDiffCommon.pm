@@ -38,7 +38,7 @@ sub git_diff_ab_hdr ($$$) {
 
 	# not wasting bandwidth on links here
 	# links in hunk headers are far more useful with line offsets
-	qq(<a\nhref=#D\nid="$anchor">diff</a> --git $html_a $html_b);
+	qq(<a\nid="$anchor">diff</a> --git $html_a $html_b);
 }
 
 # @@ -1,2 +3,4 @@ (regular diff)
