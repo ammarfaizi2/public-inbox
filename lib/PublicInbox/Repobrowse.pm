@@ -25,7 +25,7 @@ use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepobrowseConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain Tag Atom
-	Diff);
+	Diff Snapshot);
 my %VCS = (git => 'Git');
 my %LOADED;
 

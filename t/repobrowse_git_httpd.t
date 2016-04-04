@@ -115,5 +115,23 @@ test_psgi(uri => $uri, client => sub {
 	is($b2, substr($body, 5), 'substring matches on 206');
 }
 
+test_psgi(uri => $uri, client => sub {
+	my ($cb) = @_;
+	my $res = $cb->(GET($uri . 'test.git/snapshot/test-master.tar.gz'));
+	is(200, $res->code, 'got gzipped tarball');
+	my $got = "$tmpdir/got.tar.gz";
+	my $exp = "$tmpdir/exp.tar.gz";
+	open my $fh, '>', $got or die "open got.tar.gz: $!";
+	print $fh $res->content;
+	close $fh or die "close failed: $!";
+	$res = undef;
+	my $rc = system('git', "--git-dir=$test->{git_dir}",
+			qw(archive --prefix=test-master/ --format=tar.gz),
+			'-o', $exp, 'master');
+	is(0, $rc, 'git-archive generated check correctly');
+	is(0, system('cmp', $got, $exp), 'got expected gzipped tarball');
+
+});
+
 done_testing();
 1;

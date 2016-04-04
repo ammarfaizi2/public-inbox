@@ -11,6 +11,10 @@ sub new {
 	$file = default_file() unless defined($file);
 	my $self = bless PublicInbox::Config::git_config_dump($file), $class;
 	$self->{-cache} = {};
+
+	# hard disable these with '-' prefix by default:
+	$self->{'repobrowse.snapshots'} ||= '-tar.bz2 -tar.xz';
+
 	# for root
 	$self->{-groups} = { -hidden => [], -none => [] };
 	$self;
@@ -40,6 +44,12 @@ sub lookup {
 	$rv->{path} = $path;
 	$rv->{repo} = $repo_path;
 
+	# snapshots:
+	my $snap = (split('/', $repo_path))[-1];
+	$snap =~ s/\.git\z//; # seems common for git URLs to end in ".git"
+	$rv->{snapshot_re} = qr/\A\Q$snap\E[-_]/;
+	$rv->{snapshot_pfx} = $snap;
+
 	# gitweb compatibility
 	foreach my $key (qw(description cloneurl)) {
 		$rv->{$key} = try_cat("$path/$key");
@@ -48,9 +58,18 @@ sub lookup {
 	$rv->{desc_html} =
 		PublicInbox::Hval->new_oneline($rv->{description})->as_html;
 
-	foreach my $key (qw(publicinbox vcs readme group)) {
+	foreach my $key (qw(publicinbox vcs readme group snapshots)) {
 		$rv->{$key} = $self->{"repo.$repo_path.$key"};
 	}
+	unless (defined $rv->{snapshots}) {
+		$rv->{snapshots} = $self->{'repobrowse.snapshots'} || '';
+	}
+
+	my %disabled;
+	foreach (split(/\s+/, $rv->{snapshots})) {
+		s/\A-// and $disabled{$_} = 1;
+	}
+	$rv->{snapshots_disabled} = \%disabled;
 
 	my $g = $rv->{group};
 	defined $g or $g = '-none';

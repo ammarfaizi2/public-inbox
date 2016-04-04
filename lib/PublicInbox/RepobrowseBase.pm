@@ -5,7 +5,7 @@ use strict;
 use warnings;
 require PublicInbox::RepobrowseGitQuery;
 use PublicInbox::Hval;
-our %MIME_TYPE_WHITELIST = ( 'application/pdf' => 1 );
+our %MIME_TYPE_WHITELIST = ('application/pdf' => 1);
 
 sub new { bless {}, shift }
 
@@ -107,7 +107,7 @@ sub r {
 		# mainly for curl (no-'-L') users:
 		$body = "Redirecting to $redir\n";
 	} else {
-		die "not implemented, yet: $status";
+		push @h, qw(Content-Type text/plain);
 	}
 
 	[ $status, \@h, [ $body ] ]
