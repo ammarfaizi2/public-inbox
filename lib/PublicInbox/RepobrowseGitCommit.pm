@@ -111,13 +111,13 @@ sub git_diff_cc_line_i ($$) {
 	}
 }
 
-sub git_commit_stream ($$) {
-	my ($self, $req) = @_;
+sub git_commit_stream ($$$$) {
+	my ($self, $req, $fail, $end) = @_;
 	my $dbuf = \($req->{dbuf});
 	my $off = length($$dbuf);
 	my $n = $req->{rpipe}->sysread($$dbuf, 8192, $off);
-	return $req->{fail}->() unless defined $n;
-	return $req->{end}->() if $n == 0;
+	return $fail->() unless defined $n;
+	return $end->() if $n == 0;
 	my $res = $req->{res};
 	if ($res) {
 		return if index($$dbuf, "\0") < 0;
@@ -164,8 +164,7 @@ sub call_git_commit {
 	my $err = $env->{'psgi.errors'};
 	my $vin;
 	$req->{dbuf} = '';
-	$req->{end} = sub {
-		$req->{end} = undef;
+	my $end = sub {
 		if (my $fh = delete $req->{fh}) {
 			my $dbuf = delete $req->{dbuf};
 			if (!$req->{diff_state}) {
@@ -194,19 +193,19 @@ sub call_git_commit {
 		# $id to psgi.errors w/o sanitizing...
 		$git->err;
 	};
-	$req->{fail} = sub {
+	my $fail = sub {
 		if ($!{EAGAIN} || $!{EINTR}) {
 			select($vin, undef, undef, undef) if defined $vin;
 			# $vin is undef on async, so this is a noop on EAGAIN
 			return;
 		}
 		my $e = $!;
-		$req->{end}->();
+		$end->();
 		$err->print("git show ($git->{git_dir}): $e\n");
 	};
 	$req->{'q'} = $q;
 	my $cb = sub { # read git-show output and stream to client
-		git_commit_stream($self, $req);
+		git_commit_stream($self, $req, $fail, $end);
 	};
 	if (my $async = $env->{'pi-httpd.async'}) {
 		$req->{rpipe} = $async->($req->{rpipe}, $cb);
