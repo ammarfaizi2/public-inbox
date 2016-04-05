@@ -12,7 +12,10 @@ foreach my $mod (qw(Danga::Socket HTTP::Parser::XS HTTP::Date HTTP::Status
 	plan skip_all => "$mod missing for repobrowse_git_httpd.t" if $@;
 }
 my $test = require './t/repobrowse_common_git.perl';
-$Plack::Test::Impl = 'ExternalServer';
+{
+	no warnings 'once';
+	$Plack::Test::Impl = 'ExternalServer';
+}
 use File::Temp qw/tempdir/;
 use Cwd qw/getcwd/;
 use IO::Socket;
