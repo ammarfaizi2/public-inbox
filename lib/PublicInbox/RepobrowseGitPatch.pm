@@ -61,7 +61,7 @@ sub call_git_patch {
 			$fh = $res->([200, $h]);
 			$res = undef;
 		}
-		$fh->write($buf) if $fh;
+		$fh->write($buf);
 	};
 
 	if (my $async = $env->{'pi-httpd.async'}) {

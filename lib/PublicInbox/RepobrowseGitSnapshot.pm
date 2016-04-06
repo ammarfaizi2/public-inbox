@@ -112,8 +112,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 				'ETag', qq("$tree") ];
 			$req->{fh} = $res->([200, $h]);
 		}
-		my $fh = $req->{fh} or return;
-		$fh->write($buf);
+		$req->{fh}->write($buf);
 	};
 	if (my $async = $env->{'pi-httpd.async'}) {
 		$req->{rpipe} = $async->($req->{rpipe}, $cb);

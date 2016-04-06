@@ -78,9 +78,7 @@ sub call_git_diff {
 					utf8_html("git diff-tree -r -M -B -D ".
 						"$id2 $id --$ex"). "\n\n");
 		}
-		if (my $fh = $req->{fh}) {
-			git_diff_to_html($req, $fh);
-		}
+		git_diff_to_html($req);
 	};
 	if (my $async = $env->{'pi-httpd.async'}) {
 		$req->{rpipe} = $async->($req->{rpipe}, $cb);
@@ -112,7 +110,8 @@ sub git_diff_line_i {
 }
 
 sub git_diff_to_html {
-	my ($req, $fh) = @_;
+	my ($req) = @_;
+	my $fh = $req->{fh};
 	if (!$req->{diff_state}) {
 		my ($stat, $buf) = split(/\0\0/, $req->{dbuf}, 2);
 		return unless defined $buf;
