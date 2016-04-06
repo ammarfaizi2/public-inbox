@@ -29,7 +29,7 @@ sub call_git_patch {
 	my $rpipe = $git->popen(@cmd);
 	my $env = $req->{cgi}->env;
 	my $err = $env->{'psgi.errors'};
-	my ($buf, $n, $res, $vin, $fh);
+	my ($n, $res, $vin, $fh);
 	my $end = sub {
 		if ($fh) {
 			$fh->close;
@@ -53,7 +53,7 @@ sub call_git_patch {
 		$err->print("git format-patch ($git->{git_dir}): $e\n");
 	};
 	my $cb = sub {
-		$n = $rpipe->sysread($buf, 8192);
+		$n = $rpipe->sysread(my $buf, 65536);
 		return $fail->() unless defined $n;
 		return $end->() if $n == 0;
 		if ($res) {
