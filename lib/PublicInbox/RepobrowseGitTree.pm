@@ -175,7 +175,7 @@ sub git_tree_show {
 			$fh->write('g' . (' ' x 18) . "$path @ $x\n");
 			next;
 		}
-		elsif ($m eq 'd') { $path = "<b>$path/</b>" }
+		elsif ($m eq 'd') { $path = "$path/" }
 		elsif ($m eq 'x') { $path = "<b>$path</b>" }
 		elsif ($m eq 'l') { $path = "<i>$path</i>" }
 		$s =~ s/\s+//g;
