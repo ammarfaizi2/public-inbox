@@ -177,7 +177,7 @@ sub git_tree_show {
 
 		if ($m eq 'g') {
 			# TODO: support cross-repository gitlinks
-			$fh->write('g' . (' ' x 18) . "$path @ $x\n");
+			$fh->write('g' . (' ' x 15) . "$path @ $x\n");
 			next;
 		}
 		elsif ($m eq 'd') { $path = "$path/" }
