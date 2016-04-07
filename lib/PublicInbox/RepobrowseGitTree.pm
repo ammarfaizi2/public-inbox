@@ -30,9 +30,14 @@ sub git_tree_stream {
 	my $obj = "$id:$req->{expath}";
 	my ($hex, $type, $size) = $git->check($obj);
 
-	if (!defined($type) || ($type ne 'blob' && $type ne 'tree')) {
-		return $res->([404, ['Content-Type'=>'text/html'],
+	unless (defined($type)) {
+		return $res->([404, ['Content-Type'=>'text/plain'],
 			 ['Not Found']]);
+	}
+	if ($type ne 'blob' && $type ne 'tree') {
+		return $res->([404,
+			['Content-Type'=>'text/plain; charset=UTF-8'],
+			 ["Unrecognized type ($type) for $obj\n"]]);
 	}
 
 	my $fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
