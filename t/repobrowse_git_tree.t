@@ -11,7 +11,7 @@ test_psgi($test->{app}, sub {
 	my $res = $cb->(GET($req));
 	is(200, $res->code, 'got 200 response from dir');
 	my $noslash_body = dechunk($res);
-	like($noslash_body, qr{href="dir/dur\?id=\w+"><b>dur/</b></a>},
+	like($noslash_body, qr{href="dir/dur\?id=\w+">dur/</a>},
 		'path ok w/o slash');
 
 	my $slash = $req . '/';
