@@ -88,9 +88,10 @@ test_psgi(uri => $uri, client => sub {
 
 	# ignore signature from git-format-patch:
 	my ($patch, undef) = split(/\n-- \n/s, $res->content);
+
+	my $cmd = 'format-patch --signature=git -1 -M --stdout HEAD';
 	my ($exp, undef) = split(/\n-- \n/s,
-		`cd "$test->{git_dir}" && \
-		 git format-patch -1 -M --stdout HEAD`);
+		`git --git-dir=$test->{git_dir} $cmd`);
 	is($patch, $exp, 'patch content matches expected');
 });
 
