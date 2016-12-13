@@ -139,4 +139,27 @@ if (1) {
 	ok($nl > 1, "qx returned array length of $nl");
 }
 
+{
+	my $git = PublicInbox::Git->new($dir);
+
+	my $err = $git->popen([qw(cat-file blob non-existent)], undef,
+				{ 2 => $git->err_begin });
+	my @out = <$err>;
+	my $close_ret = close $err;
+	my $close_err = $?;
+	is(join('', @out), '', 'no output on stdout on error');
+	isnt($close_err, 0, 'close set $? on bad command');
+	ok(!$close_ret, 'close returned error on bad command');
+	isnt($git->err, '', 'got stderr output');
+
+	$err = $git->popen([qw(tag -l)], undef, { 2 => $git->err_begin });
+	@out = <$err>;
+	$close_ret = close $err;
+	$close_err = $?;
+	is(join('', @out), '', 'no output on stdout on error');
+	ok(!$close_err, 'close clobbered $? on empty output');
+	ok($close_ret, 'close returned error on empty output');
+	is($git->err, '', 'no stderr output');
+}
+
 done_testing();

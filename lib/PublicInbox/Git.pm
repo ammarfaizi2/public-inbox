@@ -12,10 +12,35 @@ use warnings;
 use POSIX qw(dup2);
 require IO::Handle;
 use PublicInbox::Spawn qw(spawn popen_rd);
+use IO::File;
+use Fcntl qw(:seek);
+
+# Documentation/SubmittingPatches recommends 12 (Linux v4.4)
+my $abbrev = `git config core.abbrev` || 12;
+
+sub abbrev { "--abbrev=$abbrev" }
 
 sub new {
 	my ($class, $git_dir) = @_;
-	bless { git_dir => $git_dir }, $class
+	bless { git_dir => $git_dir, err => IO::File->new_tmpfile }, $class
+}
+
+sub err_begin ($) {
+	my $err = $_[0]->{err};
+	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
+	truncate($err, 0) or die "truncate failed: $!";
+	my $ret = fileno($err);
+	defined $ret or die "fileno failed: $!";
+	$ret;
+}
+
+sub err ($) {
+	my $err = $_[0]->{err};
+	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
+	defined(sysread($err, my $buf, -s $err)) or die "sysread failed: $!";
+	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
+	truncate($err, 0) or die "truncate failed: $!";
+	$buf;
 }
 
 sub _bidi_pipe {
@@ -36,20 +61,43 @@ sub _bidi_pipe {
 	$self->{$in} = $in_r;
 }
 
-sub cat_file {
-	my ($self, $obj, $ref) = @_;
-
-	batch_prepare($self);
+sub cat_file_begin {
+	my ($self, $obj) = @_;
+	$self->_bidi_pipe(qw(--batch in out pid));
 	$self->{out}->print($obj, "\n") or fail($self, "write error: $!");
 
 	my $in = $self->{in};
 	local $/ = "\n";
 	my $head = $in->getline;
 	$head =~ / missing$/ and return undef;
-	$head =~ /^[0-9a-f]{40} \S+ (\d+)$/ or
+	$head =~ /^([0-9a-f]{40}) (\S+) (\d+)$/ or
 		fail($self, "Unexpected result from git cat-file: $head");
 
-	my $size = $1;
+	($in, $1, $2, $3);
+}
+
+sub cat_file_finish {
+	my ($self, $left) = @_;
+	my $max = 8192;
+	my $in = $self->{in};
+	my $buf;
+	while ($left > 0) {
+		my $r = read($in, $buf, $left > $max ? $max : $left);
+		defined($r) or fail($self, "read failed: $!");
+		$r == 0 and fail($self, 'exited unexpectedly');
+		$left -= $r;
+	}
+
+	my $r = read($in, $buf, 1);
+	defined($r) or fail($self, "read failed: $!");
+	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
+}
+
+sub cat_file {
+	my ($self, $obj, $ref) = @_;
+
+	my ($in, $hex, $type, $size) = $self->cat_file_begin($obj);
+	return unless $in;
 	my $ref_type = $ref ? ref($ref) : '';
 
 	my $rv;
@@ -58,16 +106,8 @@ sub cat_file {
 	my $cb_err;
 
 	if ($ref_type eq 'CODE') {
-		$rv = eval { $ref->($in, \$left) };
+		$rv = eval { $ref->($in, \$left, $type, $hex) };
 		$cb_err = $@;
-		# drain the rest
-		my $max = 8192;
-		while ($left > 0) {
-			my $r = read($in, my $x, $left > $max ? $max : $left);
-			defined($r) or fail($self, "read failed: $!");
-			$r == 0 and fail($self, 'exited unexpectedly');
-			$left -= $r;
-		}
 	} else {
 		my $offset = 0;
 		my $buf = '';
@@ -80,10 +120,7 @@ sub cat_file {
 		}
 		$rv = \$buf;
 	}
-
-	my $r = read($in, my $buf, 1);
-	defined($r) or fail($self, "read failed: $!");
-	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
+	$self->cat_file_finish($left);
 	die $cb_err if $cb_err;
 
 	$rv;
@@ -119,8 +156,16 @@ sub fail {
 
 sub popen {
 	my ($self, @cmd) = @_;
-	@cmd = ('git', "--git-dir=$self->{git_dir}", @cmd);
-	popen_rd(\@cmd);
+	my $cmd = [ 'git', "--git-dir=$self->{git_dir}" ];
+	my ($env, $opt);
+	if (ref $cmd[0]) {
+		push @$cmd, @{$cmd[0]};
+		$env = $cmd[1];
+		$opt = $cmd[2];
+	} else {
+		push @$cmd, @cmd;
+	}
+	popen_rd($cmd, $env, $opt);
 }
 
 sub qx {

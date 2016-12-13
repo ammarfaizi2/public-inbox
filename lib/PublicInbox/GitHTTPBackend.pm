@@ -52,8 +52,8 @@ sub serve {
 				$path =~ /\Agit-\w+-pack\z/) {
 		my $ok = serve_smart($env, $git, $path);
 		return $ok if $ok;
+		# fall through to dumb HTTP...
 	}
-
 	serve_dumb($env, $git, $path);
 }
 
