@@ -6,17 +6,25 @@ package PublicInbox::RepobrowseGitQuery;
 use strict;
 use warnings;
 use PublicInbox::Hval;
+use URI::Escape qw(uri_unescape);
 my @KNOWN_PARAMS = qw(id id2 h ofs);
 
 sub new {
-	my ($class, $cgi) = @_;
-	my $self = bless {}, $class;
+	my ($class, $env) = @_;
+	# we don't care about multi-value
+	my %tmp = map {
+		my ($k, $v) = split('=', uri_unescape($_), 2);
+		$v = '' unless defined $v;
+		$v =~ tr/+/ /;
+		($k, $v)
+	} split(/[&;]/, $env->{QUERY_STRING});
 
-	foreach my $k (@KNOWN_PARAMS) {
-		my $v = $cgi->param($k);
-		$self->{$k} = defined $v ? $v : '';
+	my $self = {};
+	foreach (@KNOWN_PARAMS) {
+		my $v = $tmp{$_};
+		$self->{$_} = defined $v ? $v : '';
 	}
-	$self;
+	bless $self, $class;
 }
 
 sub qs {

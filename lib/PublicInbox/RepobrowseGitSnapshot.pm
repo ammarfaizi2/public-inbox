@@ -76,7 +76,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 	my @cmd = ('archive', "--prefix=$pfx", "--format=$fmt", $tree);
 	$req->{rpipe} = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
 
-	my $env = $req->{cgi}->env;
+	my $env = $req->{env};
 	my $vin;
 	my $end = sub {
 		my ($n) = @_;

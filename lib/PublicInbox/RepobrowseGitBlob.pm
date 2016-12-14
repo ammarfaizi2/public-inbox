@@ -12,7 +12,7 @@ our @EXPORT = qw(git_blob_mime_type git_blob_stream_response);
 sub call_git_blob {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 

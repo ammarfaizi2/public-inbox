@@ -20,7 +20,7 @@ use PublicInbox::RepobrowseGitDiffCommon qw/git_diffstat_emit
 sub call_git_diff {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $id = $q->{id};
 	my $id2 = $q->{id2};
 
@@ -30,7 +30,7 @@ sub call_git_diff {
 	my $expath = $req->{expath};
 	push @cmd, $expath if defined $expath;
 	$req->{rpipe} = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
-	my $env = $req->{cgi}->env;
+	my $env = $req->{env};
 	my $err = $env->{'psgi.errors'};
 	my ($vin);
 	$req->{dbuf} = '';

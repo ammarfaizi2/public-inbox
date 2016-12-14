@@ -21,7 +21,7 @@ sub call_git_atom {
 	$max = 50 if $max == 0;
 
 	my $git = $repo_info->{git};
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $h = $q->{h};
 	$h eq '' and chomp($h = $git->qx(qw(symbolic-ref --short HEAD)));
 

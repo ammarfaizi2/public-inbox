@@ -15,7 +15,8 @@ my $sig = '--signature=git '.join(' ', @CMD);
 sub call_git_patch {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
+	my $env = $req->{env};
+	my $q = PublicInbox::RepobrowseGitQuery->new($env);
 	my $id = $q->{id};
 	$id =~ /\A[\w-]+([~\^][~\^\d])*\z/ or $id = 'HEAD';
 
@@ -27,7 +28,6 @@ sub call_git_patch {
 		push @cmd, $expath;
 	}
 	my $rpipe = $git->popen(@cmd);
-	my $env = $req->{cgi}->env;
 	my $err = $env->{'psgi.errors'};
 	my ($n, $res, $vin, $fh);
 	my $end = sub {

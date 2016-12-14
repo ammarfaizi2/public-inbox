@@ -144,7 +144,7 @@ sub git_commit_stream ($$$$) {
 sub call_git_commit {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{cgi});
+	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 
@@ -160,7 +160,7 @@ sub call_git_commit {
 			--no-notes --no-color -c),
 			$git->abbrev, GIT_FMT, $id, '--' ];
 	$req->{rpipe} = $git->popen($cmd, undef, { 2 => $git->err_begin });
-	my $env = $req->{cgi}->env;
+	my $env = $req->{env};
 	my $err = $env->{'psgi.errors'};
 	my $vin;
 	$req->{dbuf} = '';
