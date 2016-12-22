@@ -20,7 +20,6 @@
 package PublicInbox::Repobrowse;
 use strict;
 use warnings;
-use Plack::Request;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
 use PublicInbox::RepobrowseConfig;
 
@@ -38,6 +37,24 @@ sub new {
 # simple response for errors
 sub r { [ $_[0], ['Content-Type' => 'text/plain'], [ join(' ', @_, "\n") ] ] }
 
+sub base_url ($) {
+	my ($env) = @_;
+	my $scheme = $env->{'psgi.url_scheme'} || 'http';
+	my $host = $env->{HTTP_HOST};
+	my $base = "$scheme://";
+	if (defined $host) {
+		$base .= $host;
+	} else {
+		$base .= $env->{SERVER_NAME};
+		my $port = $env->{SERVER_PORT} || 80;
+		if (($scheme eq 'http' && $port != 80) ||
+				($scheme eq 'https' && $port != 443)) {
+			$base.= ":$port";
+		}
+	}
+	$base .= $env->{SCRIPT_NAME};
+}
+
 # Remove trailing slash in URLs which regular humans are likely to read
 # in an attempt to improve cache hit ratios.  Do not redirect
 # plain|patch|blob|fallback endpoints since those could be using
@@ -45,11 +62,9 @@ sub r { [ $_[0], ['Content-Type' => 'text/plain'], [ join(' ', @_, "\n") ] ] }
 # (e.g. curl does not follow 301 unless given "-L")
 my %NO_TSLASH = map { $_ => 1 } qw(Log Commit Tree Summary Tag);
 sub no_tslash {
-	my ($cgi) = @_; # Plack::Request
-	my ($base, $uri);
-	$base = $cgi->base;
-	$base =~ s!/+\z!!;
-	$uri = $cgi->request_uri;
+	my ($env) = @_;
+	my $base = base_url($env);
+	my $uri = $env->{REQUEST_URI};
 	my $qs = '';
 	if ($uri =~ s/(\?.+)\z//) {
 		$qs = $1;
@@ -71,14 +86,13 @@ sub root_index {
 
 sub call {
 	my ($self, $env) = @_;
-	my $cgi = Plack::Request->new($env);
-	my $method = $cgi->method;
+	my $method = $env->{REQUEST_METHOD};
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD|POST\z/);
 
 	# URL syntax: / repo [ / cmd [ / path ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
 	# repo and path (@extra) may both contain '/'
-	my $path_info = uri_unescape($cgi->path_info);
+	my $path_info = uri_unescape($env->{PATH_INFO});
 	my (undef, $repo_path, @extra) = split(m{/+}, $path_info, -1);
 
 	return $self->root_index($self) unless length($repo_path);
@@ -94,7 +108,6 @@ sub call {
 	my $req = {
 		repo_info => $repo_info,
 		extra => \@extra, # path
-		cgi => $cgi,
 		rconfig => $rconfig,
 		env => $env,
 	};
@@ -125,7 +138,7 @@ sub call {
 		++$tslash;
 	}
 
-	return no_tslash($cgi) if ($tslash && $NO_TSLASH{$mod});
+	return no_tslash($env) if ($tslash && $NO_TSLASH{$mod});
 
 	$req->{tslash} = $tslash;
 	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");

@@ -84,12 +84,11 @@ sub r {
 	if ($status == 301 || $status == 302) {
 		# The goal is to be able to make redirects like we make
 		# <a href=> tags with '../'
-		my $cgi = $req->{cgi};
-		my $base = $cgi->base;
+		my $env = $req->{env};
+		my $base = PublicInbox::Repobrowse::base_url($env);
 		my ($redir) = @extra;
 		if ($redir =~ m!\A\.\./!) { # relative redirect
-			my @orig = split(m!/+!, $cgi->path_info, -1);
-			shift @orig; # drop leading '/'
+			my @orig = split(m!/+!, $env->{PATH_INFO});
 			my @dest = split(m!/+!, $redir);
 
 			while ($dest[0] eq '..') {

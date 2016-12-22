@@ -6,7 +6,7 @@ use warnings;
 use Test::More;
 use File::Temp qw/tempdir/;
 use Cwd qw/getcwd/;
-my @mods = qw(HTTP::Request::Common Plack::Request Plack::Test URI::Escape);
+my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape);
 foreach my $mod (@mods) {
 	eval "require $mod";
 	plan skip_all => "$mod missing for $0" if $@;

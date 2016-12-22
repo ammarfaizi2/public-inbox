@@ -41,8 +41,8 @@ sub call_git_atom {
 
 sub repo_root_url {
 	my ($self, $req) = @_;
-	my $cgi = $req->{cgi};
-	my $uri = $cgi->request_uri;
+	my $env = $req->{env};
+	my $uri = $env->{REQUEST_URI};
 	$uri =~ s/\?.+\z//; # no query string
 	my @uri = split(m!/+!, $uri);
 	shift @uri; # leading slash
@@ -52,7 +52,7 @@ sub repo_root_url {
 		pop @extra;
 	}
 	pop @uri if $uri[-1] eq 'atom'; # warn if not equal?
-	$cgi->base . join('/', @uri);
+	PublicInbox::Repobrowse::base_url($env) . join('/', @uri);
 }
 
 sub git_atom_stream {
