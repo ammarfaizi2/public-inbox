@@ -7,6 +7,7 @@ package PublicInbox::RepobrowseGitPatch;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepobrowseBase);
+use PublicInbox::Qspawn;
 
 # try to be educational and show the command-line used in the signature
 my @CMD = qw(format-patch -M --stdout);
@@ -23,58 +24,19 @@ sub call_git_patch {
 	# limit scope, don't take extra args to avoid wasting server
 	# resources buffering:
 	my $range = "$id~1..$id^0";
-	my @cmd = (@CMD, $sig." $range", $range, '--');
+	my @cmd = ('git', "--git-dir=$git->{git_dir}", @CMD,
+			$sig." $range", $range, '--');
 	if (defined(my $expath = $req->{expath})) {
-		push @cmd, $expath;
+		push @cmd, $expath if $expath ne '';
 	}
-	my $rpipe = $git->popen(@cmd);
-	my $err = $env->{'psgi.errors'};
-	my ($n, $res, $vin, $fh);
-	my $end = sub {
-		if ($fh) {
-			$fh->close;
-			$fh = undef;
-		} elsif ($res) {
-			$res->($self->r(500));
-		}
-		if ($rpipe) {
-			$rpipe->close; # _may_ be Danga::Socket::close
-			$rpipe = undef;
-		}
-	};
-	my $fail = sub {
-		if ($!{EAGAIN} || $!{EINTR}) {
-			select($vin, undef, undef, undef) if defined $vin;
-			# $vin is undef on async, so this is a noop on EAGAIN
-			return;
-		}
-		my $e = $!;
-		$end->();
-		$err->print("git format-patch ($git->{git_dir}): $e\n");
-	};
-	my $cb = sub {
-		$n = $rpipe->sysread(my $buf, 65536);
-		return $fail->() unless defined $n;
-		return $end->() if $n == 0;
-		if ($res) {
-			my $h = ['Content-Type', 'text/plain; charset=UTF-8'];
-			$fh = $res->([200, $h]);
-			$res = undef;
-		}
-		$fh->write($buf);
-	};
 
-	if (my $async = $env->{'pi-httpd.async'}) {
-		$rpipe = $async->($rpipe, $cb);
-		sub { ($res) = @_ } # let Danga::Socket handle the rest.
-	} else { # synchronous loop for other PSGI servers
-		$vin = '';
-		vec($vin, fileno($rpipe), 1) = 1;
-		sub {
-			($res) = @_;
-			while ($rpipe) { $cb->() }
-		}
-	}
+	# FIXME: generalize this with other qspawn users
+	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	$qsp->psgi_return($env, undef, sub {
+		my ($r) = @_;
+		my $h = ['Content-Type', 'text/plain; charset=UTF-8'];
+		$r ? [ 200, $h ] : [ 500, $h, [ "format-patch error\n" ] ];
+	});
 }
 
 1;
