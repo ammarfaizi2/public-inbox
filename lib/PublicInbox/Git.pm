@@ -12,7 +12,6 @@ use warnings;
 use POSIX qw(dup2);
 require IO::Handle;
 use PublicInbox::Spawn qw(spawn popen_rd);
-use IO::File;
 use Fcntl qw(:seek);
 
 # Documentation/SubmittingPatches recommends 12 (Linux v4.4)
@@ -22,11 +21,15 @@ sub abbrev { "--abbrev=$abbrev" }
 
 sub new {
 	my ($class, $git_dir) = @_;
-	bless { git_dir => $git_dir, err => IO::File->new_tmpfile }, $class
+	bless { git_dir => $git_dir }, $class
 }
 
 sub err_begin ($) {
 	my $err = $_[0]->{err};
+	unless ($err) {
+		open($err, '+>', undef);
+		$_[0]->{err} = $err;
+	}
 	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
 	truncate($err, 0) or die "truncate failed: $!";
 	my $ret = fileno($err);
@@ -35,7 +38,7 @@ sub err_begin ($) {
 }
 
 sub err ($) {
-	my $err = $_[0]->{err};
+	my $err = $_[0]->{err} or return '';
 	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
 	defined(sysread($err, my $buf, -s $err)) or die "sysread failed: $!";
 	sysseek($err, 0, SEEK_SET) or die "sysseek failed: $!";
