@@ -186,6 +186,7 @@ t/repobrowse_git_tree.t
 t/search.t
 t/spamcheck_spamc.t
 t/spawn.t
+t/thread-all.t
 t/thread-cycle.t
 t/utf8.mbox
 t/view.t

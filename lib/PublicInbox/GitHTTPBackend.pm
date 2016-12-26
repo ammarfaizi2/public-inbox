@@ -46,6 +46,9 @@ sub r ($;$) {
 sub serve {
 	my ($env, $git, $path) = @_;
 
+	# XXX compatibility... ugh, can we stop supporting this?
+	$git = PublicInbox::Git->new($git) unless ref($git);
+
 	# Documentation/technical/http-protocol.txt in git.git
 	# requires one and exactly one query parameter:
 	if ($env->{QUERY_STRING} =~ /\Aservice=git-\w+-pack\z/ ||
@@ -98,7 +101,7 @@ sub serve_dumb {
 		return r(404);
 	}
 
-	my $f = (ref $git ? $git->{git_dir} : $git) . '/' . $path;
+	my $f = $git->{git_dir} . '/' . $path;
 	return r(404) unless -f $f && -r _; # just in case it's a FIFO :P
 	my $size = -s _;
 
@@ -196,21 +199,15 @@ sub serve_smart {
 		my $val = $env->{$name};
 		$env{$name} = $val if defined $val;
 	}
-	my ($git_dir, $limiter);
-	if (ref $git) {
-		$limiter = $git->{-httpbackend_limiter} || $default_limiter;
-		$git_dir = $git->{git_dir};
-	} else {
-		$limiter = $default_limiter;
-		$git_dir = $git;
-	}
+	my $limiter = $git->{-httpbackend_limiter} || $default_limiter;
+	my $git_dir = $git->{git_dir};
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git_dir/$path";
-	my %rdr = ( 0 => fileno($in) );
-	my $x = PublicInbox::Qspawn->new([qw(git http-backend)], \%env, \%rdr);
+	my $rdr = { 0 => fileno($in) };
+	my $qsp = PublicInbox::Qspawn->new([qw(git http-backend)], \%env, $rdr);
 	my ($fh, $rpipe);
 	my $end = sub {
-		if (my $err = $x->finish) {
+		if (my $err = $qsp->finish) {
 			err($env, "git http-backend ($git_dir): $err");
 		}
 		$fh->close if $fh; # async-only
@@ -227,8 +224,7 @@ sub serve_smart {
 		$r->[0] == 403 ? serve_dumb($env, $git, $path) : $r;
 	};
 	my $res;
-	my $async = $env->{'pi-httpd.async'};
-	my $io = $env->{'psgix.io'};
+	my $async = $env->{'pi-httpd.async'}; # XXX unstable API
 	my $cb = sub {
 		my $r = $rd_hdr->() or return;
 		$rd_hdr = undef;
@@ -239,17 +235,16 @@ sub serve_smart {
 				$rpipe->close;
 				$end->();
 			}
-			return $res->($r);
-		}
-		if ($async) {
+			$res->($r);
+		} elsif ($async) {
 			$fh = $res->($r);
-			return $async->async_pass($io, $fh, \$buf);
+			$async->async_pass($env->{'psgix.io'}, $fh, \$buf);
+		} else { # for synchronous PSGI servers
+			require PublicInbox::GetlineBody;
+			$r->[2] = PublicInbox::GetlineBody->new($rpipe, $end,
+								$buf);
+			$res->($r);
 		}
-
-		# for synchronous PSGI servers
-		require PublicInbox::GetlineBody;
-		$r->[2] = PublicInbox::GetlineBody->new($rpipe, $end, $buf);
-		$res->($r);
 	};
 	sub {
 		($res) = @_;
@@ -258,7 +253,7 @@ sub serve_smart {
 		# holding the input here is a waste of FDs and memory
 		$env->{'psgi.input'} = undef;
 
-		$x->start($limiter, sub { # may run later, much later...
+		$qsp->start($limiter, sub { # may run later, much later...
 			($rpipe) = @_;
 			$in = undef;
 			if ($async) {

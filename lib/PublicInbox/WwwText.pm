@@ -1,7 +1,6 @@
 # Copyright (C) 2016 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-#
-# serves the /$INBOX/_/* endpoints from :text/* of the git tree
+
 package PublicInbox::WwwText;
 use strict;
 use warnings;
@@ -181,6 +180,10 @@ message threading
 
 	$WIKI_URL/Atom_(standard)
 	https://tools.ietf.org/html/rfc4287
+
+      Atom Threading Extensions (RFC4685) is supported:
+
+	https://tools.ietf.org/html/rfc4685
 
     Finally, the gzipped mbox for a thread is available for
     downloading and importing into your favorite mail client:

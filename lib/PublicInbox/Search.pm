@@ -108,12 +108,6 @@ my %all_pfx = (%bool_pfx_internal, %bool_pfx_external, %prob_prefix);
 
 sub xpfx { $all_pfx{$_[0]} }
 
-our %PFX2TERM_RMAP;
-my %meta_pfx = (mid => 1, thread => 1, path => 1);
-while (my ($k, $v) = each %all_pfx) {
-	$PFX2TERM_RMAP{$v} = $k if $meta_pfx{$k};
-}
-
 my $mail_query = Search::Xapian::Query->new(xpfx('type') . 'mail');
 
 sub xdir {
@@ -295,8 +289,10 @@ sub lookup_message {
 
 sub lookup_mail { # no ghosts!
 	my ($self, $mid) = @_;
-	my $smsg = lookup_message($self, $mid) or return;
-	PublicInbox::SearchMsg->load_doc($smsg->{doc});
+	retry_reopen($self, sub {
+		my $smsg = lookup_message($self, $mid) or return;
+		PublicInbox::SearchMsg->load_doc($smsg->{doc});
+	});
 }
 
 sub find_unique_doc_id {

@@ -260,8 +260,8 @@ sub _th_index_lite {
 }
 
 sub walk_thread {
-	my ($th, $ctx, $cb) = @_;
-	my @q = map { (0, $_, -1) } @{$th->{rootset}};
+	my ($rootset, $ctx, $cb) = @_;
+	my @q = map { (0, $_, -1) } @$rootset;
 	while (@q) {
 		my ($level, $node, $i) = splice(@q, 0, 3);
 		defined $node or next;
@@ -285,10 +285,10 @@ sub thread_index_entry {
 }
 
 sub stream_thread ($$) {
-	my ($th, $ctx) = @_;
+	my ($rootset, $ctx) = @_;
 	my $inbox = $ctx->{-inbox};
 	my $mime;
-	my @q = map { (0, $_) } @{$th->{rootset}};
+	my @q = map { (0, $_) } @$rootset;
 	my $level;
 	while (@q) {
 		$level = shift @q;
@@ -350,10 +350,10 @@ sub thread_html {
 	$ctx->{mapping} = {};
 	$ctx->{s_nr} = "$nr+ messages in thread";
 
-	my $th = thread_results($msgs);
-	walk_thread($th, $ctx, *pre_thread);
+	my $rootset = thread_results($msgs);
+	walk_thread($rootset, $ctx, *pre_thread);
 	$skel .= '</pre>';
-	return stream_thread($th, $ctx) unless $ctx->{flat};
+	return stream_thread($rootset, $ctx) unless $ctx->{flat};
 
 	# flat display: lazy load the full message from smsg
 	my $inbox = $ctx->{-inbox};
@@ -441,7 +441,7 @@ sub attach_link ($$$$;$) {
 
 sub add_text_body {
 	my ($upfx, $p) = @_; # from msg_iter: [ Email::MIME, depth, @idx ]
-	my ($part, $depth, @idx) = @$p;
+	my ($part, $depth) = @$p; # attachment @idx is unused
 	my $ct = $part->content_type || 'text/plain';
 	my $fn = $part->filename;
 
@@ -476,29 +476,26 @@ sub add_text_body {
 	}
 	my @quot;
 	my $l = PublicInbox::Linkify->new;
-	while (defined(my $cur = shift @lines)) {
+	foreach my $cur (@lines) {
 		if ($cur !~ /^>/) {
 			# show the previously buffered quote inline
 			flush_quote(\$s, $l, \@quot) if @quot;
 
 			# regular line, OK
-			$cur = $l->linkify_1($cur);
-			$cur = ascii_html($cur);
-			$s .= $l->linkify_2($cur);
+			$l->linkify_1($cur);
+			$s .= $l->linkify_2(ascii_html($cur));
 		} else {
 			push @quot, $cur;
 		}
 	}
 
-	my $end = "\n";
-	if (@quot) {
-		$end = '';
+	if (@quot) { # ugh, top posted
 		flush_quote(\$s, $l, \@quot);
+	} elsif ($s =~ /\n\z/s) { # common, last line ends with a newline
+		$s;
+	} else { # some editors don't do newlines...
+		$s .= "\n";
 	}
-	$s =~ s/[ \t]+$//sgm; # kill per-line trailing whitespace
-	$s =~ s/\A\n+//s; # kill leading blank lines
-	$s =~ s/\s+\z//s; # kill all trailing spaces
-	$s .= $end;
 }
 
 sub _msg_html_prepare {
@@ -737,7 +734,7 @@ sub indent_for {
 sub load_results {
 	my ($srch, $sres) = @_;
 	my $msgs = delete $sres->{msgs};
-	$srch->retry_reopen(sub { [ map { $_->ensure_metadata; $_ } @$msgs ] });
+	$srch->retry_reopen(sub { [ map { $_->mid; $_ } @$msgs ] });
 }
 
 sub msg_timestamp {
@@ -749,10 +746,7 @@ sub msg_timestamp {
 sub thread_results {
 	my ($msgs) = @_;
 	require PublicInbox::SearchThread;
-	my $th = PublicInbox::SearchThread->new($msgs);
-	$th->thread;
-	$th->order(*sort_ts);
-	$th
+	PublicInbox::SearchThread::thread($msgs, *sort_ts);
 }
 
 sub missing_thread {
