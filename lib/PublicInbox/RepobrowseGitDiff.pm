@@ -28,7 +28,7 @@ sub call_git_diff {
 			--no-notes --no-color -M -B -D -r),
 			$id2, $id, '--');
 	my $expath = $req->{expath};
-	push @cmd, $expath if defined $expath;
+	push @cmd, $expath if $expath ne '';
 	$req->{rpipe} = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
 	my $env = $req->{env};
 	my $err = $env->{'psgi.errors'};
@@ -72,7 +72,7 @@ sub call_git_diff {
 			my $h = ['Content-Type', 'text/html; charset=UTF-8'];
 			my $fh = $req->{fh} = $res->([200, $h]);
 			my $o = { nofollow => 1, noindex => 1 };
-			my $ex = defined $expath ? " $expath" : '';
+			my $ex = $expath eq '' ? '' : " $expath";
 			$fh->write($self->html_start($req, 'diff', $o).
 					"\n\n".
 					utf8_html("git diff-tree -r -M -B -D ".
