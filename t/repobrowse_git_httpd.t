@@ -6,7 +6,7 @@
 use strict;
 use warnings;
 use Test::More;
-foreach my $mod (qw(Danga::Socket HTTP::Parser::XS HTTP::Date HTTP::Status
+foreach my $mod (qw(Danga::Socket HTTP::Date HTTP::Status
 		Plack::Test::ExternalServer)) {
 	eval "require $mod";
 	plan skip_all => "$mod missing for repobrowse_git_httpd.t" if $@;
