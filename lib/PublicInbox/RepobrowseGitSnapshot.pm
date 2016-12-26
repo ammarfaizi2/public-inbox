@@ -10,6 +10,7 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::Git;
+use PublicInbox::Qspawn;
 our $SUFFIX;
 BEGIN {
 	# as described in git-archive(1), users may add support for
@@ -73,58 +74,17 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 	return $self->r(404) if (!defined $tree || $tree eq '');
 
 	my $pfx = "$repo_info->{snapshot_pfx}-$ref/";
-	my @cmd = ('archive', "--prefix=$pfx", "--format=$fmt", $tree);
-	$req->{rpipe} = $git->popen(\@cmd, undef, { 2 => $git->err_begin });
-
-	my $env = $req->{env};
-	my $vin;
-	my $end = sub {
-		my ($n) = @_;
-		if (my $fh = delete $req->{fh}) {
-			$fh->close;
-		} elsif (my $res = delete $req->{res}) {
-			$res->($self->r(500));
-		}
-		if (my $rpipe = delete $req->{rpipe}) {
-			$rpipe->close; # _may_ be Danga::Socket::close
-		}
-	};
-	my $fail = sub {
-		if ($!{EAGAIN} || $!{EINTR}) {
-			select($vin, undef, undef, undef) if $vin;
-			# $vin is undef on async, so this is a noop
-			return;
-		}
-		my $e = $!;
-		$end->();
-		my $err = $env->{'psgi.errors'};
-		$err->print("git archive ($git->{git_dir}): $e\n");
-	};
-	my $cb = sub {
-		my $n = $req->{rpipe}->sysread(my $buf, 65536);
-		return $fail->() unless defined $n;
-		return $end->() if $n == 0;
-		if (my $res = delete $req->{res}) {
-			my $h = [ 'Content-Type',
-				$FMT_TYPES{$fmt} || 'application/octet-stream',
-				'Content-Disposition',
-				qq(inline; filename="$orig_fn"),
-				'ETag', qq("$tree") ];
-			$req->{fh} = $res->([200, $h]);
-		}
-		$req->{fh}->write($buf);
-	};
-	if (my $async = $env->{'pi-httpd.async'}) {
-		$req->{rpipe} = $async->($req->{rpipe}, $cb);
-		sub { $req->{res} = $_[0] } # let Danga::Socket handle the rest.
-	} else { # synchronous loop for other PSGI servers
-		$vin = '';
-		vec($vin, fileno($req->{rpipe}), 1) = 1;
-		sub {
-			$req->{res} = $_[0]; # Plack response callback
-			while ($req->{rpipe}) { $cb->() }
-		}
-	}
+	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", 'archive',
+			"--prefix=$pfx", "--format=$fmt", $tree ];
+	my $qsp = PublicInbox::Qspawn->new($cmd);
+	$qsp->psgi_return($req->{env}, undef, sub {
+		my $r = $_[0];
+		return $self->r(500) unless $r;
+		[ 200, [ 'Content-Type', $FMT_TYPES{$fmt} ||
+					'application/octet-stream',
+			'Content-Disposition', qq(inline; filename="$orig_fn"),
+			'ETag', qq("$tree") ] ];
+	});
 }
 
 1;
