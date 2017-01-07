@@ -211,16 +211,16 @@ sub nntp_usable {
 	$ret;
 }
 
-sub msg_by_path ($$;$) {
+sub msg_by_path ($$) {
 	my ($self, $path, $ref) = @_;
 	# TODO: allow other refs:
-	my $str = git($self)->cat_file('HEAD:'.$path, $ref);
+	my $str = git($self)->cat_file('HEAD:'.$path);
 	$$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s if $str;
 	$str;
 }
 
-sub msg_by_smsg ($$;$) {
-	my ($self, $smsg, $ref) = @_;
+sub msg_by_smsg ($$) {
+	my ($self, $smsg) = @_;
 
 	return unless defined $smsg; # ghost
 
@@ -228,7 +228,7 @@ sub msg_by_smsg ($$;$) {
 	# TODO: remove if we bump SCHEMA_VERSION in Search.pm:
 	defined(my $blob = $smsg->blob) or return msg_by_mid($self, $smsg->mid);
 
-	my $str = git($self)->cat_file($blob, $ref);
+	my $str = git($self)->cat_file($blob);
 	$$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s if $str;
 	$str;
 }
@@ -238,9 +238,9 @@ sub path_check {
 	git($self)->check('HEAD:'.$path);
 }
 
-sub msg_by_mid ($$;$) {
-	my ($self, $mid, $ref) = @_;
-	msg_by_path($self, mid2path($mid), $ref);
+sub msg_by_mid ($$) {
+	my ($self, $mid) = @_;
+	msg_by_path($self, mid2path($mid));
 }
 
 1;
