@@ -69,7 +69,7 @@ sub subject ($) { __hdr($_[0], 'subject') }
 sub to ($) { __hdr($_[0], 'to') }
 sub cc ($) { __hdr($_[0], 'cc') }
 
-# no strftime, that is locale-dependent
+# no strftime, that is locale-dependent and not for RFC822
 my @DoW = qw(Sun Mon Tue Wed Thu Fri Sat);
 my @MoY = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
@@ -103,7 +103,7 @@ sub from_name {
 
 sub ts {
 	my ($self) = @_;
-	$self->{ts} ||= eval { str2time($self->mime->header('Date')) } || 0;
+	$self->{ts} ||= eval { str2time($self->{mime}->header('Date')) } || 0;
 }
 
 sub to_doc_data {
@@ -146,36 +146,7 @@ sub mid ($;$) {
 	}
 }
 
-sub _extract_mid { mid_clean(mid_mime($_[0]->mime)) }
-
-sub blob {
-	my ($self, $x40) = @_;
-	if (defined $x40) {
-		$self->{blob} = $x40;
-	} else {
-		$self->{blob};
-	}
-}
-
-sub mime {
-	my ($self, $mime) = @_;
-	if (defined $mime) {
-		$self->{mime} = $mime;
-	} else {
-		# TODO load from git
-		$self->{mime};
-	}
-}
-
-sub doc_id {
-	my ($self, $doc_id) = @_;
-	if (defined $doc_id) {
-		$self->{doc_id} = $doc_id;
-	} else {
-		# TODO load from xapian
-		$self->{doc_id};
-	}
-}
+sub _extract_mid { mid_clean(mid_mime($_[0]->{mime})) }
 
 sub thread_id {
 	my ($self) = @_;
@@ -184,6 +155,7 @@ sub thread_id {
 	$self->{thread} = _get_term_val($self, 'G', qr/\AG/); # *G*roup
 }
 
+# XXX: consider removing this, we can phrase match subject
 sub path {
 	my ($self) = @_;
 	my $path = $self->{path};

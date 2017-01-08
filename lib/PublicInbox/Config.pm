@@ -90,19 +90,9 @@ sub limiter {
 	my ($self, $name) = @_;
 	$self->{-limiters}->{$name} ||= do {
 		require PublicInbox::Qspawn;
-		my $max;
-		# XXX "limiter.<name>.max" was a historical mistake
-		foreach my $pfx (qw(publicinboxlimiter limiter)) {
-			$max ||= $self->{"$pfx.$name.max"};
-		}
+		my $max = $self->{"publicinboxlimiter.$name.max"};
 		PublicInbox::Qspawn::Limiter->new($max);
 	};
-}
-
-sub get {
-	my ($self, $inbox, $key) = @_;
-
-	$self->{"publicinbox.$inbox.$key"};
 }
 
 sub config_dir { $ENV{PI_DIR} || "$ENV{HOME}/.public-inbox" }
@@ -146,7 +136,7 @@ sub _fill {
 
 	foreach my $k (qw(mainrepo address filter url newsgroup
 			infourl watch watchheader httpbackendmax
-			feedmax)) {
+			feedmax nntpserver)) {
 		my $v = $self->{"$pfx.$k"};
 		$rv->{$k} = $v if defined $v;
 	}
