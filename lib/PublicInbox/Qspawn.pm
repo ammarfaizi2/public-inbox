@@ -77,7 +77,7 @@ sub psgi_return {
 	my $rd_hdr = sub {
 		my $r = sysread($rpipe, $buf, 1024, length($buf));
 		return if !defined($r) && ($!{EINTR} || $!{EAGAIN});
-		$parse_hdr->($r, $buf);
+		$parse_hdr->($r, \$buf);
 	};
 	my $res;
 	my $async = $env->{'pi-httpd.async'};
