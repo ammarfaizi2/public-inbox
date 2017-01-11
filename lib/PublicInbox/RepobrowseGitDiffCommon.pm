@@ -240,6 +240,8 @@ sub git_diff_sed_stat ($$) {
 		$l =~ /\A(\S+)\t+(\S+)\t+(.*)/ or next;
 		my ($add, $del, $fn) = ($1, $2, $3);
 		if ($fn ne '') { # normal modification
+			# TODO: discard diffs if they are too big
+			# gigantic changes with many files may still OOM us
 			my $anchor = to_attr(git_unquote($fn));
 			$req->{anchors}->{$anchor} = $fn;
 			$l = utf8_html($fn);
