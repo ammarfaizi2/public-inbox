@@ -216,6 +216,9 @@ sub git_diff_sed_stat ($$) {
 	my $ndel = \($req->{ndel});
 	if (!$req->{dstat_started}) {
 		$req->{dstat_started} = 1;
+
+		# merges start with an extra '\0' before the diffstat
+		# non-merge commits start with an extra '\n', instead
 		if ($req->{mhelp}) {
 			if ($stat[0] eq '') {
 				shift @stat;
@@ -224,8 +227,8 @@ sub git_diff_sed_stat ($$) {
 'initial merge diffstat line was not empty';
 			}
 		} else {
-			$stat[0] =~ s/\A\n//s or warn
-'failed to remove initial newline from diffstat';
+			# for commits, only (not diff-tree)
+			$stat[0] =~ s/\A\n//s;
 		}
 	}
 	while (defined(my $l = shift @stat)) {
