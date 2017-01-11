@@ -65,7 +65,7 @@ sub psgi_return {
 	my ($fh, $rpipe);
 	my $end = sub {
 		if (my $err = $self->finish) {
-			$err = join(' ', @{$self->{args}->{cmd}}).": $err\n";
+			$err = join(' ', @{$self->{args}->[0]}).": $err\n";
 			$env->{'psgi.errors'}->print($err);
 		}
 		$fh->close if $fh; # async-only
