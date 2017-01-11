@@ -8,8 +8,6 @@ use warnings;
 use PublicInbox::RepobrowseGit qw/git_unquote git_commit_title/;
 use PublicInbox::Hval qw/utf8_html to_attr/;
 use base qw/Exporter/;
-our @EXPORT_OK = qw/git_diffstat_emit
-	git_diff_ab_index git_diff_ab_hdr git_diff_ab_hunk/;
 our @EXPORT = qw/git_diff_sed_init git_diff_sed_close git_diff_sed_run
 	DSTATE_INIT DSTATE_STAT DSTATE_LINES/;
 
@@ -156,44 +154,6 @@ sub git_diffstat_rename ($$$) {
 	my $th = $to->as_html;
 	$to = qq(<a\nhref="#$anchor">$th</a>);
 	@base ? "$base/{$from =&gt; $to}" : "$from =&gt; $to";
-}
-
-sub git_diffstat_emit ($$$) { # XXX deprecated
-	my ($req, $fh, undef) = @_;
-	my @stat = split("\0", $_[2]); # avoiding copy for $_[2]
-	my $nr = 0;
-	my ($nadd, $ndel) = (0, 0);
-	my $s = '';
-	while (defined(my $l = shift @stat)) {
-		$l =~ s/\n?(\S+)\t+(\S+)\t+// or next;
-		my ($add, $del) = ($1, $2);
-		if ($add =~ /\A\d+\z/) {
-			$nadd += $add;
-			$ndel += $del;
-			$add = "+$add";
-			$del = "-$del";
-		}
-		my $num = sprintf('% 6s/%-6s', $del, $add);
-		if (length $l) {
-			my $anchor = to_attr(git_unquote($l));
-			$req->{anchors}->{$anchor} = $l;
-			$l = utf8_html($l);
-			$l = qq(<a\nhref="#$anchor">$l</a>);
-		} else {
-			my $from = shift @stat;
-			my $to = shift @stat;
-			$l = git_diffstat_rename($req, $from, $to);
-		}
-		++$nr;
-		$s .= ' '.$num."\t".$l."\n";
-	}
-	$s .= "\n $nr ";
-	$s .= $nr == 1 ? 'file changed, ' : 'files changed, ';
-	$s .= $nadd;
-	$s .= $nadd == 1 ? ' insertion(+), ' : ' insertions(+), ';
-	$s .= $ndel;
-	$s .= $ndel == 1 ? " deletion(-)\n\n" : " deletions(-)\n\n";
-	$fh->write($s);
 }
 
 sub DSTATE_INIT () { 0 }
