@@ -25,7 +25,7 @@ test_psgi($test->{app}, sub {
 	like($body, qr!</html>\z!, 'response body finished');
 
 	$res = $cb->(GET($req.$q));
-	is($res->code, 404, 'got 404 response for default');
+	is($res->code, 404, 'got 404 response for bad id');
 });
 
 done_testing();
