@@ -29,7 +29,7 @@ sub cat_file_async {
 	my ($self, $obj, $cb) = @_;
 	# order matters
 	push @{$self->{jobq}}, [ $obj, $cb ];
-	$self->{wr}->write($obj."\n");
+	$self->{wr}->write(\"$obj\n");
 }
 
 # Returns: an array ref of the info line for --batch-check and --batch,
