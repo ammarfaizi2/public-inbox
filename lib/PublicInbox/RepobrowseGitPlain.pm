@@ -13,12 +13,7 @@ sub call_git_plain {
 	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
-
-	if (length(my $expath = $req->{expath})) {
-		$id .= ":$expath";
-	} else {
-		$id .= ':';
-	}
+	$id .= ":$req->{expath}";
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
 	return unless defined $cat;
 

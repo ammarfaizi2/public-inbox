@@ -15,10 +15,8 @@ sub call_git_blob {
 	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
+	$id .= ":$req->{expath}";
 
-	if (length(my $expath = $req->{expath})) {
-		$id .= ":$expath";
-	}
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
 	return unless defined $cat;
 
