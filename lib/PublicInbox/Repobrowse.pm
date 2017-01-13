@@ -143,6 +143,8 @@ sub call {
 	$req->{tslash} = $tslash;
 	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
+
+	# $repo_info->{git} ||= PublicInbox::Git->new(...)
 	$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
 
 	$req->{expath} = join('/', @extra);
