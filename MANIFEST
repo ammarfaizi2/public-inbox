@@ -55,7 +55,7 @@ lib/PublicInbox/Filter/Mirror.pm
 lib/PublicInbox/Filter/Vger.pm
 lib/PublicInbox/GetlineBody.pm
 lib/PublicInbox/Git.pm
-lib/PublicInbox/GitAsyncRd.pm
+lib/PublicInbox/GitAsync.pm
 lib/PublicInbox/GitAsyncWr.pm
 lib/PublicInbox/GitHTTPBackend.pm
 lib/PublicInbox/HTTP.pm

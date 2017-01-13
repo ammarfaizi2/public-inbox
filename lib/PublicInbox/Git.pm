@@ -15,7 +15,7 @@ use PublicInbox::Spawn qw(spawn popen_rd);
 use Fcntl qw(:seek);
 my $have_async = eval {
 	require PublicInbox::EvCleanup;
-	require PublicInbox::GitAsyncRd;
+	require PublicInbox::GitAsync;
 };
 
 # Documentation/SubmittingPatches recommends 12 (Linux v4.4)
@@ -222,7 +222,7 @@ sub check_async_ds ($$$) {
 	my ($self, $obj, $cb) = @_;
 	($self->{async_c} ||= do {
 		_bidi_pipe($self, qw(--batch-check in_ac out_ac pid_ac));
-		PublicInbox::GitAsyncRd->new($self->{in_ac}, $self->{out_ac}, 1)
+		PublicInbox::GitAsync->new($self->{in_ac}, $self->{out_ac}, 1);
 	})->cat_file_async($obj, $cb);
 }
 
@@ -230,7 +230,7 @@ sub cat_async_ds ($$$) {
 	my ($self, $obj, $cb) = @_;
 	($self->{async} ||= do {
 		_bidi_pipe($self, qw(--batch in_a out_a pid_a));
-		PublicInbox::GitAsyncRd->new($self->{in_a}, $self->{out_a});
+		PublicInbox::GitAsync->new($self->{in_a}, $self->{out_a});
 	})->cat_file_async($obj, $cb);
 }
 

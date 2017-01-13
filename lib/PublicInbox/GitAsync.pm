@@ -3,7 +3,7 @@
 #
 # internal class used by PublicInbox::Git + Danga::Socket
 # This parses the output pipe of "git cat-file --batch/--batch-check"
-package PublicInbox::GitAsyncRd;
+package PublicInbox::GitAsync;
 use strict;
 use warnings;
 use base qw(Danga::Socket);
