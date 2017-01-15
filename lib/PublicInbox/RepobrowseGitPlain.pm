@@ -6,6 +6,7 @@ use warnings;
 use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::RepobrowseGitBlob;
 use PublicInbox::Hval qw(utf8_html);
+use PublicInbox::Qspawn;
 
 sub call_git_plain {
 	my ($self, $req) = @_;
@@ -32,6 +33,32 @@ sub call_git_plain {
 	git_blob_stream_response($git, $cat, $size, $type, $buf, $left);
 }
 
+sub git_tree_sed ($) {
+	my ($req) = @_;
+	my $buf = '';
+	my $end;
+	my $pfx = $req->{tpfx};
+	sub { # $_[0] = buffer or undef
+		my $dst = delete $req->{tstart} || '';
+		my @files;
+		if (defined $_[0]) {
+			@files = split(/\0/, $buf .= $_[0]);
+			$buf = pop @files if scalar @files;
+		} else {
+			@files = split(/\0/, $buf);
+			$end = '</ul></body></html>';
+		}
+		foreach my $n (@files) {
+			$n = PublicInbox::Hval->utf8($n);
+			my $ref = $n->as_path;
+			$dst .= qq(<li><a\nhref="$pfx$ref">);
+			$dst .= $n->as_html;
+			$dst .= '</a></li>';
+		}
+		$end ? $dst .= $end : $dst;
+	}
+}
+
 # This should follow the cgit DOM structure in case anybody depends on it,
 # not using <pre> here as we don't expect people to actually view it much
 sub git_tree_plain {
@@ -52,25 +79,23 @@ sub git_tree_plain {
 			$pfx = "$last/";
 		}
 	}
-	my $ls = $git->popen(qw(ls-tree --name-only -z), $git->abbrev, $hex);
-	sub {
-		my ($res) = @_;
-		my $fh = $res->([ 200, ['Content-Type' => 'text/html']]);
-		$fh->write("<html><head><title>$title</title></head><body>".
-				$t);
 
-		local $/ = "\0";
-		while (defined(my $n = <$ls>)) {
-			chomp $n;
-			$n = PublicInbox::Hval->utf8($n);
-			my $ref = $n->as_path;
-			$n = $n->as_html;
-
-			$fh->write(qq(<li><a\nhref="$pfx$ref">$n</a></li>))
+	$req->{tpfx} = $pfx;
+	$req->{tstart} = "<html><head><title>$title</title></head><body>".$t;
+	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
+		qw(ls-tree --name-only -z), $git->abbrev, $hex ];
+	my $rdr = { 2 => $git->err_begin };
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
+	my $env = $req->{env};
+	$qsp->psgi_return($env, undef, sub {
+		my ($r) = @_;
+		if (!defined $r) {
+			[ 500, [ 'Content-Type', 'text/plain' ], [ $git->err ]];
+		} else {
+			$env->{'qspawn.filter'} = git_tree_sed($req);
+			[ 200, [ 'Content-Type', 'text/html' ] ];
 		}
-		$fh->write('</ul></body></html>');
-		$fh->close;
-	}
+	});
 }
 
 1;
