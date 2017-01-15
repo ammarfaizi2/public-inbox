@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::Hval qw(utf8_html);
+use PublicInbox::Qspawn;
 
 my %GIT_MODE = (
 	'100644' => ' ', # blob
@@ -16,8 +17,8 @@ my %GIT_MODE = (
 
 my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 
-sub git_tree_stream {
-	my ($self, $req, $res) = @_; # res: Plack callback
+sub call_git_tree {
+	my ($self, $req) = @_;
 	my @extra = @{$req->{extra}};
 	my $git = $req->{repo_info}->{git};
 	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
@@ -31,37 +32,31 @@ sub git_tree_stream {
 	my ($hex, $type, $size) = $git->check($obj);
 
 	unless (defined($type)) {
-		return $res->([404, ['Content-Type'=>'text/plain'],
-			 ['Not Found']]);
-	}
-	if ($type ne 'blob' && $type ne 'tree') {
-		return $res->([404,
-			['Content-Type'=>'text/plain; charset=UTF-8'],
-			 ["Unrecognized type ($type) for $obj\n"]]);
+		return [404, ['Content-Type'=>'text/plain'], ['Not Found']];
 	}
 
-	my $fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
 	my $opts = { nofollow => 1 };
 	my $title = $req->{expath};
 	$title = $title eq '' ? 'tree' : utf8_html($title);
-
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
-		$fh->write($self->html_start($req, $title, $opts) . "\n");
-		git_tree_show($req, $fh, $git, $hex, $q);
+		$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
+		git_tree_show($req, $hex, $q);
 	} elsif ($type eq 'blob') {
-		$fh->write($self->html_start($req, $title, $opts) . "\n");
-		git_blob_show($req, $fh, $git, $hex, $q);
+		sub {
+			my $res = $_[0];
+			my $fh = $res->([200,
+				['Content-Type','text/html; charset=UTF-8']]);
+			$fh->write($self->html_start($req, $title, $opts) .
+					"\n");
+			git_blob_show($req, $fh, $git, $hex, $q);
+			$fh->write('</body></html>');
+			$fh->close;
+		}
 	} else {
-		# TODO
+		[404, ['Content-Type', 'text/plain; charset=UTF-8'],
+			 ["Unrecognized type ($type) for $obj\n"]];
 	}
-	$fh->write('</body></html>');
-	$fh->close;
-}
-
-sub call_git_tree {
-	my ($self, $req) = @_;
-	sub { git_tree_stream($self, $req, @_) };
 }
 
 sub cur_path {
@@ -148,14 +143,61 @@ sub git_blob_show {
 	$fh->write("</pre></td></tr></table><hr />$end");
 }
 
+sub git_tree_sed ($) {
+	my ($req) = @_;
+	my @lines;
+	my $buf = '';
+	my $qs = $req->{qs};
+	my $pfx = $req->{tpfx};
+	my $end;
+	sub {
+		my $dst = delete $req->{thtml} || '';
+		if (defined $_[0]) {
+			@lines = split(/\0/, $buf .= $_[0]);
+			$buf = pop @lines if @lines;
+		} else {
+			@lines = split(/\0/, $buf);
+			$end = '</pre></body></html>';
+		}
+		for (@lines) {
+			my ($m, $x, $s, $path) =
+					(/\A(\S+) \S+ (\S+)( *\S+)\t(.+)\z/s);
+			$m = $GIT_MODE{$m} or next;
+			$path = PublicInbox::Hval->utf8($path);
+			my $ref = $path->as_path;
+			$path = $path->as_html;
+
+			if ($m eq 'g') {
+				# TODO: support cross-repository gitlinks
+				$dst .= 'g' . (' ' x 15) . "$path @ $x\n";
+				next;
+			}
+			elsif ($m eq 'd') { $path = "$path/" }
+			elsif ($m eq 'x') { $path = "<b>$path</b>" }
+			elsif ($m eq 'l') { $path = "<i>$path</i>" }
+			$s =~ s/\s+//g;
+
+			# 'plain' and 'log' links intentionally omitted
+			# for brevity and speed
+			$dst .= qq($m\t).
+				qq($s\t<a\nhref="$pfx$ref$qs">$path</a>\n);
+		}
+		$dst;
+	}
+}
+
 sub git_tree_show {
-	my ($req, $fh, $git, $hex, $q) = @_;
-	my $ls = $git->popen(qw(ls-tree -l -z), $git->abbrev, $hex);
+	my ($req, $hex, $q) = @_;
+	my $git = $req->{repo_info}->{git};
+	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", qw(ls-tree -l -z),
+		$git->abbrev, $hex ];
+	my $rdr = { 2 => $git->err_begin };
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	my $t = cur_path($req, $q);
 	my $pfx;
-	$fh->write("\npath: $t\n\n");
-	my $qs = $q->qs;
 
+	$req->{thtml} .= "\npath: $t\n\n<b>mode\tsize\tname</b>\n";
+	$req->{qs} = $q->qs;
 	if ($req->{tslash}) {
 		$pfx = './';
 	} elsif (defined(my $last = $req->{extra}->[-1])) {
@@ -163,34 +205,17 @@ sub git_tree_show {
 	} else {
 		$pfx = 'tree/';
 	}
-
-	local $/ = "\0";
-	$fh->write("<b>mode\tsize\tname</b>\n");
-	while (defined(my $l = <$ls>)) {
-		chomp $l;
-		my ($m, $t, $x, $s, $path) =
-			($l =~ /\A(\S+) (\S+) (\S+)( *\S+)\t(.+)\z/s);
-		$m = $GIT_MODE{$m} or next;
-		$path = PublicInbox::Hval->utf8($path);
-		my $ref = $path->as_path;
-		$path = $path->as_html;
-
-		if ($m eq 'g') {
-			# TODO: support cross-repository gitlinks
-			$fh->write('g' . (' ' x 15) . "$path @ $x\n");
-			next;
+	$req->{tpfx} = $pfx;
+	my $env = $req->{env};
+	$qsp->psgi_return($env, undef, sub {
+		my ($r) = @_;
+		if (defined $r) {
+			$env->{'qspawn.filter'} = git_tree_sed($req);
+			[ 200, [ 'Content-Type', 'text/html' ] ];
+		} else {
+			[ 500, [ 'Content-Type', 'text/plain' ], [ $git->err ]];
 		}
-		elsif ($m eq 'd') { $path = "$path/" }
-		elsif ($m eq 'x') { $path = "<b>$path</b>" }
-		elsif ($m eq 'l') { $path = "<i>$path</i>" }
-		$s =~ s/\s+//g;
-
-		# 'plain' and 'log' links intentionally omitted for brevity
-		# and speed
-		$fh->write(qq($m\t).
-			qq($s\t<a\nhref="$pfx$ref$qs">$path</a>\n));
-	}
-	$fh->write('</pre>');
+	});
 }
 
 1;
