@@ -1,7 +1,9 @@
 # Copyright (C) 2016 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# Limits the number of processes spawned
+# Generic process management framework to limits the number of
+# processes spawned in public-inbox-httpd, but has generic fallbacks
+# to work on any PSGI server.
 # This does not depend on Danga::Socket or any other external
 # scheduling mechanism, you just need to call start and finish
 # appropriately
