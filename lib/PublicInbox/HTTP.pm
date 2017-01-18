@@ -241,6 +241,7 @@ sub response_done_cb ($$) {
 	sub {
 		my $env = $self->{env};
 		$self->{env} = undef;
+		%$env = () if $env; # prevent circular references
 		$self->write("0\r\n\r\n") if $alive == 2;
 		$self->write(sub{$alive ? next_request($self) : $self->close});
 	}
@@ -472,7 +473,7 @@ sub close {
 	my $self = shift;
 	my $forward = $self->{forward};
 	my $env = $self->{env};
-	delete $env->{'psgix.io'} if $env; # prevent circular references
+	%$env = () if $env; # prevent circular references
 	$self->{pull} = $self->{forward} = $self->{env} = undef;
 	if ($forward) {
 		eval { $forward->close };
