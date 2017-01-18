@@ -26,11 +26,9 @@ sub call_git_patch {
 	my $range = "$id~1..$id^0";
 	my @cmd = ('git', "--git-dir=$git->{git_dir}", @CMD,
 			$sig." $range", $range, '--');
-	if (defined(my $expath = $req->{expath})) {
-		push @cmd, $expath if $expath ne '';
-	}
+	my $expath = $req->{expath};
+	push @cmd, $expath if $expath ne '';
 
-	# FIXME: generalize this with other qspawn users
 	my $qsp = PublicInbox::Qspawn->new(\@cmd);
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
