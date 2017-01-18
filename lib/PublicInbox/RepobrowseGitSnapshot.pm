@@ -46,7 +46,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 	return $self->r(404) if $orig_fn =~ /["\s]/s;
 	return $self->r(404) unless ($ref =~ s/\.($SUFFIX)\z//o);
 	my $fmt = $1;
-
+	my $env = $req->{env};
 	my $repo_info = $req->{repo_info};
 
 	# support disabling certain snapshots types entirely to twart
@@ -60,31 +60,52 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 	return $self->r(404) if $ref =~ /\A-/;
 
 	my $git = $repo_info->{git};
-	my $tree;
+	my $tree = '';
+	my $last_cb = sub {
+		delete $env->{'repobrowse.tree_cb'};
+		delete $env->{'qspawn.quiet'};
+		my $pfx = "$repo_info->{snapshot_pfx}-$ref/";
+		my $cmd = [ 'git', "--git-dir=$git->{git_dir}", 'archive',
+				"--prefix=$pfx", "--format=$fmt", $tree ];
+		my $rdr = { 2 => $git->err_begin };
+		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
+		$qsp->psgi_return($env, undef, sub {
+			my $r = $_[0];
+			return $self->r(500) unless $r;
+			[ 200, [ 'Content-Type',
+				$FMT_TYPES{$fmt} || 'application/octet-stream',
+				'Content-Disposition',
+					qq(inline; filename="$orig_fn"),
+				'ETag', qq("$tree") ] ];
+		});
+	};
 
-	# try prefixing "v" or "V" for tag names
-	foreach my $r ($ref, "v$ref", "V$ref") {
-		$tree = $git->qx([qw(rev-parse --verify --revs-only), $r],
-				 undef, { 2 => $git->err_begin });
-		if (defined $tree) {
+	my @cmd = ('git', "--git-dir=$git->{git_dir}",
+			qw(rev-parse --verify --revs-only));
+	# try prefixing "v" or "V" for tag names to get the tree
+	my @refs = ("V$ref", "v$ref", $ref);
+	$env->{'qspawn.quiet'} = 1;
+	my $tree_cb = $env->{'repobrowse.tree_cb'} = sub {
+		my ($ref) = @_;
+		if (ref($ref) eq 'SCALAR') {
+			$tree = $$ref;
 			chomp $tree;
-			last if $tree ne '';
 		}
+		return $last_cb->() if $tree ne '';
+		unless (scalar(@refs)) {
+			my $res = delete $env->{'qspawn.response'};
+			return $res->($self->r(404));
+		}
+		my $rdr = { 2 => $git->err_begin };
+		my $r = pop @refs;
+		my $qsp = PublicInbox::Qspawn->new([@cmd, $r], undef, $rdr);
+		$qsp->psgi_qx($env, undef, $env->{'repobrowse.tree_cb'});
+	};
+	sub {
+		$env->{'qspawn.response'} = $_[0];
+		# kick off the "loop" foreach @refs
+		$tree_cb->(undef);
 	}
-	return $self->r(404) if (!defined $tree || $tree eq '');
-
-	my $pfx = "$repo_info->{snapshot_pfx}-$ref/";
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", 'archive',
-			"--prefix=$pfx", "--format=$fmt", $tree ];
-	my $qsp = PublicInbox::Qspawn->new($cmd);
-	$qsp->psgi_return($req->{env}, undef, sub {
-		my $r = $_[0];
-		return $self->r(500) unless $r;
-		[ 200, [ 'Content-Type', $FMT_TYPES{$fmt} ||
-					'application/octet-stream',
-			'Content-Disposition', qq(inline; filename="$orig_fn"),
-			'ETag', qq("$tree") ] ];
-	});
 }
 
 1;
