@@ -28,6 +28,7 @@ test_psgi($test->{app}, sub {
 	$res = $cb->(GET($req . '/foo.txt'));
 	is($res->code, 200, 'got 200');
 	$body = dechunk($res);
+	like($body, qr{\bhref="http://[^/]+/test\.git/}, 'hrefs OK');
 	SKIP: {
 		skip 'XML::Feed missing', 2 unless $have_xml_feed;
 		my $p = XML::Feed->parse(\$body);

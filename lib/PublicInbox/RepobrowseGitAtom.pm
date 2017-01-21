@@ -22,7 +22,6 @@ sub repo_root_url {
 	my $uri = $env->{REQUEST_URI};
 	$uri =~ s/\?.+\z//; # no query string
 	my @uri = split(m!/+!, $uri);
-	shift @uri; # leading slash
 	my @extra = @{$req->{extra}};
 	while (@uri && @extra && $uri[-1] eq $extra[-1]) {
 		pop @uri;
