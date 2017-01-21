@@ -74,10 +74,10 @@ sub _psgi_finish ($$) {
 
 sub psgi_qx {
 	my ($self, $env, $limiter, $qx_cb) = @_;
-	my $qx = PublicInbox::Qspawn::Qx->new($qx_cb);
+	my $qx = PublicInbox::Qspawn::Qx->new;
 	my $end = sub {
 		_psgi_finish($self, $env);
-		$qx->close;
+		eval { $qx_cb->($qx) };
 		$qx = undef;
 	};
 	my $rpipe;
@@ -196,19 +196,14 @@ use strict;
 use warnings;
 
 sub new {
-	my ($class, $cb) = @_;
-	bless [ '', $cb ], $class;
+	my ($class) = @_;
+	my $buf = '';
+	bless \$buf, $class;
 }
 
+# called by PublicInbox::HTTPD::Async ($fh->write)
 sub write {
-	$_[0]->[0] .= $_[1];
-	undef;
-}
-
-sub close {
-	my ($self) = @_;
-	my $cb = $self->[1];
-	eval { $cb->(\($self->[0])) };
+	${$_[0]} .= $_[1];
 	undef;
 }
 

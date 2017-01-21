@@ -87,7 +87,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 	$env->{'qspawn.quiet'} = 1;
 	my $tree_cb = $env->{'repobrowse.tree_cb'} = sub {
 		my ($ref) = @_;
-		if (ref($ref) eq 'SCALAR') {
+		if (defined $ref) {
 			$tree = $$ref;
 			chomp $tree;
 		}
