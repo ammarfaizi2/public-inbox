@@ -32,8 +32,8 @@ sub repo_root_url {
 	PublicInbox::Repobrowse::base_url($env) . join('/', @uri);
 }
 
-sub flush_hdr ($$) {
-	my ($dst, $hdr) = @_;
+sub flush_hdr ($$$) {
+	my ($dst, $hdr, $url) = @_;
 	$$dst .= '<entry><title>';
 	$$dst .= utf8_html($hdr->{'s'}); # commit subject
 	$$dst .= '</title><updated>';
@@ -46,8 +46,9 @@ sub flush_hdr ($$) {
 	$$dst .= strftime(DATEFMT, gmtime($hdr->{at}));
 	$$dst .= '</published>';
 	$$dst .= qq(<link\nrel="alternate"\ntype="text/html"\nhref=");
-	$$dst .= $hdr->{url};
+	$$dst .= $url;
 	$$dst .= '/commit?id=';
+
 	my $H = $hdr->{H};
 	$$dst .= $H;
 	$$dst .= qq("\n/><id>);
@@ -73,7 +74,7 @@ sub git_atom_sed ($$) {
 	my $title = join('/', $repo_info->{repo}, @{$req->{extra}});
 	$title = utf8_html("$title, branch $req->{q}->{h}");
 	my $url = repo_root_url($self, $req);
-	my $hdr = $req->{hdr} = { url => $url };
+	my $hdr = {};
 	$req->{axml} = qq(<?xml version="1.0"?>\n) .
 		qq(<feed\nxmlns="http://www.w3.org/2005/Atom">) .
 		qq(<title>$title</title>) .
@@ -100,8 +101,8 @@ sub git_atom_sed ($$) {
 			if ($state != STATE_BODY) {
 				$hdr->{((STATES)[$state])} = $l;
 				if (++$state == STATE_BODY) {
-					flush_hdr(\$dst, $hdr);
-					%$hdr = (url => $url);
+					flush_hdr(\$dst, $hdr, $url);
+					$hdr = {};
 				}
 				next;
 			}
