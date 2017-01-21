@@ -183,6 +183,7 @@ t/repobrowse_git.t
 t/repobrowse_git_atom.t
 t/repobrowse_git_commit.t
 t/repobrowse_git_httpd.t
+t/repobrowse_git_log.t
 t/repobrowse_git_plain.t
 t/repobrowse_git_snapshot.t
 t/repobrowse_git_tree.t

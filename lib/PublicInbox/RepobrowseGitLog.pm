@@ -10,8 +10,9 @@ use base qw(PublicInbox::RepobrowseBase);
 use PublicInbox::RepobrowseGit qw(git_dec_links git_commit_title);
 use PublicInbox::Qspawn;
 # cannot rely on --date=format-local:... yet, it is too new (September 2015)
-my $LOG_FMT = '--pretty=tformat:'.
-		join('%x00', qw(%h %p %s D%D %ai a%an b%b), '', '');
+use constant STATES => qw(h p D ai an s b);
+use constant STATE_BODY => (scalar(STATES) - 1);
+my $LOG_FMT = '--pretty=tformat:'.  join('%n', map { "%$_" } STATES).'%x00';
 
 sub parent_links {
 	if (@_ == 1) { # typical, single-parent commit
@@ -24,11 +25,33 @@ sub parent_links {
 	}
 }
 
+sub flush_log_hdr ($$$) {
+	my ($req, $dst, $hdr) = @_;
+	my $rel = $req->{relcmd};
+	my $seen = $req->{seen};
+	$$dst .= '<hr /><pre>' if scalar keys %$seen;
+	my $id = $hdr->{h};
+	$seen->{$id} = 1;
+	$$dst .= qq(<a\nid=p$id\n);
+	$$dst .= qq(href="${rel}commit?id=$id"><b>);
+	$$dst .= utf8_html($hdr->{'s'}); # FIXME may still OOM
+	$$dst .= '</b></a>';
+	my $D = $hdr->{D}; # FIXME: thousands of decorations may OOM us
+	if ($D ne '') {
+		$$dst .= ' (' . join(', ', git_dec_links($rel, $D)) . ')';
+	}
+	my @p = split(/ /, $hdr->{p});
+	push @{$req->{parents}}, @p;
+	my $plinks = parent_links(@p);
+	$$dst .= "\n- ";
+	$$dst .= utf8_html($hdr->{an});
+	$$dst .= " @ $hdr->{ai}\n  commit $id$plinks\n";
+	undef
+}
+
 sub git_log_sed_end ($$) {
-	my $req = $_[0];
-	my $dst = delete $req->{lhtml} || '';
-	$dst .= utf8_html($_[1]); # existing buffer
-	$dst .= '</pre><hr /><pre>';
+	my ($req, $dst) = @_;
+	$$dst .= '<hr /><pre>';
 	my $m = '';
 	my $np = 0;
 	my $seen = $req->{seen};
@@ -43,106 +66,55 @@ sub git_log_sed_end ($$) {
 		$m .= qq(<a\nhref="${rel}commit?id=$p">$s</a>);
 	}
 	if ($np == 0) {
-		$dst .= "No commits follow";
+		$$dst .= "No commits follow";
 	} elsif ($np > 1) {
-		$dst .= "Unseen parent commits to follow (multiple choice):\n";
+		$$dst .= "Unseen parent commits to follow (multiple choice):\n";
 	} else {
-		$dst .= "Next parent to follow:\n";
+		$$dst .= "Next parent to follow:\n";
 	}
-	$dst .= $m;
-	$dst .= '</pre></body></html>';
+	$$dst .= $m;
+	$$dst .= '</pre></body></html>';
 }
 
 sub git_log_sed ($$) {
 	my ($self, $req) = @_;
 	my $buf = '';
-	my $state = 'h';
-	my %acache;
-	my $rel = $req->{relcmd};
-	my $seen = $req->{seen} = {};
-	my $parents = $req->{parents} = [];
-	my ($plinks, $id, $ai);
+	my $state = 0;
+	$req->{seen} = {};
+	$req->{parents} = [];
+	my $hdr = {};
 	sub {
 		my $dst;
 		# $_[0] == scalar buffer, undef means EOF from "git log"
-		return git_log_sed_end($req, $buf) unless defined $_[0];
 		$dst = delete $req->{lhtml} || '';
 		my @tmp;
-		$buf .= $_[0];
-		@tmp = split(/\0/, $buf, -1);
-		$buf = @tmp ? pop(@tmp) : '';
-
-		while (@tmp) {
-			if ($state eq 'b') {
-				my $bb = shift @tmp;
-				$state = 'B' if $bb =~ s/\Ab/\n/;
-				my @lines = split(/\n/, $bb);
-				$bb = utf8_html(pop @lines);
-				$dst .= utf8_html($_)."\n" for @lines;
-				$dst .= $bb;
-			} elsif ($state eq 'B') {
-				my $bb = shift @tmp;
-				if ($bb eq '') {
-					$state = 'BB';
-				} else {
-					my @lines = split(/\n/, $bb);
-					$bb = undef;
-					my $last = utf8_html(pop @lines);
-					$dst .= utf8_html($_)."\n" for @lines;
-					$dst .= $last;
-				}
-			} elsif ($state eq 'BB') {
-				if ($tmp[0] =~ s/\A\n//s) {
-					$state = 'h';
-				} else {
-					@tmp = ();
-					warn 'Bad state BB in log parser: ',
-						$req->{-debug};
-				}
-			} elsif ($state eq 'h') {
-				if (scalar keys %$seen) {
-					$dst .= '</pre><hr /><pre>';
-				}
-				$id = shift @tmp;
-				$seen->{$id} = 1;
-				$state = 'p'
-			} elsif ($state eq 'p') {
-				my @p = split(/ /, shift @tmp);
-				push @$parents, @p;
-				$plinks = parent_links(@p);
-				$state = 's'
-			} elsif ($state eq 's') {
-				# FIXME: excessively long subjects OOM us
-				my $s = shift @tmp;
-				$dst .= qq(<a\nid=p$id\n);
-				$dst .= qq(href="${rel}commit?id=$id"><b>);
-				$dst .= utf8_html($s);
-				$dst .= '</b></a>';
-				$state = 'D'
-			} elsif ($state eq 'D') {
-				# FIXME: thousands of decorations may OOM us
-				my $D = shift @tmp;
-				if ($D =~ /\AD(.+)/) {
-					$dst .= ' (';
-					$dst .= join(', ',
-						git_dec_links($rel, $1));
-					$dst .= ')';
-				}
-				$state = 'ai';
-			} elsif ($state eq 'ai') {
-				$ai = shift @tmp;
-				$state = 'an';
-			} elsif ($state eq 'an') {
-				my $an = shift @tmp;
-				$an =~ s/\Aa// or
-					die "missing 'a' from author: $an";
-				my $ah = $acache{$an} ||= utf8_html($an);
-				$dst .= "\n- $ah @ $ai\n  commit $id$plinks\n";
-				$id = $plinks = $ai = '';
-				$state = 'b';
-			}
+		if (defined $_[0]) {
+			$buf .= $_[0];
+			@tmp = split(/\n/, $buf, -1);
+			$buf = @tmp ? pop(@tmp) : '';
+		} else {
+			@tmp = split(/\n/, $buf, -1);
+			$buf = undef;
 		}
 
+		foreach my $l (@tmp) {
+			if ($state != STATE_BODY) {
+				$hdr->{((STATES)[$state])} = $l;
+				if (++$state == STATE_BODY) {
+					flush_log_hdr($req, \$dst, $hdr);
+					$hdr = {};
+				}
+				next;
+			}
+			if ($l eq "\0") {
+				$dst .= qq(</pre>);
+				$state = 0;
+			} else {
+				$dst .= "\n";
+				$dst .= utf8_html($l);
+			}
+		}
+		git_log_sed_end($req, \$dst) unless defined $buf;
 		$dst;
 	};
 }
