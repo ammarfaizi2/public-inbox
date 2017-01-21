@@ -81,6 +81,7 @@ sub git_atom_sed ($$) {
 		qq(<link\nrel="alternate"\ntype="text/html"\nhref="$url"\n/>);
 	my ($plinks, $id, $ai);
 	my $end = '';
+	my $blines;
 	sub {
 		my $dst;
 		# $_[0] == scalar buffer, undef means EOF from "git log"
@@ -102,6 +103,7 @@ sub git_atom_sed ($$) {
 				if (++$state == STATE_BODY) {
 					flush_hdr(\$dst, $hdr, $url);
 					$hdr = {};
+					$blines = 0;
 				}
 				next;
 			}
@@ -109,6 +111,7 @@ sub git_atom_sed ($$) {
 				$dst .= qq(</pre></div></content></entry>);
 				$state = 0;
 			} else {
+				$dst .= "\n" if $blines++;
 				$dst .= utf8_html($l);
 			}
 		}

@@ -20,6 +20,8 @@ test_psgi($test->{app}, sub {
 		is($p->format, "Atom", "parsed atom feed");
 		is(scalar $p->entries, 6, "parsed six entries");
 	}
+	like($body, qr!<pre\s*[^>]+>\* header:\n  add header</pre>!,
+		'body wrapped in <pre>');
 
 	$res = $cb->(GET($req . '/'));
 	my $sl = dechunk($res);
