@@ -7,6 +7,7 @@ use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
 use base qw(PublicInbox::RepobrowseBase);
+use PublicInbox::Qspawn;
 my $ATOM_FMT = '--pretty=tformat:'.
 		join('%x00', qw(%s %ct %an %ae %at %h %H %b), '', '');
 
@@ -21,21 +22,35 @@ sub call_git_atom {
 	$max = 50 if $max == 0;
 
 	my $git = $repo_info->{git};
-	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
+	my $env = $req->{env};
+	my $q = PublicInbox::RepobrowseGitQuery->new($env);
 	my $h = $q->{h};
-	$h eq '' and chomp($h = $git->qx(qw(symbolic-ref --short HEAD)));
+	my $res;
 
-	my @cmd = (qw(log --no-notes --no-color --abbrev-commit),
-			$git->abbrev, $ATOM_FMT, "-$max", $h, '--');
-	push @cmd, $req->{expath} if length($req->{expath});
-	my $log = $git->popen(@cmd);
-
-	sub {
-		my ($res) = @_; # Plack callback
+	my $read_log = sub {
+		my @cmd = (qw(log --no-notes --no-color --abbrev-commit),
+				$git->abbrev, $ATOM_FMT, "-$max", $h, '--');
+		my $expath = $req->{expath};
+		push @cmd, $expath if $expath ne '';
+		my $log = $git->popen(@cmd);
 		my @h = ( 'Content-Type' => 'application/atom+xml' );
 		my $fh = $res->([200, \@h]);
 		$self->git_atom_stream($req, $q, $log, $fh, $h);
 		$fh->close;
+	};
+
+	sub {
+		$res = $_[0];
+		return $read_log->() if $h ne '';
+
+		my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
+				qw(symbolic-ref --short HEAD) ];
+		my $rdr = { 2 => $git->err_begin };
+		my $qsp = PublicInbox::Qspawn->new($cmd, undef, undef, $rdr);
+		$qsp->psgi_qx($env, undef, sub {
+			chomp($h = ${$_[0]});
+			$read_log->();
+		})
 	}
 }
 
