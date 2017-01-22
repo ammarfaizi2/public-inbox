@@ -4,6 +4,7 @@
 use strict;
 use warnings;
 use Test::More;
+use Carp qw(carp);
 
 foreach my $mod (qw(Plack::Util Plack::Builder Danga::Socket
 			HTTP::Date HTTP::Status)) {
@@ -54,7 +55,7 @@ ok(-S $unix, 'UNIX socket was bound by -httpd');
 sub check_sock ($) {
 	my ($unix) = @_;
 	my $sock = IO::Socket::UNIX->new(Peer => $unix, Type => SOCK_STREAM);
-	warn "E: $! connecting to $unix\n" unless defined $sock;
+	carp "E: $! connecting to $unix\n" unless defined $sock;
 	ok($sock, 'client UNIX socket connected');
 	ok($sock->write("GET /host-port HTTP/1.0\r\n\r\n"),
 		'wrote req to server');
@@ -95,11 +96,13 @@ SKIP: {
 	eval 'require Net::Server::Daemonize';
 	skip('Net::Server missing for pid-file/daemonization test', 10) if $@;
 
-	# wait for daemonization
+	# wait for daemonization, PublicInbox::Daemon should bind
+	# listener BEFORE the grandparent exits.
 	$spawn_httpd->("-l$unix", '-D', '-P', "$tmpdir/pid");
 	my $kpid = $pid;
 	$pid = undef;
 	is(waitpid($kpid, 0), $kpid, 'existing httpd terminated');
+	ok(-S $unix, 'unix socket exists');
 	check_sock($unix);
 
 	ok(-f "$tmpdir/pid", 'pid file written');
