@@ -7,12 +7,24 @@ use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
 use base qw(PublicInbox::RepobrowseBase);
+use PublicInbox::Qspawn;
 
 sub call_git_summary {
 	my ($self, $req) = @_;
+	my $git = $req->{repo_info}->{git};
+	my $env = $req->{env};
+
+	# n.b. we would use %(HEAD) in for-each-ref --format if we could
+	# rely on git 1.9.0+, but it's too soon for that in early 2017...
+	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", qw(symbolic-ref HEAD) ];
+	my $rdr = { 2 => $git->err_begin };
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	sub {
 		my ($res) = @_; # Plack streaming callback
-		emit_summary($self, $req, $res);
+		$qsp->psgi_qx($env, undef, sub {
+			chomp(my $head_ref = ${$_[0]});
+			for_each_ref($self, $req, $res, $head_ref);
+		});
 	}
 }
 
@@ -20,17 +32,12 @@ use constant EACH_REF_FMT => '--format=' .
 		join(' ', map { "%($_)" }
 		qw(refname objecttype objectname creatordate:short subject));
 
-sub emit_summary {
-	my ($self, $req, $res) = @_;
-	my $repo_info = $req->{repo_info};
-	my $git = $repo_info->{git};
+sub for_each_ref {
+	my ($self, $req, $res, $head_ref) = @_;
 	my $count = 10; # TODO: configurable
 	my $fh;
-
-	# n.b. we would use %(HEAD) in for-each-ref --format if we could
-	# rely on git 1.9.0+, but it's too soon for that in early 2016...
-	chomp(my $head_ref = $git->qx(qw(symbolic-ref HEAD)));
-
+	my $repo_info = $req->{repo_info};
+	my $git = $repo_info->{git};
 	my $refs = $git->popen(qw(for-each-ref --sort=-creatordate),
 				EACH_REF_FMT, "--count=$count",
 				qw(refs/heads/ refs/tags/));
