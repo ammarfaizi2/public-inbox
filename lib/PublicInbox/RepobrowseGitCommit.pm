@@ -131,10 +131,9 @@ sub call_git_commit { # RepobrowseBase calls this
 	}
 
 	my $git = $req->{repo_info}->{git};
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", qw(show
-			-z --numstat -p --encoding=UTF-8
+	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c),
-			$git->abbrev, GIT_FMT, $id, '--' ];
+			$git->abbrev, GIT_FMT, $id, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$req->{'q'} = $q;

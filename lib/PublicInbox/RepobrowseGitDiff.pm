@@ -40,10 +40,8 @@ sub call_git_diff {
 	my $id2 = $q->{id2};
 
 	my $git = $req->{repo_info}->{git};
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", qw(diff-tree
-			-z --numstat -p --encoding=UTF-8
-			--no-color -M -B -D -r),
-			$id2, $id, '--' ];
+	my $cmd = $git->cmd(qw(diff-tree -z --numstat -p --encoding=UTF-8
+				--no-color -M -B -D -r), $id2, $id, '--');
 	my $expath = $req->{expath};
 	push @$cmd, $expath if $expath ne '';
 	my $o = { nofollow => 1, noindex => 1 };

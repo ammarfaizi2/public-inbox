@@ -130,15 +130,8 @@ sub call_git_log {
 	my $h = $q->{h};
 	$h eq '' and $h = 'HEAD';
 	my $git = $repo_info->{git};
-	my $git_dir = $git->{git_dir};
-
-	# n.b. no need to escape $h, this -debug line will never
-	# be seen if $h is invalid
-	# XXX but we should probably validate refnames before execve...
-	$req->{-debug} = "git log --git-dir=$git_dir $h --";
-	my $cmd = [ 'git', "--git-dir=$git_dir",
-			qw(log --no-notes --no-color --abbrev-commit),
-			$git->abbrev, $LOG_FMT, "-$max", $h, '--' ];
+	my $cmd = $git->cmd(qw(log --no-notes --no-color --abbrev-commit),
+				$git->abbrev, $LOG_FMT, "-$max", $h, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $title = "log: $repo_info->{repo} (" . utf8_html($h). ')';
 	$req->{lhtml} = $self->html_start($req, $title) . "\n\n";

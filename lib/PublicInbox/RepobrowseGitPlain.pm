@@ -82,8 +82,7 @@ sub git_tree_plain {
 
 	$req->{tpfx} = $pfx;
 	$req->{tstart} = "<html><head><title>$title</title></head><body>".$t;
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
-		qw(ls-tree --name-only -z), $git->abbrev, $hex ];
+	my $cmd = $git->cmd(qw(ls-tree --name-only -z), $git->abbrev, $hex);
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	my $env = $req->{env};

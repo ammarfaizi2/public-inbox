@@ -24,12 +24,11 @@ sub call_git_patch {
 	# limit scope, don't take extra args to avoid wasting server
 	# resources buffering:
 	my $range = "$id~1..$id^0";
-	my @cmd = ('git', "--git-dir=$git->{git_dir}", @CMD,
-			$sig." $range", $range, '--');
+	my $cmd = $git->cmd(@CMD, $sig." $range", $range, '--');
 	my $expath = $req->{expath};
-	push @cmd, $expath if $expath ne '';
+	push @$cmd, $expath if $expath ne '';
 
-	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
 		my $h = ['Content-Type', 'text/plain; charset=UTF-8'];

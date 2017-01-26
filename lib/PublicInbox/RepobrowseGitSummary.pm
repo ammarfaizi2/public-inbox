@@ -16,7 +16,7 @@ sub call_git_summary {
 
 	# n.b. we would use %(HEAD) in for-each-ref --format if we could
 	# rely on git 1.9.0+, but it's too soon for that in early 2017...
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}", qw(symbolic-ref HEAD) ];
+	my $cmd = $git->cmd(qw(symbolic-ref HEAD));
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	sub {

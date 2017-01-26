@@ -65,8 +65,8 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 		delete $env->{'repobrowse.tree_cb'};
 		delete $env->{'qspawn.quiet'};
 		my $pfx = "$repo_info->{snapshot_pfx}-$ref/";
-		my $cmd = [ 'git', "--git-dir=$git->{git_dir}", 'archive',
-				"--prefix=$pfx", "--format=$fmt", $tree ];
+		my $cmd = $git->cmd('archive',
+				"--prefix=$pfx", "--format=$fmt", $tree);
 		my $rdr = { 2 => $git->err_begin };
 		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 		$qsp->psgi_return($env, undef, sub {
@@ -80,8 +80,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 		});
 	};
 
-	my @cmd = ('git', "--git-dir=$git->{git_dir}",
-			qw(rev-parse --verify --revs-only));
+	my $cmd = $git->cmd(qw(rev-parse --verify --revs-only));
 	# try prefixing "v" or "V" for tag names to get the tree
 	my @refs = ("V$ref", "v$ref", $ref);
 	$env->{'qspawn.quiet'} = 1;
@@ -98,7 +97,7 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
 		}
 		my $rdr = { 2 => $git->err_begin };
 		my $r = pop @refs;
-		my $qsp = PublicInbox::Qspawn->new([@cmd, $r], undef, $rdr);
+		my $qsp = PublicInbox::Qspawn->new([@$cmd, $r], undef, $rdr);
 		$qsp->psgi_qx($env, undef, $env->{'repobrowse.tree_cb'});
 	};
 	sub {

@@ -50,6 +50,11 @@ sub err ($) {
 	$buf;
 }
 
+sub cmd {
+	my $self = shift;
+	[ 'git', "--git-dir=$self->{git_dir}", @_ ];
+}
+
 sub _bidi_pipe {
 	my ($self, $batch, $in, $out, $pid) = @_;
 	return if $self->{$pid};
@@ -58,9 +63,8 @@ sub _bidi_pipe {
 	pipe($in_r, $in_w) or fail($self, "pipe failed: $!");
 	pipe($out_r, $out_w) or fail($self, "pipe failed: $!");
 
-	my @cmd = ('git', "--git-dir=$self->{git_dir}", qw(cat-file), $batch);
 	my $redir = { 0 => fileno($out_r), 1 => fileno($in_w) };
-	my $p = spawn(\@cmd, undef, $redir);
+	my $p = spawn(cmd($self, qw(cat-file), $batch), undef, $redir);
 	defined $p or fail($self, "spawn failed: $!");
 	$self->{$pid} = $p;
 	$out_w->autoflush(1);
@@ -167,7 +171,7 @@ sub fail {
 
 sub popen {
 	my ($self, @cmd) = @_;
-	my $cmd = [ 'git', "--git-dir=$self->{git_dir}" ];
+	my $cmd = cmd($self);
 	my ($env, $opt);
 	if (ref $cmd[0]) {
 		push @$cmd, @{$cmd[0]};
