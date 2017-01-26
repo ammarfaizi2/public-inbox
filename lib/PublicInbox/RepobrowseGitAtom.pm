@@ -60,10 +60,6 @@ sub flush_hdr ($$$) {
 	undef
 }
 
-sub git_atom_sed_end ($$) {
-	my ($req, $buf) = @_;
-}
-
 sub git_atom_sed ($$) {
 	my ($self, $req) = @_;
 	my $buf = '';
