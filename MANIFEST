@@ -58,6 +58,7 @@ lib/PublicInbox/Git.pm
 lib/PublicInbox/GitAsync.pm
 lib/PublicInbox/GitAsyncWr.pm
 lib/PublicInbox/GitHTTPBackend.pm
+lib/PublicInbox/GitIdx.pm
 lib/PublicInbox/HTTP.pm
 lib/PublicInbox/HTTPD.pm
 lib/PublicInbox/HTTPD/Async.pm
@@ -154,6 +155,7 @@ t/git-http-backend.t
 t/git.fast-import-data
 t/git.t
 t/git_async.t
+t/git_idx.t
 t/html_index.t
 t/httpd-corner.psgi
 t/httpd-corner.t

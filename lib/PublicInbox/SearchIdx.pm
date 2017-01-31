@@ -16,19 +16,13 @@ $Email::MIME::ContentType::STRICT_PARAMS = 0;
 use base qw(PublicInbox::Search);
 use PublicInbox::MID qw/mid_clean id_compress mid_mime/;
 use PublicInbox::MsgIter;
+use PublicInbox::GitIdx;
 use Carp qw(croak);
 use POSIX qw(strftime);
 require PublicInbox::Git;
 *xpfx = *PublicInbox::Search::xpfx;
 
 use constant MAX_MID_SIZE => 244; # max term size - 1 in Xapian
-use constant {
-	PERM_UMASK => 0,
-	OLD_PERM_GROUP => 1,
-	OLD_PERM_EVERYBODY => 2,
-	PERM_GROUP => 0660,
-	PERM_EVERYBODY => 0664,
-};
 
 sub new {
 	my ($class, $inbox, $creat) = @_;
@@ -46,11 +40,10 @@ sub new {
 	}
 	require Search::Xapian::WritableDatabase;
 	my $self = bless { git_dir => $git_dir, -altid => $altid }, $class;
-	my $perm = $self->_git_config_perm;
-	my $umask = _umask_for($perm);
-	$self->{umask} = $umask;
+	my $git = $self->{git} = PublicInbox::Git->new($git_dir);
+	my $umask = git_umask_for($git);
+	$self->{'umask'} = $umask;
 	$self->{lock_path} = "$git_dir/ssoma.lock";
-	$self->{git} = PublicInbox::Git->new($git_dir);
 	$self->{creat} = ($creat || 0) == 1;
 	$self;
 }
@@ -407,7 +400,7 @@ sub do_cat_mail {
 
 sub index_sync {
 	my ($self, $opts) = @_;
-	with_umask($self, sub { $self->_index_sync($opts) });
+	with_umask($self->{'umask'}, sub { $self->_index_sync($opts) });
 }
 
 sub rlog {
@@ -580,62 +573,6 @@ sub merge_threads {
 		$doc->add_term($thread_pfx . $winner_tid);
 		$db->replace_document($docid, $doc);
 	}
-}
-
-sub _read_git_config_perm {
-	my ($self) = @_;
-	my @cmd = qw(config core.sharedRepository);
-	my $fh = PublicInbox::Git->new($self->{git_dir})->popen(@cmd);
-	local $/ = "\n";
-	my $perm = <$fh>;
-	chomp $perm if defined $perm;
-	$perm;
-}
-
-sub _git_config_perm {
-	my $self = shift;
-	my $perm = scalar @_ ? $_[0] : _read_git_config_perm($self);
-	return PERM_GROUP if (!defined($perm) || $perm eq '');
-	return PERM_UMASK if ($perm eq 'umask');
-	return PERM_GROUP if ($perm eq 'group');
-	if ($perm =~ /\A(?:all|world|everybody)\z/) {
-		return PERM_EVERYBODY;
-	}
-	return PERM_GROUP if ($perm =~ /\A(?:true|yes|on|1)\z/);
-	return PERM_UMASK if ($perm =~ /\A(?:false|no|off|0)\z/);
-
-	my $i = oct($perm);
-	return PERM_UMASK if ($i == PERM_UMASK);
-	return PERM_GROUP if ($i == OLD_PERM_GROUP);
-	return PERM_EVERYBODY if ($i == OLD_PERM_EVERYBODY);
-
-	if (($i & 0600) != 0600) {
-		die "core.sharedRepository mode invalid: ".
-		    sprintf('%.3o', $i) . "\nOwner must have permissions\n";
-	}
-	($i & 0666);
-}
-
-sub _umask_for {
-	my ($perm) = @_; # _git_config_perm return value
-	my $rv = $perm;
-	return umask if $rv == 0;
-
-	# set +x bit if +r or +w were set
-	$rv |= 0100 if ($rv & 0600);
-	$rv |= 0010 if ($rv & 0060);
-	$rv |= 0001 if ($rv & 0006);
-	(~$rv & 0777);
-}
-
-sub with_umask {
-	my ($self, $cb) = @_;
-	my $old = umask $self->{umask};
-	my $rv = eval { $cb->() };
-	my $err = $@;
-	umask $old;
-	die $err if $@;
-	$rv;
 }
 
 sub DESTROY {
