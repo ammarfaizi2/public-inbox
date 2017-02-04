@@ -8,6 +8,7 @@ use warnings;
 use base qw(PublicInbox::RepobrowseBase);
 use POSIX qw(strftime);
 use PublicInbox::Hval qw(utf8_html);
+use PublicInbox::Qspawn;
 
 my %cmd_map = ( # type => action
 	commit => 'commit',
@@ -20,10 +21,7 @@ sub call_git_tag {
 
 	my $q = PublicInbox::RepobrowseGitQuery->new($req->{env});
 	my $h = $q->{h};
-	$h eq '' and return sub {
-		my ($res) = @_;
-		git_tag_list($self, $req, $res);
-	};
+	$h eq '' and return git_tag_list($self, $req);
 	sub {
 		my ($res) = @_;
 		git_tag_show($self, $req, $h, $res);
@@ -115,45 +113,73 @@ sub invalid_tag_start {
 		qq(see <a\nhref="${rel}tag">tag list</a> for valid tags.);
 }
 
-sub git_tag_list {
-	my ($self, $req, $res) = @_;
+sub git_each_tag_sed ($$) {
+	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
-	my $git = $repo_info->{git};
-	my $desc = $repo_info->{desc_html};
+	my $buf = '';
+	my $nr = 0;
+	$req->{thtml} = $self->html_start($req, "$repo_info->{repo}: tag list") .
+		'</pre><table><tr>' .
+		join('', map { "<th><tt>$_</tt></th>" } qw(tag date subject)).
+		'</tr>';
+	sub {
+		my $dst = delete $req->{thtml} || '';
+		my $end = '';
+		my @lines;
+		if (defined $_[0]) {
+			@lines = split(/\n/, $buf .= $_[0]);
+			$buf = pop @lines if @lines;
+		} else { # for-each-ref EOF
+			@lines = split(/\n/, $buf);
+			$buf = undef;
+			if ($nr == $req->{-tag_count}) {
+				$end = "<pre>Showing the latest $nr tags</pre>";
+			} elsif ($nr == 0) {
+				$end = '<pre>no tags to show</pre>';
+			}
+			$end = "</table>$end</body></html>";
+		}
+		for (@lines) {
+			my ($ref, $date, $s) = split(' ', $_, 3);
+			++$nr;
+			$ref =~ s!\Arefs/tags/!!;
+			$ref = PublicInbox::Hval->utf8($ref);
+			my $h = $ref->as_html;
+			$ref = $ref->as_href;
+			$dst .= qq(<tr><td><tt>) .
+				qq(<a\nhref="?h=$ref"><b>$h</b></a>) .
+				qq(</tt></td><td><tt>$date</tt></td><td><tt>) .
+				utf8_html($s) . '</tt></td></tr>';
+		}
+		$dst .= $end;
+	}
+}
+
+sub git_tag_list {
+	my ($self, $req) = @_;
+	my $git = $req->{repo_info}->{git};
 
 	# TODO: use Xapian so we can more easily handle offsets/limits
 	# for pagination instead of limiting
-	my $nr = 0;
-	my $count = 50;
-	my @cmd = (qw(for-each-ref --sort=-creatordate),
+	my $count = $req->{-tag_count} = 50;
+	my $cmd = $git->cmd(qw(for-each-ref --sort=-creatordate),
 		'--format=%(refname) %(creatordate:short) %(subject)',
 		"--count=$count", 'refs/tags/');
-	my $refs = $git->popen(@cmd);
-	my $fh = $res->([200, ['Content-Type', 'text/html; charset=UTF-8']]);
-
-	# tag names are unpredictable in length and requires tables :<
-	$fh->write($self->html_start($req,
-				"$repo_info->{repo}: tag list") .
-		'</pre><table><tr>' .
-		join('', map { "<th><tt>$_</tt></th>" } qw(tag subject date)).
-		'</tr>');
-
-	foreach (<$refs>) {
-		my ($ref, $date, $s) = split(' ', $_, 3);
-		++$nr;
-		$ref =~ s!\Arefs/tags/!!;
-		$ref = PublicInbox::Hval->utf8($ref);
-		my $h = $ref->as_html;
-		$ref = $ref->as_href;
-		$fh->write(qq(<tr><td><a\nhref="?h=$ref">$h</a></td><td>) .
-			utf8_html($s) . "</td><td>$date</td></tr>");
-	}
-	my $end = '';
-	if ($nr == $count) {
-		$end = "<pre>Showing the latest $nr tags</pre>";
-	}
-	$fh->write("</table>$end</body></html>");
-	$fh->close;
+	my $rdr = { 2 => $git->err_begin };
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
+	my $env = $req->{env};
+	$env->{'qspawn.quiet'} = 1;
+	$qsp->psgi_return($env, undef, sub { # parse output
+		my ($r) = @_;
+		if (!defined $r) {
+			my $errmsg = $git->err;
+			[ 500, [ 'Content-Type', 'text/html; charset=UTF-8'],
+				[ $errmsg ] ];
+		} else {
+			$env->{'qspawn.filter'} = git_each_tag_sed($self, $req);
+			[ 200, [ 'Content-Type', 'text/html; charset=UTF-8' ]];
+		}
+	});
 }
 
 sub unknown_tag_type {
