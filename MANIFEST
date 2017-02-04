@@ -78,6 +78,8 @@ lib/PublicInbox/NewsWWW.pm
 lib/PublicInbox/ParentPipe.pm
 lib/PublicInbox/ProcessPipe.pm
 lib/PublicInbox/Qspawn.pm
+lib/PublicInbox/RepoGitSearch.pm
+lib/PublicInbox/RepoGitSearchIdx.pm
 lib/PublicInbox/Repobrowse.pm
 lib/PublicInbox/RepobrowseBase.pm
 lib/PublicInbox/RepobrowseConfig.pm
@@ -127,6 +129,7 @@ script/public-inbox-mda
 script/public-inbox-nntpd
 script/public-inbox-watch
 script/public-inbox.cgi
+script/repobrowse-index
 scripts/dc-dlvr
 scripts/dc-dlvr.pre
 scripts/edit-sa-prefs
@@ -179,6 +182,7 @@ t/psgi_attach.t
 t/psgi_mount.t
 t/psgi_text.t
 t/qspawn.t
+t/repo_git_search_idx.t
 t/repobrowse.t
 t/repobrowse_common_git.perl
 t/repobrowse_git.t
