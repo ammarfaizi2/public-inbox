@@ -48,7 +48,7 @@ sub for_each_ref {
 			'</pre><table>');
 
 	my $rel = $req->{relcmd};
-	foreach (<$refs>) {
+	while (<$refs>) {
 		my ($ref, $type, $hex, $date, $s) = split(' ', $_, 5);
 		my $x = $ref eq $head_ref ? ' (HEAD)' : '';
 		$ref =~ s!\Arefs/(?:heads|tags)/!!;

@@ -24,7 +24,7 @@ sub mime_load {
 	my ($self, $file) = @_;
 	my %rv;
 	open my $fh, '<', $file or return \%rv;
-	foreach (<$fh>) {
+	while (<$fh>) {
 		next if /^#/; # no comments
 		my ($type, @ext) = split(/\s+/);
 
