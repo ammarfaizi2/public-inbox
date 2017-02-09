@@ -6,7 +6,7 @@
 package PublicInbox::WatchMaildir;
 use strict;
 use warnings;
-use Email::MIME;
+use PublicInbox::MIME;
 use Email::MIME::ContentType;
 $Email::MIME::ContentType::STRICT_PARAMS = 0; # user input is imperfect
 use PublicInbox::Git;
@@ -207,7 +207,7 @@ sub _path_to_mime {
 		local $/;
 		my $str = <$fh>;
 		$str or return;
-		return Email::MIME->new(\$str);
+		return PublicInbox::MIME->new(\$str);
 	} elsif ($!{ENOENT}) {
 		return;
 	} else {
@@ -224,18 +224,31 @@ sub _importer_for {
 		my $addr = $inbox->{-primary_address};
 		PublicInbox::Import->new($git, $name, $addr, $inbox);
 	};
-	$self->{importers}->{"$im"} = $im;
+
+	my $importers = $self->{importers};
+	if (scalar(keys(%$importers)) > 2) {
+		delete $importers->{"$im"};
+		_done_for_now($self);
+	}
+
+	$importers->{"$im"} = $im;
 }
 
 sub _scrubber_for {
 	my ($inbox) = @_;
 	my $f = $inbox->{filter};
 	if ($f && $f =~ /::/) {
+		my @args;
+		# basic line splitting, only
+		# Perhaps we can have proper quote splitting one day...
+		($f, @args) = split(/\s+/, $f) if $f =~ /\s+/;
+
 		eval "require $f";
 		if ($@) {
 			warn $@;
 		} else {
-			return $f->new;
+			# e.g: PublicInbox::Filter::Vger->new(@args)
+			return $f->new(@args);
 		}
 	}
 	undef;
@@ -247,7 +260,7 @@ sub _spamcheck_cb {
 		my ($mime) = @_;
 		my $tmp = '';
 		if ($sc->spamcheck($mime, \$tmp)) {
-			return Email::MIME->new(\$tmp);
+			return PublicInbox::MIME->new(\$tmp);
 		}
 		warn $mime->header('Message-ID')." failed spam check\n";
 		undef;

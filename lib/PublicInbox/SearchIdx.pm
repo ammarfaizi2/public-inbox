@@ -10,7 +10,7 @@ package PublicInbox::SearchIdx;
 use strict;
 use warnings;
 use Fcntl qw(:flock :DEFAULT);
-use Email::MIME;
+use PublicInbox::MIME;
 use Email::MIME::ContentType;
 $Email::MIME::ContentType::STRICT_PARAMS = 0;
 use base qw(PublicInbox::Search);
@@ -285,11 +285,15 @@ sub link_message {
 	my $mime = $smsg->{mime};
 	my $hdr = $mime->header_obj;
 	my $refs = $hdr->header_raw('References');
-	my @refs = $refs ? ($refs =~ /<([^>]+)>/g) : ();
+	my @refs = defined $refs ? ($refs =~ /<([^>]+)>/g) : ();
 	my $irt = $hdr->header_raw('In-Reply-To');
 	if (defined $irt) {
-		$irt = mid_clean($irt);
-		$irt = undef if $mid eq $irt;
+		if ($irt eq '') {
+			$irt = undef;
+		} else {
+			$irt = mid_clean($irt);
+			$irt = undef if $mid eq $irt;
+		}
 	}
 
 	my $tid;
@@ -393,7 +397,7 @@ sub do_cat_mail {
 		my $str = $git->cat_file($blob, $sizeref);
 		# fixup bugs from import:
 		$$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
-		Email::MIME->new($str);
+		PublicInbox::MIME->new($str);
 	};
 	$@ ? undef : $mime;
 }

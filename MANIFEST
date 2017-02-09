@@ -52,6 +52,7 @@ lib/PublicInbox/ExtMsg.pm
 lib/PublicInbox/Feed.pm
 lib/PublicInbox/Filter/Base.pm
 lib/PublicInbox/Filter/Mirror.pm
+lib/PublicInbox/Filter/SubjectTag.pm
 lib/PublicInbox/Filter/Vger.pm
 lib/PublicInbox/GetlineBody.pm
 lib/PublicInbox/Git.pm
@@ -69,6 +70,7 @@ lib/PublicInbox/Linkify.pm
 lib/PublicInbox/Listener.pm
 lib/PublicInbox/MDA.pm
 lib/PublicInbox/MID.pm
+lib/PublicInbox/MIME.pm
 lib/PublicInbox/Mbox.pm
 lib/PublicInbox/MsgIter.pm
 lib/PublicInbox/Msgmap.pm
@@ -152,6 +154,7 @@ t/fail-bin/spamc
 t/feed.t
 t/filter_base.t
 t/filter_mirror.t
+t/filter_subjecttag.t
 t/filter_vger.t
 t/git-http-backend.psgi
 t/git-http-backend.t
@@ -172,6 +175,7 @@ t/linkify.t
 t/main-bin/spamc
 t/mda.t
 t/mid.t
+t/mime.t
 t/msg_iter.t
 t/msgmap.t
 t/nntp.t
