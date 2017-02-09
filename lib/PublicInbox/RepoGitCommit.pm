@@ -11,13 +11,13 @@
 # punish the common case with extra bytes if somebody uses 'D' or 'P'
 # in filenames.
 
-package PublicInbox::RepobrowseGitCommit;
+package PublicInbox::RepoGitCommit;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Hval qw(utf8_html to_attr);
-use PublicInbox::RepobrowseGit qw(git_unquote git_commit_title);
-use PublicInbox::RepobrowseGitDiffCommon;
+use PublicInbox::RepoGit qw(git_unquote git_commit_title);
+use PublicInbox::RepoGitDiffCommon;
 use PublicInbox::Qspawn;
 
 use constant GIT_FMT => '--pretty=format:'.join('%n',
@@ -116,10 +116,10 @@ sub git_commit_sed ($$) {
 	}
 }
 
-sub call_git_commit { # RepobrowseBase calls this
+sub call_git_commit { # RepoBase calls this
 	my ($self, $req) = @_;
 	my $env = $req->{env};
-	my $q = PublicInbox::RepobrowseGitQuery->new($env);
+	my $q = PublicInbox::RepoGitQuery->new($env);
 	my $id = $q->{id};
 	$id eq '' and $id = 'HEAD';
 

@@ -2,10 +2,10 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # displays the root '/' where all the projects lie
-package PublicInbox::RepobrowseRoot;
+package PublicInbox::RepoRoot;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Hval qw(utf8_html);
 
 sub call {

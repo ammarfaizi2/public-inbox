@@ -2,11 +2,11 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # show log as an Atom feed
-package PublicInbox::RepobrowseGitAtom;
+package PublicInbox::RepoGitAtom;
 use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Qspawn;
 
 use constant DATEFMT => '%Y-%m-%dT%H:%M:%SZ';
@@ -139,7 +139,7 @@ sub call_git_atom {
 
 	my $git = $repo_info->{git};
 	my $env = $req->{env};
-	my $q =$req->{'q'} = PublicInbox::RepobrowseGitQuery->new($env);
+	my $q =$req->{'q'} = PublicInbox::RepoGitQuery->new($env);
 	my $h = $q->{h};
 	my $read_log = sub {
 		my $cmd = $git->cmd(qw(log --no-notes --no-color

@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 use Test::More;
-use PublicInbox::RepobrowseGit qw(git_unquote);
+use PublicInbox::RepoGit qw(git_unquote);
 
 is("foo\nbar", git_unquote('"foo\\nbar"'), 'unquoted newline');
 is("Eléanor", git_unquote('"El\\303\\251anor"'), 'unquoted octal');

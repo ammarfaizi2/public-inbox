@@ -3,10 +3,10 @@
 
 # shows the /patch/ endpoint for git repositories
 # usage: /repo.git/patch?id=COMMIT_ID
-package PublicInbox::RepobrowseGitPatch;
+package PublicInbox::RepoGitPatch;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Qspawn;
 
 # try to be educational and show the command-line used in the signature
@@ -17,7 +17,7 @@ sub call_git_patch {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
 	my $env = $req->{env};
-	my $q = PublicInbox::RepobrowseGitQuery->new($env);
+	my $q = PublicInbox::RepoGitQuery->new($env);
 	my $id = $q->{id};
 	$id =~ /\A[\w-]+([~\^][~\^\d])*\z/ or $id = 'HEAD';
 

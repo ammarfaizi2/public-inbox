@@ -5,10 +5,10 @@
 # Mainly for compatibility reasons with cgit, I'm unsure if
 # showing this in a repository viewer is a good idea.
 
-package PublicInbox::RepobrowseGitSnapshot;
+package PublicInbox::RepoGitSnapshot;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Git;
 use PublicInbox::Qspawn;
 our $SUFFIX;
@@ -33,7 +33,7 @@ our %FMT_TYPES = (
 	'zip' => 'application/x-zip',
 );
 
-sub call_git_snapshot ($$) { # invoked by PublicInbox::RepobrowseBase::call
+sub call_git_snapshot ($$) { # invoked by PublicInbox::RepoBase::call
 	my ($self, $req) = @_;
 
 	my @extra = @{$req->{extra}};

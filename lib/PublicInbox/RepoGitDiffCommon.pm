@@ -2,10 +2,10 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # common git diff-related code
-package PublicInbox::RepobrowseGitDiffCommon;
+package PublicInbox::RepoGitDiffCommon;
 use strict;
 use warnings;
-use PublicInbox::RepobrowseGit qw/git_unquote git_commit_title/;
+use PublicInbox::RepoGit qw/git_unquote git_commit_title/;
 use PublicInbox::Hval qw/utf8_html to_attr/;
 use base qw/Exporter/;
 our @EXPORT = qw/git_diff_sed_init git_diff_sed_close git_diff_sed_run

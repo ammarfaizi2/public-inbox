@@ -6,12 +6,12 @@
 #
 # We probably will not link to this outright because it's expensive,
 # but exists to preserve URL compatibility with cgit.
-package PublicInbox::RepobrowseGitDiff;
+package PublicInbox::RepoGitDiff;
 use strict;
 use warnings;
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Hval qw(utf8_html);
-use PublicInbox::RepobrowseGitDiffCommon;
+use PublicInbox::RepoGitDiffCommon;
 use PublicInbox::Qspawn;
 
 sub git_diff_sed ($$) {
@@ -35,7 +35,7 @@ sub git_diff_sed ($$) {
 sub call_git_diff {
 	my ($self, $req) = @_;
 	my $env = $req->{env};
-	my $q = PublicInbox::RepobrowseGitQuery->new($env);
+	my $q = PublicInbox::RepoGitQuery->new($env);
 	my $id = $q->{id};
 	my $id2 = $q->{id2};
 

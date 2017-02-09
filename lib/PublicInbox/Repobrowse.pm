@@ -21,7 +21,7 @@ package PublicInbox::Repobrowse;
 use strict;
 use warnings;
 use URI::Escape qw(uri_escape_utf8 uri_unescape);
-use PublicInbox::RepobrowseConfig;
+use PublicInbox::RepoConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain Tag Atom
 	Diff Snapshot);
@@ -30,7 +30,7 @@ my %LOADED;
 
 sub new {
 	my ($class, $rconfig) = @_;
-	$rconfig ||= PublicInbox::RepobrowseConfig->new;
+	$rconfig ||= PublicInbox::RepoConfig->new;
 	bless { rconfig => $rconfig }, $class;
 }
 
@@ -80,8 +80,8 @@ sub no_tslash {
 
 sub root_index {
 	my ($self) = @_;
-	my $mod = load_once('PublicInbox::RepobrowseRoot');
-	$mod->new->call($self->{rconfig}); # RepobrowseRoot::call
+	my $mod = load_once('PublicInbox::RepoRoot');
+	$mod->new->call($self->{rconfig}); # RepoRoot::call
 }
 
 sub call {
@@ -97,7 +97,7 @@ sub call {
 
 	return $self->root_index($self) unless length($repo_path);
 
-	my $rconfig = $self->{rconfig}; # RepobrowseConfig
+	my $rconfig = $self->{rconfig}; # RepoConfig
 	my $repo_info;
 	until ($repo_info = $rconfig->lookup($repo_path)) {
 		my $p = shift @extra or last;
@@ -141,14 +141,14 @@ sub call {
 	return no_tslash($env) if ($tslash && $NO_TSLASH{$mod});
 
 	$req->{tslash} = $tslash;
-	$mod = load_once("PublicInbox::Repobrowse$vcs$mod");
+	$mod = load_once("PublicInbox::Repo$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
 
 	# $repo_info->{git} ||= PublicInbox::Git->new(...)
 	$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
 
 	$req->{expath} = join('/', @extra);
-	my $rv = eval { $mod->new->call($cmd, $req) }; # RepobrowseBase::call
+	my $rv = eval { $mod->new->call($cmd, $req) }; # RepoBase::call
 	$rv || r404();
 }
 

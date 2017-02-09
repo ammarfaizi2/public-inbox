@@ -2,11 +2,11 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # The main summary/landing page of a git repository viewer
-package PublicInbox::RepobrowseGitSummary;
+package PublicInbox::RepoGitSummary;
 use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
-use base qw(PublicInbox::RepobrowseBase);
+use base qw(PublicInbox::RepoBase);
 use PublicInbox::Qspawn;
 
 sub call_git_summary {

@@ -2,12 +2,12 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # show the log view
-package PublicInbox::RepobrowseGitLog;
+package PublicInbox::RepoGitLog;
 use strict;
 use warnings;
 use PublicInbox::Hval qw(utf8_html);
-use base qw(PublicInbox::RepobrowseBase);
-use PublicInbox::RepobrowseGit qw(git_dec_links git_commit_title);
+use base qw(PublicInbox::RepoBase);
+use PublicInbox::RepoGit qw(git_dec_links git_commit_title);
 use PublicInbox::Qspawn;
 # cannot rely on --date=format-local:... yet, it is too new (September 2015)
 use constant STATES => qw(h p D ai an s b);
@@ -126,7 +126,7 @@ sub call_git_log {
 	$max = int($max);
 	$max = 50 if $max == 0;
 	my $env = $req->{env};
-	my $q = $req->{'q'} = PublicInbox::RepobrowseGitQuery->new($env);
+	my $q = $req->{'q'} = PublicInbox::RepoGitQuery->new($env);
 	my $h = $q->{h};
 	$h eq '' and $h = 'HEAD';
 	my $git = $repo_info->{git};
