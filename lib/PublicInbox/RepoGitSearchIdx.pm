@@ -104,18 +104,10 @@ sub replace_or_add ($$$) {
 	$doc_id;
 }
 
-sub doc_refnames {
-	my ($doc) = @_;
-	my %cur;
-	each_term_val($doc, 'XREF', qr/^XREF/, sub { $cur{$_[0]} = 1 });
-	\%cur;
-}
-
 sub decor_update {
 	my ($self, $doc, $decor, $oid) = @_;
 
 	# load all current refs
-	my $cur = doc_refnames($doc);
 	my $want = $self->{want_refs_re};
 	($decor) = ($decor =~ m!\((.+)\)!);
 	foreach (split(/, /, $decor)) {
@@ -124,36 +116,14 @@ sub decor_update {
 			($sym, $refname) = ($1, $2);
 		} elsif (s/^tag: //) {
 			$refname = $_;
-			$tag = 1;
+			$tag = 1; # XXX use this
 		} else {
 			$refname = $_;
 		}
-		next if $cur->{$refname};
 		if ($refname =~ $want) {
 			$self->{-active_refs}->{$refname} = $oid;
 		}
 		# TODO: handle $sym, and do something with tags
-	}
-}
-
-sub update_ref_contains ($$) {
-	my ($self, $doc) = @_;
-	my $cur = doc_refnames($doc);
-	my $n = 0;
-	my @active = keys %{$self->{-active_refs}};
-	for (@active) {
-		next if $cur->{$_};
-		$doc->add_term('XREF'.$_);
-		++$n;
-	}
-	$n;
-}
-
-sub commit_doc ($$$) {
-	my ($self, $doc_id, $doc) = @_;
-	my $n = update_ref_contains($self, $doc);
-	if ($n || !defined($doc_id)) {
-		replace_or_add($self->{xdb}, $doc_id, $doc);
 	}
 }
 
@@ -192,7 +162,6 @@ sub each_log_line ($$) {
 	my $hex = '[a-f0-9]+';
 	my ($cc_ins, $cc_del);
 	my $batch = BATCH_BYTES;
-	my $decorate_only;
 
 	local $/ = "\n";
 	while (defined(my $l = <$log>)) {
@@ -204,7 +173,7 @@ sub each_log_line ($$) {
 		}
 		if ($l =~ /^commit (\S+)(\s+\([^\)]+\))?/) {
 			my ($oid, $decor) = ($1, $2);
-			commit_doc($self, $doc_id, $doc) if $doc;
+			replace_or_add($db, $doc_id, $doc) if $doc;
 			$tip ||= $oid;
 			$state = 0;
 			$cc_ins = $cc_del = undef;
@@ -212,10 +181,7 @@ sub each_log_line ($$) {
 			$doc = get_doc($self, \$doc_id, 'commit', $oid);
 			decor_update($self, $doc, $decor, $oid) if $decor;
 			# old commit
-			if (defined $doc_id) {
-				$decorate_only = $oid;
-				last;
-			}
+			last if defined $doc_id;
 
 			# new commit:
 			$tg->set_document($doc);
@@ -349,34 +315,7 @@ sub each_log_line ($$) {
 			warn  "wtf $state $l\n" if $l ne "\n";
 		}
 	}
-
-	# optimization: we go into decorate-only mode once we start
-	# seeing commits we've already seen to save git from having
-	# to generate diffs and us from having to skip lines we
-	# don't care about:
-	if (defined $decorate_only) {
-		$doc = undef;
-		# SIGPIPE existing git log, spawn a new fast one
-		$log = $self->{git}->popen(qw(log --decorate=full
-						--pretty=format:%H%d),
-						$decorate_only);
-
-		while (defined(my $l = <$log>)) {
-			$l =~ /^(\S+)(\s+\([^\)]+\))?/ or die "bad line: $l";
-			my ($oid, $decor) = ($1, $2);
-			commit_doc($self, $doc_id, $doc) if $doc;
-
-			# do not to buffer more than 100 docs before flush
-			if (($batch -= 10000) <= 0) {
-				$db->flush;
-				$batch = BATCH_BYTES;
-			}
-			$doc = get_doc($self, \$doc_id, 'commit', $oid);
-			decor_update($self, $doc, $decor, $oid) if $decor;
-		}
-	}
-
-	commit_doc($self, $doc_id, $doc) if $doc;
+	replace_or_add($db, $doc_id, $doc) if $doc;
 	$tip;
 }
 
@@ -438,7 +377,6 @@ sub index_sync {
 		next unless $type eq 'commit' || $type eq 'tag';
 		index_top_ref($self, $refname, $oid);
 	}
-	$db->flush;
 }
 
 1;

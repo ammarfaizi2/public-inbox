@@ -24,9 +24,7 @@ my %bool_pfx_internal = (
 	type => 'T', # "commit", "tag", or "ref"
 );
 
-my %bool_pfx_external = (
-	ref => 'XREF', # refname (belongs to)
-);
+my %bool_pfx_external = ();
 
 my %prob_prefix = (
 	id => 'Q', # git object ID, partial matches supported
