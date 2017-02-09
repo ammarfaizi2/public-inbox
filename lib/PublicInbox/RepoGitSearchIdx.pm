@@ -197,6 +197,11 @@ sub each_log_line ($$) {
 	local $/ = "\n";
 	while (defined(my $l = <$log>)) {
 		$batch -= bytes::length($l);
+		# prevent memory growth from Xapian
+		if ($batch <= 0) {
+			$db->flush;
+			$batch = BATCH_BYTES;
+		}
 		if ($l =~ /^commit (\S+)(\s+\([^\)]+\))?/) {
 			my ($oid, $decor) = ($1, $2);
 			commit_doc($self, $doc_id, $doc) if $doc;
@@ -204,11 +209,6 @@ sub each_log_line ($$) {
 			$state = 0;
 			$cc_ins = $cc_del = undef;
 
-			# prevent OOM
-			if ($batch <= 0) {
-				$db->flush;
-				$batch = BATCH_BYTES;
-			}
 			$doc = get_doc($self, \$doc_id, 'commit', $oid);
 			decor_update($self, $doc, $decor, $oid) if $decor;
 			# old commit
