@@ -60,8 +60,6 @@ EOF
 );
 chomp @HELP;
 
-my %all_pfx = (%bool_pfx_internal, %bool_pfx_external, %prob_prefix);
-
 sub new {
 	my ($class, $git_dir, $repo_dir) = @_;
 	$repo_dir ||= "$git_dir/public-inbox";

@@ -1,7 +1,7 @@
 # Copyright (C) 2016 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
-# real-world testing of search threading
+# real-world testing of search threading performance
 use strict;
 use warnings;
 use Test::More;
@@ -16,7 +16,6 @@ plan skip_all => "$pi_dir not initialized for $0" if $@;
 require PublicInbox::View;
 require PublicInbox::SearchThread;
 
-my $pfx = PublicInbox::Search::xpfx('thread');
 my $opts = { limit => 1000000, asc => 1 };
 my $t0 = clock_gettime(CLOCK_MONOTONIC);
 my $elapsed;
@@ -34,5 +33,7 @@ $t0 = clock_gettime(CLOCK_MONOTONIC);
 PublicInbox::View::thread_results($msgs);
 $elapsed = clock_gettime(CLOCK_MONOTONIC) - $t0;
 diag "thread_results $elapsed";
+
+ok(1, 'test completed without crashing :)');
 
 done_testing();

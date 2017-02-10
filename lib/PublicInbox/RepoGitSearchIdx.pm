@@ -13,7 +13,6 @@ use base qw(PublicInbox::RepoGitSearch); # base is read-only
 use POSIX qw(strftime);
 use PublicInbox::Git;
 use PublicInbox::GitIdx;
-*xpfx = *PublicInbox::RepoGitSearch::xpfx;
 use constant {
 	Z40 => ('0' x 40),
 	STATE_GPGSIG => -0x80000000,
