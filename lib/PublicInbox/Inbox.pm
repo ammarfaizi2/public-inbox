@@ -6,6 +6,7 @@ package PublicInbox::Inbox;
 use strict;
 use warnings;
 use PublicInbox::Git;
+use PublicInbox::Config;
 use PublicInbox::MID qw(mid2path);
 use Devel::Peek qw(SvREFCNT);
 
@@ -102,21 +103,11 @@ sub search {
 	};
 }
 
-sub try_cat {
-	my ($path) = @_;
-	my $rv = '';
-	if (open(my $fh, '<', $path)) {
-		local $/;
-		$rv = <$fh>;
-	}
-	$rv;
-}
-
 sub description {
 	my ($self) = @_;
 	my $desc = $self->{description};
 	return $desc if defined $desc;
-	$desc = try_cat("$self->{mainrepo}/description");
+	$desc = PublicInbox::Config::try_cat("$self->{mainrepo}/description");
 	local $/ = "\n";
 	chomp $desc;
 	$desc =~ s/\s+/ /smg;
@@ -128,7 +119,7 @@ sub cloneurl {
 	my ($self) = @_;
 	my $url = $self->{cloneurl};
 	return $url if $url;
-	$url = try_cat("$self->{mainrepo}/cloneurl");
+	$url = PublicInbox::Config::try_cat("$self->{mainrepo}/cloneurl");
 	my @url = split(/\s+/s, $url);
 	local $/ = "\n";
 	chomp @url;

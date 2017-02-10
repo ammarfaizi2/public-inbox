@@ -3,7 +3,6 @@
 package PublicInbox::RepoConfig;
 use strict;
 use warnings;
-use PublicInbox::Inbox;
 use PublicInbox::Config;
 use PublicInbox::Repo;
 require PublicInbox::Hval;
@@ -54,7 +53,7 @@ sub lookup {
 
 	# gitweb compatibility
 	foreach my $key (qw(description cloneurl)) {
-		$rv->{$key} = PublicInbox::Inbox::try_cat("$path/$key");
+		$rv->{$key} = PublicInbox::Config::try_cat("$path/$key");
 	}
 
 	$rv->{desc_html} =

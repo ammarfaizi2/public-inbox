@@ -167,4 +167,14 @@ sub _fill {
 	$self->{-by_name}->{$name} = $rv;
 }
 
+sub try_cat {
+	my ($path) = @_;
+	my $rv = '';
+	if (open(my $fh, '<', $path)) {
+		local $/;
+		$rv = <$fh>;
+	}
+	$rv;
+}
+
 1;
