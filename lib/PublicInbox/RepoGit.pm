@@ -19,7 +19,7 @@ my %GIT_ESC = (
 	v => "\013",
 );
 
-sub git_unquote {
+sub git_unquote ($) {
 	my ($s) = @_;
 	return $s unless ($s =~ /\A"(.*)"\z/);
 	$s = $1;
@@ -28,7 +28,8 @@ sub git_unquote {
 	$s;
 }
 
-sub git_commit_title {
+# Remove, hilariously slow
+sub git_commit_title ($$) {
 	my ($git, $obj) = @_; # PublicInbox::Git, $sha1hex
 	my $rv;
 	eval {
@@ -39,7 +40,7 @@ sub git_commit_title {
 }
 
 # example inputs: "HEAD -> master", "tag: v1.0.0",
-sub git_dec_links {
+sub git_dec_links ($$) {
 	my ($rel, $D) = @_;
 	my @l;
 	foreach (split /, /, $D) {
