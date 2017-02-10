@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use PublicInbox::Inbox;
 use PublicInbox::Config;
+use PublicInbox::Repo;
 require PublicInbox::Hval;
 
 sub new {
@@ -82,7 +83,7 @@ sub lookup {
 
 	# of course git is the default VCS
 	$rv->{vcs} ||= 'git';
-	$self->{-cache}->{$repo_path} = $rv;
+	$self->{-cache}->{$repo_path} = PublicInbox::Repo->new($rv);
 }
 
 1;

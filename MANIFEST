@@ -80,6 +80,7 @@ lib/PublicInbox/NewsWWW.pm
 lib/PublicInbox/ParentPipe.pm
 lib/PublicInbox/ProcessPipe.pm
 lib/PublicInbox/Qspawn.pm
+lib/PublicInbox/Repo.pm
 lib/PublicInbox/RepoBase.pm
 lib/PublicInbox/RepoConfig.pm
 lib/PublicInbox/RepoGit.pm
