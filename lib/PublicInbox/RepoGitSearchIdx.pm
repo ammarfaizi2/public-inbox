@@ -345,10 +345,16 @@ sub index_top_ref ($$$) {
 		print $progress "$refname => $tip\n" if $progress;
 		replace_or_add($db, $doc_id, $ref_doc);
 	}
+	$db->flush;
 
 	# update all decorated refs which got snowballed into this one
 	delete $active->{$refname};
+	my $n = 100;
 	foreach my $ref (keys %$active) {
+		if (--$n <= 0) {
+			$db->flush;
+			$n = 100;
+		}
 		$ref_doc = get_doc($self, \$doc_id, 'ref', $ref);
 		$ref_doc->set_data($active->{$ref});
 		if ($progress) {
