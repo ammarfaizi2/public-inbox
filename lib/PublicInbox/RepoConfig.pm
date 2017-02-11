@@ -30,8 +30,6 @@ sub default_file {
 # Returns something like:
 # {
 #	path => '/home/git/foo.git',
-#	description => 'foo repo',
-#	cloneurl => "git://example.com/foo.git\nhttp://example.com/foo.git",
 #	publicinbox => '/home/pub/foo-public.git',
 # }
 sub lookup {
@@ -50,14 +48,6 @@ sub lookup {
 	$snap =~ s/\.git\z//; # seems common for git URLs to end in ".git"
 	$rv->{snapshot_re} = qr/\A\Q$snap\E[-_]/;
 	$rv->{snapshot_pfx} = $snap;
-
-	# gitweb compatibility
-	foreach my $key (qw(description cloneurl)) {
-		$rv->{$key} = PublicInbox::Config::try_cat("$path/$key");
-	}
-
-	$rv->{desc_html} =
-		PublicInbox::Hval->new_oneline($rv->{description})->as_html;
 
 	foreach my $key (qw(publicinbox vcs readme group snapshots)) {
 		$rv->{$key} = $self->{"repo.$repo_path.$key"};

@@ -46,7 +46,7 @@ sub repobrowse_index {
 		my $l = $p->as_html;
 		$p = $p->as_path;
 		$fh->write(qq(<tr><td><tt><a\nhref="$p">$l</a></tt></td>) .
-			"<td><tt> $r->{desc_html}</tt></td></tr>");
+			'<td><tt> '.$r->desc_html.'</tt></td></tr>');
 	}
 
 	foreach my $group (keys %$groups) {
@@ -61,7 +61,7 @@ sub repobrowse_index {
 			$p = $p->as_path;
 			$fh->write('<tr><td><tt> ' .
 				qq(<a\nhref="$p">$l</a></tt></td>) .
-				"<td><tt> $r->{desc_html}</tt></td></tr>");
+				'<td><tt> '.$r->desc_html.'</tt></td></tr>');
 		}
 	}
 

@@ -70,10 +70,11 @@ sub git_atom_sed ($$) {
 	$title = utf8_html("$title, branch $req->{q}->{h}");
 	my $url = repo_root_url($self, $req);
 	my $hdr = {};
+	my $subtitle = $repo_info->desc_html;
 	$req->{axml} = qq(<?xml version="1.0"?>\n) .
 		qq(<feed\nxmlns="http://www.w3.org/2005/Atom">) .
 		qq(<title>$title</title>) .
-		qq(<subtitle>$repo_info->{desc_html}</subtitle>) .
+		qq(<subtitle>$subtitle</subtitle>) .
 		qq(<link\nrel="alternate"\ntype="text/html"\nhref="$url"\n/>);
 	my ($plinks, $id, $ai);
 	my $end = '';

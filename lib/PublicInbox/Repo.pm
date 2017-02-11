@@ -6,10 +6,42 @@
 package PublicInbox::Repo;
 use strict;
 use warnings;
+use PublicInbox::Config;
 
 sub new {
 	my ($class, $opts) = @_;
 	bless $opts, $class;
+}
+
+sub description {
+	my ($self) = @_;
+	my $desc = $self->{description};
+	return $desc if defined $desc;
+	$desc = PublicInbox::Config::try_cat("$self->{path}/description");
+	local $/ = "\n";
+	chomp $desc;
+	$desc =~ s/\s+/ /smg;
+	$desc = '($GIT_DIR/description missing)' if $desc eq '';
+	$self->{description} = $desc;
+}
+
+sub desc_html {
+	my ($self) = @_;
+	$self->{desc_html} ||=
+		PublicInbox::Hval->utf8($self->description)->as_html;
+}
+
+sub cloneurl {
+	my ($self) = @_;
+	my $url = $self->{cloneurl};
+	return $url if $url;
+	if ($self->{vcs} eq 'git') {
+		$url = PublicInbox::Config::try_cat("$self->{path}/cloneurl");
+		$url = [ split(/\s+/s, $url) ];
+		local $/ = "\n";
+		chomp @$url;
+	}
+	$self->{cloneurl} = $url;
 }
 
 1;
