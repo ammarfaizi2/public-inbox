@@ -21,7 +21,10 @@ use Carp qw(croak);
 use POSIX qw(strftime);
 require PublicInbox::Git;
 
-use constant MAX_MID_SIZE => 244; # max term size - 1 in Xapian
+use constant {
+	MAX_MID_SIZE => 244, # max term size - 1 in Xapian
+	BATCH_BYTES => 1_000_000,
+};
 
 sub new {
 	my ($class, $inbox, $creat) = @_;
@@ -64,7 +67,6 @@ sub _xdb_acquire {
 		require File::Path;
 		_lock_acquire($self);
 		File::Path::mkpath($dir);
-		$self->{batch_size} = 100;
 		$flag = Search::Xapian::DB_CREATE_OR_OPEN;
 	}
 	$self->{xdb} = Search::Xapian::WritableDatabase->new($dir, $flag);
@@ -406,6 +408,15 @@ sub index_sync {
 	with_umask($self->{'umask'}, sub { $self->_index_sync($opts) });
 }
 
+sub batch_adjust ($$$$) {
+	my ($max, $bytes, $batch_cb, $latest) = @_;
+	$$max -= $bytes;
+	if ($$max <= 0) {
+		$$max = BATCH_BYTES;
+		$batch_cb->($latest, 1);
+	}
+}
+
 sub rlog {
 	my ($self, $log, $add_cb, $del_cb, $batch_cb) = @_;
 	my $hex = '[a-f0-9]';
@@ -415,23 +426,21 @@ sub rlog {
 	my $git = $self->{git};
 	my $latest;
 	my $bytes;
-	my $max = $self->{batch_size}; # may be undef
+	my $max = BATCH_BYTES;
 	local $/ = "\n";
 	my $line;
 	while (defined($line = <$log>)) {
 		if ($line =~ /$addmsg/o) {
 			my $blob = $1;
 			my $mime = do_cat_mail($git, $blob, \$bytes) or next;
+			batch_adjust(\$max, $bytes, $batch_cb, $latest);
 			$add_cb->($self, $mime, $bytes, $blob);
 		} elsif ($line =~ /$delmsg/o) {
 			my $blob = $1;
-			my $mime = do_cat_mail($git, $blob) or next;
+			my $mime = do_cat_mail($git, $blob, \$bytes) or next;
+			batch_adjust(\$max, $bytes, $batch_cb, $latest);
 			$del_cb->($self, $mime);
 		} elsif ($line =~ /^commit ($h40)/o) {
-			if (defined $max && --$max <= 0) {
-				$max = $self->{batch_size};
-				$batch_cb->($latest, 1);
-			}
 			$latest = $1;
 		}
 	}
