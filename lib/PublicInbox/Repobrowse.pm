@@ -20,7 +20,7 @@
 package PublicInbox::Repobrowse;
 use strict;
 use warnings;
-use URI::Escape qw(uri_escape_utf8 uri_unescape);
+use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::RepoConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain Tag Atom
@@ -92,7 +92,7 @@ sub call {
 	# URL syntax: / repo [ / cmd [ / path ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
 	# repo and path (@extra) may both contain '/'
-	my $path_info = uri_unescape($env->{PATH_INFO});
+	my $path_info = $env->{PATH_INFO};
 	my (undef, $repo_path, @extra) = split(m{/+}, $path_info, -1);
 
 	return $self->root_index($self) unless length($repo_path);
