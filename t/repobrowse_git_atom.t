@@ -23,11 +23,7 @@ test_psgi($test->{app}, sub {
 	like($body, qr!<pre\s*[^>]+>\* header:\n  add header</pre>!,
 		'body wrapped in <pre>');
 
-	$res = $cb->(GET($req . '/'));
-	my $sl = dechunk($res);
-	is($body, $sl, 'slash returned identical to non-trailing slash');
-
-	$res = $cb->(GET($req . '/foo.txt'));
+	$res = $cb->(GET($req . '/master/foo.txt'));
 	is($res->code, 200, 'got 200');
 	$body = dechunk($res);
 	like($body, qr{\bhref="http://[^/]+/test\.git/}, 'hrefs OK');

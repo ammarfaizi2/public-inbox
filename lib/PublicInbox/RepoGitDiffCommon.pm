@@ -68,17 +68,16 @@ sub git_diff_ab_hunk ($$$$) {
 		$na = defined $na ? "#n$na" : '';
 		my $p = $req->{p}->[0];
 		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$req->{path_a}?id=$p$na">);
+		$rv .= qq(\nhref="${rel}tree/$p/$req->{path_a}$na">);
 		$rv .= "$ca</a>";
 	}
 	$rv .= ' ';
 	if (defined($nb) && $nb == 0) { # deleted file
 		$rv .= $cb;
 	} else {
-		my $h = $req->{h};
 		$nb = defined $nb ? "#n$nb" : '';
 		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$req->{path_b}?id=$h$nb">);
+		$rv .= qq(\nhref="${rel}tree/$req->{-tip}/$req->{path_b}$nb">);
 		$rv .= "$cb</a>";
 	}
 	$rv . ' @@' . utf8_html($ctx);
@@ -129,7 +128,7 @@ sub git_diff_cc_hunk {
 	} else {
 		my $h = $req->{h};
 		$rv .= qq( <a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$path?id=$h#n$n">$last</a>);
+		$rv .= qq(\nhref="${rel}tree/$h/$path#n$n">$last</a>);
 	}
 	$rv .= " $at" . utf8_html($ctx);
 }

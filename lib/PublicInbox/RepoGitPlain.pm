@@ -11,10 +11,7 @@ use PublicInbox::Qspawn;
 sub call_git_plain {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepoGitQuery->new($req->{env});
-	my $id = $q->{id};
-	$id eq '' and $id = 'HEAD';
-	$id .= ":$req->{expath}";
+	my $id = $req->{-tip} . ':' . $req->{expath};
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
 	return unless defined $cat;
 

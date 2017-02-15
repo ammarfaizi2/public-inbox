@@ -7,7 +7,7 @@ use strict;
 use warnings;
 use PublicInbox::Hval;
 use URI::Escape qw(uri_unescape);
-my @KNOWN_PARAMS = qw(id id2 h ofs);
+my @KNOWN_PARAMS = qw(id id2 ofs);
 
 sub new {
 	my ($class, $env) = @_;

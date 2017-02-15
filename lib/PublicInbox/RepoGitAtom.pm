@@ -46,7 +46,7 @@ sub flush_hdr ($$$) {
 	$$dst .= '</published>';
 	$$dst .= qq(<link\nrel="alternate"\ntype="text/html"\nhref=");
 	$$dst .= $url;
-	$$dst .= '/commit?id=';
+	$$dst .= '/commit/';
 
 	my $H = $hdr->{H};
 	$$dst .= $H;
@@ -67,7 +67,7 @@ sub git_atom_sed ($$) {
 	my $rel = $req->{relcmd};
 	my $repo_info = $req->{repo_info};
 	my $title = join('/', $repo_info->{repo}, @{$req->{extra}});
-	$title = utf8_html("$title, branch $req->{q}->{h}");
+	$title = utf8_html("$title, $req->{-tip}");
 	my $url = repo_root_url($self, $req);
 	my $hdr = {};
 	my $subtitle = $repo_info->desc_html;
@@ -76,7 +76,7 @@ sub git_atom_sed ($$) {
 		qq(<title>$title</title>) .
 		qq(<subtitle>$subtitle</subtitle>) .
 		qq(<link\nrel="alternate"\ntype="text/html"\nhref="$url"\n/>);
-	my ($plinks, $id, $ai);
+	my ($plinks, $ai);
 	my $end = '';
 	my $blines;
 	sub {
@@ -140,12 +140,11 @@ sub call_git_atom {
 
 	my $git = $repo_info->{git};
 	my $env = $req->{env};
-	my $q =$req->{'q'} = PublicInbox::RepoGitQuery->new($env);
-	my $h = $q->{h};
+	my $tip = $req->{-tip};
 	my $read_log = sub {
 		my $cmd = $git->cmd(qw(log --no-notes --no-color
 					--abbrev-commit), $git->abbrev,
-					$ATOM_FMT, "-$max", $h, '--');
+					$ATOM_FMT, "-$max", $tip, '--');
 		my $expath = $req->{expath};
 		push @$cmd, $expath if $expath ne '';
 		my $rdr = { 2 => $git->err_begin };
@@ -155,13 +154,13 @@ sub call_git_atom {
 
 	sub {
 		$env->{'qspawn.response'} = $_[0];
-		return $read_log->() if $h ne '';
+		return $read_log->() if $tip ne '';
 
 		my $cmd = $git->cmd(qw(symbolic-ref --short HEAD));
 		my $rdr = { 2 => $git->err_begin };
 		my $qsp = PublicInbox::Qspawn->new($cmd, undef, undef, $rdr);
 		$qsp->psgi_qx($env, undef, sub {
-			chomp($h = ${$_[0]});
+			chomp($tip = ${$_[0]});
 			$read_log->();
 		})
 	}

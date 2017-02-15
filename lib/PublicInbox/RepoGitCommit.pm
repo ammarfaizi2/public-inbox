@@ -37,11 +37,9 @@ sub commit_header {
 	my @p = split(' ', $p);
 
 	my $rel = $req->{relcmd};
-	my $q = $req->{'q'};
-	my $qs = $req->{qs} = $q->qs(id => $h);
 	my $x = $self->html_start($req, $s) . "\n" .
-		qq(   commit $H (<a\nhref="${rel}patch$qs">patch</a>)\n) .
-		qq(     tree <a\nrel=nofollow\nhref="${rel}tree?id=$h">$t</a>);
+		qq(   commit $H (<a\nhref="${rel}patch/$h">patch</a>)\n) .
+		qq(     tree <a\nrel=nofollow\nhref="${rel}tree/$h">$t</a>);
 
 	my $git = $req->{repo_info}->{git};
 	# extra show path information, if any
@@ -56,7 +54,7 @@ sub commit_header {
 			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			$ep = $e->as_path;
 			my $eh = $e->as_html;
-			$ep = "${rel}tree/$ep?id=$h";
+			$ep = "${rel}tree/$ep/$h";
 			qq(<a\nrel=nofollow\nhref="$ep">$eh</a>);
 		} @$extra);
 		$path = "/$ep";
@@ -66,10 +64,10 @@ sub commit_header {
 	my $np = scalar @p;
 	if ($np == 1) {
 		my $p = $p[0];
-		$x .= git_parent_line('   parent', $p, $q, $git, $rel, $path);
+		$x .= git_parent_line('   parent', $p, $git, $rel);
 	} elsif ($np > 1) {
 		$req->{mhelp} = CC_MERGE;
-		my @common = ($q, $git, $rel, $path);
+		my @common = ($git, $rel);
 		my @t = @p;
 		my $p = shift @t;
 		$x .= git_parent_line('  parents', $p, @common);
@@ -119,24 +117,20 @@ sub git_commit_sed ($$) {
 sub call_git_commit { # RepoBase calls this
 	my ($self, $req) = @_;
 	my $env = $req->{env};
-	my $q = PublicInbox::RepoGitQuery->new($env);
-	my $id = $q->{id};
-	$id eq '' and $id = 'HEAD';
+	my $tip = $req->{-tip};
 
 	my $expath = $req->{expath};
 	if ($expath ne '') {
 		my $relup = join('', map { '../' } @{$req->{extra}});
-		my $qs = $q->qs;
-		return $self->r(301, $req, "$relup$qs#".to_attr($expath));
+		return $self->r(301, $req, "$relup#".to_attr($expath));
 	}
 
 	my $git = $req->{repo_info}->{git};
 	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c),
-			$git->abbrev, GIT_FMT, $id, '--');
+			$git->abbrev, GIT_FMT, $tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
-	$req->{'q'} = $q;
 	$env->{'qspawn.quiet'} = 1;
 	$qsp->psgi_return($env, undef, sub { # parse header
 		my ($r, $bref) = @_;
@@ -159,8 +153,7 @@ sub git_commit_404 {
 
 	my $try = 'try';
 	$x = "<html><head><title>$x</title></head><body><pre><b>$x</b>\n\n";
-	my $qs = $req->{'q'}->qs(id => '');
-	$x .= "<a\nhref=\"$pfx$qs\">$try the latest commit in HEAD</a>\n";
+	$x .= "<a\nhref=\"$pfx\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';
 
 	[404, ['Content-Type'=>'text/html'], [ $x ]];
@@ -168,11 +161,10 @@ sub git_commit_404 {
 
 # FIXME: horrifically expensive...
 sub git_parent_line {
-	my ($pfx, $p, $q, $git, $rel, $path) = @_;
-	my $qs = $q->qs(id => $p);
+	my ($pfx, $p, $git, $rel) = @_;
 	my $t = git_commit_title($git, $p);
 	$t = defined $t ? utf8_html($t) : '';
-	$pfx . qq( <a\nid=P\nhref="${rel}commit$path$qs">$p</a> $t\n);
+	$pfx . qq( <a\nid=P\nhref="${rel}commit/$p">$p</a> $t\n);
 }
 
 # do not break anchor links if the combined diff doesn't show changes:
@@ -186,14 +178,13 @@ sub show_unchanged {
 		qq( See the <a\nhref="#P">parents</a>, ) .
 		"or view final state(s) below:\n\n";
 	my $rel = $req->{relcmd};
-	my $qs = $req->{qs};
 	foreach my $anchor (@unchanged) {
 		my $fn = $anchors->{$anchor};
 		my $p = PublicInbox::Hval->utf8(git_unquote($fn));
 		$p = $p->as_path;
 		$fn = utf8_html($fn);
 		$$dst .= qq(\t<a\nrel=nofollow);
-		$$dst .= qq(\nid="$anchor"\nhref="${rel}tree/$p$qs">);
+		$$dst .= qq(\nid="$anchor"\nhref="${rel}tree/$p">);
 		$$dst .= "$fn</a>\n";
 	}
 }

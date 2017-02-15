@@ -89,7 +89,7 @@ sub call {
 	my $method = $env->{REQUEST_METHOD};
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD|POST\z/);
 
-	# URL syntax: / repo [ / cmd [ / path ] ]
+	# URL syntax: / repo [ / cmd [ / head [ / path ] ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
 	# repo and path (@extra) may both contain '/'
 	my $path_info = $env->{PATH_INFO};
@@ -116,13 +116,16 @@ sub call {
 	my $vcs_lc = $repo_info->{vcs};
 	my $vcs = $VCS{$vcs_lc} or return r404();
 	my $mod;
+	my $h;
 	if (defined $cmd && length $cmd) {
 		$mod = $CMD{$cmd};
-		unless ($mod) {
+		if ($mod) {
+			$h = shift @extra if @extra;
+		} else {
 			unshift @extra, $cmd;
 			$mod = 'Fallback';
 		}
-		$req->{relcmd} = '../' x scalar(@extra);
+		$req->{relcmd} = '../' x (scalar(@extra) + 1);
 	} else {
 		$mod = 'Summary';
 		$cmd = 'summary';
@@ -137,7 +140,8 @@ sub call {
 		pop @extra;
 		++$tslash;
 	}
-
+	$req->{h} = $h;
+	$req->{-tip} = defined $h ? $h : 'HEAD';
 	return no_tslash($env) if ($tslash && $NO_TSLASH{$mod});
 
 	$req->{tslash} = $tslash;

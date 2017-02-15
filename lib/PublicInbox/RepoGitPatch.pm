@@ -17,13 +17,12 @@ sub call_git_patch {
 	my ($self, $req) = @_;
 	my $git = $req->{repo_info}->{git};
 	my $env = $req->{env};
-	my $q = PublicInbox::RepoGitQuery->new($env);
-	my $id = $q->{id};
-	$id =~ /\A[\w-]+([~\^][~\^\d])*\z/ or $id = 'HEAD';
+	my $tip = $req->{-tip};
+	$tip =~ /\A[\w-]+([~\^][~\^\d])*\z/;
 
 	# limit scope, don't take extra args to avoid wasting server
 	# resources buffering:
-	my $range = "$id~1..$id^0";
+	my $range = "$tip~1..$tip^0";
 	my $cmd = $git->cmd(@CMD, $sig." $range", $range, '--');
 	my $expath = $req->{expath};
 	push @$cmd, $expath if $expath ne '';

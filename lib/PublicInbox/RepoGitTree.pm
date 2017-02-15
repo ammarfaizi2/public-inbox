@@ -21,14 +21,7 @@ sub call_git_tree {
 	my ($self, $req) = @_;
 	my @extra = @{$req->{extra}};
 	my $git = $req->{repo_info}->{git};
-	my $q = PublicInbox::RepoGitQuery->new($req->{env});
-	my $id = $q->{id};
-	if ($id eq '') {
-		chomp($id = $git->qx(qw(rev-parse --short=10 HEAD)));
-		$q->{id} = $id;
-	}
-
-	my $obj = "$id:$req->{expath}";
+	my $obj = "$req->{-tip}:$req->{expath}";
 	my ($hex, $type, $size) = $git->check($obj);
 
 	unless (defined($type)) {
@@ -41,7 +34,7 @@ sub call_git_tree {
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
 		$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
-		git_tree_show($req, $hex, $q);
+		git_tree_show($req, $hex);
 	} elsif ($type eq 'blob') {
 		sub {
 			my $res = $_[0];
@@ -49,7 +42,7 @@ sub call_git_tree {
 				['Content-Type','text/html; charset=UTF-8']]);
 			$fh->write($self->html_start($req, $title, $opts) .
 					"\n");
-			git_blob_show($req, $fh, $git, $hex, $q);
+			git_blob_show($req, $fh, $git, $hex);
 			$fh->write('</body></html>');
 			$fh->close;
 		}
@@ -60,15 +53,15 @@ sub call_git_tree {
 }
 
 sub cur_path {
-	my ($req, $q) = @_;
-	my $qs = $q->qs;
+	my ($req) = @_;
 	my @ex = @{$req->{extra}} or return '<b>root</b>';
 	my $s;
 
+	my $tip = $req->{-tip};
 	my $rel = $req->{relcmd};
 	# avoid relative paths, here, we don't want to propagate
 	# trailing-slash URLs although we tolerate them
-	$s = "<a\nhref=\"${rel}tree$qs\">root</a>/";
+	$s = "<a\nhref=\"${rel}tree/$tip\">root</a>/";
 	my $cur = pop @ex;
 	my @t;
 	$s .= join('/', (map {
@@ -76,37 +69,38 @@ sub cur_path {
 		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 		my $ep = $e->as_path;
 		my $eh = $e->as_html;
-		"<a\nhref=\"${rel}tree/$ep$qs\">$eh</a>";
+		"<a\nhref=\"${rel}tree/$tip/$ep\">$eh</a>";
 	} @ex), '<b>'.utf8_html($cur).'</b>');
 }
 
 sub git_blob_show {
-	my ($req, $fh, $git, $hex, $q) = @_;
+	my ($req, $fh, $git, $hex) = @_;
 	# ref: buffer_is_binary in git.git
 	my $to_read = 8000; # git uses this size to detect binary files
 	my $text_p;
 	my $n = 0;
 
+	my $tip = $req->{-tip};
 	my $rel = $req->{relcmd};
-	my $plain = join('/', "${rel}plain", @{$req->{extra}});
-	$plain = PublicInbox::Hval->utf8($plain)->as_path . $q->qs;
-	my $t = cur_path($req, $q);
-	my $h = qq{\npath: $t\n\nblob $hex};
+	my $plain = join('/', "${rel}plain/$tip", @{$req->{extra}});
+	$plain = PublicInbox::Hval->utf8($plain)->as_path;
+	my $t = cur_path($req);
+	my $s = qq{\npath: $t\n\nblob $hex};
 	my $end = '';
 
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
-		$h .= qq{\t$$left bytes (<a\nhref="$plain">raw</a>)};
+		$s .= qq{\t$$left bytes (<a\nhref="$plain">raw</a>)};
 		$to_read = $$left if $to_read > $$left;
 		my $r = read($cat, my $buf, $to_read);
 		return unless defined($r) && $r > 0;
 		$$left -= $r;
 
 		if (index($buf, "\0") >= 0) {
-			$fh->write("$h\n$BINARY_MSG</pre>");
+			$fh->write("$s\n$BINARY_MSG</pre>");
 			return;
 		}
-		$fh->write($h."</pre><hr/><table\nsummary=blob><tr><td><pre>");
+		$fh->write($s."</pre><hr/><table\nsummary=blob><tr><td><pre>");
 		$text_p = 1;
 
 		while (1) {
@@ -147,7 +141,6 @@ sub git_tree_sed ($) {
 	my ($req) = @_;
 	my @lines;
 	my $buf = '';
-	my $qs = $req->{qs};
 	my $pfx = $req->{tpfx};
 	my $end;
 	sub {
@@ -180,29 +173,30 @@ sub git_tree_sed ($) {
 			# 'plain' and 'log' links intentionally omitted
 			# for brevity and speed
 			$dst .= qq($m\t).
-				qq($s\t<a\nhref="$pfx$ref$qs">$path</a>\n);
+				qq($s\t<a\nhref="$pfx/$ref">$path</a>\n);
 		}
 		$dst;
 	}
 }
 
 sub git_tree_show {
-	my ($req, $hex, $q) = @_;
+	my ($req, $hex) = @_;
 	my $git = $req->{repo_info}->{git};
 	my $cmd = $git->cmd(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
-	my $t = cur_path($req, $q);
+	my $t = cur_path($req);
 	my $pfx;
 
 	$req->{thtml} .= "\npath: $t\n\n<b>mode\tsize\tname</b>\n";
-	$req->{qs} = $q->qs;
 	if ($req->{tslash}) {
-		$pfx = './';
+		$pfx = '../';
 	} elsif (defined(my $last = $req->{extra}->[-1])) {
-		$pfx = PublicInbox::Hval->utf8($last)->as_path . '/';
+		$pfx = PublicInbox::Hval->utf8($last)->as_path;
+	} elsif (defined $req->{h}) {
+		$pfx = $req->{-tip};
 	} else {
-		$pfx = 'tree/';
+		$pfx = 'tree/' . $req->{-tip};
 	}
 	$req->{tpfx} = $pfx;
 	my $env = $req->{env};

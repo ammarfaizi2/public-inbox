@@ -19,9 +19,8 @@ my %cmd_map = ( # type => action
 sub call_git_tag {
 	my ($self, $req) = @_;
 
-	my $q = PublicInbox::RepoGitQuery->new($req->{env});
-	my $h = $q->{h};
-	$h eq '' and return git_tag_list($self, $req);
+	my $h = $req->{h};
+	defined $h or return git_tag_list($self, $req);
 	sub {
 		my ($res) = @_;
 		git_tag_show($self, $req, $h, $res);
@@ -58,7 +57,7 @@ sub git_show_tag_as_tag {
 	my $label = "$type $obj";
 	my $cmd = $cmd_map{$type} || 'show';
 	my $rel = $req->{relcmd};
-	my $obj_link = qq(<a\nhref="$rel$cmd?id=$obj">$label</a>);
+	my $obj_link = qq(<a\nhref="$rel$cmd/$obj">$label</a>);
 	$head = $h . "\n\n   tag <b>$tag</b>\nobject $obj_link\n";
 	if (my $tagger = $h{tagger}) {
 		$head .= 'tagger ' . join("\t", creator_split($tagger)) . "\n";
@@ -147,7 +146,7 @@ sub git_each_tag_sed ($$) {
 			my $h = $ref->as_html;
 			$ref = $ref->as_href;
 			$dst .= qq(<tr><td><tt>) .
-				qq(<a\nhref="?h=$ref"><b>$h</b></a>) .
+				qq(<a\nhref="tag/$ref"><b>$h</b></a>) .
 				qq(</tt></td><td><tt>$date</tt></td><td><tt>) .
 				utf8_html($s) . '</tt></td></tr>';
 		}
@@ -189,7 +188,7 @@ sub unknown_tag_type {
 	my $rel = $req->{relcmd};
 	my $label = "$type $hex";
 	my $cmd = $cmd_map{$type} || 'show';
-	my $obj_link = qq(<a\nhref="$rel$cmd?id=$hex">$label</a>\n);
+	my $obj_link = qq(<a\nhref="$rel$cmd/$hex">$label</a>\n);
 
 	$fh->write($self->html_start($req,
 				"$repo_info->{repo}: ref: $h") .

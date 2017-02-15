@@ -58,10 +58,10 @@ sub for_each_ref {
 		my $sref;
 		if ($type eq 'tag') {
 			$h = "<b>$h</b>";
-			$sref = $ref = $rel . 'tag?h=' . $ref;
+			$sref = $ref = $rel . 'tag/' . $ref;
 		} elsif ($type eq 'commit') {
-			$sref = $rel . 'commit?h=' . $ref;
-			$ref = $rel . 'log?h=' . $ref;
+			$sref = $rel . 'commit/' . $ref;
+			$ref = $rel . 'log/' . $ref;
 		} else {
 			# no point in wasting code to support tagged
 			# trees/blobs...
@@ -82,7 +82,7 @@ sub for_each_ref {
 	foreach my $r (@$readme) {
 		my $doc = $git->cat_file('HEAD:'.$r);
 		defined $doc or next;
-		$fh->write('<pre>' . readme_path_links($rel, $r) .
+		$fh->write('<pre>' . readme_path_links($req, $rel, $r) .
 			" (HEAD)\n\n" . utf8_html($$doc) . '</pre>');
 	}
 	$fh->write('</body></html>');
@@ -90,17 +90,17 @@ sub for_each_ref {
 }
 
 sub readme_path_links {
-	my ($rel, $readme) = @_;
+	my ($req, $rel, $readme) = @_;
 	my @path = split(m!/+!, $readme);
 
-	my $s = "tree <a\nhref=\"${rel}tree\">root</a>/";
+	my $s = "tree <a\nhref=\"${rel}tree/$req->{-tip}\">root</a>/";
 	my @t;
 	$s .= join('/', (map {
 		push @t, $_;
 		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 		my $ep = $e->as_path;
 		my $eh = $e->as_html;
-		$e = "<a\nhref=\"${rel}tree/$ep\">$eh</a>";
+		$e = "<a\nhref=\"${rel}tree/$req->{-tip}/$ep\">$eh</a>";
 		# bold the last one
 		scalar(@t) == scalar(@path) ? "<b>$e</b>" : $e;
 	} @path));

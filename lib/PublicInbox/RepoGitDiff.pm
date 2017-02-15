@@ -34,11 +34,8 @@ sub git_diff_sed ($$) {
 
 sub call_git_diff {
 	my ($self, $req) = @_;
+	my ($id, $id2) = split(/\.\./, $req->{h});
 	my $env = $req->{env};
-	my $q = PublicInbox::RepoGitQuery->new($env);
-	my $id = $q->{id};
-	my $id2 = $q->{id2};
-
 	my $git = $req->{repo_info}->{git};
 	my $cmd = $git->cmd(qw(diff-tree -z --numstat -p --encoding=UTF-8
 				--no-color -M -B -D -r), $id2, $id, '--');

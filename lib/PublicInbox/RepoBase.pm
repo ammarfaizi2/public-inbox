@@ -3,7 +3,6 @@
 package PublicInbox::RepoBase;
 use strict;
 use warnings;
-require PublicInbox::RepoGitQuery;
 use PublicInbox::Hval;
 our %MIME_TYPE_WHITELIST = ('application/pdf' => 1);
 

@@ -27,18 +27,18 @@ sub parent_links {
 
 sub flush_log_hdr ($$$) {
 	my ($req, $dst, $hdr) = @_;
-	my $rel = $req->{relcmd};
+	my $lpfx = $req->{lpfx};
 	my $seen = $req->{seen};
 	$$dst .= '<hr /><pre>' if scalar keys %$seen;
 	my $id = $hdr->{h};
 	$seen->{$id} = 1;
 	$$dst .= qq(<a\nid=p$id\n);
-	$$dst .= qq(href="${rel}commit?id=$id"><b>);
+	$$dst .= qq(href="${lpfx}commit/$id"><b>);
 	$$dst .= utf8_html($hdr->{'s'}); # FIXME may still OOM
 	$$dst .= '</b></a>';
 	my $D = $hdr->{D}; # FIXME: thousands of decorations may OOM us
 	if ($D ne '') {
-		$$dst .= ' (' . join(', ', git_dec_links($rel, $D)) . ')';
+		$$dst .= ' (' . join(', ', git_dec_links($lpfx, $D)) . ')';
 	}
 	my @p = split(/ /, $hdr->{p});
 	push @{$req->{parents}}, @p;
@@ -56,14 +56,14 @@ sub git_log_sed_end ($$) {
 	my $np = 0;
 	my $seen = $req->{seen};
 	my $git = $req->{repo_info}->{git};
-	my $rel = $req->{relcmd};
+	my $lpfx = $req->{lpfx};
 	foreach my $p (@{$req->{parents}}) {
 		next if $seen->{$p};
 		$seen->{$p} = ++$np;
 		my $s = git_commit_title($git, $p);
-		$m .= qq(\n<a\nid=p$p\nhref="?h=$p">$p</a>\t);
+		$m .= qq(\n<a\nid=p$p\nhref="$p">$p</a>\t);
 		$s = defined($s) ? utf8_html($s) : '';
-		$m .= qq(<a\nhref="${rel}commit?id=$p">$s</a>);
+		$m .= qq(<a\nhref="${lpfx}commit/$p">$s</a>);
 	}
 	if ($np == 0) {
 		$$dst .= "No commits follow";
@@ -123,17 +123,22 @@ sub call_git_log {
 	my ($self, $req) = @_;
 	my $repo_info = $req->{repo_info};
 	my $max = $repo_info->{max_commit_count} || 50;
+	my $h = $req->{h};
 	$max = int($max);
 	$max = 50 if $max == 0;
 	my $env = $req->{env};
-	my $q = $req->{'q'} = PublicInbox::RepoGitQuery->new($env);
-	my $h = $q->{h};
-	$h eq '' and $h = 'HEAD';
 	my $git = $repo_info->{git};
 	my $cmd = $git->cmd(qw(log --no-notes --no-color --abbrev-commit),
-				$git->abbrev, $LOG_FMT, "-$max", $h, '--');
+				$git->abbrev, $LOG_FMT, "-$max",
+				$req->{-tip}, '--');
 	my $rdr = { 2 => $git->err_begin };
-	my $title = "log: $repo_info->{repo} (" . utf8_html($h). ')';
+	my $title = "log: $repo_info->{repo}";
+	if (defined $h) {
+		$title .= ' ('. utf8_html($h). ')';
+		$req->{lpfx} = $req->{relcmd};
+	} else {
+		$req->{lpfx} = $req->{relcmd}.$req->{-tip};
+	}
 	$req->{lhtml} = $self->html_start($req, $title) . "\n\n";
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$qsp->psgi_return($env, undef, sub {

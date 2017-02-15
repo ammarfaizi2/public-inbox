@@ -50,17 +50,17 @@ sub git_dec_links ($$) {
 			$h = PublicInbox::Hval->utf8($h);
 			my $r = $h->as_href;
 			$h = $h->as_html;
-			push @l, qq($s -&gt; <a\nhref="${rel}log?h=$r">$h</a>);
+			push @l, qq($s -&gt; <a\nhref="${rel}log/$r">$h</a>);
 		} elsif (s/\Atag: //) {
 			my $h = PublicInbox::Hval->utf8($_);
 			my $r = $h->as_href;
 			$h = $h->as_html;
-			push @l, qq(<a\nhref="${rel}tag?h=$r"><b>$h</b></a>);
+			push @l, qq(<a\nhref="${rel}tag/$r"><b>$h</b></a>);
 		} else {
 			my $h = PublicInbox::Hval->utf8($_);
 			my $r = $h->as_href;
 			$h = $h->as_html;
-			push @l, qq(<a\nhref="${rel}log?h=$r">$h</a>);
+			push @l, qq(<a\nhref="${rel}log/$r">$h</a>);
 		}
 	}
 	@l;
