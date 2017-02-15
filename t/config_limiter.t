@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Test::More;
 use PublicInbox::Config;
+use PublicInbox::Inbox;
 my $cfgpfx = "publicinbox.test";
 {
 	my $config = PublicInbox::Config->new({

@@ -5,7 +5,6 @@
 package PublicInbox::Config;
 use strict;
 use warnings;
-require PublicInbox::Inbox;
 use PublicInbox::Spawn qw(popen_rd);
 
 # returns key-value pairs of config directives in a hash
@@ -131,6 +130,7 @@ sub git_config_dump {
 }
 
 sub _fill {
+	require PublicInbox::Inbox;
 	my ($self, $pfx) = @_;
 	my $rv = {};
 
