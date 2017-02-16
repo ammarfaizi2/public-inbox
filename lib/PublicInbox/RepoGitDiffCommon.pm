@@ -162,6 +162,7 @@ sub DSTATE_LINES () { 2 }
 sub git_diff_sed_init ($) {
 	my ($req) = @_;
 	$req->{dbuf} = '';
+	$req->{-tip} = $req->{-repo}->tip;
 	$req->{ndiff} = $req->{nchg} = $req->{nadd} = $req->{ndel} = 0;
 	$req->{dstate} = DSTATE_INIT;
 }

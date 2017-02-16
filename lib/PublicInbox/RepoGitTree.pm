@@ -20,8 +20,10 @@ my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 sub call_git_tree {
 	my ($self, $req) = @_;
 	my @extra = @{$req->{extra}};
-	my $git = $req->{-repo}->{git};
-	my $obj = "$req->{-tip}:$req->{expath}";
+	my $repo = $req->{-repo};
+	my $git = $repo->{git};
+	my $tip = $repo->tip;
+	my $obj = "$tip:$req->{expath}";
 	my ($hex, $type, $size) = $git->check($obj);
 
 	unless (defined($type)) {
@@ -57,7 +59,7 @@ sub cur_path {
 	my @ex = @{$req->{extra}} or return '<b>root</b>';
 	my $s;
 
-	my $tip = $req->{-tip};
+	my $tip = $req->{-repo}->tip;
 	my $rel = $req->{relcmd};
 	# avoid relative paths, here, we don't want to propagate
 	# trailing-slash URLs although we tolerate them
@@ -80,9 +82,9 @@ sub git_blob_show {
 	my $text_p;
 	my $n = 0;
 
-	my $tip = $req->{-tip};
 	my $rel = $req->{relcmd};
-	my $plain = join('/', "${rel}plain/$tip", @{$req->{extra}});
+	my $plain = join('/',
+			"${rel}plain", $req->{-repo}->tip, @{$req->{extra}});
 	$plain = PublicInbox::Hval->utf8($plain)->as_path;
 	my $t = cur_path($req);
 	my $s = qq{\npath: $t\n\nblob $hex};
@@ -194,9 +196,9 @@ sub git_tree_show {
 	} elsif (defined(my $last = $req->{extra}->[-1])) {
 		$pfx = PublicInbox::Hval->utf8($last)->as_path;
 	} elsif (defined $req->{h}) {
-		$pfx = $req->{-tip};
+		$pfx = $req->{-repo}->tip;
 	} else {
-		$pfx = 'tree/' . $req->{-tip};
+		$pfx = 'tree/' . $req->{-repo}->tip;
 	}
 	$req->{tpfx} = $pfx;
 	my $env = $req->{env};

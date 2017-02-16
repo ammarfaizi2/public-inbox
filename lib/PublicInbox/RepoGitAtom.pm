@@ -66,8 +66,9 @@ sub git_atom_sed ($$) {
 	my $state = 0;
 	my $rel = $req->{relcmd};
 	my $repo = $req->{-repo};
+	my $tip = $repo->tip;
 	my $title = join('/', $repo->{repo}, @{$req->{extra}});
-	$title = utf8_html("$title, $req->{-tip}");
+	$title = utf8_html("$title, $tip");
 	my $url = repo_root_url($self, $req);
 	my $hdr = {};
 	my $subtitle = $repo->desc_html;
@@ -140,7 +141,7 @@ sub call_git_atom {
 
 	my $git = $repo->{git};
 	my $env = $req->{env};
-	my $tip = $req->{-tip};
+	my $tip = $req->{h} || $repo->tip;
 	my $read_log = sub {
 		my $cmd = $git->cmd(qw(log --no-notes --no-color
 					--abbrev-commit), $git->abbrev,
@@ -154,15 +155,7 @@ sub call_git_atom {
 
 	sub {
 		$env->{'qspawn.response'} = $_[0];
-		return $read_log->() if $tip ne '';
-
-		my $cmd = $git->cmd(qw(symbolic-ref --short HEAD));
-		my $rdr = { 2 => $git->err_begin };
-		my $qsp = PublicInbox::Qspawn->new($cmd, undef, undef, $rdr);
-		$qsp->psgi_qx($env, undef, sub {
-			chomp($tip = ${$_[0]});
-			$read_log->();
-		})
+		$read_log->();
 	}
 }
 

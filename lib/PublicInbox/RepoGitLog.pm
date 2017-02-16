@@ -128,16 +128,17 @@ sub call_git_log {
 	$max = 50 if $max == 0;
 	my $env = $req->{env};
 	my $git = $repo->{git};
+	my $tip = $req->{-repo}->tip;
 	my $cmd = $git->cmd(qw(log --no-notes --no-color --abbrev-commit),
 				$git->abbrev, $LOG_FMT, "-$max",
-				$req->{-tip}, '--');
+				$tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $title = "log: $repo->{repo}";
 	if (defined $h) {
 		$title .= ' ('. utf8_html($h). ')';
 		$req->{lpfx} = $req->{relcmd};
 	} else {
-		$req->{lpfx} = $req->{relcmd}.$req->{-tip};
+		$req->{lpfx} = $req->{relcmd} . $tip;
 	}
 	$req->{lhtml} = $self->html_start($req, $title) . "\n\n";
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);

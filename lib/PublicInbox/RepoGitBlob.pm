@@ -11,8 +11,9 @@ our @EXPORT = qw(git_blob_mime_type git_blob_stream_response);
 
 sub call_git_blob {
 	my ($self, $req) = @_;
-	my $git = $req->{-repo}->{git};
-	my $id = $req->{-tip} . ':' . $req->{expath};
+	my $repo = $req->{-repo};
+	my $git = $repo->{git};
+	my $id = $repo->tip . ':' . $req->{expath};
 
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
 	return unless defined $cat;

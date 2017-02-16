@@ -141,7 +141,6 @@ sub call {
 		++$tslash;
 	}
 	$req->{h} = $h;
-	$req->{-tip} = defined $h ? $h : 'HEAD';
 	return no_tslash($env) if ($tslash && $NO_TSLASH{$mod});
 
 	$req->{tslash} = $tslash;

@@ -15,9 +15,10 @@ my $sig = '--signature=git '.join(' ', @CMD);
 
 sub call_git_patch {
 	my ($self, $req) = @_;
-	my $git = $req->{-repo}->{git};
+	my $repo = $req->{-repo};
+	my $git = $repo->{git};
 	my $env = $req->{env};
-	my $tip = $req->{-tip};
+	my $tip = $repo->tip;
 	$tip =~ /\A[\w-]+([~\^][~\^\d])*\z/;
 
 	# limit scope, don't take extra args to avoid wasting server

@@ -46,4 +46,15 @@ sub cloneurl {
 	$self->{cloneurl} = $url;
 }
 
+sub tip {
+	my ($self) = @_;
+	$self->{-tip} ||= do {
+		if ($self->{vcs} eq 'git') {
+			my $t = $self->{git}->qx(qw(symbolic-ref --short HEAD));
+			chomp $t;
+			$t;
+		}
+	};
+}
+
 1;

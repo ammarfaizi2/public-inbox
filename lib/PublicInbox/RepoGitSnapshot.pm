@@ -36,7 +36,7 @@ our %FMT_TYPES = (
 sub call_git_snapshot ($$) { # invoked by PublicInbox::RepoBase::call
 	my ($self, $req) = @_;
 
-	my $ref = $req->{-tip};
+	my $ref = $req->{h} || $req->{-repo}->tip;
 	my $orig_fn = $ref;
 
 	# just in case git changes refname rules, don't allow wonky filenames

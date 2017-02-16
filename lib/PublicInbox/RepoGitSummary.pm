@@ -13,18 +13,9 @@ sub call_git_summary {
 	my ($self, $req) = @_;
 	my $git = $req->{-repo}->{git};
 	my $env = $req->{env};
-
-	# n.b. we would use %(HEAD) in for-each-ref --format if we could
-	# rely on git 1.9.0+, but it's too soon for that in early 2017...
-	my $cmd = $git->cmd(qw(symbolic-ref HEAD));
-	my $rdr = { 2 => $git->err_begin };
-	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	sub {
 		my ($res) = @_; # Plack streaming callback
-		$qsp->psgi_qx($env, undef, sub {
-			chomp(my $head_ref = ${$_[0]});
-			for_each_ref($self, $req, $res, $head_ref);
-		});
+		for_each_ref($self, $req, $res, $req->{-repo}->tip);
 	}
 }
 
@@ -92,15 +83,15 @@ sub for_each_ref {
 sub readme_path_links {
 	my ($req, $rel, $readme) = @_;
 	my @path = split(m!/+!, $readme);
-
-	my $s = "tree <a\nhref=\"${rel}tree/$req->{-tip}\">root</a>/";
+	my $tip = $req->{-repo}->tip;
+	my $s = "tree <a\nhref=\"${rel}tree/$tip\">root</a>/";
 	my @t;
 	$s .= join('/', (map {
 		push @t, $_;
 		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 		my $ep = $e->as_path;
 		my $eh = $e->as_html;
-		$e = "<a\nhref=\"${rel}tree/$req->{-tip}/$ep\">$eh</a>";
+		$e = "<a\nhref=\"${rel}tree/$tip/$ep\">$eh</a>";
 		# bold the last one
 		scalar(@t) == scalar(@path) ? "<b>$e</b>" : $e;
 	} @path));

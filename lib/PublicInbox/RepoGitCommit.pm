@@ -117,7 +117,6 @@ sub git_commit_sed ($$) {
 sub call_git_commit { # RepoBase calls this
 	my ($self, $req) = @_;
 	my $env = $req->{env};
-	my $tip = $req->{-tip};
 
 	my $expath = $req->{expath};
 	if ($expath ne '') {
@@ -128,7 +127,7 @@ sub call_git_commit { # RepoBase calls this
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c),
-			$git->abbrev, GIT_FMT, $tip, '--');
+			$git->abbrev, GIT_FMT, $req->{-repo}->tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$env->{'qspawn.quiet'} = 1;
