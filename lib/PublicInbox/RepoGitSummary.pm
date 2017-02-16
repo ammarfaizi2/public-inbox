@@ -11,7 +11,7 @@ use PublicInbox::Qspawn;
 
 sub call_git_summary {
 	my ($self, $req) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $env = $req->{env};
 
 	# n.b. we would use %(HEAD) in for-each-ref --format if we could
@@ -36,15 +36,15 @@ sub for_each_ref {
 	my ($self, $req, $res, $head_ref) = @_;
 	my $count = 10; # TODO: configurable
 	my $fh;
-	my $repo_info = $req->{repo_info};
-	my $git = $repo_info->{git};
+	my $repo = $req->{-repo};
+	my $git = $repo->{git};
 	my $refs = $git->popen(qw(for-each-ref --sort=-creatordate),
 				EACH_REF_FMT, "--count=$count",
 				qw(refs/heads/ refs/tags/));
 	$fh = $res->([200, ['Content-Type'=>'text/html; charset=UTF-8']]);
 	# ref names are unpredictable in length and requires tables :<
 	$fh->write($self->html_start($req,
-				"$repo_info->{repo}: overview") .
+				"$repo->{repo}: overview") .
 			'</pre><table>');
 
 	my $rel = $req->{relcmd};
@@ -76,7 +76,7 @@ sub for_each_ref {
 	$fh->write('</table>');
 
 	# some people will use README.md or even README.sh here...
-	my $readme = $repo_info->{readme};
+	my $readme = $repo->{readme};
 	defined $readme or $readme = [ 'README', 'README.md' ];
 	$readme = [ $readme ] if (ref($readme) ne 'ARRAY');
 	foreach my $r (@$readme) {

@@ -14,7 +14,7 @@ sub call {
 	my ($self, undef, $req) = @_;
 	my $expath = $req->{expath};
 	return if index($expath, '..') >= 0; # prevent path traversal
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	PublicInbox::GitHTTPBackend::serve($req->{env}, $git, $expath);
 }
 

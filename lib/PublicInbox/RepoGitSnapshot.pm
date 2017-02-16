@@ -45,24 +45,24 @@ sub call_git_snapshot ($$) { # invoked by PublicInbox::RepoBase::call
 	return $self->r(404) unless ($ref =~ s/\.($SUFFIX)\z//o);
 	my $fmt = $1;
 	my $env = $req->{env};
-	my $repo_info = $req->{repo_info};
+	my $repo = $req->{-repo};
 
 	# support disabling certain snapshots types entirely to twart
 	# URL guessing since it could burn server resources.
-	return $self->r(404) if $repo_info->{snapshots_disabled}->{$fmt};
+	return $self->r(404) if $repo->{snapshots_disabled}->{$fmt};
 
 	# strip optional basename (may not exist)
-	$ref =~ s/$repo_info->{snapshot_re}//;
+	$ref =~ s/$repo->{snapshot_re}//;
 
 	# don't allow option/command injection, git refs do not start with '-'
 	return $self->r(404) if $ref =~ /\A-/;
 
-	my $git = $repo_info->{git};
+	my $git = $repo->{git};
 	my $tree = '';
 	my $last_cb = sub {
 		delete $env->{'repobrowse.tree_cb'};
 		delete $env->{'qspawn.quiet'};
-		my $pfx = "$repo_info->{snapshot_pfx}-$ref/";
+		my $pfx = "$repo->{snapshot_pfx}-$ref/";
 		my $cmd = $git->cmd('archive',
 				"--prefix=$pfx", "--format=$fmt", $tree);
 		my $rdr = { 2 => $git->err_begin };

@@ -36,7 +36,7 @@ sub call_git_diff {
 	my ($self, $req) = @_;
 	my ($id, $id2) = split(/\.\./, $req->{h});
 	my $env = $req->{env};
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(diff-tree -z --numstat -p --encoding=UTF-8
 				--no-color -M -B -D -r), $id2, $id, '--');
 	my $expath = $req->{expath};

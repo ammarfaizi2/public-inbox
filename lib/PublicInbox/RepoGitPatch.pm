@@ -15,7 +15,7 @@ my $sig = '--signature=git '.join(' ', @CMD);
 
 sub call_git_patch {
 	my ($self, $req) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $env = $req->{env};
 	my $tip = $req->{-tip};
 	$tip =~ /\A[\w-]+([~\^][~\^\d])*\z/;

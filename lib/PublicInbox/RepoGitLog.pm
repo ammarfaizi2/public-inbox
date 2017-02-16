@@ -55,7 +55,7 @@ sub git_log_sed_end ($$) {
 	my $m = '';
 	my $np = 0;
 	my $seen = $req->{seen};
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $lpfx = $req->{lpfx};
 	foreach my $p (@{$req->{parents}}) {
 		next if $seen->{$p};
@@ -121,18 +121,18 @@ sub git_log_sed ($$) {
 
 sub call_git_log {
 	my ($self, $req) = @_;
-	my $repo_info = $req->{repo_info};
-	my $max = $repo_info->{max_commit_count} || 50;
+	my $repo = $req->{-repo};
+	my $max = $repo->{max_commit_count} || 50;
 	my $h = $req->{h};
 	$max = int($max);
 	$max = 50 if $max == 0;
 	my $env = $req->{env};
-	my $git = $repo_info->{git};
+	my $git = $repo->{git};
 	my $cmd = $git->cmd(qw(log --no-notes --no-color --abbrev-commit),
 				$git->abbrev, $LOG_FMT, "-$max",
 				$req->{-tip}, '--');
 	my $rdr = { 2 => $git->err_begin };
-	my $title = "log: $repo_info->{repo}";
+	my $title = "log: $repo->{repo}";
 	if (defined $h) {
 		$title .= ' ('. utf8_html($h). ')';
 		$req->{lpfx} = $req->{relcmd};

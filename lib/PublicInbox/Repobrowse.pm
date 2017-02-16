@@ -98,22 +98,22 @@ sub call {
 	return $self->root_index($self) unless length($repo_path);
 
 	my $rconfig = $self->{rconfig}; # RepoConfig
-	my $repo_info;
-	until ($repo_info = $rconfig->lookup($repo_path)) {
+	my $repo;
+	until ($repo = $rconfig->lookup($repo_path)) {
 		my $p = shift @extra or last;
 		$repo_path .= "/$p";
 	}
-	return r404() unless $repo_info;
+	return r404() unless $repo;
 
 	my $req = {
-		repo_info => $repo_info,
+		-repo => $repo,
 		extra => \@extra, # path
 		rconfig => $rconfig,
 		env => $env,
 	};
 	my $tslash = 0;
 	my $cmd = shift @extra;
-	my $vcs_lc = $repo_info->{vcs};
+	my $vcs_lc = $repo->{vcs};
 	my $vcs = $VCS{$vcs_lc} or return r404();
 	my $mod;
 	my $h;
@@ -148,8 +148,8 @@ sub call {
 	$mod = load_once("PublicInbox::Repo$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
 
-	# $repo_info->{git} ||= PublicInbox::Git->new(...)
-	$repo_info->{$vcs_lc} ||= $vcs->new($repo_info->{path});
+	# $repo->{git} ||= PublicInbox::Git->new(...)
+	$repo->{$vcs_lc} ||= $vcs->new($repo->{path});
 
 	$req->{expath} = join('/', @extra);
 	my $rv = eval { $mod->new->call($cmd, $req) }; # RepoBase::call

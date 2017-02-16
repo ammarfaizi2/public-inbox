@@ -76,7 +76,7 @@ sub git_show_tag_as_tag {
 
 sub git_tag_show {
 	my ($self, $req, $h, $res) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $fh;
 	my $hdr = ['Content-Type', 'text/html; charset=UTF-8'];
 
@@ -114,10 +114,10 @@ sub invalid_tag_start {
 
 sub git_each_tag_sed ($$) {
 	my ($self, $req) = @_;
-	my $repo_info = $req->{repo_info};
+	my $repo = $req->{-repo};
 	my $buf = '';
 	my $nr = 0;
-	$req->{thtml} = $self->html_start($req, "$repo_info->{repo}: tag list") .
+	$req->{thtml} = $self->html_start($req, "$repo->{repo}: tag list") .
 		'</pre><table><tr>' .
 		join('', map { "<th><tt>$_</tt></th>" } qw(tag date subject)).
 		'</tr>';
@@ -156,7 +156,7 @@ sub git_each_tag_sed ($$) {
 
 sub git_tag_list {
 	my ($self, $req) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 
 	# TODO: use Xapian so we can more easily handle offsets/limits
 	# for pagination instead of limiting
@@ -183,7 +183,7 @@ sub git_tag_list {
 
 sub unknown_tag_type {
 	my ($self, $fh, $req, $h, $type, $hex) = @_;
-	my $repo_info = $req->{repo_info};
+	my $repo = $req->{-repo};
 	$h = $h->as_html;
 	my $rel = $req->{relcmd};
 	my $label = "$type $hex";
@@ -191,7 +191,7 @@ sub unknown_tag_type {
 	my $obj_link = qq(<a\nhref="$rel$cmd/$hex">$label</a>\n);
 
 	$fh->write($self->html_start($req,
-				"$repo_info->{repo}: ref: $h") .
+				"$repo->{repo}: ref: $h") .
 		"\n\n       <b>$h</b> (lightweight tag)\nobject $obj_link\n");
 }
 

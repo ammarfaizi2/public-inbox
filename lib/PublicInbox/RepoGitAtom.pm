@@ -65,12 +65,12 @@ sub git_atom_sed ($$) {
 	my $buf = '';
 	my $state = 0;
 	my $rel = $req->{relcmd};
-	my $repo_info = $req->{repo_info};
-	my $title = join('/', $repo_info->{repo}, @{$req->{extra}});
+	my $repo = $req->{-repo};
+	my $title = join('/', $repo->{repo}, @{$req->{extra}});
 	$title = utf8_html("$title, $req->{-tip}");
 	my $url = repo_root_url($self, $req);
 	my $hdr = {};
-	my $subtitle = $repo_info->desc_html;
+	my $subtitle = $repo->desc_html;
 	$req->{axml} = qq(<?xml version="1.0"?>\n) .
 		qq(<feed\nxmlns="http://www.w3.org/2005/Atom">) .
 		qq(<title>$title</title>) .
@@ -122,7 +122,7 @@ sub git_atom_cb {
 		my ($r) = @_;
 		my $env = $req->{env};
 		if (!defined $r) {
-			my $git = $req->{repo_info}->{git};
+			my $git = $req->{-repo}->{git};
 			return [ 400, [ 'Content-Type', 'text/plain' ],
 				[ $git->err ] ];
 		}
@@ -133,12 +133,12 @@ sub git_atom_cb {
 
 sub call_git_atom {
 	my ($self, $req) = @_;
-	my $repo_info = $req->{repo_info};
-	my $max = $repo_info->{max_commit_count} || 10;
+	my $repo = $req->{-repo};
+	my $max = $repo->{max_commit_count} || 10;
 	$max = int($max);
 	$max = 50 if $max == 0;
 
-	my $git = $repo_info->{git};
+	my $git = $repo->{git};
 	my $env = $req->{env};
 	my $tip = $req->{-tip};
 	my $read_log = sub {

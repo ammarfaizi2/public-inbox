@@ -41,7 +41,7 @@ sub commit_header {
 		qq(   commit $H (<a\nhref="${rel}patch/$h">patch</a>)\n) .
 		qq(     tree <a\nrel=nofollow\nhref="${rel}tree/$h">$t</a>);
 
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	# extra show path information, if any
 	my $extra = $req->{extra};
 	my $path = '';
@@ -125,7 +125,7 @@ sub call_git_commit { # RepoBase calls this
 		return $self->r(301, $req, "$relup#".to_attr($expath));
 	}
 
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c),
 			$git->abbrev, GIT_FMT, $tip, '--');

@@ -11,7 +11,7 @@ our @EXPORT = qw(git_blob_mime_type git_blob_stream_response);
 
 sub call_git_blob {
 	my ($self, $req) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $id = $req->{-tip} . ':' . $req->{expath};
 
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
@@ -39,7 +39,7 @@ sub git_blob_mime_type {
 	$to_read = $$left if $to_read > $$left;
 	my $r = read($cat, $$buf, $to_read);
 	if (!defined $r || $r <= 0) {
-		my $git = $req->{repo_info}->{git};
+		my $git = $req->{-repo}->{git};
 		$git->cat_file_finish($$left);
 		return;
 	}

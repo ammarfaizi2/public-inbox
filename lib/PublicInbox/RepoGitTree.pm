@@ -20,7 +20,7 @@ my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 sub call_git_tree {
 	my ($self, $req) = @_;
 	my @extra = @{$req->{extra}};
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $obj = "$req->{-tip}:$req->{expath}";
 	my ($hex, $type, $size) = $git->check($obj);
 
@@ -181,7 +181,7 @@ sub git_tree_sed ($) {
 
 sub git_tree_show {
 	my ($req, $hex) = @_;
-	my $git = $req->{repo_info}->{git};
+	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
