@@ -17,6 +17,8 @@ sub description {
 	my ($self) = @_;
 	my $desc = $self->{description};
 	return $desc if defined $desc;
+	return unless $self->{vcs} eq 'git'; # TODO
+
 	$desc = PublicInbox::Config::try_cat("$self->{path}/description");
 	local $/ = "\n";
 	chomp $desc;
