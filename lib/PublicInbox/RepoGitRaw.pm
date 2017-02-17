@@ -1,6 +1,6 @@
 # Copyright (C) 2015-2016 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::RepoGitPlain;
+package PublicInbox::RepoGitRaw;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBase);
@@ -8,7 +8,7 @@ use PublicInbox::RepoGitBlob;
 use PublicInbox::Hval qw(utf8_html);
 use PublicInbox::Qspawn;
 
-sub call_git_plain {
+sub call_git_raw {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
@@ -24,7 +24,7 @@ sub call_git_plain {
 		$type = 'text/plain';
 	} elsif ($type eq 'tree') {
 		$git->cat_file_finish($left);
-		return git_tree_plain($req, $git, $hex);
+		return git_tree_raw($req, $git, $hex);
 	} else {
 		$type = 'application/octet-stream';
 	}
@@ -59,14 +59,14 @@ sub git_tree_sed ($) {
 
 # This should follow the cgit DOM structure in case anybody depends on it,
 # not using <pre> here as we don't expect people to actually view it much
-sub git_tree_plain {
+sub git_tree_raw {
 	my ($req, $git, $hex) = @_;
 
 	my @ex = @{$req->{extra}};
 	my $rel = $req->{relcmd};
 	my $title = utf8_html(join('/', '', @ex, ''));
 	my $tslash = $req->{tslash};
-	my $pfx = $tslash ? './' : 'plain/';
+	my $pfx = $tslash ? './' : 'raw/';
 	my $t = "<h2>$title</h2><ul>";
 	if (@ex) {
 		if ($tslash) {

@@ -7,7 +7,7 @@ my $test = require './t/repobrowse_common_git.perl';
 test_psgi($test->{app}, sub {
 	my ($cb) = @_;
 
-	my $req = 'http://example.com/test.git/plain/master/dir';
+	my $req = 'http://example.com/test.git/raw/master/dir';
 	my $res = $cb->(GET($req));
 	is(200, $res->code, 'got 200 response from dir');
 	my $noslash_body = dechunk($res);
@@ -20,7 +20,7 @@ test_psgi($test->{app}, sub {
 	my $slash_body = dechunk($r2);
 	like($slash_body, qr{href="\./dur\">dur</a></li>}, 'path ok w/ slash');
 
-	$req = 'http://example.com/test.git/plain/master/foo.txt';
+	$req = 'http://example.com/test.git/raw/master/foo.txt';
 	my $blob = $cb->(GET($req));
 	like($blob->header('Content-Type'), qr!\Atext/plain\b!,
 		'got text/plain blob');

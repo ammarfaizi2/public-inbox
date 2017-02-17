@@ -83,16 +83,16 @@ sub git_blob_show {
 	my $n = 0;
 
 	my $rel = $req->{relcmd};
-	my $plain = join('/',
-			"${rel}plain", $req->{-repo}->tip, @{$req->{extra}});
-	$plain = PublicInbox::Hval->utf8($plain)->as_path;
+	my $raw = join('/',
+			"${rel}raw", $req->{-repo}->tip, @{$req->{extra}});
+	$raw = PublicInbox::Hval->utf8($raw)->as_path;
 	my $t = cur_path($req);
 	my $s = qq{\npath: $t\n\nblob $hex};
 	my $end = '';
 
 	$git->cat_file($hex, sub {
 		my ($cat, $left) = @_; # $$left == $size
-		$s .= qq{\t$$left bytes (<a\nhref="$plain">raw</a>)};
+		$s .= qq{\t$$left bytes (<a\nhref="$raw">raw</a>)};
 		$to_read = $$left if $to_read > $$left;
 		my $r = read($cat, my $buf, $to_read);
 		return unless defined($r) && $r > 0;
@@ -172,7 +172,7 @@ sub git_tree_sed ($) {
 			elsif ($m eq 'l') { $path = "<i>$path</i>" }
 			$s =~ s/\s+//g;
 
-			# 'plain' and 'log' links intentionally omitted
+			# 'raw' and 'log' links intentionally omitted
 			# for brevity and speed
 			$dst .= qq($m\t).
 				qq($s\t<a\nhref="$pfx/$ref">$path</a>\n);

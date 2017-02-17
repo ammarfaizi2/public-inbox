@@ -23,7 +23,7 @@ use warnings;
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::RepoConfig;
 
-my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Plain Tag Atom
+my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Raw Tag Atom
 	Diff Snapshot);
 my %VCS = (git => 'Git');
 my %LOADED;
@@ -57,7 +57,7 @@ sub base_url ($) {
 
 # Remove trailing slash in URLs which regular humans are likely to read
 # in an attempt to improve cache hit ratios.  Do not redirect
-# plain|patch|blob|fallback endpoints since those could be using
+# raw|patch|blob|fallback endpoints since those could be using
 # automated tools which may not follow redirects automatically
 # (e.g. curl does not follow 301 unless given "-L")
 my %NO_TSLASH = map { $_ => 1 } qw(Log Commit Tree Summary Tag);
