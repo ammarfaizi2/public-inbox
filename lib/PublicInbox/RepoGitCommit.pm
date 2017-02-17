@@ -20,12 +20,13 @@ use PublicInbox::RepoGit qw(git_unquote git_commit_title);
 use PublicInbox::RepoGitDiffCommon;
 use PublicInbox::Qspawn;
 
-use constant GIT_FMT => '--pretty=format:'.join('%n',
-	'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
-	'%t', '%p', '%D', '%b%x00');
-
-use constant CC_EMPTY => " This is a merge, and the combined diff is empty.\n";
-use constant CC_MERGE => " This is a merge, showing combined diff:\n\n";
+use constant {
+	GIT_FMT => '--pretty=format:'.join('%n',
+		'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
+		'%t', '%p', '%D', '%b%x00'),
+	CC_EMPTY => " This is a merge, and the combined diff is empty.\n",
+	CC_MERGE => " This is a merge, showing combined diff:\n\n"
+};
 
 sub commit_header {
 	my ($self, $req) = @_;
@@ -155,7 +156,7 @@ sub git_commit_404 {
 	$x .= "<a\nhref=\"$pfx\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';
 
-	[404, ['Content-Type'=>'text/html'], [ $x ]];
+	[404, ['Content-Type', 'text/html'], [ $x ]];
 }
 
 # FIXME: horrifically expensive...

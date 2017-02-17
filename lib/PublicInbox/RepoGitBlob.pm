@@ -56,8 +56,8 @@ sub git_blob_stream_response {
 		my ($res) = @_;
 		my $to_read = 8192;
 		eval {
-			my $fh = $res->([ 200, ['Content-Length' => $size,
-						'Content-Type' => $type]]);
+			my $fh = $res->([ 200, ['Content-Length', $size,
+						'Content-Type', $type]]);
 			$fh->write($buf) if defined $buf;
 			while ($left > 0) {
 				$to_read = $left if $to_read > $left;

@@ -73,7 +73,7 @@ sub no_tslash {
 	}
 	my $url = $base . $uri . $qs;
 	[ 301,
-	  [ Location => $url, 'Content-Type' => 'text/plain' ],
+	  [ 'Location', $url, 'Content-Type', 'text/plain' ],
 	  [ "Redirecting to $url\n" ] ]
 }
 

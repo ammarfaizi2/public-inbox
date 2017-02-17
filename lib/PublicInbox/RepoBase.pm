@@ -16,7 +16,7 @@ sub call {
 		my $sub = "call_${vcs}_$cmd";
 		$self->$sub($req);
 	};
-	$@ ? [ 500, ['Content-Type'=>'text/plain'], [] ] : $rv;
+	$@ ? [ 500, ['Content-Type', 'text/plain'], [] ] : $rv;
 }
 
 sub mime_load {
