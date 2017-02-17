@@ -20,7 +20,6 @@
 package PublicInbox::Repobrowse;
 use strict;
 use warnings;
-use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::RepoConfig;
 
 my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Raw Tag Atom
