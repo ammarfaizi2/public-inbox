@@ -191,9 +191,7 @@ sub git_tree_show {
 	my $pfx;
 
 	$req->{thtml} .= "\npath: $t\n\n<b>mode\tsize\tname</b>\n";
-	if ($req->{tslash}) {
-		$pfx = '../';
-	} elsif (defined(my $last = $req->{extra}->[-1])) {
+	if (defined(my $last = $req->{extra}->[-1])) {
 		$pfx = PublicInbox::Hval->utf8($last)->as_path;
 	} elsif (defined $req->{h}) {
 		$pfx = $req->{-repo}->tip;

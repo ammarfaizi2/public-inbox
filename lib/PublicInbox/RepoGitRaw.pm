@@ -65,17 +65,12 @@ sub git_tree_raw {
 	my @ex = @{$req->{extra}};
 	my $rel = $req->{relcmd};
 	my $title = utf8_html(join('/', '', @ex, ''));
-	my $tslash = $req->{tslash};
-	my $pfx = $tslash ? './' : 'raw/';
+	my $pfx = 'raw/';
 	my $t = "<h2>$title</h2><ul>";
 	if (@ex) {
-		if ($tslash) {
-			$t .= qq(<li><a\nhref="../">../</a></li>);
-		} else  {
-			$t .= qq(<li><a\nhref="./">../</a></li>);
-			my $last = PublicInbox::Hval->utf8($ex[-1])->as_href;
-			$pfx = "$last/";
-		}
+		$t .= qq(<li><a\nhref="./">../</a></li>);
+		my $last = PublicInbox::Hval->utf8($ex[-1])->as_href;
+		$pfx = "$last/";
 	}
 
 	$req->{tpfx} = $pfx;

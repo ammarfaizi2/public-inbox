@@ -54,27 +54,27 @@ sub base_url ($) {
 	$base .= $env->{SCRIPT_NAME};
 }
 
-# Remove trailing slash in URLs which regular humans are likely to read
-# in an attempt to improve cache hit ratios.  Do not redirect
-# raw|patch|blob|fallback endpoints since those could be using
-# automated tools which may not follow redirects automatically
-# (e.g. curl does not follow 301 unless given "-L")
-my %NO_TSLASH = map { $_ => 1 } qw(Log Commit Tree Summary Tag);
-sub no_tslash {
+# return a PSGI response if the URL is ambiguous with
+# extra slashes or has a trailing slash
+sub disambiguate_uri {
 	my ($env) = @_;
-	my $base = base_url($env);
+	my $redirect;
 	my $uri = $env->{REQUEST_URI};
 	my $qs = '';
-	if ($uri =~ s/(\?.+)\z//) {
-		$qs = $1;
+	$uri =~ s!\A([^:]+://)!!;
+	my $scheme = $1 || '';
+	if ($uri =~ s!/(\?.+)?\z!!) { # no trailing slashes
+		$qs = $1 if defined $1;
+		$redirect = 1;
 	}
-	if ($uri !~ s!/+\z!!) {
-		warn "W: buggy redirect? base=$base request_uri=$uri\n";
+	if ($uri =~ s!//+!/!g) { # no redundant slashes
+		$redirect = 1;
 	}
-	my $url = $base . $uri . $qs;
+	return unless $redirect;
+	$uri = ($scheme ? $scheme : base_url($env)) . $uri . $qs;
 	[ 301,
-	  [ 'Location', $url, 'Content-Type', 'text/plain' ],
-	  [ "Redirecting to $url\n" ] ]
+	  [ 'Location', $uri, 'Content-Type', 'text/plain' ],
+	  [ "Redirecting to $uri\n" ] ]
 }
 
 sub root_index {
@@ -83,10 +83,14 @@ sub root_index {
 	$mod->new->call($self->{rconfig}); # RepoRoot::call
 }
 
+# PSGI entry point
 sub call {
 	my ($self, $env) = @_;
 	my $method = $env->{REQUEST_METHOD};
 	return r(405, 'Method Not Allowed') if ($method !~ /\AGET|HEAD|POST\z/);
+	if (my $res = disambiguate_uri($env)) {
+		return $res;
+	}
 
 	# URL syntax: / repo [ / cmd [ / head [ / path ] ] ]
 	# cmd: log | commit | diff | tree | view | blob | snapshot
@@ -110,7 +114,6 @@ sub call {
 		rconfig => $rconfig,
 		env => $env,
 	};
-	my $tslash = 0;
 	my $cmd = shift @extra;
 	my $vcs_lc = $repo->{vcs};
 	my $vcs = $VCS{$vcs_lc} or return r404();
@@ -129,7 +132,7 @@ sub call {
 		$mod = 'Summary';
 		$cmd = 'summary';
 		if ($path_info =~ m!/\z!) {
-			$tslash = $path_info =~ tr!/!!;
+			$path_info =~ tr!/!!;
 		} else {
 			my @x = split('/', $repo_path);
 			$req->{relcmd} = @x > 1 ? "./$x[-1]/" : "/$x[-1]/";
@@ -137,12 +140,8 @@ sub call {
 	}
 	while (@extra && $extra[-1] eq '') {
 		pop @extra;
-		++$tslash;
 	}
 	$req->{h} = $h;
-	return no_tslash($env) if ($tslash && $NO_TSLASH{$mod});
-
-	$req->{tslash} = $tslash;
 	$mod = load_once("PublicInbox::Repo$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
 
