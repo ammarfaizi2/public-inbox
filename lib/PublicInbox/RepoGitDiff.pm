@@ -54,7 +54,7 @@ sub call_git_diff {
 	$qsp->psgi_return($env, undef, sub { # parse header
 		my ($r) = @_;
 		if (!defined $r) {
-			[ 500, [ 'Content-Type', 'text/html' ], [ $git->err ]];
+			[ 500, [ 'Content-Type', 'text/plain' ], [ $git->err ]];
 		} elsif ($r == 0) {
 			[ 200, [ 'Content-Type', 'text/html' ], [
 				delete($req->{dhtml}).
