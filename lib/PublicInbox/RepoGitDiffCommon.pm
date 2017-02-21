@@ -126,9 +126,9 @@ sub git_diff_cc_hunk {
 	if ($n == 0) { # deleted file (does this happen with --cc?)
 		$rv .= " $last";
 	} else {
-		my $h = $req->{h};
+		my $H = $req->{H};
 		$rv .= qq( <a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$h/$path#n$n">$last</a>);
+		$rv .= qq(\nhref="${rel}tree/$H/$path#n$n">$last</a>);
 	}
 	$rv .= " $at" . utf8_html($ctx);
 }

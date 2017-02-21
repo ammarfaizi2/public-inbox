@@ -22,7 +22,7 @@ use PublicInbox::Qspawn;
 
 use constant {
 	GIT_FMT => '--pretty=format:'.join('%n',
-		'%H', '%h', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
+		'%H', '%s', '%an <%ae>', '%ai', '%cn <%ce>', '%ci',
 		'%t', '%p', '%D', '%b%x00'),
 	CC_EMPTY => " This is a merge, and the combined diff is empty.\n",
 	CC_MERGE => " This is a merge, showing combined diff:\n\n"
@@ -30,8 +30,8 @@ use constant {
 
 sub commit_header {
 	my ($self, $req) = @_;
-	my ($H, $h, $s, $au, $ad, $cu, $cd, $t, $p, $D, $rest) =
-		split("\n", $req->{dbuf}, 11);
+	my ($H, $s, $au, $ad, $cu, $cd, $t, $p, $D, $rest) =
+		split("\n", $req->{dbuf}, 10);
 	$s = utf8_html($s);
 	$au = utf8_html($au);
 	$cu = utf8_html($cu);
@@ -39,8 +39,8 @@ sub commit_header {
 
 	my $rel = $req->{relcmd};
 	my $x = $self->html_start($req, $s) . "\n" .
-		qq(   commit $H (<a\nhref="${rel}patch/$h">patch</a>)\n) .
-		qq(     tree <a\nrel=nofollow\nhref="${rel}tree/$h">$t</a>);
+		qq(   commit $H (<a\nhref="${rel}patch/$H">patch</a>)\n) .
+		qq(     tree <a\nrel=nofollow\nhref="${rel}tree/$H">$t</a>);
 
 	my $git = $req->{-repo}->{git};
 	# extra show path information, if any
@@ -55,7 +55,7 @@ sub commit_header {
 			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			$ep = $e->as_path;
 			my $eh = $e->as_html;
-			$ep = "${rel}tree/$ep/$h";
+			$ep = "${rel}tree/$ep/$H";
 			qq(<a\nrel=nofollow\nhref="$ep">$eh</a>);
 		} @$extra);
 		$path = "/$ep";
@@ -84,7 +84,7 @@ sub commit_header {
 	# FIXME: deal with excessively long commit message bodies
 	($bx00, $req->{dbuf}) = split("\0", $rest, 2);
 	$req->{anchors} = {};
-	$req->{h} = $h;
+	$req->{H} = $H;
 	$req->{p} = \@p;
 	$x .= utf8_html($bx00) . "<a\nid=D>---</a>\n";
 }
@@ -127,8 +127,8 @@ sub call_git_commit { # RepoBase calls this
 
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
-			--no-notes --no-color -c),
-			$git->abbrev, GIT_FMT, $req->{-repo}->tip, '--');
+			--no-notes --no-color -c --no-abbrev),
+			GIT_FMT, $req->{-repo}->tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$env->{'qspawn.quiet'} = 1;
@@ -164,7 +164,8 @@ sub git_parent_line {
 	my ($pfx, $p, $git, $rel) = @_;
 	my $t = git_commit_title($git, $p);
 	$t = defined $t ? utf8_html($t) : '';
-	$pfx . qq( <a\nid=P\nhref="${rel}commit/$p">$p</a> $t\n);
+	my $pad = ' ' x length($pfx);
+	$pfx . qq( <a\nid=P\nhref="${rel}commit/$p">$p</a>\n $pad$t\n);
 }
 
 # do not break anchor links if the combined diff doesn't show changes:

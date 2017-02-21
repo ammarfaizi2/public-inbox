@@ -10,16 +10,17 @@ use base qw(PublicInbox::RepoBase);
 use PublicInbox::RepoGit qw(git_dec_links git_commit_title);
 use PublicInbox::Qspawn;
 # cannot rely on --date=format-local:... yet, it is too new (September 2015)
-use constant STATES => qw(h p D ai an s b);
+use constant STATES => qw(H p D ai an s b);
 use constant STATE_BODY => (scalar(STATES) - 1);
 my $LOG_FMT = '--pretty=tformat:'.  join('%n', map { "%$_" } STATES).'%x00';
 
 sub parent_links {
 	if (@_ == 1) { # typical, single-parent commit
-		qq( / parent <a\nhref="#p$_[0]">$_[0]</a>);
+		qq(\n  parent <a\nhref="#p$_[0]">$_[0]</a>);
 	} elsif (@_ > 0) { # merge commit
-		' / parents ' .
-			join(' ', map { qq(<a\nhref="#p$_">$_</a>) } @_);
+		"\n parents " .
+			join("\n         ",
+			map { qq(<a\nhref="#p$_">$_</a>) } @_);
 	} else {
 		''; # root commit
 	}
@@ -30,7 +31,7 @@ sub flush_log_hdr ($$$) {
 	my $lpfx = $req->{lpfx};
 	my $seen = $req->{seen};
 	$$dst .= '<hr /><pre>' if scalar keys %$seen;
-	my $id = $hdr->{h};
+	my $id = $hdr->{H};
 	$seen->{$id} = 1;
 	$$dst .= qq(<a\nid=p$id\n);
 	$$dst .= qq(href="${lpfx}commit/$id"><b>);
@@ -129,9 +130,8 @@ sub call_git_log {
 	my $env = $req->{env};
 	my $git = $repo->{git};
 	my $tip = $req->{-repo}->tip;
-	my $cmd = $git->cmd(qw(log --no-notes --no-color --abbrev-commit),
-				$git->abbrev, $LOG_FMT, "-$max",
-				$tip, '--');
+	my $cmd = $git->cmd(qw(log --no-notes --no-color --no-abbrev),
+				$LOG_FMT, "-$max", $tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $title = "log: $repo->{repo}";
 	if (defined $h) {
