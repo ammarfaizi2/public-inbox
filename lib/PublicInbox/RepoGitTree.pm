@@ -22,7 +22,7 @@ sub call_git_tree {
 	my @extra = @{$req->{extra}};
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
-	my $tip = $repo->tip;
+	my $tip = $req->{tip} || $repo->tip;
 	my $obj = "$tip:$req->{expath}";
 	my ($hex, $type, $size) = $git->check($obj);
 
@@ -31,8 +31,7 @@ sub call_git_tree {
 	}
 
 	my $opts = { nofollow => 1 };
-	my $title = $req->{expath};
-	$title = $title eq '' ? 'tree' : utf8_html($title);
+	my $title = "tree: ".utf8_html($req->{expath});
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
 		$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
@@ -193,8 +192,8 @@ sub git_tree_show {
 	$req->{thtml} .= "\npath: $t\n\n<b>mode\tsize\tname</b>\n";
 	if (defined(my $last = $req->{extra}->[-1])) {
 		$pfx = PublicInbox::Hval->utf8($last)->as_path;
-	} elsif (defined $req->{h}) {
-		$pfx = $req->{-repo}->tip;
+	} elsif (defined(my $tip = $req->{tip})) {
+		$pfx = $tip;
 	} else {
 		$pfx = 'tree/' . $req->{-repo}->tip;
 	}

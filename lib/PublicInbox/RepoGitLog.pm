@@ -124,22 +124,16 @@ sub call_git_log {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $max = $repo->{max_commit_count} || 50;
-	my $h = $req->{h};
+	my $tip = $req->{tip} || $repo->tip;
+	$req->{lpfx} = $req->{relcmd};
 	$max = int($max);
 	$max = 50 if $max == 0;
 	my $env = $req->{env};
 	my $git = $repo->{git};
-	my $tip = $req->{-repo}->tip;
 	my $cmd = $git->cmd(qw(log --no-notes --no-color --no-abbrev),
 				$LOG_FMT, "-$max", $tip, '--');
 	my $rdr = { 2 => $git->err_begin };
-	my $title = "log: $repo->{repo}";
-	if (defined $h) {
-		$title .= ' ('. utf8_html($h). ')';
-		$req->{lpfx} = $req->{relcmd};
-	} else {
-		$req->{lpfx} = $req->{relcmd} . $tip;
-	}
+	my $title = 'log: '.$repo->{repo}.' ('.utf8_html($tip).')';
 	$req->{lhtml} = $self->html_start($req, $title) . "\n\n";
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$qsp->psgi_return($env, undef, sub {

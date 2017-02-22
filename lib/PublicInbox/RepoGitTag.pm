@@ -19,11 +19,11 @@ my %cmd_map = ( # type => action
 sub call_git_tag {
 	my ($self, $req) = @_;
 
-	my $h = $req->{h};
-	defined $h or return git_tag_list($self, $req);
+	my $tip = $req->{tip};
+	defined $tip or return git_tag_list($self, $req);
 	sub {
 		my ($res) = @_;
-		git_tag_show($self, $req, $h, $res);
+		git_tag_show($self, $req, $tip, $res);
 	}
 }
 

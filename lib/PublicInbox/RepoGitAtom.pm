@@ -141,7 +141,7 @@ sub call_git_atom {
 
 	my $git = $repo->{git};
 	my $env = $req->{env};
-	my $tip = $req->{h} || $repo->tip;
+	my $tip = $req->{tip} || $repo->tip;
 	my $read_log = sub {
 		my $cmd = $git->cmd(qw(log --no-notes --no-color
 					--abbrev-commit), $git->abbrev,

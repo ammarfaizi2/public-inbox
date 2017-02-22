@@ -32,9 +32,10 @@ sub git_diff_sed ($$) {
 	}
 }
 
+# $REPO/diff/$BEFORE..$AFTER
 sub call_git_diff {
 	my ($self, $req) = @_;
-	my ($id, $id2) = split(/\.\./, $req->{h});
+	my ($id, $id2) = split(/\.\./, $req->{tip});
 	my $env = $req->{env};
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(diff-tree -z --numstat -p --encoding=UTF-8

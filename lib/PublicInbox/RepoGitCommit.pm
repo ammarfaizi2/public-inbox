@@ -124,11 +124,11 @@ sub call_git_commit { # RepoBase calls this
 		my $relup = join('', map { '../' } @{$req->{extra}});
 		return $self->r(301, $req, "$relup#".to_attr($expath));
 	}
-
+	my $tip = $req->{tip} || $req->{-repo}->tip;
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(show -z --numstat -p --encoding=UTF-8
 			--no-notes --no-color -c --no-abbrev),
-			GIT_FMT, $req->{-repo}->tip, '--');
+			GIT_FMT, $tip, '--');
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	$env->{'qspawn.quiet'} = 1;

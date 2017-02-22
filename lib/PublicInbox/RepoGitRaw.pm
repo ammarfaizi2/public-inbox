@@ -12,7 +12,8 @@ sub call_git_raw {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
-	my $id = $repo->tip . ':' . $req->{expath};
+	my $tip = $req->{tip} || $repo->tip;
+	my $id = $tip . ':' . $req->{expath};
 	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
 	return unless defined $cat;
 

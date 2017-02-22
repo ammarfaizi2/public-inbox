@@ -118,11 +118,11 @@ sub call {
 	my $vcs_lc = $repo->{vcs};
 	my $vcs = $VCS{$vcs_lc} or return r404();
 	my $mod;
-	my $h;
+	my $tip;
 	if (defined $cmd && length $cmd) {
 		$mod = $CMD{$cmd};
 		if ($mod) {
-			$h = shift @extra if @extra;
+			$tip = shift @extra if @extra;
 		} else {
 			unshift @extra, $cmd;
 			$mod = 'Fallback';
@@ -141,7 +141,7 @@ sub call {
 	while (@extra && $extra[-1] eq '') {
 		pop @extra;
 	}
-	$req->{h} = $h;
+	$req->{tip} = $tip;
 	$mod = load_once("PublicInbox::Repo$vcs$mod");
 	$vcs = load_once("PublicInbox::$vcs");
 
