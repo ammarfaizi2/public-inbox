@@ -2,7 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # shows the /patch/ endpoint for git repositories
-# usage: /repo.git/patch?id=COMMIT_ID
+# usage: /repo.git/patch/COMMIT_ID
 package PublicInbox::RepoGitPatch;
 use strict;
 use warnings;
