@@ -2,7 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # shows the /diff endpoint for git repositories for cgit compatibility
-# usage: /repo.git/diff?id=COMMIT_ID&id2=COMMIT_ID2
+# usage: /repo.git/diff/COMMIT_ID_A..COMMIT_ID_B
 #
 # We probably will not link to this outright because it's expensive,
 # but exists to preserve URL compatibility with cgit.
@@ -35,20 +35,19 @@ sub git_diff_sed ($$) {
 # $REPO/diff/$BEFORE..$AFTER
 sub call_git_diff {
 	my ($self, $req) = @_;
-	my ($id, $id2) = split(/\.\./, $req->{tip});
+	my ($id_a, $id_b) = split(/\.\./, $req->{tip});
 	my $env = $req->{env};
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(diff-tree -z --numstat -p --encoding=UTF-8
-				--no-color -M -B -D -r), $id2, $id, '--');
+				--no-color -M -B -D -r), "$id_a..$id_b", '--');
 	my $expath = $req->{expath};
 	push @$cmd, $expath if $expath ne '';
 	my $o = { nofollow => 1, noindex => 1 };
 	my $ex = $expath eq '' ? '' : " $expath";
 	$req->{dhtml} = $self->html_start($req, 'diff', $o). "\n\n".
 				utf8_html("git diff-tree -r -M -B -D ".
-				"$id2 $id --$ex"). "\n\n";
-	$req->{p} = [ $id2 ];
-	$req->{h} = $id;
+				"$id_a..$id_b --$ex"). "\n\n";
+	$req->{p} = [ $id_a ];
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	# $env->{'qspawn.quiet'} = 1;
