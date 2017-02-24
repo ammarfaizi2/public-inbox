@@ -19,37 +19,44 @@ my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 
 sub call_git_tree {
 	my ($self, $req) = @_;
-	my @extra = @{$req->{extra}};
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
 	my $tip = $req->{tip} || $repo->tip;
 	my $obj = "$tip:$req->{expath}";
-	my ($hex, $type, $size) = $git->check($obj);
-
-	unless (defined($type)) {
-		return [404, ['Content-Type'=>'text/plain'], ['Not Found']];
+	sub {
+		my ($res) = @_;
+		$git->check_async($req->{env}, $obj, sub {
+			my ($info) = @_;
+			my ($hex, $type, $size) = @$info;
+			unless (defined $type) {
+				return $res->([404,
+					['Content-Type','text/plain'],
+					['Not Found']]);
+			}
+			show_tree($self, $req, $res, $hex, $type, $size);
+		});
 	}
+}
 
+sub show_tree {
+	my ($self, $req, $res, $hex, $type, $size) = @_;
 	my $opts = { nofollow => 1 };
 	my $title = "tree: ".utf8_html($req->{expath});
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
 		$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
-		git_tree_show($req, $hex);
+		git_tree_show($req, $res, $hex);
 	} elsif ($type eq 'blob') {
-		sub {
-			my $res = $_[0];
-			my $fh = $res->([200,
-				['Content-Type','text/html; charset=UTF-8']]);
-			$fh->write($self->html_start($req, $title, $opts) .
-					"\n");
-			git_blob_show($req, $fh, $git, $hex);
-			$fh->write('</body></html>');
-			$fh->close;
-		}
+		my $fh = $res->([200,
+			['Content-Type','text/html; charset=UTF-8']]);
+		$fh->write($self->html_start($req, $title, $opts) .
+				"\n");
+		git_blob_show($req, $fh,$hex);
+		$fh->write('</body></html>');
+		$fh->close;
 	} else {
-		[404, ['Content-Type', 'text/plain; charset=UTF-8'],
-			 ["Unrecognized type ($type) for $obj\n"]];
+		$res->([404, ['Content-Type', 'text/plain; charset=UTF-8'],
+			 ["Unrecognized type ($type) for $hex\n"]]);
 	}
 }
 
@@ -75,11 +82,12 @@ sub cur_path {
 }
 
 sub git_blob_show {
-	my ($req, $fh, $git, $hex) = @_;
+	my ($req, $fh, $hex) = @_;
 	# ref: buffer_is_binary in git.git
 	my $to_read = 8000; # git uses this size to detect binary files
 	my $text_p;
 	my $n = 0;
+	my $git = $req->{-repo}->{git};
 
 	my $rel = $req->{relcmd};
 	my $raw = join('/',
@@ -181,7 +189,7 @@ sub git_tree_sed ($) {
 }
 
 sub git_tree_show {
-	my ($req, $hex) = @_;
+	my ($req, $res, $hex) = @_;
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $rdr = { 2 => $git->err_begin };
@@ -199,6 +207,7 @@ sub git_tree_show {
 	}
 	$req->{tpfx} = $pfx;
 	my $env = $req->{env};
+	$env->{'qspawn.response'} = $res;
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
 		if (defined $r) {
