@@ -41,7 +41,7 @@ my $dir = "$tmpdir/git.git";
 		}
 		0
 	});
-	$git->check_async($f, sub {
+	$git->check_async_ds($f, sub {
 		$n++;
 		@args = @_;
 		$git = undef;
@@ -58,7 +58,7 @@ my $dir = "$tmpdir/git.git";
 	my $m = 0;
 	for my $i (0..$max) {
 		my $k = "HEAD:m$i";
-		$git->check_async($k, sub {
+		$git->check_async_ds($k, sub {
 			my ($info) = @_;
 			++$n;
 			++$m if $info->[1] eq 'missing' && $info->[0] eq $k;
@@ -70,18 +70,18 @@ my $dir = "$tmpdir/git.git";
 		}
 	}
 	is($m, $n, 'everything expected missing is missing');
-	$git->check_async($f, sub { $git = undef });
+	$git->check_async_ds($f, sub { $git = undef });
 	Danga::Socket->EventLoop;
 
 	$git = PublicInbox::Git->new($dir);
 	my $info;
 	my $str = '';
 	my @missing;
-	$git->cat_async('HEAD:miss', sub {
+	$git->cat_async_ds('HEAD:miss', sub {
 		my ($miss) = @_;
 		push @missing, $miss;
 	});
-	$git->cat_async($f, sub {
+	$git->cat_async_ds($f, sub {
 		my $res = $_[0];
 		if (ref($res) eq 'ARRAY') {
 			is($info, undef, 'info unset, setting..');

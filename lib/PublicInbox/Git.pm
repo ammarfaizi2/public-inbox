@@ -274,12 +274,13 @@ sub cat_async_compat ($$$) {
 	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
 }
 
-if ($have_async) {
-	*check_async = *check_async_ds;
-	*cat_async = *cat_async_ds;
-} else {
-	*check_async = *check_async_compat;
-	*cat_async = *cat_async_compat;
+sub check_async {
+	my ($self, $env, $obj, $cb) = @_;
+	if ($env->{'pi-httpd.async'}) {
+		check_async_ds($self, $obj, $cb);
+	} else {
+		check_async_compat($self, $obj, $cb);
+	}
 }
 
 1;
