@@ -16,16 +16,17 @@ my %GIT_MODE = (
 );
 
 my $BINARY_MSG = "Binary file, save using the 'raw' link above";
+my $MAX_ASYNC = 65536; # same as pipe size on Linux
+my $BIN_DETECT = 8000; # same as git (buffer_is_binary in git.git)
 
 sub call_git_tree {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
-	my $tip = $req->{tip} || $repo->tip;
-	my $obj = "$tip:$req->{expath}";
+	my $tip = $req->{tip} || $req->{repo}->tip;
 	sub {
 		my ($res) = @_;
-		$git->check_async($req->{env}, $obj, sub {
+		$git->check_async($req->{env}, "$tip:$req->{expath}", sub {
 			my ($info) = @_;
 			my ($hex, $type, $size) = @$info;
 			unless (defined $type) {
@@ -42,18 +43,12 @@ sub show_tree {
 	my ($self, $req, $res, $hex, $type, $size) = @_;
 	my $opts = { nofollow => 1 };
 	my $title = "tree: ".utf8_html($req->{expath});
+	$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
-		$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
 		git_tree_show($req, $res, $hex);
 	} elsif ($type eq 'blob') {
-		my $fh = $res->([200,
-			['Content-Type','text/html; charset=UTF-8']]);
-		$fh->write($self->html_start($req, $title, $opts) .
-				"\n");
-		git_blob_show($req, $fh,$hex);
-		$fh->write('</body></html>');
-		$fh->close;
+		git_blob_show($req, $res, $hex, $size);
 	} else {
 		$res->([404, ['Content-Type', 'text/plain; charset=UTF-8'],
 			 ["Unrecognized type ($type) for $hex\n"]]);
@@ -64,8 +59,7 @@ sub cur_path {
 	my ($req) = @_;
 	my @ex = @{$req->{extra}} or return '<b>root</b>';
 	my $s;
-
-	my $tip = $req->{-repo}->tip;
+	my $tip = $req->{tip} || $req->{repo}->tip;
 	my $rel = $req->{relcmd};
 	# avoid relative paths, here, we don't want to propagate
 	# trailing-slash URLs although we tolerate them
@@ -81,69 +75,102 @@ sub cur_path {
 	} @ex), '<b>'.utf8_html($cur).'</b>');
 }
 
-sub git_blob_show {
-	my ($req, $fh, $hex) = @_;
-	# ref: buffer_is_binary in git.git
-	my $to_read = 8000; # git uses this size to detect binary files
-	my $text_p;
-	my $n = 0;
-	my $git = $req->{-repo}->{git};
-
+sub git_blob_sed ($$$) {
+	my ($req, $hex, $size) = @_;
+	my $pfx = $req->{tpfx};
+	my $nl = 0;
+	my $bytes = 0;
+	my @lines;
+	my $buf = '';
 	my $rel = $req->{relcmd};
-	my $raw = join('/',
-			"${rel}raw", $req->{-repo}->tip, @{$req->{extra}});
+	my $tip = $req->{tip} || $req->{repo}->tip;
+	my $raw = join('/', "${rel}raw", $tip, @{$req->{extra}});
 	$raw = PublicInbox::Hval->utf8($raw)->as_path;
 	my $t = cur_path($req);
-	my $s = qq{\npath: $t\n\nblob $hex};
 	my $end = '';
+	$req->{thtml} .= qq{\npath: $t\n\nblob $hex} .
+			qq{\t$size bytes (<a\nhref="$raw">raw</a>)};
+	$req->{lstart} = '</pre><hr/><pre>';
+	my $s;
 
-	$git->cat_file($hex, sub {
-		my ($cat, $left) = @_; # $$left == $size
-		$s .= qq{\t$$left bytes (<a\nhref="$raw">raw</a>)};
-		$to_read = $$left if $to_read > $$left;
-		my $r = read($cat, my $buf, $to_read);
-		return unless defined($r) && $r > 0;
-		$$left -= $r;
-
-		if (index($buf, "\0") >= 0) {
-			$fh->write("$s\n$BINARY_MSG</pre>");
-			return;
-		}
-		$fh->write($s."</pre><hr/><table\nsummary=blob><tr><td><pre>");
-		$text_p = 1;
-
-		while (1) {
-			my @buf = split(/\r?\n/, $buf, -1);
-			$buf = pop @buf; # last line, careful...
-			foreach my $l (@buf) {
-				++$n;
-				$fh->write("<a\nid=n$n>". utf8_html($l).
-						"</a>\n");
+	sub {
+		my $dst = delete $req->{thtml} || '';
+		if (defined $_[0]) {
+			return '' if $bytes < 0; # binary
+			if ($bytes <= $BIN_DETECT) {
+				if (index($_[0], "\0") >= 0) {
+					$bytes = -1;
+					$s = delete $req->{lstart} and
+						$dst .= $s;
+					$dst .= "\n";
+					$dst .= $BINARY_MSG;
+					return $dst .= '</pre></body></html>';
+				}
 			}
-			# no trailing newline:
-			if ($$left == 0 && $buf ne '') {
-				++$n;
-				$buf = utf8_html($buf);
-				$fh->write("<a\nid=n$n>". $buf ."</a>");
-				$end = '<pre>\ No newline at end of file</pre>';
-				last;
-			}
-
-			last unless defined($buf);
-
-			$to_read = $$left if $to_read > $$left;
-			my $off = length $buf; # last line from previous read
-			$r = read($cat, $buf, $to_read, $off);
-			return unless defined($r) && $r > 0;
-			$$left -= $r;
+			$bytes += bytes::length($_[0]);
+			$buf .= $_[0];
+			$_[0] = ''; # save some memory
+			$s = delete $req->{lstart} and $dst .= $s;
+			@lines = split(/\r?\n/, $buf, -1);
+			$buf = pop @lines; # last line, careful...
+		} else { # EOF
+			$s = delete $req->{lstart} and $dst .= $s;
+			@lines = split(/\r?\n/, $buf, -1);
+			$buf = pop @lines;
+			$end .= '</pre></body></html>';
 		}
-		0;
-	});
+		foreach (@lines) {
+			++$nl;
+			$dst .= "<a\nid=n$nl>";
+			$dst .= sprintf("% 5u</a>\t", $nl);
+			$dst .= utf8_html($_);
+			$dst .= "\n";
+		}
+		@lines = ();
+		if ($end && defined $buf && $buf ne '') {
+			++$nl;
+			$dst .= "<a\nid=n$nl>";
+			$dst .= sprintf("% 5u</a>\t", $nl);
+			$dst .= utf8_html($buf);
+			$buf = undef;
+			$dst .= "\n\\ No newline at end of file";
+		}
+		$dst .= $end;
+	}
+}
 
-	# line numbers go in a second column:
-	$fh->write('</pre></td><td><pre>');
-	$fh->write(qq(<a\nhref="#n$_">$_</a>\n)) foreach (1..$n);
-	$fh->write("</pre></td></tr></table><hr />$end");
+sub git_blob_show {
+	my ($req, $res, $hex, $size) = @_;
+	my $sed = git_blob_sed($req, $hex, $size);
+	my $git = $req->{-repo}->{git};
+	if ($size <= $MAX_ASYNC) {
+		my $buf = ''; # we slurp small files
+		$git->cat_async($req->{env}, $hex, sub {
+			my ($r) = @_;
+			my $ref = ref($r);
+			return if $ref eq 'ARRAY'; # redundant info
+			if ($ref eq 'SCALAR') {
+				$buf .= $$r;
+				if (bytes::length($buf) == $size) {
+					my $fh = $res->([200,
+						['Content-Type',
+						 'text/html; charset=UTF-8']]);
+					$fh->write($sed->($buf));
+					$fh->write($sed->(undef));
+					$fh->close;
+				}
+				return;
+			}
+			my $cb = $res or return;
+			$res = undef;
+			$cb->([500,
+				['Content-Type', 'text/plain; charset=UTF-8'],
+				[ 'Error' ]]);
+		});
+	} else {
+		$res->([200, ['Content-Type', 'text/plain; charset=UTF-8'],
+			[ 'Too big' ]]);
+	}
 }
 
 sub git_tree_sed ($) {

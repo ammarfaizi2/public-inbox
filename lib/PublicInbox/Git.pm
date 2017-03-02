@@ -283,6 +283,15 @@ sub check_async {
 	}
 }
 
+sub cat_async {
+	my ($self, $env, $obj, $cb) = @_;
+	if ($env->{'pi-httpd.async'}) {
+		cat_async_ds($self, $obj, $cb);
+	} else {
+		cat_async_compat($self, $obj, $cb);
+	}
+}
+
 1;
 __END__
 =pod
