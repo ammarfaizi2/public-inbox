@@ -40,7 +40,7 @@ sub commit_header {
 	my $rel = $req->{relcmd};
 	my $x = $self->html_start($req, $s) . "\n" .
 		qq(   commit $H (<a\nhref="${rel}patch/$H">patch</a>)\n) .
-		qq(     tree <a\nrel=nofollow\nhref="${rel}tree/$H">$t</a>);
+		qq(     tree <a\nrel=nofollow\nhref="${rel}src/$H">$t</a>);
 
 	my $git = $req->{-repo}->{git};
 	# extra show path information, if any
@@ -55,7 +55,7 @@ sub commit_header {
 			my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 			$ep = $e->as_path;
 			my $eh = $e->as_html;
-			$ep = "${rel}tree/$ep/$H";
+			$ep = "${rel}src/$ep/$H";
 			qq(<a\nrel=nofollow\nhref="$ep">$eh</a>);
 		} @$extra);
 		$path = "/$ep";
@@ -185,7 +185,7 @@ sub show_unchanged {
 		$p = $p->as_path;
 		$fn = utf8_html($fn);
 		$$dst .= qq(\t<a\nrel=nofollow);
-		$$dst .= qq(\nid="$anchor"\nhref="${rel}tree/$p">);
+		$$dst .= qq(\nid="$anchor"\nhref="${rel}src/$p">);
 		$$dst .= "$fn</a>\n";
 	}
 }

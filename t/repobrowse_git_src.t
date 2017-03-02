@@ -7,7 +7,7 @@ my $test = require './t/repobrowse_common_git.perl';
 test_psgi($test->{app}, sub {
 	my ($cb) = @_;
 
-	my $req = 'http://example.com/test.git/tree/HEAD/dir';
+	my $req = 'http://example.com/test.git/src/HEAD/dir';
 	my $res = $cb->(GET($req));
 	is(200, $res->code, 'got 200 response from dir');
 	my $noslash_body = dechunk($res);
@@ -19,7 +19,7 @@ test_psgi($test->{app}, sub {
 	is(301, $r2->code, 'got 301 response from dir with slash');
 	is($req, $r2->header('Location'), 'redirected w/o slash');
 
-	$req = 'http://example.com/test.git/tree/master/foo.txt';
+	$req = 'http://example.com/test.git/src/master/foo.txt';
 	my $blob = $cb->(GET($req));
 	is($blob->header('Content-Type'), 'text/html; charset=UTF-8',
 		'got text/html blob');

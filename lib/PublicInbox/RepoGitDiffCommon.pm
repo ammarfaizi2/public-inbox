@@ -68,7 +68,7 @@ sub git_diff_ab_hunk ($$$$) {
 		$na = defined $na ? "#n$na" : '';
 		my $p = $req->{p}->[0];
 		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$p/$req->{path_a}$na">);
+		$rv .= qq(\nhref="${rel}src/$p/$req->{path_a}$na">);
 		$rv .= "$ca</a>";
 	}
 	$rv .= ' ';
@@ -77,7 +77,7 @@ sub git_diff_ab_hunk ($$$$) {
 	} else {
 		$nb = defined $nb ? "#n$nb" : '';
 		$rv .= qq(<a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$req->{-tip}/$req->{path_b}$nb">);
+		$rv .= qq(\nhref="${rel}src/$req->{-tip}/$req->{path_b}$nb">);
 		$rv .= "$cb</a>";
 	}
 	$rv . ' @@' . utf8_html($ctx);
@@ -121,14 +121,14 @@ sub git_diff_cc_hunk {
 		}
 	}
 
-	# we can use the normal 'tree' endpoint for the result
+	# we can use the normal 'src' endpoint for the result
 	my ($n) = ($last =~ /\A\+(\d+)/); # line number
 	if ($n == 0) { # deleted file (does this happen with --cc?)
 		$rv .= " $last";
 	} else {
 		my $H = $req->{H};
 		$rv .= qq( <a\nrel=nofollow);
-		$rv .= qq(\nhref="${rel}tree/$H/$path#n$n">$last</a>);
+		$rv .= qq(\nhref="${rel}src/$H/$path#n$n">$last</a>);
 	}
 	$rv .= " $at" . utf8_html($ctx);
 }

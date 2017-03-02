@@ -84,14 +84,14 @@ sub readme_path_links {
 	my ($req, $rel, $readme) = @_;
 	my @path = split(m!/+!, $readme);
 	my $tip = $req->{-repo}->tip;
-	my $s = "tree <a\nhref=\"${rel}tree/$tip\">root</a>/";
+	my $s = "tree <a\nhref=\"${rel}src/$tip\">root</a>/";
 	my @t;
 	$s .= join('/', (map {
 		push @t, $_;
 		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 		my $ep = $e->as_path;
 		my $eh = $e->as_html;
-		$e = "<a\nhref=\"${rel}tree/$tip/$ep\">$eh</a>";
+		$e = "<a\nhref=\"${rel}src/$tip/$ep\">$eh</a>";
 		# bold the last one
 		scalar(@t) == scalar(@path) ? "<b>$e</b>" : $e;
 	} @path));

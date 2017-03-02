@@ -97,9 +97,9 @@ lib/PublicInbox/RepoGitRaw.pm
 lib/PublicInbox/RepoGitSearch.pm
 lib/PublicInbox/RepoGitSearchIdx.pm
 lib/PublicInbox/RepoGitSnapshot.pm
+lib/PublicInbox/RepoGitSrc.pm
 lib/PublicInbox/RepoGitSummary.pm
 lib/PublicInbox/RepoGitTag.pm
-lib/PublicInbox/RepoGitTree.pm
 lib/PublicInbox/RepoRoot.pm
 lib/PublicInbox/Repobrowse.pm
 lib/PublicInbox/SaPlugin/ListMirror.pm
@@ -197,7 +197,7 @@ t/repobrowse_git_httpd.t
 t/repobrowse_git_log.t
 t/repobrowse_git_raw.t
 t/repobrowse_git_snapshot.t
-t/repobrowse_git_tree.t
+t/repobrowse_git_src.t
 t/search.t
 t/spamcheck_spamc.t
 t/spawn.t

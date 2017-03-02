@@ -22,7 +22,7 @@ use strict;
 use warnings;
 use PublicInbox::RepoConfig;
 
-my %CMD = map { lc($_) => $_ } qw(Log Commit Tree Patch Blob Raw Tag Atom
+my %CMD = map { lc($_) => $_ } qw(Log Commit Src Patch Blob Raw Tag Atom
 	Diff Snapshot);
 my %VCS = (git => 'Git');
 my %LOADED;
@@ -93,7 +93,7 @@ sub call {
 	}
 
 	# URL syntax: / repo [ / cmd [ / head [ / path ] ] ]
-	# cmd: log | commit | diff | tree | view | blob | snapshot
+	# cmd: log | commit | diff | src | view | blob | snapshot
 	# repo and path (@extra) may both contain '/'
 	my $path_info = $env->{PATH_INFO};
 	my (undef, $repo_path, @extra) = split(m{/+}, $path_info, -1);

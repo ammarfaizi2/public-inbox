@@ -1,6 +1,6 @@
 # Copyright (C) 2015 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::RepoGitTree;
+package PublicInbox::RepoGitSrc;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBase);
@@ -19,7 +19,7 @@ my $BINARY_MSG = "Binary file, save using the 'raw' link above";
 my $MAX_ASYNC = 65536; # same as pipe size on Linux
 my $BIN_DETECT = 8000; # same as git (buffer_is_binary in git.git)
 
-sub call_git_tree {
+sub call_git_src {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
@@ -63,7 +63,7 @@ sub cur_path {
 	my $rel = $req->{relcmd};
 	# avoid relative paths, here, we don't want to propagate
 	# trailing-slash URLs although we tolerate them
-	$s = "<a\nhref=\"${rel}tree/$tip\">root</a>/";
+	$s = "<a\nhref=\"${rel}src/$tip\">root</a>/";
 	my $cur = pop @ex;
 	my @t;
 	$s .= join('/', (map {
@@ -71,7 +71,7 @@ sub cur_path {
 		my $e = PublicInbox::Hval->utf8($_, join('/', @t));
 		my $ep = $e->as_path;
 		my $eh = $e->as_html;
-		"<a\nhref=\"${rel}tree/$tip/$ep\">$eh</a>";
+		"<a\nhref=\"${rel}src/$tip/$ep\">$eh</a>";
 	} @ex), '<b>'.utf8_html($cur).'</b>');
 }
 
@@ -230,7 +230,7 @@ sub git_tree_show {
 	} elsif (defined(my $tip = $req->{tip})) {
 		$pfx = $tip;
 	} else {
-		$pfx = 'tree/' . $req->{-repo}->tip;
+		$pfx = 'src/' . $req->{-repo}->tip;
 	}
 	$req->{tpfx} = $pfx;
 	my $env = $req->{env};
