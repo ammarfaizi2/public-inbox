@@ -6,35 +6,47 @@ use warnings;
 use base qw(PublicInbox::RepoBase);
 use PublicInbox::Hval qw(utf8_html);
 use PublicInbox::Qspawn;
+my $MAX_ASYNC = 65536;
 
 sub call_git_raw {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
 	my $tip = $req->{tip} || $repo->tip;
-	my $id = $tip . ':' . $req->{expath};
-	my ($cat, $hex, $type, $size) = $git->cat_file_begin($id);
-	return unless defined $cat;
-
-	my ($r, $buf);
-	my $left = $size;
-	if ($type eq 'blob') {
-		$type = git_blob_mime_type($self, $req, $cat, \$buf, \$left);
-	} elsif ($type eq 'commit' || $type eq 'tag') {
-		$type = 'text/plain; charset=UTF-8';
-	} elsif ($type eq 'tree') {
-		$git->cat_file_finish($left);
-		return git_tree_raw($self, $req, $git, $hex);
-	} else {
-		$type = 'application/octet-stream';
+	my $expath = $req->{expath};
+	my $obj = $tip;
+	$obj .= ":$expath" if $expath ne '';
+	my $env = $req->{env};
+	sub {
+		my ($res) = @_;
+		$git->check_async($env, $obj, sub {
+			my ($info) = @_;
+			my ($hex, $type, $size) = @$info;
+			if (!defined $type || $type eq 'missing') {
+				return $res->($self->rt(404, 'plain',
+						'Not Found'));
+			}
+			my $ct;
+			if ($type eq 'blob') {
+				my $base = $req->{extra}->[-1];
+				$ct = $self->mime_type($base) if defined $base;
+				$ct ||= 'text/plain; charset=UTF-8' if !$size;
+			} elsif ($type eq 'commit' || $type eq 'tag') {
+				$ct = 'text/plain; charset=UTF-8';
+			} elsif ($type eq 'tree') {
+				return git_tree_raw($self, $req, $res, $hex);
+			} else {
+				$ct = 'application/octet-stream';
+			}
+			show_raw($self, $req, $res, $ct, $hex, $type, $size);
+		});
 	}
-	git_blob_stream_response($git, $cat, $size, $type, $buf, $left);
 }
 
 sub git_tree_sed ($) {
 	my ($req) = @_;
 	my $buf = '';
-	my $end;
+	my $end = '';
 	my $pfx = $req->{tpfx};
 	sub { # $_[0] = buffer or undef
 		my $dst = delete $req->{tstart} || '';
@@ -53,19 +65,18 @@ sub git_tree_sed ($) {
 			$dst .= $n->as_html;
 			$dst .= '</a></li>';
 		}
-		$end ? $dst .= $end : $dst;
+		$dst .= $end;
 	}
 }
 
-# This should follow the cgit DOM structure in case anybody depends on it,
-# not using <pre> here as we don't expect people to actually view it much
 sub git_tree_raw {
-	my ($self, $req, $git, $hex) = @_;
+	my ($self, $req, $res, $hex) = @_;
 
 	my @ex = @{$req->{extra}};
 	my $rel = $req->{relcmd};
 	my $title = utf8_html(join('/', '', @ex, ''));
-	my $pfx = 'raw/';
+	my $repo = $req->{-repo};
+	my $pfx = ($req->{tip} || $repo->tip) . '/';
 	my $t = "<h2>$title</h2><ul>";
 	if (@ex) {
 		$t .= qq(<li><a\nhref="./">../</a></li>);
@@ -75,10 +86,12 @@ sub git_tree_raw {
 
 	$req->{tpfx} = $pfx;
 	$req->{tstart} = "<html><head><title>$title</title></head><body>".$t;
-	my $cmd = $git->cmd(qw(ls-tree --name-only -z), $git->abbrev, $hex);
+	my $git = $repo->{git};
+	my $cmd = $git->cmd(qw(ls-tree --name-only -z), $hex);
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	my $env = $req->{env};
+	$env->{'qspawn.response'} = $res;
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
 		if (!defined $r) {
@@ -90,47 +103,38 @@ sub git_tree_raw {
 	});
 }
 
-sub git_blob_mime_type {
-	my ($self, $req, $cat, $buf, $left) = @_;
-	my $base = $req->{extra}->[-1];
-	my $type = $self->mime_type($base) if defined $base;
-	return $type if $type;
-
-	my $to_read = 8000; # git uses this size to detect binary files
-	$to_read = $$left if $to_read > $$left;
-	my $r = read($cat, $$buf, $to_read);
-	if (!defined $r || $r <= 0) {
-		my $git = $req->{-repo}->{git};
-		$git->cat_file_finish($$left);
-		return;
-	}
-	$$left -= $r;
-	(index($buf, "\0") < 0) ? 'text/plain; charset=UTF-8'
-				: 'application/octet-stream';
-}
-
-sub git_blob_stream_response {
-	my ($git, $cat, $size, $type, $buf, $left) = @_;
-
-	sub {
-		my ($res) = @_;
-		my $to_read = 8192;
-		eval {
-			my $fh = $res->([ 200, ['Content-Length', $size,
-						'Content-Type', $type]]);
-			$fh->write($buf) if defined $buf;
-			while ($left > 0) {
-				$to_read = $left if $to_read > $left;
-				my $r = read($cat, $buf, $to_read);
-				last if (!defined $r || $r <= 0);
-				$left -= $r;
-				$fh->write($buf);
+sub show_raw {
+	my ($self, $req, $res, $ct, $hex, $type, $size) = @_;
+	my $env = $req->{env};
+	my $git = $req->{-repo}->{git};
+	if (1 || $size > $MAX_ASYNC) {
+		my $rdr = { 2 => $git->err_begin };
+		my $cmd = $git->cmd('cat-file', $type, $hex);
+		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
+		$env->{'qspawn.response'} = $res;
+		my $n = 0;
+		my $buf = '';
+		$qsp->psgi_return($env, undef, sub {
+			my ($r, $bref) = @_;
+			if (!defined $r) {
+				$self->rt(500, 'plain', $git->err);
+			} elsif (defined $ct) {
+				[ 200, [ 'Content-Type', $ct ] ];
+			} else {
+				return $self->rt(200, 'plain');
+				if (index($$bref, "\0") >= 0) {
+					$ct = 'application/octet-stream';
+					return [200, ['Content-Type', $ct]];
+				}
+				my $n = bytes::length($$bref);
+				if ($n >= 8000 || $n == $size) {
+					return $self->rt(200, 'plain');
+				}
+				# else: bref will keep growing...
 			}
-			$fh->close;
-		};
-		$git->cat_file_finish($left);
+		});
 	}
+	# TODO: forkless for small files
 }
-
 
 1;
