@@ -22,11 +22,10 @@ sub git_raw_check_res ($$$) {
 			my $base = $req->{extra}->[-1];
 			$ct = $self->mime_type($base) if defined $base;
 			$ct ||= 'text/plain; charset=UTF-8' if !$size;
-		} elsif ($type eq 'commit' || $type eq 'tag') {
-			$ct = 'text/plain; charset=UTF-8';
-		} elsif ($type eq 'tree') {
+		} elsif ($type eq 'commit' || $type eq 'tag' ||
+				$type eq 'tree') {
 			return git_tree_raw($self, $req, $res, $hex);
-		} else {
+		} else { # hmm..., just in case
 			$ct = 'application/octet-stream';
 		}
 
