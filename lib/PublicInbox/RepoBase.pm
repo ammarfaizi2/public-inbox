@@ -86,7 +86,7 @@ sub r {
 		my $env = $req->{env};
 		my $base = PublicInbox::Repobrowse::base_url($env);
 		my ($redir) = @extra;
-		if ($redir =~ m!\A\.\./!) { # relative redirect
+		if (index($redir, '/') != 0) { # relative redirect
 			my @orig = split(m!/+!, $env->{PATH_INFO});
 			my @dest = split(m!/+!, $redir);
 
@@ -98,7 +98,7 @@ sub r {
 			$end = pop @dest if $dest[-1] =~ /\A[#\?]/;
 			$redir = $base . join('/', @orig, @dest) . $end;
 		} else {
-			$redir = $base . '/' . $redir;
+			$redir = $base . $redir;
 		}
 		push @h, qw(Content-Type text/plain Location), $redir;
 

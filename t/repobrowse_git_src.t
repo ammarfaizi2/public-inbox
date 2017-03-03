@@ -14,6 +14,11 @@ test_psgi($test->{app}, sub {
 	like($noslash_body, qr{href="dir/dur">dur/</a>},
 		'path ok w/o slash');
 
+	$req = 'http://example.com/test.git/src';
+	$res = $cb->(GET($req));
+	is(302, $res->code, 'got 302 response from dir');
+	is("$req/master", $res->header('Location'), 'redirected to tip');
+
 	my $slash = $req . '/';
 	my $r2 = $cb->(GET($slash));
 	is(301, $r2->code, 'got 301 response from dir with slash');

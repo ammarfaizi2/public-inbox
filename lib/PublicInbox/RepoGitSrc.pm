@@ -23,7 +23,7 @@ sub call_git_src {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
 	my $git = $repo->{git};
-	my $tip = $req->{tip} || $req->{repo}->tip;
+	my $tip = $req->{tip} or return $self->r(302, $req, $repo->tip);
 	sub {
 		my ($res) = @_;
 		$git->check_async($req->{env}, "$tip:$req->{expath}", sub {
@@ -57,7 +57,7 @@ sub cur_path {
 	my ($req) = @_;
 	my @ex = @{$req->{extra}} or return '<b>root</b>';
 	my $s;
-	my $tip = $req->{tip} || $req->{repo}->tip;
+	my $tip = $req->{tip};
 	my $rel = $req->{relcmd};
 	# avoid relative paths, here, we don't want to propagate
 	# trailing-slash URLs although we tolerate them
@@ -81,7 +81,7 @@ sub git_blob_sed ($$$) {
 	my @lines;
 	my $buf = '';
 	my $rel = $req->{relcmd};
-	my $tip = $req->{tip} || $req->{repo}->tip;
+	my $tip = $req->{tip};
 	my $raw = join('/', "${rel}raw", $tip, @{$req->{extra}});
 	$raw = PublicInbox::Hval->utf8($raw)->as_path;
 	my $t = cur_path($req);
@@ -220,10 +220,8 @@ sub git_tree_show {
 	$req->{thtml} .= "\npath: $t\n\n<b>mode\tsize\tname</b>\n";
 	if (defined(my $last = $req->{extra}->[-1])) {
 		$pfx = PublicInbox::Hval->utf8($last)->as_path;
-	} elsif (defined(my $tip = $req->{tip})) {
-		$pfx = $tip;
 	} else {
-		$pfx = 'src/' . $req->{-repo}->tip;
+		$pfx = 'src/' . $req->{tip};
 	}
 	$req->{tpfx} = $pfx;
 	my $env = $req->{env};
