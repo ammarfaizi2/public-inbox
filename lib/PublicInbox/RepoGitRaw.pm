@@ -7,39 +7,59 @@ use base qw(PublicInbox::RepoBase);
 use PublicInbox::Hval qw(utf8_html);
 use PublicInbox::Qspawn;
 my $MAX_ASYNC = 65536;
+my $BIN_DETECT = 8000;
+
+sub git_raw_check_res ($$$) {
+	my ($self, $req, $res) = @_;
+	sub {
+		my ($info) = @_;
+		my ($hex, $type, $size) = @$info;
+		if (!defined $type || $type eq 'missing') {
+			return $res->($self->rt(404, 'plain', 'Not Found'));
+		}
+		my $ct;
+		if ($type eq 'blob') {
+			my $base = $req->{extra}->[-1];
+			$ct = $self->mime_type($base) if defined $base;
+			$ct ||= 'text/plain; charset=UTF-8' if !$size;
+		} elsif ($type eq 'commit' || $type eq 'tag') {
+			$ct = 'text/plain; charset=UTF-8';
+		} elsif ($type eq 'tree') {
+			return git_tree_raw($self, $req, $res, $hex);
+		} else {
+			$ct = 'application/octet-stream';
+		}
+
+		$size > $MAX_ASYNC and
+			return show_big($self, $req, $res, $ct, $info);
+
+		# buffer small files in full
+		my $buf = '';
+		$req->{-repo}->{git}->cat_async($req->{env}, $hex, sub {
+			my ($r) = @_;
+			return if ref($r) ne 'SCALAR';
+			$buf .= $$r;
+			return if bytes::length($buf) < $size;
+			$ct ||= index($buf, "\0") >= 0 ?
+					'application/octet-stream' :
+					'text/plain; charset=UTF-8';
+			$res->([200, ['Content-Type', $ct,
+					'Content-Length', $size ],
+				[ $buf ]]);
+		});
+	}
+}
 
 sub call_git_raw {
 	my ($self, $req) = @_;
 	my $repo = $req->{-repo};
-	my $git = $repo->{git};
-	my $tip = $req->{tip} || $repo->tip;
+	my $obj = $req->{tip} || $repo->tip;
 	my $expath = $req->{expath};
-	my $obj = $tip;
 	$obj .= ":$expath" if $expath ne '';
-	my $env = $req->{env};
 	sub {
 		my ($res) = @_;
-		$git->check_async($env, $obj, sub {
-			my ($info) = @_;
-			my ($hex, $type, $size) = @$info;
-			if (!defined $type || $type eq 'missing') {
-				return $res->($self->rt(404, 'plain',
-						'Not Found'));
-			}
-			my $ct;
-			if ($type eq 'blob') {
-				my $base = $req->{extra}->[-1];
-				$ct = $self->mime_type($base) if defined $base;
-				$ct ||= 'text/plain; charset=UTF-8' if !$size;
-			} elsif ($type eq 'commit' || $type eq 'tag') {
-				$ct = 'text/plain; charset=UTF-8';
-			} elsif ($type eq 'tree') {
-				return git_tree_raw($self, $req, $res, $hex);
-			} else {
-				$ct = 'application/octet-stream';
-			}
-			show_raw($self, $req, $res, $ct, $hex, $type, $size);
-		});
+		$repo->{git}->check_async($req->{env}, $obj,
+			git_raw_check_res($self, $req, $res));
 	}
 }
 
@@ -103,38 +123,36 @@ sub git_tree_raw {
 	});
 }
 
-sub show_raw {
-	my ($self, $req, $res, $ct, $hex, $type, $size) = @_;
+sub show_big {
+	my ($self, $req, $res, $ct, $info) = @_;
+	my ($hex, $type, $size) = @$info;
 	my $env = $req->{env};
 	my $git = $req->{-repo}->{git};
-	if (1 || $size > $MAX_ASYNC) {
-		my $rdr = { 2 => $git->err_begin };
-		my $cmd = $git->cmd('cat-file', $type, $hex);
-		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
-		$env->{'qspawn.response'} = $res;
-		my $n = 0;
-		my $buf = '';
-		$qsp->psgi_return($env, undef, sub {
-			my ($r, $bref) = @_;
-			if (!defined $r) {
-				$self->rt(500, 'plain', $git->err);
-			} elsif (defined $ct) {
-				[ 200, [ 'Content-Type', $ct ] ];
-			} else {
-				return $self->rt(200, 'plain');
-				if (index($$bref, "\0") >= 0) {
-					$ct = 'application/octet-stream';
-					return [200, ['Content-Type', $ct]];
-				}
-				my $n = bytes::length($$bref);
-				if ($n >= 8000 || $n == $size) {
-					return $self->rt(200, 'plain');
-				}
-				# else: bref will keep growing...
+	my $rdr = { 2 => $git->err_begin };
+	my $cmd = $git->cmd('cat-file', $type, $hex);
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
+	$env->{'qspawn.response'} = $res;
+	my @cl = ('Content-Length', $size);
+	$qsp->psgi_return($env, undef, sub {
+		my ($r, $bref) = @_;
+		if (!defined $r) {
+			$self->rt(500, 'plain', $git->err);
+		} elsif (defined $ct) {
+			[ 200, [ 'Content-Type', $ct, @cl ] ];
+		} else {
+			return $self->rt(200, 'plain');
+			if (index($$bref, "\0") >= 0) {
+				$ct = 'application/octet-stream';
+				return [200, ['Content-Type', $ct, @cl ] ];
 			}
-		});
-	}
-	# TODO: forkless for small files
+			my $n = bytes::length($$bref);
+			if ($n >= $BIN_DETECT || $n == $size) {
+				$ct ||= 'text/plain; charset=UTF-8';
+				return [200, ['Content-Type', $ct, @cl] ];
+			}
+			# else: bref will keep growing...
+		}
+	});
 }
 
 1;
