@@ -16,6 +16,7 @@ my %GIT_MODE = (
 );
 
 my $BINARY_MSG = "Binary file, save using the 'raw' link above";
+my $TOOBIG_MSG = "File is too big to display, save using the 'raw' link above";
 my $MAX_ASYNC = 65536; # same as pipe size on Linux
 my $BIN_DETECT = 8000; # same as git (buffer_is_binary in git.git)
 
@@ -80,15 +81,7 @@ sub git_blob_sed ($$$) {
 	my $bytes = 0;
 	my @lines;
 	my $buf = '';
-	my $rel = $req->{relcmd};
-	my $tip = $req->{tip};
-	my $raw = join('/', "${rel}raw", $tip, @{$req->{extra}});
-	$raw = PublicInbox::Hval->utf8($raw)->as_path;
-	my $t = cur_path($req);
 	my $end = '';
-	$req->{thtml} .= qq{\npath: $t\n\nblob $hex} .
-			qq{\t$size bytes (<a\nhref="$raw">raw</a>)};
-	$req->{lstart} = '</pre><hr/><pre>';
 	my $s;
 
 	sub {
@@ -139,31 +132,41 @@ sub git_blob_sed ($$$) {
 
 sub git_blob_show {
 	my ($self, $req, $res, $hex, $size) = @_;
-	my $sed = git_blob_sed($req, $hex, $size);
+	my $t = cur_path($req);
+	my $rel = $req->{relcmd};
+	my $raw = join('/', "${rel}raw", $req->{tip}, @{$req->{extra}});
+	$raw = PublicInbox::Hval->utf8($raw)->as_path;
+	$req->{thtml} .= qq{\npath: $t\n\nblob $hex} .
+			qq{\t$size bytes (<a\nhref="$raw">raw</a>)};
+	$req->{lstart} = '</pre><hr/><pre>';
 	my $git = $req->{-repo}->{git};
-	if ($size <= $MAX_ASYNC) {
-		my $buf = ''; # we slurp small files
-		$git->cat_async($req->{env}, $hex, sub {
-			my ($r) = @_;
-			my $ref = ref($r);
-			return if $ref eq 'ARRAY'; # redundant info
-			if ($ref eq 'SCALAR') {
-				$buf .= $$r;
-				if (bytes::length($buf) == $size) {
-					my $fh = $res->($self->rt(200, 'html'));
-					$fh->write($sed->($buf));
-					$fh->write($sed->(undef));
-					$fh->close;
-				}
-				return;
-			}
-			my $cb = $res or return;
-			$res = undef;
-			$cb->($self->rt(500, 'plain', "Error\n"));
-		});
-	} else {
-		$res->($self->rt(200, 'plain', "Too big\n"));
+	if ($size > $MAX_ASYNC) {
+		my $html = delete($req->{thtml}) . delete($req->{lstart});
+		$html .= $TOOBIG_MSG;
+		$html .= '</pre></body></html>';
+		return $res->($self->rt(200, 'html', $html));
 	}
+
+	my $buf = ''; # we slurp small files
+	$git->cat_async($req->{env}, $hex, sub {
+		my ($r) = @_;
+		my $ref = ref($r);
+		return if $ref eq 'ARRAY'; # redundant info
+		if ($ref eq 'SCALAR') {
+			$buf .= $$r;
+			if (bytes::length($buf) == $size) {
+				my $fh = $res->($self->rt(200, 'html'));
+				my $sed = git_blob_sed($req, $hex, $size);
+				$fh->write($sed->($buf));
+				$fh->write($sed->(undef));
+				$fh->close;
+			}
+			return;
+		}
+		my $cb = $res or return;
+		$res = undef;
+		$cb->($self->rt(500, 'plain', "Error\n"));
+	});
 }
 
 sub git_tree_sed ($) {
