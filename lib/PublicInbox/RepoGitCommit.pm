@@ -135,19 +135,18 @@ sub call_git_commit { # RepoBase calls this
 	$qsp->psgi_return($env, undef, sub { # parse header
 		my ($r, $bref) = @_;
 		if (!defined $r) {
-			my $errmsg = $git->err;
-			[ 500, [ 'Content-Type', 'text/html' ], [ $errmsg ] ];
+			$self->rt(500, 'plain', $git->err);
 		} elsif ($r == 0) {
-			git_commit_404($req);
+			git_commit_404($self, $req);
 		} else {
 			$env->{'qspawn.filter'} = git_commit_sed($self, $req);
-			[ 200, [ 'Content-Type', 'text/html' ] ];
+			$self->rt(200, 'html');
 		}
 	});
 }
 
 sub git_commit_404 {
-	my ($req) = @_;
+	my ($self, $req) = @_;
 	my $x = 'Missing commit or path';
 	my $pfx = "$req->{relcmd}commit";
 
@@ -156,7 +155,7 @@ sub git_commit_404 {
 	$x .= "<a\nhref=\"$pfx\">$try the latest commit in HEAD</a>\n";
 	$x .= '</pre></body>';
 
-	[404, ['Content-Type', 'text/html'], [ $x ]];
+	$self->rt(404, 'html', $x);
 }
 
 # FIXME: horrifically expensive...

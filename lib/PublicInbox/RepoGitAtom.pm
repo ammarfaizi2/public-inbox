@@ -124,8 +124,7 @@ sub git_atom_cb {
 		my $env = $req->{env};
 		if (!defined $r) {
 			my $git = $req->{-repo}->{git};
-			return [ 400, [ 'Content-Type', 'text/plain' ],
-				[ $git->err ] ];
+			return $self->rt(400, 'plain', $git->err);
 		}
 		$env->{'qspawn.filter'} = git_atom_sed($self, $req);
 		[ 200, [ 'Content-Type', 'application/atom+xml' ] ];

@@ -32,7 +32,7 @@ sub for_each_ref {
 	my $refs = $git->popen(qw(for-each-ref --sort=-creatordate),
 				EACH_REF_FMT, "--count=$count",
 				qw(refs/heads/ refs/tags/));
-	$fh = $res->([200, ['Content-Type', 'text/html; charset=UTF-8']]);
+	$fh = $res->($self->rt(200, 'html'));
 	# ref names are unpredictable in length and requires tables :<
 	$fh->write($self->html_start($req,
 				"$repo->{repo}: overview") .

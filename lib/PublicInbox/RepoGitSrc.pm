@@ -30,9 +30,7 @@ sub call_git_src {
 			my ($info) = @_;
 			my ($hex, $type, $size) = @$info;
 			unless (defined $type) {
-				return $res->([404,
-					['Content-Type','text/plain'],
-					['Not Found']]);
+				$res->($self->rt(404, 'plain', 'Not Found'));
 			}
 			show_tree($self, $req, $res, $hex, $type, $size);
 		});
@@ -46,12 +44,12 @@ sub show_tree {
 	$req->{thtml} = $self->html_start($req, $title, $opts) . "\n";
 	if ($type eq 'tree') {
 		$opts->{noindex} = 1;
-		git_tree_show($req, $res, $hex);
+		git_tree_show($self, $req, $res, $hex);
 	} elsif ($type eq 'blob') {
-		git_blob_show($req, $res, $hex, $size);
+		git_blob_show($self, $req, $res, $hex, $size);
 	} else {
-		$res->([404, ['Content-Type', 'text/plain; charset=UTF-8'],
-			 ["Unrecognized type ($type) for $hex\n"]]);
+		$res->($self->rt(404, 'plain',
+			"Unrecognized type ($type) for $hex\n"));
 	}
 }
 
@@ -140,7 +138,7 @@ sub git_blob_sed ($$$) {
 }
 
 sub git_blob_show {
-	my ($req, $res, $hex, $size) = @_;
+	my ($self, $req, $res, $hex, $size) = @_;
 	my $sed = git_blob_sed($req, $hex, $size);
 	my $git = $req->{-repo}->{git};
 	if ($size <= $MAX_ASYNC) {
@@ -152,9 +150,7 @@ sub git_blob_show {
 			if ($ref eq 'SCALAR') {
 				$buf .= $$r;
 				if (bytes::length($buf) == $size) {
-					my $fh = $res->([200,
-						['Content-Type',
-						 'text/html; charset=UTF-8']]);
+					my $fh = $res->($self->rt(200, 'html'));
 					$fh->write($sed->($buf));
 					$fh->write($sed->(undef));
 					$fh->close;
@@ -163,13 +159,10 @@ sub git_blob_show {
 			}
 			my $cb = $res or return;
 			$res = undef;
-			$cb->([500,
-				['Content-Type', 'text/plain; charset=UTF-8'],
-				[ 'Error' ]]);
+			$cb->($self->rt(500, 'plain', "Error\n"));
 		});
 	} else {
-		$res->([200, ['Content-Type', 'text/plain; charset=UTF-8'],
-			[ 'Too big' ]]);
+		$res->($self->rt(200, 'plain', "Too big\n"));
 	}
 }
 
@@ -216,7 +209,7 @@ sub git_tree_sed ($) {
 }
 
 sub git_tree_show {
-	my ($req, $res, $hex) = @_;
+	my ($self, $req, $res, $hex) = @_;
 	my $git = $req->{-repo}->{git};
 	my $cmd = $git->cmd(qw(ls-tree -l -z), $git->abbrev, $hex);
 	my $rdr = { 2 => $git->err_begin };
@@ -239,9 +232,9 @@ sub git_tree_show {
 		my ($r) = @_;
 		if (defined $r) {
 			$env->{'qspawn.filter'} = git_tree_sed($req);
-			[ 200, [ 'Content-Type', 'text/html' ] ];
+			$self->rt(200, 'html');
 		} else {
-			[ 500, [ 'Content-Type', 'text/plain' ], [ $git->err ]];
+			$self->rt(500, 'plain', $git->err);
 		}
 	});
 }

@@ -139,12 +139,12 @@ sub call_git_log {
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
 		if (!defined $r) {
-			[ 500, [ 'Content-Type', 'text/html' ], [ $git->err ] ];
+			$self->rt(500, 'html', $git->err);
 		} elsif ($r == 0) {
-			[ 404, [ 'Content-Type', 'text/html' ], [ $git->err ] ];
+			$self->rt(404, 'html', $git->err);
 		} else {
 			$env->{'qspawn.filter'} = git_log_sed($self, $req);
-			[ 200, [ 'Content-Type', 'text/html' ] ];
+			$self->rt(200, 'html');
 		}
 	});
 }

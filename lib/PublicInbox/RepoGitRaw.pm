@@ -22,10 +22,10 @@ sub call_git_raw {
 	if ($type eq 'blob') {
 		$type = git_blob_mime_type($self, $req, $cat, \$buf, \$left);
 	} elsif ($type eq 'commit' || $type eq 'tag') {
-		$type = 'text/plain';
+		$type = 'text/plain; charset=UTF-8';
 	} elsif ($type eq 'tree') {
 		$git->cat_file_finish($left);
-		return git_tree_raw($req, $git, $hex);
+		return git_tree_raw($self, $req, $git, $hex);
 	} else {
 		$type = 'application/octet-stream';
 	}
@@ -61,7 +61,7 @@ sub git_tree_sed ($) {
 # This should follow the cgit DOM structure in case anybody depends on it,
 # not using <pre> here as we don't expect people to actually view it much
 sub git_tree_raw {
-	my ($req, $git, $hex) = @_;
+	my ($self, $req, $git, $hex) = @_;
 
 	my @ex = @{$req->{extra}};
 	my $rel = $req->{relcmd};
@@ -83,10 +83,10 @@ sub git_tree_raw {
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
 		if (!defined $r) {
-			[ 500, [ 'Content-Type', 'text/plain' ], [ $git->err ]];
+			$self->rt(500, 'plain', $git->err);
 		} else {
 			$env->{'qspawn.filter'} = git_tree_sed($req);
-			[ 200, [ 'Content-Type', 'text/html' ] ];
+			$self->rt(200, 'html');
 		}
 	});
 }

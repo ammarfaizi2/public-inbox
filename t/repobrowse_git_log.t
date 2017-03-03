@@ -10,7 +10,7 @@ test_psgi($test->{app}, sub {
 	my $req = 'http://example.com/test.git/log';
 	my $res = $cb->(GET($req));
 	is($res->code, 200, 'got 200');
-	is($res->header('Content-Type'), 'text/html',
+	is($res->header('Content-Type'), 'text/html; charset=UTF-8',
 		'got correct Content-Type');
 	my $body = dechunk($res);
 	like($body, qr!</html>!, 'valid HTML :)');

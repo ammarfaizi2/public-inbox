@@ -31,8 +31,8 @@ sub call_git_patch {
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$qsp->psgi_return($env, undef, sub {
 		my ($r) = @_;
-		my $h = ['Content-Type', 'text/plain; charset=UTF-8'];
-		$r ? [ 200, $h ] : [ 500, $h, [ "format-patch error\n" ] ];
+		$r ? $self->rt(200, 'plain') :
+			$self->rt(500, 'plain', "format-patch error\n");
 	});
 }
 

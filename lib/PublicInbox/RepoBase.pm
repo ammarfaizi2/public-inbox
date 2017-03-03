@@ -105,10 +105,17 @@ sub r {
 		# mainly for curl (no-'-L') users:
 		$body = "Redirecting to $redir\n";
 	} else {
-		push @h, qw(Content-Type text/plain);
+		push @h, 'Content-Type', 'text/plain; charset=UTF-8';
 	}
 
 	[ $status, \@h, [ $body ] ]
+}
+
+sub rt {
+	my ($self, $status, $t) = @_;
+	my $res = [ $status, [ 'Content-Type', "text/$t; charset=UTF-8" ] ];
+	$res->[2] = [ $_[3] ] if defined $_[3];
+	$res;
 }
 
 1;

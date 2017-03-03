@@ -78,13 +78,12 @@ sub git_tag_show {
 	my ($self, $req, $h, $res) = @_;
 	my $git = $req->{-repo}->{git};
 	my $fh;
-	my $hdr = ['Content-Type', 'text/html; charset=UTF-8'];
 
 	# yes, this could still theoretically show anything,
 	# but a tag could also point to anything:
 	$git->cat_file("refs/tags/$h", sub {
 		my ($cat, $left, $type, $hex) = @_;
-		$fh = $res->([200, $hdr]);
+		$fh = $res->($self->rt(200, 'html'));
 		$h = PublicInbox::Hval->utf8($h);
 		my $m = "git_show_${type}_as_tag";
 
@@ -97,7 +96,7 @@ sub git_tag_show {
 		}
 	});
 	unless ($fh) {
-		$fh = $res->([404, $hdr]);
+		$fh = $res->($self->rt(404, 'html'));
 		$fh->write(invalid_tag_start($req, $h));
 	}
 	$fh->write('</pre></body></html>');
