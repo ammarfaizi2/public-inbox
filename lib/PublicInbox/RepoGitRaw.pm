@@ -4,7 +4,6 @@ package PublicInbox::RepoGitRaw;
 use strict;
 use warnings;
 use base qw(PublicInbox::RepoBase);
-use PublicInbox::RepoGitBlob;
 use PublicInbox::Hval qw(utf8_html);
 use PublicInbox::Qspawn;
 
@@ -90,5 +89,48 @@ sub git_tree_raw {
 		}
 	});
 }
+
+sub git_blob_mime_type {
+	my ($self, $req, $cat, $buf, $left) = @_;
+	my $base = $req->{extra}->[-1];
+	my $type = $self->mime_type($base) if defined $base;
+	return $type if $type;
+
+	my $to_read = 8000; # git uses this size to detect binary files
+	$to_read = $$left if $to_read > $$left;
+	my $r = read($cat, $$buf, $to_read);
+	if (!defined $r || $r <= 0) {
+		my $git = $req->{-repo}->{git};
+		$git->cat_file_finish($$left);
+		return;
+	}
+	$$left -= $r;
+	(index($buf, "\0") < 0) ? 'text/plain; charset=UTF-8'
+				: 'application/octet-stream';
+}
+
+sub git_blob_stream_response {
+	my ($git, $cat, $size, $type, $buf, $left) = @_;
+
+	sub {
+		my ($res) = @_;
+		my $to_read = 8192;
+		eval {
+			my $fh = $res->([ 200, ['Content-Length', $size,
+						'Content-Type', $type]]);
+			$fh->write($buf) if defined $buf;
+			while ($left > 0) {
+				$to_read = $left if $to_read > $left;
+				my $r = read($cat, $buf, $to_read);
+				last if (!defined $r || $r <= 0);
+				$left -= $r;
+				$fh->write($buf);
+			}
+			$fh->close;
+		};
+		$git->cat_file_finish($left);
+	}
+}
+
 
 1;

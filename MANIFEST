@@ -85,7 +85,6 @@ lib/PublicInbox/RepoBase.pm
 lib/PublicInbox/RepoConfig.pm
 lib/PublicInbox/RepoGit.pm
 lib/PublicInbox/RepoGitAtom.pm
-lib/PublicInbox/RepoGitBlob.pm
 lib/PublicInbox/RepoGitCommit.pm
 lib/PublicInbox/RepoGitDiff.pm
 lib/PublicInbox/RepoGitDiffCommon.pm
