@@ -13,13 +13,11 @@ use PublicInbox::Qspawn;
 my @CMD = qw(format-patch -M --stdout);
 my $sig = '--signature=git '.join(' ', @CMD);
 
-sub call_git_patch {
-	my ($self, $req) = @_;
-	my $repo = $req->{-repo};
-	my $git = $repo->{git};
+sub fmt_patch ($$$) {
+	my ($self, $req, $res) = @_;
+	my $git = $req->{-repo}->{git};
+	my $tip = $req->{tip};
 	my $env = $req->{env};
-	my $tip = $repo->tip;
-	$tip =~ /\A[\w-]+([~\^][~\^\d])*\z/;
 
 	# limit scope, don't take extra args to avoid wasting server
 	# resources buffering:
@@ -27,6 +25,7 @@ sub call_git_patch {
 	my $cmd = $git->cmd(@CMD, $sig." $range", $range, '--');
 	my $expath = $req->{expath};
 	push @$cmd, $expath if $expath ne '';
+	$env->{'qspawn.response'} = $res;
 
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$qsp->psgi_return($env, undef, sub {
@@ -34,6 +33,26 @@ sub call_git_patch {
 		$r ? $self->rt(200, 'plain') :
 			$self->rt(500, 'plain', "format-patch error\n");
 	});
+}
+
+sub call_git_patch {
+	my ($self, $req) = @_;
+	sub {
+		my ($res) = @_;
+		my $repo = $req->{-repo};
+		my $tip = $req->{tip};
+		my $obj = $tip || $repo->tip;
+		$repo->{git}->check_async($req->{env}, $obj.'^{commit}', sub {
+			my ($info) = @_;
+			my ($hex, $type, undef) = @$info;
+			if (!defined $type || $type ne 'commit') {
+				return $res->($self->rt(400, 'plain',
+						"$obj is not a commit\n"));
+			}
+			return fmt_patch($self, $req, $res) if $obj eq $hex;
+			$res->($self->r(302, $req, $tip ? "../$hex" : $hex));
+		});
+	}
 }
 
 1;
