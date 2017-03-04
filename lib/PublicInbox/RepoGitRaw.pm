@@ -36,15 +36,17 @@ sub git_raw_check_res ($$$) {
 		my $buf = '';
 		$req->{-repo}->{git}->cat_async($req->{env}, $hex, sub {
 			my ($r) = @_;
-			return if ref($r) ne 'SCALAR';
-			$buf .= $$r;
-			return if bytes::length($buf) < $size;
-			$ct ||= index($buf, "\0") >= 0 ?
-					'application/octet-stream' :
-					'text/plain; charset=UTF-8';
-			$res->([200, ['Content-Type', $ct,
-					'Content-Length', $size ],
-				[ $buf ]]);
+			if (ref($r) eq 'SCALAR') {
+				$buf .= $$r;
+			} elsif ($r == 0) {
+				return if bytes::length($buf) < $size;
+				$ct ||= index($buf, "\0") >= 0 ?
+						'application/octet-stream' :
+						'text/plain; charset=UTF-8';
+				$res->([200, ['Content-Type', $ct,
+						'Content-Length', $size ],
+					[ $buf ]]);
+			}
 		});
 	}
 }

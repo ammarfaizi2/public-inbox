@@ -65,7 +65,7 @@ take_job:
 		}
 		$cb->($info); # $info may 0 (EOF, or undef, $cb will see $!)
 		return $self->close unless $info;
-		if ($check || (scalar(@$info) != 3)) {
+		if ($check || $info->[1] eq 'missing') {
 			# do not monopolize the event loop if we're drained:
 			return if ${$self->{rbuf}} eq '';
 			goto take_job;
@@ -89,6 +89,7 @@ final_hunk:
 		my $lf = chop $$rbuf;
 		$lf eq "\n" or die "BUG: missing LF (got $lf)";
 		$cb->($rbuf);
+		$cb->(0);
 
 		return if $buf eq '';
 		goto take_job;

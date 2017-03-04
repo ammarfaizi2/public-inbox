@@ -154,18 +154,17 @@ sub git_blob_show {
 		return if $ref eq 'ARRAY'; # redundant info
 		if ($ref eq 'SCALAR') {
 			$buf .= $$r;
-			if (bytes::length($buf) == $size) {
-				my $fh = $res->($self->rt(200, 'html'));
-				my $sed = git_blob_sed($req, $hex, $size);
-				$fh->write($sed->($buf));
-				$fh->write($sed->(undef));
-				$fh->close;
-			}
-			return;
+		} elsif (!defined $r) {
+			my $cb = $res or return;
+			$res = undef;
+			$cb->($self->rt(500, 'plain', "Error\n"));
+		} elsif ($r == 0) {
+			my $fh = $res->($self->rt(200, 'html'));
+			my $sed = git_blob_sed($req, $hex, $size);
+			$fh->write($sed->($buf));
+			$fh->write($sed->(undef));
+			$fh->close;
 		}
-		my $cb = $res or return;
-		$res = undef;
-		$cb->($self->rt(500, 'plain', "Error\n"));
 	});
 }
 

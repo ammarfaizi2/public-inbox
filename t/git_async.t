@@ -117,6 +117,7 @@ my $dir = "$tmpdir/git.git";
 	}
 	my @info;
 	my $str = '';
+	my $eof_seen = 0;
 	$git->cat_async_compat('HEAD:foo.txt', sub {
 		my $ref = $_[0];
 		my $t = ref $ref;
@@ -124,10 +125,13 @@ my $dir = "$tmpdir/git.git";
 			push @info, $ref;
 		} elsif ($t eq 'SCALAR') {
 			$str .= $$ref;
+		} elsif ($ref == 0) {
+			$eof_seen++;
 		} else {
 			fail "fail type: $t";
 		}
 	});
+	is($eof_seen, 1, 'EOF seen once');
 	is_deeply(\@info, [ [ 'bf4f17855632367a160bef055fc8ba4675d10e6b',
 			       'blob', 18 ]], 'info matches compat');
 	is($str, "-----\nhello\nworld\n", 'data matches compat');

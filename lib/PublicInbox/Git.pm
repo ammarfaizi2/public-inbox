@@ -253,10 +253,10 @@ sub cat_async_compat ($$$) {
 	$self->{out}->print($obj."\n") or fail($self, "write error: $!");
 	my $in = $self->{in};
 	my $info = async_info_compat($in);
+	my (undef, $type, $left) = @$info;
 	$cb->($info);
-	return if scalar(@$info) != 3; # missing
+	return if $info->[1] eq 'missing';
 	my $max = 8192;
-	my $left = $info->[2];
 	my ($buf, $r);
 	while ($left > 0) {
 		$r = read($in, $buf, $left > $max ? $max : $left);
@@ -267,6 +267,7 @@ sub cat_async_compat ($$$) {
 	$r = read($in, $buf, 1);
 	defined($r) or fail($self, "read failed: $!");
 	fail($self, 'newline missing after blob') if ($r != 1 || $buf ne "\n");
+	$cb->(0);
 }
 
 sub check_async {
