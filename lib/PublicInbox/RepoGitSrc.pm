@@ -214,7 +214,7 @@ sub git_tree_sed ($) {
 sub git_tree_show {
 	my ($self, $req, $res, $hex) = @_;
 	my $git = $req->{-repo}->{git};
-	my $cmd = $git->cmd(qw(ls-tree -l -z), $git->abbrev, $hex);
+	my $cmd = $git->cmd(qw(ls-tree -l -z --no-abbrev), $hex);
 	my $rdr = { 2 => $git->err_begin };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
 	my $t = cur_path($req);

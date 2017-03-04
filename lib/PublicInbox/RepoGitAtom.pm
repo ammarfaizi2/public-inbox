@@ -142,8 +142,7 @@ sub call_git_atom {
 	my $env = $req->{env};
 	my $tip = $req->{tip} || $repo->tip;
 	my $read_log = sub {
-		my $cmd = $git->cmd(qw(log --no-notes --no-color
-					--abbrev-commit), $git->abbrev,
+		my $cmd = $git->cmd(qw(log --no-notes --no-color --no-abbrev),
 					$ATOM_FMT, "-$max", $tip, '--');
 		my $expath = $req->{expath};
 		push @$cmd, $expath if $expath ne '';
