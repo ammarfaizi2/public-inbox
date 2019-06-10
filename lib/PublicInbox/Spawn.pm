@@ -149,6 +149,23 @@ int pi_fork_exec(int in, int out, int err,
 }
 VFORK_SPAWN
 
+# TODO: we may support other mallocs through this parameter
+if (($ENV{INBOX_DEBUG} // '') =~ /\bmalloc_info\b/) {
+	$vfork_spawn .= <<MALLOC_DEBUG;
+#include <malloc.h>
+
+int inbox_malloc_info(int options)
+{
+	int rc = malloc_info(options, stderr);
+
+	return rc == 0 ? TRUE : FALSE;
+}
+MALLOC_DEBUG
+
+	# dump malloc info to stderr on SIGCONT
+	$SIG{CONT} = sub { inbox_malloc_info(0) };
+}
+
 my $inline_dir = $ENV{PERL_INLINE_DIRECTORY};
 $vfork_spawn = undef unless defined $inline_dir && -d $inline_dir && -w _;
 if (defined $vfork_spawn) {
