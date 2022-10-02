@@ -212,8 +212,9 @@ sub flush_diff ($$) {
 			for my $s (split(/((?:(?:^\+[^\n]*\n)+)|
 					(?:(?:^-[^\n]*\n)+)|
 					(?:^@@ [^\n]+\n))/xsm, $x)) {
+				undef $x;
 				if (!defined($dctx)) {
-					print $afh $x;
+					print $afh $s;
 				} elsif ($s =~ s/\A@@ (\S+) (\S+) @@//) {
 					print $zfh qq(<span\nclass="hunk">),
 						diff_hunk($dctx, $1, $2),
