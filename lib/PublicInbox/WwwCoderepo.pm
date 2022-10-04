@@ -171,6 +171,10 @@ sub srv { # endpoint called by PublicInbox::WWW
 	}
 	$path_info =~ m!\A/(.+?)/\z! and
 		($ctx->{git} = $self->{"\0$1"}) and return summary($self, $ctx);
+	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/\z! and
+			($ctx->{git} = $self->{"\0$1"}) and
+		return PublicInbox::ViewVCS::show($ctx, $2);
+
 	if ($path_info =~ m!\A/(.+?)\z! and ($git = $self->{"\0$1"})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});

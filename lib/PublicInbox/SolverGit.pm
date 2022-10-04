@@ -639,7 +639,7 @@ sub resolve_patch ($$) {
 
 	# scan through inboxes to look for emails which results in
 	# the oid we want:
-	my $ibx = shift(@{$want->{try_ibxs}}) or die 'BUG: {try_ibxs} empty';
+	my $ibx = shift(@{$want->{try_ibxs}}) or return done($self, undef);
 	if (my $msgs = find_smsgs($self, $ibx, $want)) {
 		$want->{try_smsgs} = $msgs;
 		$want->{cur_ibx} = $ibx;
@@ -654,14 +654,14 @@ sub resolve_patch ($$) {
 sub new {
 	my ($class, $ibx, $user_cb, $uarg) = @_;
 
-	bless {
-		gits => $ibx->{-repo_objs},
+	bless { # $ibx is undef if coderepo only (see WwwCoderepo)
+		gits => $ibx ? $ibx->{-repo_objs} : undef,
 		user_cb => $user_cb,
 		uarg => $uarg,
 		# -cur_di, -qsp_err, -msg => temp fields for Qspawn callbacks
 
 		# TODO: config option for searching related inboxes
-		inboxes => [ $ibx ],
+		inboxes => $ibx ? [ $ibx ] : [],
 	}, $class;
 }
 

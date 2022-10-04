@@ -484,6 +484,7 @@ sub show ($$;$) {
 	open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log" or die "open: $!";
 	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
 						\&solve_result, $ctx);
+	$solver->{gits} //= [ $ctx->{git} ];
 	$solver->{tmp} = $ctx->{-tmp}; # share tmpdir
 	# PSGI server will call this immediately and give us a callback (-wcb)
 	sub {
