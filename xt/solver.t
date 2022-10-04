@@ -57,20 +57,10 @@ while (($ibx_name, $urls) = each %$todo) {
 	}
 }
 
-SKIP: {
-	require_mods(qw(Plack::Test::ExternalServer), $nr);
-	delete @$todo{@gone};
-
-	my $sock = tcp_server() or BAIL_OUT $!;
-	my ($tmpdir, $for_destroy) = tmpdir();
-	my ($out, $err) = map { "$tmpdir/std$_.log" } qw(out err);
-	my $cmd = [ qw(-httpd -W0), "--stdout=$out", "--stderr=$err" ];
-	my $td = start_script($cmd, undef, { 3 => $sock });
-	my ($h, $p) = tcp_host_port($sock);
-	local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = "http://$h:$p";
-	while (($ibx_name, $urls) = each %$todo) {
-		Plack::Test::ExternalServer::test_psgi(client => $client);
-	}
+delete @$todo{@gone};
+my $env = { PI_CONFIG => PublicInbox::Config->default_file };
+while (($ibx_name, $urls) = each %$todo) {
+	test_httpd($env, $client, $nr);
 }
 
 done_testing();

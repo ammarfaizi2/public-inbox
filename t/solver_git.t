@@ -302,29 +302,20 @@ EOF
 				'UTF-8 commit shown properly');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
+	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };
+	test_httpd($env, $client, 7, sub {
 	SKIP: {
-		require_mods(qw(Plack::Test::ExternalServer), 7);
-		my $env = { PI_CONFIG => $cfgpath };
-		my $sock = tcp_server() or die;
-		my ($out, $err) = map { "$tmpdir/std$_.log" } qw(out err);
-		my $cmd = [ qw(-httpd -W0), "--stdout=$out", "--stderr=$err" ];
-		my $td = start_script($cmd, $env, { 3 => $sock });
-		my ($h, $p) = tcp_host_port($sock);
-		my $url = "http://$h:$p";
-		local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = $url;
-		Plack::Test::ExternalServer::test_psgi(client => $client);
 		require_cmd('curl', 1) or skip 'no curl', 1;
-
 		mkdir "$tmpdir/ext" // xbail "mkdir $!";
+		my $rurl = "$ENV{PLACK_TEST_EXTERNALSERVER_URI}/$name";
 		test_lei({tmpdir => "$tmpdir/ext"}, sub {
-			my $rurl = "$url/$name";
 			lei_ok(qw(blob --no-mail 69df7d5 -I), $rurl);
 			is(git_sha(1, \$lei_out)->hexdigest, $expect,
 				'blob contents output');
 			ok(!lei(qw(blob -I), $rurl, $non_existent),
 					'non-existent blob fails');
 		});
-	}
+	}});
 }
 
 done_testing();

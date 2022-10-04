@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -97,19 +97,12 @@ my $client = sub {
 
 test_psgi(sub { $www->call(@_) }, $client);
 SKIP: {
-	require_mods(qw(DBD::SQLite Plack::Test::ExternalServer), 18);
+	require_mods(qw(DBD::SQLite), 18);
 	$ibx = create_inbox 'test-indexed', indexlevel => 'basic', $creat_cb;
 	$cfgpath = "$ibx->{inboxdir}/pi_config";
 	my $env = { PI_CONFIG => $cfgpath };
 	$www = PublicInbox::WWW->new(PublicInbox::Config->new($cfgpath));
 	test_psgi(sub { $www->call(@_) }, $client);
-	my $sock = tcp_server() or die;
-	my ($tmpdir, $for_destroy) = tmpdir();
-	my ($out, $err) = map { "$tmpdir/std$_.log" } qw(out err);
-	my $cmd = [ qw(-httpd -W0), "--stdout=$out", "--stderr=$err" ];
-	my $td = start_script($cmd, $env, { 3 => $sock });
-	my ($h, $p) = tcp_host_port($sock);
-	local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = "http://$h:$p";
-	Plack::Test::ExternalServer::test_psgi(client => $client);
+	test_httpd($env, $client);
 }
 done_testing;

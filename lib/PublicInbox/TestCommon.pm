@@ -743,11 +743,14 @@ sub create_inbox ($$;@) {
 	$ibx;
 }
 
-sub test_httpd ($$;$) {
-	my ($env, $client, $skip) = @_;
-	for (qw(PI_CONFIG TMPDIR)) {
-		$env->{$_} or BAIL_OUT "$_ unset";
-	}
+sub test_httpd ($$;$$) {
+	my ($env, $client, $skip, $cb) = @_;
+	my ($tmpdir, $for_destroy);
+	$env->{TMPDIR} //= do {
+		($tmpdir, $for_destroy) = tmpdir();
+		$tmpdir;
+	};
+	for (qw(PI_CONFIG)) { $env->{$_} or BAIL_OUT "$_ unset" }
 	SKIP: {
 		require_mods(qw(Plack::Test::ExternalServer LWP::UserAgent),
 				$skip // 1);
@@ -761,6 +764,7 @@ sub test_httpd ($$;$) {
 		$ua->max_redirect(0);
 		Plack::Test::ExternalServer::test_psgi(client => $client,
 							ua => $ua);
+		$cb->() if $cb;
 		$td->join('TERM');
 		open my $fh, '<', $err or BAIL_OUT $!;
 		my $e = do { local $/; <$fh> };
