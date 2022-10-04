@@ -34,6 +34,7 @@ File::Path::mkpath([map { $md.$_ } (qw(/ /cur /new /tmp))]);
 symlink(abs_path('t/solve/0001-simple-mod.patch'), "$md/cur/foo:2,") or
 	xbail "symlink: $!";
 
+my $v1_0_0_rev = '8a918a8523bc9904123460f85999d75f6d604916';
 my $v1_0_0_tag = 'cb7c42b1e15577ed2215356a2bf925aef59cdd8d';
 my $v1_0_0_tag_short = substr($v1_0_0_tag, 0, 16);
 my $expect = '69df7d565d49fbaaeb0a067910f03dc22cd52bd0';
@@ -331,6 +332,25 @@ EOF
 		is($res->code, 200, 'coderepo summary (public-inbox)');
 		$res = $cb->(GET('/public-inbox'));
 		is($res->code, 301, 'redirected');
+
+		my $fn = 'public-inbox-1.0.0.tar.gz';
+		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
+		is($res->code, 200, 'tar.gz snapshot');
+		is($res->header('Content-Disposition'),
+			qq'inline; filename="$fn"', 'c-d header');
+		is($res->header('ETag'), qq'"$v1_0_0_rev"', 'etag header');
+		my $exp = xqx([qw(git archive --format=tar.gz
+				--prefix=public-inbox-1.0.0/ v1.0.0)],
+				{ GIT_DIR => $git_dir });
+		my $got = $res->content;
+		is(length($got), length($exp),
+			"length matches installed `git archive' output") and
+		is(git_sha(1, \$got)->hexdigest, git_sha(1, \$exp)->hexdigest,
+			"content matches installed `git archive' output");
+
+		$fn = 'public-inbox-1.0.2.tar.gz';
+		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
+		is($res->code, 404, '404 on non-existent tag');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

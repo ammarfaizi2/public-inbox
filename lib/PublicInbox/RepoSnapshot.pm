@@ -1,0 +1,95 @@
+# Copyright (C) all contributors <meta@public-inbox.org>
+# License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+
+# cgit-compatible /snapshot/ endpoint for WWW coderepos
+package PublicInbox::RepoSnapshot;
+use v5.12;
+use PublicInbox::Git;
+use PublicInbox::Qspawn;
+use PublicInbox::GitAsyncCat;
+use PublicInbox::WwwStatic qw(r);
+
+# Not using standard mime types since the compressed tarballs are
+# special or do not match my /etc/mime.types.  Choose what gitweb
+# and cgit agree on for compatibility.
+our %FMT_TYPES = (
+	'tar' => 'application/x-tar',
+	'tar.gz' => 'application/x-gzip',
+	'tar.bz2' => 'application/x-bzip2',
+	'tar.xz' => 'application/x-xz',
+	'zip' => 'application/x-zip',
+);
+
+our %FMT_CFG = (
+	'tar.xz' => 'xz -c',
+	'tar.bz2' => 'bzip2 -c',
+	# not supporting lz nor zstd for now to avoid format proliferation
+	# and increased cache overhead required to handle extra formats.
+);
+
+my $SUFFIX = join('|', map { quotemeta } keys %FMT_TYPES);
+
+# TODO deal with tagged blobs
+
+sub archive_hdr { # parse_hdr for Qspawn
+	my ($r, $bref, $ctx) = @_;
+	$r or return [500, [qw(Content-Type text/plain Content-Length 0)], []];
+	my $fn = "$ctx->{snap_pfx}.$ctx->{snap_fmt}";
+	my $type = $FMT_TYPES{$ctx->{snap_fmt}} //
+				die "BUG: bad fmt: $ctx->{snap_fmt}";
+	[ 200, [ 'Content-Type', "$type; charset=UTF-8",
+		'Content-Disposition', qq(inline; filename="$fn"),
+		'ETag', qq("$ctx->{etag}") ] ];
+}
+
+sub archive_cb {
+	my ($ctx) = @_;
+	my @cfg;
+	if (my $cmd = $FMT_CFG{$ctx->{snap_fmt}}) {
+		@cfg = ('-c', "tar.$ctx->{snap_fmt}.command=$cmd");
+	}
+	my $qsp = PublicInbox::Qspawn->new(['git', @cfg,
+			"--git-dir=$ctx->{git}->{git_dir}", 'archive',
+			"--prefix=$ctx->{snap_pfx}/",
+			"--format=$ctx->{snap_fmt}", $ctx->{treeish}]);
+	$qsp->psgi_return($ctx->{env}, undef, \&archive_hdr, $ctx);
+}
+
+sub ver_check { # git->check_async callback
+	my ($oid, $type, $size, $ctx) = @_;
+	if ($type eq 'missing') { # try 'v' and 'V' prefixes
+		my $pfx = shift @{$ctx->{try_pfx}} or return
+			delete($ctx->{env}->{'qspawn.wcb'})->(r(404));
+		my $v = $ctx->{treeish} = $pfx.$ctx->{snap_ver};
+		return $ctx->{env}->{'pi-httpd.async'} ?
+			async_check($ctx, $v, \&ver_check, $ctx) :
+			$ctx->{git}->check_async($v, \&ver_check, $ctx);
+	}
+	$ctx->{etag} = $oid;
+	archive_cb($ctx);
+}
+
+sub srv {
+	my ($ctx, $fn) = @_;
+	return if $fn =~ /["\s]/s;
+	$fn =~ s/\.($SUFFIX)\z//o or return;
+	$ctx->{snap_fmt} = $1;
+	my $pfx = $ctx->{git}->local_nick // return;
+	$pfx =~ s/(?:\.git)?\z/-/;
+	substr($fn, 0, length($pfx)) eq $pfx or return;
+	$ctx->{snap_pfx} = $fn;
+	my $v = $ctx->{snap_ver} = substr($fn, length($pfx), length($fn));
+	$ctx->{treeish} = $v; # try without [vV] prefix, first
+	@{$ctx->{try_pfx}} = qw(v V); # cf. cgit:ui-snapshot.c
+	sub {
+		$ctx->{env}->{'qspawn.wcb'} = $_[0];
+		if ($ctx->{env}->{'pi-httpd.async'}) {
+			async_check($ctx, $v, \&ver_check, $ctx);
+		} else {
+			$ctx->{git}->check_async($v, \&ver_check, $ctx);
+			$ctx->{git}->check_async_wait;
+		}
+	}
+}
+
+1;

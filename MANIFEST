@@ -306,6 +306,7 @@ lib/PublicInbox/PktOp.pm
 lib/PublicInbox/ProcessPipe.pm
 lib/PublicInbox/Qspawn.pm
 lib/PublicInbox/Reply.pm
+lib/PublicInbox/RepoSnapshot.pm
 lib/PublicInbox/SaPlugin/ListMirror.pm
 lib/PublicInbox/SaPlugin/ListMirror.pod
 lib/PublicInbox/Search.pm

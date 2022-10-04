@@ -426,6 +426,7 @@ sub cleanup {
 				scalar(@{$self->{inflight} // []}));
 	local $in_cleanup = 1;
 	delete $self->{async_cat};
+	delete $self->{async_chk};
 	async_wait_all($self);
 	delete $self->{inflight};
 	delete $self->{inflight_c};

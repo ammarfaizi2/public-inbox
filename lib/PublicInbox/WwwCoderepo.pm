@@ -175,6 +175,14 @@ sub srv { # endpoint called by PublicInbox::WWW
 			($ctx->{git} = $self->{"\0$1"}) and
 		return PublicInbox::ViewVCS::show($ctx, $2);
 
+	# snapshots:
+	if ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
+			($ctx->{git} = $self->{"\0$1"})) {
+		require PublicInbox::RepoSnapshot;
+		return PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
+	}
+
+	# enforce trailing slash:
 	if ($path_info =~ m!\A/(.+?)\z! and ($git = $self->{"\0$1"})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
