@@ -451,7 +451,7 @@ sub DESTROY { cleanup(@_) }
 
 sub local_nick ($) {
 	# don't show full FS path, basename should be OK:
-	$_[0]->{git_dir} =~ m!/([^/]+?)(?:/*\.git/*)?\z! ? "$1.git" : '???';
+	$_[0]->{git_dir} =~ m!/([^/]+?)(?:/*\.git/*)?\z! ? "$1.git" : undef;
 }
 
 sub host_prefix_url ($$) {
@@ -478,7 +478,7 @@ sub pub_urls {
 	if (my $urls = $self->{cgit_url}) {
 		return map { host_prefix_url($env, $_) } @$urls;
 	}
-	(local_nick($self));
+	(local_nick($self) // '???');
 }
 
 sub cat_async_begin {
