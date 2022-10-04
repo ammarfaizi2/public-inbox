@@ -181,33 +181,18 @@ sub over {
 	} // ($req ? croak("E: $@") : undef);
 }
 
-sub try_cat {
-	my ($path) = @_;
-	open(my $fh, '<', $path) or return '';
-	local $/;
-	<$fh> // '';
-}
-
-sub cat_desc ($) {
-	my $desc = try_cat($_[0]);
-	local $/ = "\n";
-	chomp $desc;
-	utf8::decode($desc);
-	$desc =~ s/\s+/ /smg;
-	$desc eq '' ? undef : $desc;
-}
-
 sub description {
 	my ($self) = @_;
-	($self->{description} //= cat_desc("$self->{inboxdir}/description")) //
+	($self->{description} //=
+		PublicInbox::Git::cat_desc("$self->{inboxdir}/description")) //
 		'($INBOX_DIR/description missing)';
 }
 
 sub cloneurl {
 	my ($self) = @_;
 	$self->{cloneurl} // do {
-		my $s = try_cat("$self->{inboxdir}/cloneurl");
-		my @urls = split(/\s+/s, $s);
+		my @urls = split(/\s+/s,
+		  PublicInbox::Git::try_cat("$self->{inboxdir}/cloneurl"));
 		scalar(@urls) ? ($self->{cloneurl} = \@urls) : undef;
 	} // [];
 }

@@ -108,7 +108,7 @@ sub altid_map { {} }
 sub description {
 	my ($self) = @_;
 	($self->{description} //=
-		PublicInbox::Inbox::cat_desc("$self->{topdir}/description")) //
+		PublicInbox::Git::cat_desc("$self->{topdir}/description")) //
 		'$EXTINDEX_DIR/description missing';
 }
 

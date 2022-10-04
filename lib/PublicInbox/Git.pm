@@ -498,13 +498,31 @@ sub modified ($) {
 	(split(/ /, <$fh> // time))[0] + 0; # integerize for JSON
 }
 
+sub try_cat {
+	my ($path) = @_;
+	open(my $fh, '<', $path) or return '';
+	local $/;
+	<$fh> // '';
+}
+
+sub cat_desc ($) {
+	my $desc = try_cat($_[0]);
+	chomp $desc;
+	utf8::decode($desc);
+	$desc =~ s/\s+/ /smg;
+	$desc eq '' ? undef : $desc;
+}
+
 sub description {
-	my $desc = '';
-	if (open(my $fh, '<:utf8', "$_[0]->{git_dir}/description")) {
-		local $/ = "\n";
-		chomp($desc = <$fh> // '');
-	}
-	$desc eq '' ? 'Unnamed repository' : $desc;
+	cat_desc("$_[0]->{git_dir}/description") // 'Unnamed repository';
+}
+
+sub cloneurl {
+	my ($self) = @_;
+	$self->{cloneurl} // do {
+		my @urls = split(/\s+/s, try_cat("$self->{git_dir}/cloneurl"));
+		scalar(@urls) ? ($self->{cloneurl} = \@urls) : undef;
+	} // [];
 }
 
 # for grokmirror, which doesn't read gitweb.description

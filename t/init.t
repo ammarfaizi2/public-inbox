@@ -102,7 +102,7 @@ sub quiet_fail {
 	umask($umask) // xbail "umask: $!";
 	ok(-d "$tmpdir/a/b/c/d", 'directory created');
 	my $desc = "$tmpdir/a/b/c/d/description";
-	is(PublicInbox::Inbox::try_cat($desc),
+	is(PublicInbox::Git::try_cat($desc),
 		"public inbox for abcd\@example.com\n", 'description set');
 	my $mode = (stat($desc))[2];
 	is(sprintf('0%03o', $mode & 0777), '0644',
