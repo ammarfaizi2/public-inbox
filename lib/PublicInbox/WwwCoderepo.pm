@@ -55,8 +55,16 @@ sub summary_finish {
 	# git log
 	my @r = split(/\n/s, pop(@x) // '');
 	my $last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_log};
-	print $zfh '<pre><a id=log>$</a> '.
-		"git log --pretty=format:'%h %s (%cs)%d'\n";
+	print $zfh <<EOM;
+<pre>
+<a
+href='#readme'>about</a> <a
+href='#heads'>heads</a> <a
+href='#tags'>tags</a>
+
+<a
+id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'
+EOM
 	for (@r) {
 		my $d; # decorations
 		s/^ \(([^\)]+)\)// and $d = $1;
