@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # wrapper for cgit(1) and git-http-backend(1) for browsing and
@@ -6,7 +6,7 @@
 # directive to be set in the public-inbox config file.
 
 package PublicInbox::Cgit;
-use strict;
+use v5.12;
 use PublicInbox::GitHTTPBackend;
 use PublicInbox::Git;
 # not bothering with Exporter for a one-off
@@ -40,10 +40,9 @@ sub locate_cgit ($) {
 		if (defined($cgit_bin) && $cgit_bin =~ m!\A(.+?)/[^/]+\z!) {
 			unshift @dirs, $1 if -d $1;
 		}
-		foreach my $d (@dirs) {
-			my $f = "$d/cgit.css";
-			next unless -f $f;
-			$cgit_data = $d;
+		for (@dirs) {
+			next unless -f "$_/cgit.css";
+			$cgit_data = $_;
 			last;
 		}
 	}
@@ -65,17 +64,15 @@ sub new {
 
 	# some cgit repos may not be mapped to inboxes, so ensure those exist:
 	my $code_repos = $pi_cfg->{-code_repos};
-	foreach my $k (keys %$pi_cfg) {
-		$k =~ /\Acoderepo\.(.+)\.dir\z/ or next;
-		my $dir = $pi_cfg->{$k};
-		$code_repos->{$1} ||= $pi_cfg->fill_code_repo($1);
+	for my $k (grep(/\Acoderepo\.(?:.+)\.dir\z/, keys %$pi_cfg)) {
+		$k = substr($k, length('coderepo.'), -length('.dir'));
+		$code_repos->{$k} //= $pi_cfg->fill_code_repo($k);
 	}
 	while (my ($nick, $repo) = each %$code_repos) {
 		$self->{"\0$nick"} = $repo;
 	}
-	my $cgit_static = $pi_cfg->{-cgit_static};
-	my $static = join('|', map { quotemeta $_ } keys %$cgit_static);
-	$self->{static} = qr/\A($static)\z/;
+	my $s = join('|', map { quotemeta } keys %{$pi_cfg->{-cgit_static}});
+	$self->{static} = qr/\A($s)\z/;
 	$self;
 }
 
@@ -114,7 +111,7 @@ sub call {
 
 	my $cgi_env = { PATH_INFO => $path_info };
 	foreach (@PASS_ENV) {
-		defined(my $v = $env->{$_}) or next;
+		my $v = $env->{$_} // next;
 		$cgi_env->{$_} = $v;
 	}
 	$cgi_env->{'HTTPS'} = 'on' if $env->{'psgi.url_scheme'} eq 'https';
