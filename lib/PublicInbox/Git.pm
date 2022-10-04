@@ -498,6 +498,15 @@ sub modified ($) {
 	(split(/ /, <$fh> // time))[0] + 0; # integerize for JSON
 }
 
+sub description {
+	my $desc = '';
+	if (open(my $fh, '<:utf8', "$_[0]->{git_dir}/description")) {
+		local $/ = "\n";
+		chomp($desc = <$fh> // '');
+	}
+	$desc eq '' ? 'Unnamed repository' : $desc;
+}
+
 # for grokmirror, which doesn't read gitweb.description
 # templates/hooks--update.sample and git-multimail in git.git
 # only match "Unnamed repository", not the full contents of
@@ -520,14 +529,8 @@ sub manifest_entry {
 	chomp(my $owner = $self->qx('config', 'gitweb.owner'));
 	utf8::decode($owner);
 	$ent->{owner} = $owner eq '' ? undef : $owner;
-	my $desc = '';
-	if (open($fh, '<', "$git_dir/description")) {
-		local $/ = "\n";
-		chomp($desc = <$fh>);
-		utf8::decode($desc);
-	}
-	$desc = 'Unnamed repository' if $desc eq '';
-	if (defined $epoch && $desc =~ /\AUnnamed repository/) {
+	my $desc = description($self);
+	if (defined $epoch && index($desc, 'Unnamed repository') == 0) {
 		$desc = "$default_desc [epoch $epoch]";
 	}
 	$ent->{description} = $desc;
