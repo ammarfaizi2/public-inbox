@@ -452,7 +452,8 @@ sub DESTROY { cleanup(@_) }
 
 sub local_nick ($) {
 	# don't show full FS path, basename should be OK:
-	$_[0]->{git_dir} =~ m!/([^/]+?)(?:/*\.git/*)?\z! ? "$1.git" : undef;
+	$_[0]->{nick} // ($_[0]->{git_dir} =~ m!/([^/]+?)(?:/*\.git/*)?\z! ?
+			"$1.git" : undef);
 }
 
 sub host_prefix_url ($$) {

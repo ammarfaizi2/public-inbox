@@ -98,16 +98,13 @@ sub coderepos ($) {
 	my @ret = ('<a id=code>' .
 		'Code repositories for project(s) associated with this '.
 		$ctx->{ibx}->thing_type . "\n");
-	for my $cr_name (@$cr) {
-		my $urls = $cfg->get_all("coderepo.$cr_name.cgiturl");
-		if ($urls) {
-			for (@$urls) {
-				my $u = m!\A(?:[a-z\+]+:)?//! ? $_ : $pfx.$_;
-				$u = ascii_html(prurl($ctx->{env}, $u));
-				$ret[0] .= qq(\n\t<a\nhref="$u">$u</a>);
-			}
-		} else {
-			$ret[0] .= qq[\n\t$cr_name.git (no URL configured)];
+	my $objs = $cfg->repo_objs($ctx->{ibx});
+	for my $git (@$objs) {
+		my @urls = $git->pub_urls($ctx->{env});
+		for (@urls) {
+			my $u = m!\A(?:[a-z\+]+:)?//! ? $_ : $pfx.$_;
+			$u = ascii_html(prurl($ctx->{env}, $u));
+			$ret[0] .= qq(\n\t<a\nhref="$u">$u</a>);
 		}
 	}
 	@ret; # may be empty, this sub is called as an arg for join()
