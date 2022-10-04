@@ -343,7 +343,7 @@ sub fill_code_repo {
 		$git->{cgit_url} = $cgits = _array($cgits);
 		$self->{"$pfx.cgiturl"} = $cgits;
 	}
-
+	$git->{nick} = $nick;
 	$git;
 }
 

@@ -463,6 +463,16 @@ sub host_prefix_url ($$) {
 	"$scheme://$host_port". ($env->{SCRIPT_NAME} || '/') . $url;
 }
 
+sub base_url { # for coderepos, PSGI-only
+	my ($self, $env) = @_; # env - PSGI env
+	my $url = host_prefix_url($env, '');
+	# for mount in Plack::Builder
+	$url .= '/' if substr($url, -1, 1) ne '/';
+	$url . $self->{nick} . '/';
+}
+
+sub isrch {} # TODO
+
 sub pub_urls {
 	my ($self, $env) = @_;
 	if (my $urls = $self->{cgit_url}) {
@@ -518,11 +528,11 @@ sub description {
 }
 
 sub cloneurl {
-	my ($self) = @_;
+	my ($self, $env) = @_;
 	$self->{cloneurl} // do {
 		my @urls = split(/\s+/s, try_cat("$self->{git_dir}/cloneurl"));
 		scalar(@urls) ? ($self->{cloneurl} = \@urls) : undef;
-	} // [];
+	} // [ substr(base_url($self, $env), 0, -1) ];
 }
 
 # for grokmirror, which doesn't read gitweb.description

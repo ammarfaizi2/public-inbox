@@ -45,6 +45,16 @@ sub event_step {
 	}
 }
 
+sub watch_cat {
+	my ($git) = @_;
+	$git->{async_cat} //= do {
+		my $self = bless { git => $git }, __PACKAGE__;
+		$git->{in}->blocking(0);
+		$self->SUPER::new($git->{in}, EPOLLIN|EPOLLET);
+		\undef; # this is a true ref()
+	};
+}
+
 sub ibx_async_cat ($$$$) {
 	my ($ibx, $oid, $cb, $arg) = @_;
 	my $git = $ibx->{git} // $ibx->git;
@@ -60,12 +70,7 @@ sub ibx_async_cat ($$$$) {
 		\undef;
 	} else { # read-only end of git-cat-file pipe
 		$git->cat_async($oid, $cb, $arg);
-		$git->{async_cat} //= do {
-			my $self = bless { git => $git }, __PACKAGE__;
-			$git->{in}->blocking(0);
-			$self->SUPER::new($git->{in}, EPOLLIN|EPOLLET);
-			\undef; # this is a true ref()
-		};
+		watch_cat($git);
 	}
 }
 

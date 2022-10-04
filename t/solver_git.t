@@ -9,7 +9,9 @@ require_git(2.6);
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(popen_rd);
 require_mods(qw(DBD::SQLite Search::Xapian Plack::Util));
-my $git_dir = xqx([qw(git rev-parse --git-dir)], undef, {2 => \(my $null)});
+my $rdr = { 2 => \(my $null) };
+my $git_dir = xqx([qw(git rev-parse --git-common-dir)], undef, $rdr);
+$git_dir = xqx([qw(git rev-parse --git-dir)], undef, $rdr) if $? != 0;
 $? == 0 or plan skip_all => "$0 must be run from a git working tree";
 chomp $git_dir;
 
@@ -300,6 +302,35 @@ EOF
 		is($res->code, 200, 'shows commit w/ utf8.eml');
 		like($res->content, qr/El&#233;anor/,
 				'UTF-8 commit shown properly');
+
+		# WwwCoderepo
+		my $olderr;
+		if (defined $ENV{PLACK_TEST_EXTERNALSERVER_URI}) {
+			ok(!-s "$tmpdir/stderr.log",
+				'nothing in stderr.log, yet');
+		} else {
+			open $olderr, '>&', \*STDERR or xbail "open: $!";
+			open STDERR, '+>>', "$tmpdir/stderr.log" or
+				xbail "open: $!";
+		}
+		$res = $cb->(GET('/binfoo/'));
+		defined($ENV{PLACK_TEST_EXTERNALSERVER_URI}) or
+			open STDERR, '>&', $olderr or xbail "open: $!";
+		is($res->code, 200, 'coderepo summary (binfoo)');
+		if (ok(-s "$tmpdir/stderr.log")) {
+			open my $fh, '<', "$tmpdir/stderr.log" or xbail $!;
+			my $s = do { local $/; <$fh> };
+			open $fh, '>', "$tmpdir/stderr.log" or xbail $!;
+			ok($s =~ s/^fatal: your current branch.*?\n//sm,
+				'got current branch warning');
+			ok($s =~ s/^.*? exit status=[1-9]+ .*?\n//sm,
+				'got exit status warning');
+			is($s, '', 'no unexpected warnings on empty coderepo');
+		}
+		$res = $cb->(GET('/public-inbox/'));
+		is($res->code, 200, 'coderepo summary (public-inbox)');
+		$res = $cb->(GET('/public-inbox'));
+		is($res->code, 301, 'redirected');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

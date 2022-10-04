@@ -7,6 +7,7 @@
 
 package PublicInbox::Cgit;
 use v5.12;
+use parent qw(PublicInbox::WwwCoderepo);
 use PublicInbox::GitHTTPBackend;
 use PublicInbox::Git;
 # not bothering with Exporter for a one-off
@@ -52,10 +53,6 @@ sub locate_cgit ($) {
 sub new {
 	my ($class, $pi_cfg) = @_;
 	my ($cgit_bin, $cgit_data) = locate_cgit($pi_cfg);
-	# TODO: support gitweb and other repository viewers?
-	if (defined(my $cgitrc = $pi_cfg->{-cgitrc_unparsed})) {
-		$pi_cfg->parse_cgitrc($cgitrc, 0);
-	}
 	my $self = bless {
 		cmd => [ $cgit_bin ],
 		cgit_data => $cgit_data,
@@ -63,14 +60,7 @@ sub new {
 	}, $class;
 
 	# some cgit repos may not be mapped to inboxes, so ensure those exist:
-	my $code_repos = $pi_cfg->{-code_repos};
-	for my $k (grep(/\Acoderepo\.(?:.+)\.dir\z/, keys %$pi_cfg)) {
-		$k = substr($k, length('coderepo.'), -length('.dir'));
-		$code_repos->{$k} //= $pi_cfg->fill_code_repo($k);
-	}
-	while (my ($nick, $repo) = each %$code_repos) {
-		$self->{"\0$nick"} = $repo;
-	}
+	PublicInbox::WwwCoderepo::prepare_coderepos($self);
 	my $s = join('|', map { quotemeta } keys %{$pi_cfg->{-cgit_static}});
 	$self->{static} = qr/\A($s)\z/;
 	$self;

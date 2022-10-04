@@ -18,7 +18,7 @@ https://public-inbox.org/public-inbox.git) ];
 
 sub base_url ($) {
 	my $ctx = shift;
-	my $base_url = $ctx->{ibx}->base_url($ctx->{env});
+	my $base_url = ($ctx->{ibx} // $ctx->{git})->base_url($ctx->{env});
 	chop $base_url; # no trailing slash for clone
 	$base_url;
 }
@@ -40,7 +40,7 @@ sub async_eml { # for async_blob_cb
 
 sub html_top ($) {
 	my ($ctx) = @_;
-	my $ibx = $ctx->{ibx};
+	my $ibx = $ctx->{ibx} // $ctx->{git};
 	my $desc = ascii_html($ibx->description);
 	my $title = delete($ctx->{-title_html}) // $desc;
 	my $upfx = $ctx->{-upfx} || '';
@@ -84,8 +84,11 @@ sub html_top ($) {
 		'</head><body>'. $top . (delete($ctx->{-html_tip}) // '');
 }
 
+sub inboxes { () } # TODO
+
 sub coderepos ($) {
 	my ($ctx) = @_;
+	$ctx->{ibx} // return inboxes($ctx);
 	my $cr = $ctx->{ibx}->{coderepo} // return ();
 	my $cfg = $ctx->{www}->{pi_cfg};
 	my $upfx = ($ctx->{-upfx} // ''). '../';
@@ -114,8 +117,8 @@ sub _html_end {
 	my ($ctx) = @_;
 	my $upfx = $ctx->{-upfx} || '';
 	my $m = "${upfx}_/text/mirror/";
-	my $x;
-	if ($ctx->{ibx}->can('cloneurl')) {
+	my $x = '';
+	if ($ctx->{ibx} && $ctx->{ibx}->can('cloneurl')) {
 		$x = <<EOF;
 This is a public inbox, see <a
 href="$m">mirroring instructions</a>
@@ -139,12 +142,15 @@ as well as URLs for IMAP folder(s).
 EOM
 			}
 		}
-	} else {
+	} elsif ($ctx->{ibx}) { # extindex
 		$x = <<EOF;
 This is an external index of several public inboxes,
 see <a href="$m">mirroring instructions</a> on how to clone and mirror
 all data and code used by this external index.
 EOF
+	} elsif ($ctx->{git}) { # coderepo
+		$x = join('', map { "git clone $_\n" }
+			@{$ctx->{git}->cloneurl($ctx->{env})});
 	}
 	chomp $x;
 	'<hr><pre>'.join("\n\n", coderepos($ctx), $x).'</pre></body></html>'

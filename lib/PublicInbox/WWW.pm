@@ -197,7 +197,9 @@ sub news_cgit_fallback ($) {
 	my $www = $ctx->{www};
 	my $env = $ctx->{env};
 	my $res = $www->news_www->call($env);
-	$res->[0] == 404 ? $www->cgit->call($env) : $res;
+	$res = $www->cgit->call($env) if $res->[0] == 404;
+	$res = $www->coderepo->srv($ctx) if $res->[0] == 404;
+	$res;
 }
 
 # returns undef if valid, array ref response if invalid
@@ -491,6 +493,14 @@ sub cgit {
 			require Plack::Util;
 			Plack::Util::inline_object(call => sub { r404() });
 		}
+	}
+}
+
+sub coderepo {
+	my ($self) = @_;
+	$self->{coderepo} //= do {
+		require PublicInbox::WwwCoderepo;
+		PublicInbox::WwwCoderepo->new($self->{pi_cfg});
 	}
 }
 
