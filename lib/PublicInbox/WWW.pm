@@ -197,8 +197,9 @@ sub news_cgit_fallback ($) {
 	my $www = $ctx->{www};
 	my $env = $ctx->{env};
 	my $res = $www->news_www->call($env);
-	$res = $www->cgit->call($env) if $res->[0] == 404;
-	$res = $www->coderepo->srv($ctx) if $res->[0] == 404;
+	$res = $www->cgit->call($env, $ctx) if $res->[0] == 404;
+	ref($res) eq 'ARRAY' && $res->[0] == 404 and
+		$res = $www->coderepo->srv($ctx);
 	$res;
 }
 
