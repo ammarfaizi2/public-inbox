@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # when no endpoints match, fallback to this and serve a static file
@@ -132,7 +132,7 @@ sub input_prepare {
 }
 
 sub parse_cgi_headers {
-	my ($r, $bref) = @_;
+	my ($r, $bref, $ctx) = @_;
 	return r(500) unless defined $r && $r >= 0;
 	$$bref =~ s/\A(.*?)\r?\n\r?\n//s or return $r == 0 ? r(500) : undef;
 	my $h = $1;
@@ -146,7 +146,20 @@ sub parse_cgi_headers {
 			push @h, $k, $v;
 		}
 	}
-	[ $code, \@h ]
+
+	# fallback to WwwCoderepo if cgit 404s.  Duplicating $ctx prevents
+	# ->finalize from the current Qspawn from using qspawn.wcb
+	if ($code == 404 && $ctx->{www} && !$ctx->{_coderepo_tried}++) {
+		my %ctx = %$ctx;
+		$ctx{env} = +{ %{$ctx->{env}} };
+		delete $ctx->{env}->{'qspawn.wcb'};
+		$ctx->{env}->{'plack.skip-deflater'} = 1; # prevent 2x gzip
+		my $res = $ctx->{www}->coderepo->srv(\%ctx);
+		$res->(delete $ctx{env}->{'qspawn.wcb'}) if ref($res) eq 'CODE';
+		$res; # non ARRAY ref for ->psgi_return_init_cb
+	} else {
+		[ $code, \@h ]
+	}
 }
 
 1;

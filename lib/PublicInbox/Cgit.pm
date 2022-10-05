@@ -83,7 +83,7 @@ my @PASS_ENV = qw(
 my $parse_cgi_headers = \&PublicInbox::GitHTTPBackend::parse_cgi_headers;
 
 sub call {
-	my ($self, $env) = @_;
+	my ($self, $env, $ctx) = @_; # $ctx is optional, used by WWW
 	my $path_info = $env->{PATH_INFO};
 	my $cgit_data;
 
@@ -109,7 +109,7 @@ sub call {
 	my $rdr = input_prepare($env) or return r(500);
 	my $qsp = PublicInbox::Qspawn->new($self->{cmd}, $cgi_env, $rdr);
 	my $limiter = $self->{pi_cfg}->limiter('-cgit');
-	$qsp->psgi_return($env, $limiter, $parse_cgi_headers);
+	$qsp->psgi_return($env, $limiter, $parse_cgi_headers, $ctx);
 }
 
 1;

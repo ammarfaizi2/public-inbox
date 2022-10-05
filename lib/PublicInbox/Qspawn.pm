@@ -225,19 +225,19 @@ sub psgi_return_init_cb {
 	my ($self) = @_;
 	my $r = rd_hdr($self) or return;
 	my $env = $self->{psgi_env};
-	my $filter = delete $env->{'qspawn.filter'} //
-		PublicInbox::GzipFilter::qsp_maybe($r->[1], $env);
+	my $filter = delete($env->{'qspawn.filter'}) // (ref($r) eq 'ARRAY' ?
+		PublicInbox::GzipFilter::qsp_maybe($r->[1], $env) : undef);
 
 	my $wcb = delete $env->{'qspawn.wcb'};
 	my $async = delete $self->{async}; # PublicInbox::HTTPD::Async
-	if (scalar(@$r) == 3) { # error
+	if (ref($r) ne 'ARRAY' || scalar(@$r) == 3) { # error
 		if ($async) { # calls rpipe->close && ->event_step
 			$async->close; # PublicInbox::HTTPD::Async::close
 		} else {
 			$self->{rpipe}->close;
 			event_step($self);
 		}
-		$wcb->($r);
+		$wcb->($r) if ref($r) eq 'ARRAY';
 	} elsif ($async) {
 		# done reading headers, handoff to read body
 		my $fh = $wcb->($r); # scalar @$r == 2
