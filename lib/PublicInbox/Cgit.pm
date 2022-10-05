@@ -53,6 +53,7 @@ sub locate_cgit ($) {
 sub new {
 	my ($class, $pi_cfg) = @_;
 	my ($cgit_bin, $cgit_data) = locate_cgit($pi_cfg);
+	$cgit_bin // return; # fall back in WWW->cgit
 	my $self = bless {
 		cmd => [ $cgit_bin ],
 		cgit_data => $cgit_data,

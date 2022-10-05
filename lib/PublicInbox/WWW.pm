@@ -194,12 +194,19 @@ sub r404 {
 
 sub news_cgit_fallback ($) {
 	my ($ctx) = @_;
-	my $www = $ctx->{www};
-	my $env = $ctx->{env};
-	my $res = $www->news_www->call($env);
-	$res = $www->cgit->call($env, $ctx) if $res->[0] == 404;
+	my $res = $ctx->{www}->news_www->call($ctx->{env});
+
+	$res->[0] == 404 and ($ctx->{www}->{cgit_fallback} //= do {
+		my $c = $ctx->{www}->{pi_cfg}->{'publicinbox.cgit'} // 'first';
+		$c ne 'first' # `fallback' and `rewrite' => true
+	} // 0) and $res = $ctx->{www}->coderepo->srv($ctx);
+
 	ref($res) eq 'ARRAY' && $res->[0] == 404 and
-		$res = $www->coderepo->srv($ctx);
+		$res = $ctx->{www}->cgit->call($ctx->{env}, $ctx);
+
+	ref($res) eq 'ARRAY' && $res->[0] == 404 &&
+			!$ctx->{www}->{cgit_fallback} and
+		$res = $ctx->{www}->coderepo->srv($ctx);
 	$res;
 }
 
@@ -484,17 +491,14 @@ sub news_www {
 
 sub cgit {
 	my ($self) = @_;
-	$self->{cgit} //= do {
-		my $pi_cfg = $self->{pi_cfg};
-
-		if (defined($pi_cfg->{'publicinbox.cgitrc'})) {
+	$self->{cgit} //=
+		(defined($self->{pi_cfg}->{'publicinbox.cgitrc'}) ? do {
 			require PublicInbox::Cgit;
-			PublicInbox::Cgit->new($pi_cfg);
-		} else {
+			PublicInbox::Cgit->new($self->{pi_cfg});
+		} : undef) // do {
 			require Plack::Util;
 			Plack::Util::inline_object(call => sub { r404() });
-		}
-	}
+		};
 }
 
 sub coderepo {

@@ -293,6 +293,32 @@ C<publicinbox.cgitbin>, but may be overridden.
 Default: basename of C<publicinbox.cgitbin>, /var/www/htdocs/cgit/
 or /usr/share/cgit/
 
+=item publicinbox.cgit
+
+Controls whether or not and how C<cgit> is used for serving coderepos.
+New in public-inbox 2.0.0 (PENDING).
+
+=over 8
+
+=item * first
+
+Try using C<cgit> as the first choice, this is the default.
+
+=item * fallback
+
+Fall back to using C<cgit> only if our native, inbox-aware
+git code repository viewer doesn't recognized the URL.
+
+=item * rewrite
+
+Rewrite C<cgit> URLs for our native, inbox-aware code repository viewer.
+This implies C<fallback> for URLs the native viewer does not recognize.
+
+=back
+
+Default: C<first>  (C<cgit> will be used iff C<publicinbox.cgitrc>
+is set and the C<cgit> binary exists).
+
 =item publicinbox.mailEditor
 
 See L<public-inbox-edit(1)>
