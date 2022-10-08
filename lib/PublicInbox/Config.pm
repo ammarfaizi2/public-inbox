@@ -404,6 +404,11 @@ sub repo_objs {
 			push @repo_objs, $repo if $repo;
 		}
 		if (scalar @repo_objs) {
+			require Scalar::Util;
+			for (@repo_objs) {
+				push @{$_->{-ibxs}}, $ibxish;
+				Scalar::Util::weaken($_->{-ibxs}->[-1]);
+			}
 			$ibxish->{-repo_objs} = \@repo_objs;
 		} else {
 			delete $ibxish->{coderepo};

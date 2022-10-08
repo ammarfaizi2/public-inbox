@@ -25,7 +25,7 @@ use PublicInbox::ViewDiff qw(flush_diff uri_escape_path);
 use PublicInbox::View;
 use PublicInbox::Eml;
 use Text::Wrap qw(wrap);
-use PublicInbox::Hval qw(ascii_html to_filename);
+use PublicInbox::Hval qw(ascii_html to_filename prurl);
 my $hl = eval {
 	require PublicInbox::HlMod;
 	PublicInbox::HlMod->new;
@@ -152,6 +152,25 @@ sub show_commit_start { # ->psgi_qx callback
 	}
 }
 
+sub ibx_url_for {
+	my ($ctx) = @_;
+	$ctx->{ibx} and return; # just fall back to $upfx
+	$ctx->{git} or return; # /$CODEREPO/$OID/s/ to (eidx|ibx)
+	if (my $ALL = $ctx->{www}->{pi_cfg}->ALL) {
+		$ALL->base_url // $ALL->base_url($ctx->{env});
+	} elsif (my $ibxs = $ctx->{git}->{-ibxs}) {
+		for my $ibx (@$ibxs) {
+			if ($ibx->isrch) {
+				return defined($ibx->{url}) ?
+					prurl($ctx->{env}, $ibx->{url}) :
+					"../../../$ibx->{name}/";
+			}
+		}
+	} else {
+		undef;
+	}
+}
+
 sub cmt_finalize {
 	my ($ctx) = @_;
 	$ctx->{-linkify} //= PublicInbox::Linkify->new;
@@ -227,12 +246,16 @@ EOM
 			$q = wrap('', '', $q);
 			my $rows = ($q =~ tr/\n/\n/) + 1;
 			$q = ascii_html($q);
+			my $ibx_url = ibx_url_for($ctx);
+			my $alt = $ibx_url ? ' '.ascii_html($ibx_url) : '';
+			$ibx_url = ascii_html($ibx_url) if defined $ibx_url;
+			$ibx_url //= $upfx;
 			print $zfh <<EOM;
-<hr><form action=$upfx
+<hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
 <textarea name=q cols=${\PublicInbox::View::COLS} rows=$rows>$q</textarea>
-<input type=submit value=search
-/>\t(<a href=${upfx}_/text/help/>help</a>)</pre></form>
+<input type=submit value="search$alt"
+/>\t(<a href="${ibx_url}_/text/help/">help</a>)</pre></form>
 EOM
 		}
 	}

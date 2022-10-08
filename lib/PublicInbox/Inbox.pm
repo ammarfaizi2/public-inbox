@@ -205,7 +205,8 @@ sub base_url {
 		$url .= '/' if $url !~ m!/\z!;
 		return $url .= $self->{name} . '/';
 	}
-	# called from a non-PSGI environment (e.g. NNTP/POP3):
+	# called from a non-PSGI environment or cross-inbox environment
+	# where multiple inboxes can have different domains
 	my $url = $self->{url} // return undef;
 	$url = $url->[0] // return undef;
 	# expand protocol-relative URLs to HTTPS if we're
