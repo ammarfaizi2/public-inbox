@@ -265,6 +265,10 @@ The URL of the cgit instance associated with the coderepo.
 
 Default: none
 
+=item coderepo.snapshots
+
+See C<snapshots> in L<cgitrc(5)>
+
 =item publicinbox.cgitrc
 
 A path to a L<cgitrc(5)> file.  "repo.url" directives in the cgitrc

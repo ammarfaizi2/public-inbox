@@ -325,6 +325,8 @@ sub parse_cgitrc {
 		} elsif (m!\A(?:css|favicon|logo|repo\.logo)=(/.+)\z!) {
 			# absolute paths for static files via PublicInbox::Cgit
 			$self->{-cgit_static}->{$1} = 1;
+		} elsif (s!\Asnapshots=\s*!!) {
+			$self->{'coderepo.snapshots'} = $_;
 		}
 	}
 	cgit_repo_merge($self, $repo->{dir}, $repo) if $repo;

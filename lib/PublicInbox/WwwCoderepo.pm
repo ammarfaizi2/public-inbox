@@ -12,6 +12,7 @@ use PublicInbox::Git;
 use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStream;
 use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::RepoSnapshot;
 
 my $EACH_REF = "git for-each-ref --sort=-creatordate --format='%(HEAD)%00".
 	join('%00', map { "%($_)" }
@@ -40,6 +41,11 @@ sub new {
 	my ($cls, $pi_cfg) = @_;
 	my $self = bless { pi_cfg => $pi_cfg }, $cls;
 	prepare_coderepos($self);
+	$self->{snapshots} = do {
+		my $s = $pi_cfg->{'coderepo.snapshots'} // '';
+		$s eq 'all' ? \%PublicInbox::RepoSnapshot::FMT_TYPES :
+			+{ map { $_ => 1 } split(/\s+/, $s) };
+	};
 	$self->{$_} = 10 for qw(summary_branches summary_tags);
 	$self->{$_} = 10 for qw(summary_log);
 	$self;
@@ -111,13 +117,28 @@ EOM
 		"%(refname:short) %(subject) (%(creatordate:short))'\n";
 	@r = split(/^/sm, shift(@x) // '');
 	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_tags};
+	my @s = sort keys %{$ctx->{wcr}->{snapshots}};
+	my $n;
+	if (@s) {
+		$n = $ctx->{git}->local_nick // die "BUG: $ctx->{git_dir} nick";
+		$n =~ s/\.git\z/-/;
+		($n) = ($n =~ m!([^/]+)\z!);
+		$n = ascii_html($n);
+	}
 	for (@r) {
 		my (undef, $oid, $ref, $s, $cd) = split(/\0/);
 		utf8::decode($_) for ($ref, $s);
 		chomp $cd;
 		my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
 		print $zfh "<a\nhref=./$oid/s/>", ascii_html($ref),
-			"</a>$align ", ascii_html($s), " ($cd)\n";
+			"</a>$align ", ascii_html($s), " ($cd)";
+		if (@s) {
+			my $v = $ref;
+			$v =~ s/\A[vV]//;
+			print $zfh "\t",  join(' ', map {
+				qq{<a href="snapshot/$n$v.$_">$_</a>} } @s);
+		}
+		print $zfh "\n";
 	}
 	print $zfh "# no tags yet...\n" if !@r;
 	print $zfh "...\n" if $last;
@@ -186,7 +207,7 @@ sub srv { # endpoint called by PublicInbox::WWW
 	# snapshots:
 	if ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
 			($ctx->{git} = $self->{"\0$1"})) {
-		require PublicInbox::RepoSnapshot;
+		$ctx->{wcr} = $self;
 		return PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
 	}
 

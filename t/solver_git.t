@@ -247,6 +247,8 @@ SKIP: {
 	my $cfgpath = "$tmpdir/httpd-config";
 	open my $cfgfh, '>', $cfgpath or die;
 	print $cfgfh <<EOF or die;
+[coderepo]
+	snapshots = tar.gz
 [publicinbox "$name"]
 	address = $ibx->{-primary_address}
 	inboxdir = $ibx->{inboxdir}
@@ -351,6 +353,10 @@ EOF
 		$fn = 'public-inbox-1.0.2.tar.gz';
 		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
 		is($res->code, 404, '404 on non-existent tag');
+
+		$fn = 'public-inbox-1.0.0.tar.bz2';
+		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
+		is($res->code, 404, '404 on unconfigured snapshot format');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

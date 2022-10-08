@@ -72,10 +72,12 @@ sub ver_check { # git->check_async callback
 sub srv {
 	my ($ctx, $fn) = @_;
 	return if $fn =~ /["\s]/s;
-	$fn =~ s/\.($SUFFIX)\z//o or return;
+	my $fmt = $ctx->{wcr}->{snapshots}; # TODO per-repo snapshots
+	$fn =~ s/\.($SUFFIX)\z//o and $fmt->{$1} or return;
 	$ctx->{snap_fmt} = $1;
 	my $pfx = $ctx->{git}->local_nick // return;
 	$pfx =~ s/(?:\.git)?\z/-/;
+	($pfx) = ($pfx =~ m!([^/]+)\z!);
 	substr($fn, 0, length($pfx)) eq $pfx or return;
 	$ctx->{snap_pfx} = $fn;
 	my $v = $ctx->{snap_ver} = substr($fn, length($pfx), length($fn));
