@@ -1,7 +1,10 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
-# Standalone code repository viewer for users w/o cgit
+# Standalone code repository viewer for users w/o cgit.
+# This isn't intended to replicate all of cgit, but merely to be a
+# "good enough" viewer with search support and some UI hints to encourage
+# cloning + command-line usage.
 package PublicInbox::WwwCoderepo;
 use v5.12;
 use File::Temp 0.19 (); # newdir
