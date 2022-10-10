@@ -26,6 +26,7 @@ use PublicInbox::View;
 use PublicInbox::Eml;
 use Text::Wrap qw(wrap);
 use PublicInbox::Hval qw(ascii_html to_filename prurl);
+use POSIX qw(strftime);
 my $hl = eval {
 	require PublicInbox::HlMod;
 	PublicInbox::HlMod->new;
@@ -337,7 +338,7 @@ sub show_commit ($$) {
 	$qsp->psgi_qx($ctx->{env}, undef, \&show_commit_start, $ctx);
 }
 
-sub show_other ($$) {
+sub show_other ($$) { # just in case...
 	my ($ctx, $res) = @_;
 	my ($git, $oid, $type, $size) = @$res;
 	$size > $MAX_SIZE and return html_page($ctx, 200,
@@ -421,6 +422,42 @@ sub show_tree ($$) {
 	$qsp->psgi_qx($ctx->{env}, undef, \&show_tree_result, $ctx);
 }
 
+# returns seconds offset from git TZ offset
+sub tz_adj ($) {
+	my ($tz) = @_; # e.g "-0700"
+	$tz = int($tz);
+	my $mm = $tz < 0 ? -$tz : $tz;
+	$mm = int($mm / 100) * 60 + ($mm % 100);
+	$mm = $tz < 0 ? -$mm : $mm;
+	($mm * 60);
+}
+
+sub show_tag_result { # git->cat_async callback
+	my ($bref, $oid, $type, $size, $ctx) = @_;
+	utf8::decode($$bref);
+	my $l = PublicInbox::Linkify->new;
+	$$bref = $l->to_html($$bref);
+	$$bref =~ s!^object ([a-f0-9]+)!object <a
+href=../../$1/s/>$1</a>!;
+
+	$$bref =~ s/^(tagger .*&gt; )([0-9]+) ([\-+]?[0-9]+)/$1.strftime(
+		'%Y-%m-%d %H:%M:%S', gmtime($2 + tz_adj($3)))." $3"/sme;
+	# TODO: download link
+	html_page($ctx, 200, '<pre>', $$bref, '</pre>', dbg_log($ctx));
+}
+
+sub show_tag ($$) {
+	my ($ctx, $res) = @_;
+	my ($git, $oid) = @$res;
+	$ctx->{git} = $git;
+	if ($ctx->{env}->{'pi-httpd.async'}) {
+		ibx_async_cat($ctx, $oid, \&show_tag_result, $ctx);
+	} else { # synchronous (generic PSGI)
+		$git->cat_async($oid, \&show_tag_result, $ctx);
+		$git->cat_async_wait;
+	}
+}
+
 # user_cb for SolverGit, called as: user_cb->($result_or_error, $uarg)
 sub solve_result {
 	my ($res, $ctx) = @_;
@@ -431,6 +468,7 @@ sub solve_result {
 	my ($git, $oid, $type, $size, $di) = @$res;
 	return show_commit($ctx, $res) if $type eq 'commit';
 	return show_tree($ctx, $res) if $type eq 'tree';
+	return show_tag($ctx, $res) if $type eq 'tag';
 	return show_other($ctx, $res) if $type ne 'blob';
 	my $path = to_filename($di->{path_b} // $hints->{path_b} // 'blob');
 	my $raw_link = "(<a\nhref=$path>raw</a>)";

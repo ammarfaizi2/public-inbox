@@ -29,6 +29,7 @@ my $todo = {
 		'6aa8857a11/s/?b=protocol.c',
 		'96f1c7f/s/', # TODO: b=contrib/completion/git-completion.bash
 		'b76f2c0/s/?b=po/zh_CN.po',
+		'c2f3bf071ee90b01f2d629921bb04c4f798f02fa/s/', # tag
 	],
 };
 
