@@ -48,9 +48,16 @@ my $client = sub {
 my $nr = 0;
 while (($ibx_name, $urls) = each %$todo) {
 	SKIP: {
-		if (!$cfg->lookup_name($ibx_name)) {
+		my $ibx = $cfg->lookup_name($ibx_name);
+		if (!$ibx) {
 			push @gone, $ibx_name;
-			skip("$ibx_name not configured", scalar(@$urls));
+			skip(qq{[publicinbox "$ibx_name"] not configured},
+				scalar(@$urls));
+		}
+		if (!defined($ibx->{coderepo})) {
+			push @gone, $ibx_name;
+			skip(qq{publicinbox.$ibx_name.coderepo not configured},
+				scalar(@$urls));
 		}
 		test_psgi($app, $client);
 		$nr++;
