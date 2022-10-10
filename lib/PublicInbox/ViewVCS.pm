@@ -247,9 +247,14 @@ EOM
 			my $rows = ($q =~ tr/\n/\n/) + 1;
 			$q = ascii_html($q);
 			my $ibx_url = ibx_url_for($ctx);
-			my $alt = $ibx_url ? ' '.ascii_html($ibx_url) : '';
-			$ibx_url = ascii_html($ibx_url) if defined $ibx_url;
-			$ibx_url //= $upfx;
+			my $alt;
+			if (defined $ibx_url) {
+				$ibx_url = ascii_html($ibx_url);
+				$alt = ' '.$ibx_url;
+			} else {
+				$ibx_url = $upfx;
+				$alt = '';
+			}
 			print $zfh <<EOM;
 <hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
