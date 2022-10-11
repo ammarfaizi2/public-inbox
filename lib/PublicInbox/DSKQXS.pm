@@ -71,7 +71,7 @@ sub READ { # called by sysread() for signalfd compatibility
 	my $nr = $len / 128;
 	my $r = 0;
 	$_[1] = '';
-	do {
+	while (1) {
 		while ($nr--) {
 			my $signo = shift(@$sigbuf) or last;
 			# caller only cares about signalfd_siginfo.ssi_signo:
@@ -94,7 +94,7 @@ sub READ { # called by sysread() for signalfd compatibility
 		# field shows coalesced signals, and maybe we'll use it
 		# in the future...
 		@$sigbuf = map { $_->[0] } @events;
-	} while (1);
+	}
 }
 
 # for fileno() calls in PublicInbox::DS
