@@ -15,8 +15,8 @@ sub new {
 	my ($class, $sig, $nonblock) = @_;
 	my %signo = map {;
 		my $cb = $sig->{$_};
-		# SIGWINCH is 28 on FreeBSD, NetBSD, OpenBSD
-		my $num = ($_ eq 'WINCH' && $^O =~ /linux|bsd/i) ? 28 : do {
+		# SIGWINCH is 28 on FreeBSD, NetBSD, OpenBSD, Darwin
+		my $num = ($_ eq 'WINCH' && $^O =~ /linux|bsd|darwin/i) ? 28 : do {
 			my $m = "SIG$_";
 			POSIX->$m;
 		};
