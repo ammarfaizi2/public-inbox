@@ -18,7 +18,8 @@ SKIP: {
 	local $SIG{HUP} = sub { $hit->{HUP}->{normal}++ };
 	local $SIG{TERM} = sub { $hit->{TERM}->{normal}++ };
 	local $SIG{INT} = sub { $hit->{INT}->{normal}++ };
-	for my $s (qw(HUP TERM INT)) {
+	local $SIG{WINCH} = sub { $hit->{WINCH}->{normal}++ };
+	for my $s (qw(HUP TERM INT WINCH)) {
 		$sig->{$s} = sub { $hit->{$s}->{sigfd}++ };
 	}
 	my $sigfd = PublicInbox::Sigfd->new($sig, 0);
@@ -26,6 +27,7 @@ SKIP: {
 		ok($sigfd, 'Sigfd->new works');
 		kill('HUP', $$) or die "kill $!";
 		kill('INT', $$) or die "kill $!";
+		kill('WINCH', $$) or die "kill $!";
 		my $fd = fileno($sigfd->{sock});
 		ok($fd >= 0, 'fileno(Sigfd->{sock}) works');
 		my $rvec = '';
@@ -54,6 +56,7 @@ SKIP: {
 		PublicInbox::DS->Reset;
 		is($hit->{TERM}->{sigfd}, 1, 'TERM sigfd fired in event loop');
 		is($hit->{HUP}->{sigfd}, 3, 'HUP sigfd fired in event loop');
+		is($hit->{WINCH}->{sigfd}, 1, 'WINCH sigfd fired in event loop');
 	} else {
 		skip('signalfd disabled?', 10);
 	}

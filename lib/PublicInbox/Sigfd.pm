@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Wraps a signalfd (or similar) for PublicInbox::DS
@@ -6,7 +6,7 @@
 package PublicInbox::Sigfd;
 use strict;
 use parent qw(PublicInbox::DS);
-use PublicInbox::Syscall qw(signalfd EPOLLIN EPOLLET);
+use PublicInbox::Syscall qw(signalfd EPOLLIN EPOLLET %SIGNUM);
 use POSIX ();
 
 # returns a coderef to unblock signals if neither signalfd or kqueue
@@ -14,13 +14,8 @@ use POSIX ();
 sub new {
 	my ($class, $sig, $nonblock) = @_;
 	my %signo = map {;
-		my $cb = $sig->{$_};
-		# SIGWINCH is 28 on FreeBSD, NetBSD, OpenBSD, Darwin
-		my $num = ($_ eq 'WINCH' && $^O =~ /linux|bsd|darwin/i) ? 28 : do {
-			my $m = "SIG$_";
-			POSIX->$m;
-		};
-		$num => $cb;
+		# $num => $cb;
+		($SIGNUM{$_} // POSIX->can("SIG$_")->()) => $sig->{$_}
 	} keys %$sig;
 	my $self = bless { sig => \%signo }, $class;
 	my $io;

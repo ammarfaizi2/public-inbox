@@ -21,13 +21,14 @@ use parent qw(Exporter);
 use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
+our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
                   EPOLLIN EPOLLOUT EPOLLET
                   EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
                   EPOLLONESHOT EPOLLEXCLUSIVE
-                  signalfd rename_noreplace);
+                  signalfd rename_noreplace %SIGNUM);
 our %EXPORT_TAGS = (epoll => [qw(epoll_ctl epoll_create epoll_wait
                              EPOLLIN EPOLLOUT
                              EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
@@ -159,6 +160,7 @@ if ($^O eq "linux") {
         $SYS_epoll_wait   = 226;
         $u64_mod_8        = 1;
         $SYS_signalfd4 = 309;
+        $SIGNUM{WINCH} = 23;
     } elsif ($machine =~ m/^ppc64/) {
         $SYS_epoll_create = 236;
         $SYS_epoll_ctl    = 237;
@@ -252,6 +254,7 @@ if ($^O eq "linux") {
 	$SYS_recvmsg = 4177;
 	$FS_IOC_GETFLAGS = 0x40046601;
 	$FS_IOC_SETFLAGS = 0x80046602;
+	$SIGNUM{WINCH} = 20;
     } else {
         # as a last resort, try using the *.ph files which may not
         # exist or may be wrong
