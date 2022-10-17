@@ -97,15 +97,14 @@ if ($^O eq "linux") {
     # boundaries.
     my $u64_mod_8 = 0;
 
-    # if we're running on an x86_64 kernel, but a 32-bit process,
-    # we need to use the x32 or i386 syscall numbers.
-    if ($machine eq "x86_64" && $Config{ptrsize} == 4) {
-        $machine = $Config{cppsymbols} =~ /\b__ILP32__=1\b/ ? 'x32' : 'i386';
-    }
-
-    # Similarly for mips64 vs mips
-    if ($machine eq "mips64" && $Config{ptrsize} == 4) {
-        $machine = "mips";
+    if ($Config{ptrsize} == 4) {
+	# if we're running on an x86_64 kernel, but a 32-bit process,
+	# we need to use the x32 or i386 syscall numbers.
+	if ($machine eq 'x86_64') {
+	    $machine = $Config{cppsymbols} =~ /\b__ILP32__=1\b/ ? 'x32' : 'i386'
+	} elsif ($machine eq 'mips64') { # similarly for mips64 vs mips
+	    $machine = 'mips';
+	}
     }
 
     if ($machine =~ m/^i[3456]86$/) {
