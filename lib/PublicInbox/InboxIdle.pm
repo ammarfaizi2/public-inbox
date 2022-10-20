@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # fields:
@@ -48,11 +48,9 @@ sub in2_arm ($$) { # PublicInbox::Config::each_inbox callback
 		$self->{on_unlock}->{$w->name} = $ibx;
 	} else {
 		warn "E: ".ref($inot)."->watch($lock, IN_MODIFY) failed: $!\n";
-		if ($!{ENOSPC} && $^O eq 'linux') {
-			warn <<"";
-I: consider increasing /proc/sys/fs/inotify/max_user_watches
+		warn <<"" if $!{ENOSPC} && $^O eq 'linux';
+# consider increasing /proc/sys/fs/inotify/max_user_watches
 
-		}
 	}
 
 	# TODO: detect deleted packs (and possibly other files)

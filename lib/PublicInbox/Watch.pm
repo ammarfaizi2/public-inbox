@@ -328,7 +328,7 @@ sub imap_idle_once ($$$$) {
 	my ($self, $mic, $intvl, $uri) = @_;
 	my $i = $intvl //= (29 * 60);
 	my $end = now() + $intvl;
-	warn "I: $uri idling for ${intvl}s\n";
+	warn "# $uri idling for ${intvl}s\n";
 	local $0 = "IDLE $0";
 	return if $self->{quit};
 	unless ($mic->idle) {
@@ -517,7 +517,7 @@ sub poll_fetch_reap {
 	if ($?) {
 		warn "W: PID=$pid died: \$?=$?\n", map { "$_\n" } @$uris;
 	}
-	warn("I: will check $_ in ${intvl}s\n") for @$uris;
+	warn("# will check $_ in ${intvl}s\n") for @$uris;
 	add_timer($intvl, \&poll_fetch_fork, $self, $intvl, $uris);
 }
 

@@ -72,7 +72,7 @@ sub remove_eidx_key {
 	}
 	for my $docid (@docids) {
 		$xdb->delete_document($docid);
-		warn "I: remove inbox docid #$docid ($eidx_key)\n";
+		warn "# remove inbox docid #$docid ($eidx_key)\n";
 	}
 }
 

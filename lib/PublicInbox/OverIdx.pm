@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # for XOVER, OVER in NNTP, and feeds/homepage/threads in PSGI
@@ -509,12 +509,12 @@ EOF
 				next;
 			}
 			$pr->(<<EOM) if $pr;
-I: ghost $r->{num} <$mid> THREADID=$r->{tid} culled
+# ghost $r->{num} <$mid> THREADID=$r->{tid} culled
 EOM
 		}
 		delete_by_num($self, $r->{num});
 	}
-	$pr->("I: rethread culled $total ghosts\n") if $pr && $total;
+	$pr->("# rethread culled $total ghosts\n") if $pr && $total;
 }
 
 # used for cross-inbox search

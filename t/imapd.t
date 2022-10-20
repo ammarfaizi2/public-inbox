@@ -470,7 +470,7 @@ SKIP: {
 	PublicInbox::DS::event_loop();
 	diag 'inbox unlocked on initial fetch, waiting for IDLE';
 
-	tick until (grep(/I: \S+ idling/, <$err>));
+	tick until (grep(/# \S+ idling/, <$err>));
 	open my $fh, '<', 't/iso-2202-jp.eml' or BAIL_OUT $!;
 	$old_env->{ORIGINAL_RECIPIENT} = $addr;
 	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
@@ -487,7 +487,7 @@ SKIP: {
 		or BAIL_OUT "git config $?";
 	$w->kill('HUP');
 	diag 'waiting for -watch reload + initial fetch';
-	tick until (grep(/I: will check/, <$err>));
+	tick until (grep(/# will check/, <$err>));
 
 	open $fh, '<', 't/psgi_attach.eml' or BAIL_OUT $!;
 	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
@@ -516,7 +516,7 @@ SKIP: {
 		my @t0 = times;
 		$w = start_script(['-watch'], undef, { 2 => $err_wr });
 		seek($err, 0, 0);
-		tick until (grep(/I: \S+ idling/, <$err>));
+		tick until (grep(/# \S+ idling/, <$err>));
 		diag 'killing imapd, waiting for CPU spins';
 		my $delay = 0.11;
 		$td->kill(9);

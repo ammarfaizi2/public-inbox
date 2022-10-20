@@ -128,14 +128,14 @@ sub loop (;$) {
 			# retry once if missing.  We only get unabbreviated OIDs
 			# from SQLite or Xapian DBs, here, so malicious clients
 			# can't trigger excessive retries:
-			warn "I: $$ $oid missing, retrying in $git_dir\n";
+			warn "# $$ $oid missing, retrying in $git_dir\n";
 
 			$gcf2 = new();
 			%seen = ($git_dir => add_alt($gcf2, $git_dir));
 			$check_at = clock_gettime(CLOCK_MONOTONIC) + $exp;
 
 			if ($gcf2->cat_oid(1, $oid)) {
-				warn "I: $$ $oid found after retry\n";
+				warn "# $$ $oid found after retry\n";
 			} else {
 				warn "W: $$ $oid missing after retry\n";
 				print "$oid missing\n"; # mimic git-cat-file

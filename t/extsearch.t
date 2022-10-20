@@ -309,7 +309,7 @@ if ('reindex catches missed messages') {
 	is($oidx->eidx_meta($lc_key), $cmt_b, 'lc-v2 stays unchanged');
 	my @err = split(/^/, $err);
 	is(scalar(@err), 1, 'only one warning') or diag "err=$err";
-	like($err[0], qr/I: reindex_unseen/, 'got reindex_unseen message');
+	like($err[0], qr/# reindex_unseen/, 'got reindex_unseen message');
 	my $new = $oidx->get_art($max + 1);
 	is($new->{subject}, $eml->header('Subject'), 'new message added');
 
@@ -415,8 +415,8 @@ if ('remove v1test and test gc') {
 	my $opt = { 2 => \(my $err = '') };
 	ok(run_script([qw(-extindex --gc), "$home/extindex"], undef, $opt),
 		'extindex --gc');
-	like($err, qr/^I: remove #1 v1\.example /ms, 'removed v1 message');
-	is(scalar(grep(!/^I:/, split(/^/m, $err))), 0,
+	like($err, qr/^# remove #1 v1\.example /ms, 'removed v1 message');
+	is(scalar(grep(!/^#/, split(/^/m, $err))), 0,
 		'no non-informational messages');
 	$misc->{xdb}->reopen;
 	@it = $misc->mset('')->items;

@@ -406,14 +406,14 @@ EOM
 	while (my ($ibx_id, $eidx_key) = $ibx_ck->fetchrow_array) {
 		next if $self->{ibx_map}->{$eidx_key};
 		$self->{midx}->remove_eidx_key($eidx_key);
-		warn "I: deleting messages for $eidx_key...\n";
+		warn "# deleting messages for $eidx_key...\n";
 		$x3_doc->execute($ibx_id);
 		my $ibx = { -ibx_id => $ibx_id, -gc_eidx_key => $eidx_key };
 		while (my ($docid, $xnum, $oid) = $x3_doc->fetchrow_array) {
 			my $r = _unref_doc($sync, $docid, $ibx, $xnum, $oid);
 			$oid = unpack('H*', $oid);
 			$r = $r ? 'unref' : 'remove';
-			warn "I: $r #$docid $eidx_key $oid\n";
+			warn "# $r #$docid $eidx_key $oid\n";
 			if (checkpoint_due($sync)) {
 				$x3_doc = $ibx_ck = undef;
 				reindex_checkpoint($self, $sync);
@@ -433,12 +433,12 @@ SELECT key FROM eidx_meta WHERE key LIKE ? ESCAPE ?
 		$lc_i->execute("lc-%:$pat//%", '\\');
 		while (my ($key) = $lc_i->fetchrow_array) {
 			next if $key !~ m!\Alc-v[1-9]+:\Q$eidx_key\E//!;
-			warn "I: removing $key\n";
+			warn "# removing $key\n";
 			$self->{oidx}->dbh->do(<<'', undef, $key);
 DELETE FROM eidx_meta WHERE key = ?
 
 		}
-		warn "I: $eidx_key removed\n";
+		warn "# $eidx_key removed\n";
 	}
 }
 
@@ -447,20 +447,20 @@ sub eidx_gc_scan_shards ($$) { # TODO: use for lei/store
 	my $nr = $self->{oidx}->dbh->do(<<'');
 DELETE FROM xref3 WHERE docid NOT IN (SELECT num FROM over)
 
-	warn "I: eliminated $nr stale xref3 entries\n" if $nr != 0;
+	warn "# eliminated $nr stale xref3 entries\n" if $nr != 0;
 	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
 
 	# fixup from old bugs:
 	$nr = $self->{oidx}->dbh->do(<<'');
 DELETE FROM over WHERE num > 0 AND num NOT IN (SELECT docid FROM xref3)
 
-	warn "I: eliminated $nr stale over entries\n" if $nr != 0;
+	warn "# eliminated $nr stale over entries\n" if $nr != 0;
 	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
 
 	$nr = $self->{oidx}->dbh->do(<<'');
 DELETE FROM eidxq WHERE docid NOT IN (SELECT num FROM over)
 
-	warn "I: eliminated $nr stale reindex queue entries\n" if $nr != 0;
+	warn "# eliminated $nr stale reindex queue entries\n" if $nr != 0;
 	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
 
 	my ($cur) = $self->{oidx}->dbh->selectrow_array(<<EOM);
@@ -490,7 +490,7 @@ SELECT num FROM over WHERE num >= ? ORDER BY num ASC LIMIT 10000
 			reindex_checkpoint($self, $sync);
 		}
 	}
-	warn "I: eliminated $nr stale Xapian documents\n" if $nr != 0;
+	warn "# eliminated $nr stale Xapian documents\n" if $nr != 0;
 }
 
 sub eidx_gc {
@@ -731,13 +731,11 @@ sub eidxq_lock_acquire ($) {
 	my $t = strftime('%Y-%m-%d %k:%M %z', localtime($time));
 	local $self->{current_info} = 'eidxq';
 	if ($euid == $> && $ident eq host_ident) {
-		if (kill(0, $pid)) {
-			warn <<EOM; return;
-I: PID:$pid (re)indexing since $t, it will continue our work
+		kill(0, $pid) and warn <<EOM and return;
+# PID:$pid (re)indexing since $t, it will continue our work
 EOM
-		}
 		if ($!{ESRCH}) {
-			warn "I: eidxq_lock is stale ($cur), clobbering\n";
+			warn "# eidxq_lock is stale ($cur), clobbering\n";
 			return _eidxq_take($self);
 		}
 		warn "E: kill(0, $pid) failed: $!\n"; # fall-through:
@@ -837,7 +835,7 @@ sub reindex_unseen ($$$$) {
 		xnum => $xsmsg->{num},
 		# {mids} and {chash} will be filled in at _reindex_unseen
 	};
-	warn "I: reindex_unseen ${\$ibx->eidx_key}:$req->{xnum}:$req->{oid}\n";
+	warn "# reindex_unseen ${\$ibx->eidx_key}:$req->{xnum}:$req->{oid}\n";
 	$self->git->cat_async($xsmsg->{blob}, \&_reindex_unseen, $req);
 }
 
