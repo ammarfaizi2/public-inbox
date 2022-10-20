@@ -221,7 +221,9 @@ EOM
 		if ($mculled) {
 			my $json = PublicInbox::Config->json->encode($m1);
 			my $fn = $ft->filename;
+			my $mtime = (stat($fn))[9];
 			gzip(\$json => $fn) or die "gzip: $GzipError";
+			utime($mtime, $mtime, $fn) or die "utime(..., $fn): $!";
 		}
 		PublicInbox::LeiMirror::ft_rename($ft, $mf, 0666);
 	}

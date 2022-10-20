@@ -408,7 +408,9 @@ EOM
 		# users won't have to delete manifest if they +w an
 		# epoch they no longer want to skip
 		my $json = PublicInbox::Config->json->encode($m);
+		my $mtime = (stat($fn))[9];
 		gzip(\$json => $fn) or die "gzip: $GzipError";
+		utime($mtime, $mtime, $fn) or die "utime(..., $fn): $!";
 	}
 	ft_rename($ft, "$self->{dst}/manifest.js.gz", 0666);
 }
