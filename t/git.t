@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use Test::More;
@@ -44,7 +44,7 @@ use PublicInbox::Git;
 	my $f = 'HEAD:foo.txt';
 	my @x = $gcf->check($f);
 	is(scalar @x, 3, 'returned 3 element array for existing file');
-	like($x[0], qr/\A[a-f0-9]{40}\z/, 'returns obj ID in 1st element');
+	like($x[0], qr/\A[a-f0-9]{40,64}\z/, 'returns obj ID in 1st element');
 	is('blob', $x[1], 'returns obj type in 2nd element');
 	like($x[2], qr/\A\d+\z/, 'returns obj size in 3rd element');
 

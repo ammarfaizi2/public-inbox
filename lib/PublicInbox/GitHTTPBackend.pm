@@ -23,10 +23,8 @@ my @text = qw[HEAD info/refs info/attributes
 	objects/info/(?:http-alternates|alternates|packs)
 	cloneurl description];
 
-my @binary = qw!
-	objects/[a-f0-9]{2}/[a-f0-9]{38}
-	objects/pack/pack-[a-f0-9]{40}\.(?:pack|idx)
-	!;
+my @binary = ('objects/[a-f0-9]{2}/[a-f0-9]{38,62}',
+	'objects/pack/pack-[a-f0-9]{40,64}\.(?:pack|idx)');
 
 our $ANY = join('|', @binary, @text, 'git-upload-pack');
 my $BIN = join('|', @binary);
@@ -62,13 +60,13 @@ sub serve_dumb {
 
 	my $h = [];
 	my $type;
-	if ($path =~ m!\Aobjects/[a-f0-9]{2}/[a-f0-9]{38}\z!) {
+	if ($path =~ m!\Aobjects/[a-f0-9]{2}/[a-f0-9]{38,62}\z!) {
 		$type = 'application/x-git-loose-object';
 		cache_one_year($h);
-	} elsif ($path =~ m!\Aobjects/pack/pack-[a-f0-9]{40}\.pack\z!) {
+	} elsif ($path =~ m!\Aobjects/pack/pack-[a-f0-9]{40,64}\.pack\z!) {
 		$type = 'application/x-git-packed-objects';
 		cache_one_year($h);
-	} elsif ($path =~ m!\Aobjects/pack/pack-[a-f0-9]{40}\.idx\z!) {
+	} elsif ($path =~ m!\Aobjects/pack/pack-[a-f0-9]{40,64}\.idx\z!) {
 		$type = 'application/x-git-packed-objects-toc';
 		cache_one_year($h);
 	} elsif ($path =~ /\A(?:$TEXT)\z/o) {

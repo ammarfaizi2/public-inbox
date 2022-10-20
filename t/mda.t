@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use warnings;
@@ -97,7 +97,7 @@ EOF
 		local $ENV{PATH} = $main_path;
 		ok(run_script(['-mda'], undef, { 0 => \$in }));
 		my $rev = $git->qx(qw(rev-list HEAD));
-		like($rev, qr/\A[a-f0-9]{40}/, "good revision committed");
+		like($rev, qr/\A[a-f0-9]{40,64}/, "good revision committed");
 		chomp $rev;
 		my $cmt = $git->cat_file($rev);
 		like($$cmt, qr/^author Me <me\@example\.com> 0 \+0000\n/m,

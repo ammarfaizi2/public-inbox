@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Ensure buffering behavior in -httpd doesn't cause runaway memory use
@@ -53,7 +53,7 @@ SKIP: {
 		}
 	}
 	skip "no packs found in $git_dir" unless defined $pack;
-	if ($pack !~ m!(/objects/pack/pack-[a-f0-9]{40}.pack)\z!) {
+	if ($pack !~ m!(/objects/pack/pack-[a-f0-9]{40,64}.pack)\z!) {
 		skip "bad pack name: $pack";
 	}
 	my $url = $1;

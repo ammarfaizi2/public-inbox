@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use warnings;
@@ -30,7 +30,7 @@ my $smsg = bless {}, 'PublicInbox::Smsg' if $v2;
 like($im->add($mime, undef, $smsg), qr/\A:[0-9]+\z/, 'added one message');
 
 if ($v2) {
-	like($smsg->{blob}, qr/\A[a-f0-9]{40}\z/, 'got last object_id');
+	like($smsg->{blob}, qr/\A[a-f0-9]{40,64}\z/, 'got last object_id');
 	my @cmd = ('git', "--git-dir=$git->{git_dir}", qw(hash-object --stdin));
 	open my $in, '+<', undef or BAIL_OUT "open(+<): $!";
 	print $in $mime->as_string or die "write failed: $!";
