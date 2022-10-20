@@ -402,7 +402,7 @@ EOM
 		clone_v1($self);
 	} else {
 		die "E: confused by <$uri>, possible matches:\n\t",
-			join(', ', sort keys %$m), "\n";
+			join("\n\t", sort keys %$m), "\n";
 	}
 	if (delete $self->{-culled_manifest}) { # set by clone_v2
 		# write the smaller manifest if epochs were skipped so
