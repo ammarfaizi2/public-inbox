@@ -27,7 +27,6 @@ my @binary = ('objects/[a-f0-9]{2}/[a-f0-9]{38,62}',
 	'objects/pack/pack-[a-f0-9]{40,64}\.(?:pack|idx)');
 
 our $ANY = join('|', @binary, @text, 'git-upload-pack');
-my $BIN = join('|', @binary);
 my $TEXT = join('|', @text);
 
 sub serve {
