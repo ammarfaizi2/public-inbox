@@ -14,6 +14,9 @@ our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err, $lei_cwdfh);
+
+$_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
+
 BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
