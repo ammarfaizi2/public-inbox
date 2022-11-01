@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # *-external commands of lei
@@ -88,7 +88,7 @@ sub get_externals {
 	my @cur = externals_each($self);
 	my $do_glob = !$self->{opt}->{globoff}; # glob by default
 	if ($do_glob && (my $re = glob2re($loc))) {
-		@m = grep(m!$re!, @cur);
+		@m = grep(m!$re/?\z!, @cur);
 		return @m if scalar(@m);
 	} elsif (index($loc, '/') < 0) { # exact basename match:
 		@m = grep(m!/\Q$loc\E/?\z!, @cur);

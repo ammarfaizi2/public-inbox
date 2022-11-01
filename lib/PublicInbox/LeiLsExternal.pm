@@ -13,6 +13,7 @@ sub lei_ls_external {
 	my ($OFS, $ORS) = $lei->{opt}->{z} ? ("\0", "\0\0") : (" ", "\n");
 	$filter //= '*';
 	my $re = $do_glob ? $lei->glob2re($filter) : undef;
+	$re .= '/?\\z' if defined $re;
 	$re //= index($filter, '/') < 0 ?
 			qr!/\Q$filter\E/?\z! : # exact basename match
 			qr/\Q$filter\E/; # grep -F semantics

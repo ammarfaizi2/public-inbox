@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # front-end for the "lei ls-mail-sync" sub-command
@@ -12,7 +12,10 @@ sub lei_ls_mail_sync {
 	my $lms = $lei->lms or return;
 	my $opt = $lei->{opt};
 	my $re = $opt->{globoff} ? undef : $lei->glob2re($filter // '*');
-	$re //= qr/\Q$filter\E/;
+	$re .= '/?\\z' if defined $re;
+	$re //= index($filter, '/') < 0 ?
+			qr!/\Q$filter\E/?\z! : # exact basename match
+			qr/\Q$filter\E/; # grep -F semantics
 	my @f = $lms->folders;
 	@f = $opt->{'invert-match'} ? grep(!/$re/, @f) : grep(/$re/, @f);
 	if ($opt->{'local'} && !$opt->{remote}) {
