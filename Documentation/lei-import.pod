@@ -10,7 +10,8 @@ lei import [OPTIONS] (--stdin|-)
 
 =head1 DESCRIPTION
 
-Import messages into the local storage of L<lei(1)>.  C<LOCATION> is a
+Import messages into the local storage of L<lei(1)>
+(aka L<leiE<sol>store|lei-store-format(5)>).  C<LOCATION> is a
 source of messages: a directory (Maildir), a file, or a URL
 (C<imap://>, C<imaps://>, C<nntp://>, or C<nntps://>).  URLs requiring
 authentication use L<git-credential(1)> to
@@ -102,4 +103,4 @@ License: AGPL-3.0+ L<https://www.gnu.org/licenses/agpl-3.0.txt>
 
 =head1 SEE ALSO
 
-L<lei-index(1)>
+L<lei-index(1)>, L<lei-store-format(5)>
