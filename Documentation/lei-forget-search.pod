@@ -8,7 +8,9 @@ lei forget-search [OPTIONS] OUTPUT
 
 =head1 DESCRIPTION
 
-Forget a saved search at C<OUTPUT>.
+Forget a saved search at C<OUTPUT>,
+where C<OUTPUT> was supplied for argument of C<lei q -o OUTPUT ...>
+A listing of outputs is available via C<lei ls-search>.
 
 =head1 OPTIONS
 
