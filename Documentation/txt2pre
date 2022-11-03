@@ -9,7 +9,7 @@ use strict;
 use warnings;
 use PublicInbox::Linkify;
 use PublicInbox::Hval qw(ascii_html);
-my %xurls;
+my (%xurls, %lei);
 for (qw[lei(1)
 	lei-add-external(1)
 	lei-add-watch(1)
@@ -77,6 +77,7 @@ for (qw[lei(1)
 	my ($n) = (/([\w\-\.]+)/);
 	$xurls{$_} = "$n.html";
 	$xurls{$n} = "$n.html";
+	/\Alei-(.+?)\(1\)\z/ and $xurls{"lei $1"} = "$n.html";
 }
 
 for (qw[make(1) flock(2) setrlimit(2) vfork(2) tmpfs(5) inotify(7) unix(7)
@@ -160,6 +161,9 @@ if ($str =~ /^NAME\n\s+([^\n]+)/sm) {
 	$title = $1;
 	if ($title =~ /([\w\.\-]+)/) {
 		delete $xurls{$1};
+	}
+	if ($title =~ /\blei-([\w\-]+)\b/) {
+		delete $xurls{"lei $1"};
 	}
 }
 $title = ascii_html($title);
