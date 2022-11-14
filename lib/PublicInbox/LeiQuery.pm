@@ -39,8 +39,11 @@ sub _start_query { # used by "lei q" and "lei up"
 			$lms->lms_write_prepare->lms_pause; # just create
 		}
 	}
-	$l2m and $l2m->{-wq_nr_workers} //= $mj //
-		int($nproc * 0.75 + 0.5); # keep some CPU for git
+	$l2m and $l2m->{-wq_nr_workers} //= $mj // do {
+		# keep some CPU for git, and don't overload IMAP destinations
+		my $n = int($nproc * 0.75 + 0.5);
+		$self->{net} && $n > 4 ? 4 : $n;
+	};
 
 	# descending docid order is cheapest, MUA controls sorting order
 	$self->{mset_opt}->{relevance} //= -2 if $l2m || $opt->{threads};
