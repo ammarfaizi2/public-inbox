@@ -7,8 +7,7 @@
 # n.b. curl may support a daemon/client model like lei someday:
 #   https://github.com/curl/curl/wiki/curl-tool-master-client
 package PublicInbox::LeiCurl;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::Spawn qw(which);
 use PublicInbox::Config;
 
@@ -78,7 +77,7 @@ sub for_uri {
 	if ($uri->scheme =~ /\Ahttps?\z/i) {
 		my $cfg = $lei->_lei_cfg;
 		my $p = $cfg ? $cfg->urlmatch('http.Proxy', $$uri) : undef;
-		push(@opt, "--proxy=$p") if defined($p);
+		push(@opt, '--proxy', $p) if defined($p);
 	}
 	bless [ @$pfx, @$self, @opt, $uri->as_string ], ref($self);
 }
