@@ -533,7 +533,7 @@ sub _fill_ei ($$) {
 }
 
 sub urlmatch {
-	my ($self, $key, $url) = @_;
+	my ($self, $key, $url, $try_git) = @_;
 	state $urlmatch_broken; # requires git 1.8.5
 	return if $urlmatch_broken;
 	my $file = $self->{'-f'} // default_file();
@@ -542,13 +542,19 @@ sub urlmatch {
 	my $fh = popen_rd($cmd);
 	local $/ = "\0";
 	my $val = <$fh>;
-	if (close($fh)) {
-		chomp($val);
-	} else {
-		$urlmatch_broken = 1 if (($? >> 8) != 1);
+	if (!close($fh)) {
 		undef $val;
+		if (($? >> 8) != 1) {
+			$urlmatch_broken = 1;
+		} elsif ($try_git) { # n.b. this takes cwd into account
+			$cmd = [qw(git config -z --get-urlmatch), $key, $url];
+			$fh = popen_rd($cmd);
+			$val = <$fh>;
+			close($fh) or undef($val);
+		}
 	}
 	$? = 0; # don't influence lei exit status
+	chomp $val if defined $val;
 	$val;
 }
 
