@@ -544,11 +544,12 @@ sub urlmatch {
 	my $val = <$fh>;
 	if (close($fh)) {
 		chomp($val);
-		$val;
 	} else {
 		$urlmatch_broken = 1 if (($? >> 8) != 1);
-		undef;
+		undef $val;
 	}
+	$? = 0; # don't influence lei exit status
+	$val;
 }
 
 sub json {
