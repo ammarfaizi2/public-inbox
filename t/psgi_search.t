@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2017-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -103,6 +103,11 @@ test_psgi(sub { $www->call(@_) }, sub {
 		like($res->content, $mid_re, 'found mid in response');
 		chop($digits);
 	}
+	$res = $cb->(GET("/test/$mid/"));
+	$html = $res->content;
+	like($html, qr/\bFrom: &#198;var /,
+		"displayed Ævar's name properly in permalink From:");
+	unlike($html, qr/&#195;/, 'no raw octets in permalink HTML');
 
 	$res = $cb->(GET('/test/'));
 	$html = $res->content;

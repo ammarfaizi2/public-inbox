@@ -426,8 +426,10 @@ sub _esc ($) {
 	if (!defined($v)) {
 		'NIL';
 	} elsif ($v =~ /[{"\r\n%*\\\[]/) { # literal string
+		utf8::encode($v);
 		'{' . length($v) . "}\r\n" . $v;
 	} else { # quoted string
+		utf8::encode($v);
 		qq{"$v"}
 	}
 }

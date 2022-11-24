@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Lazy MIME parser, it still slurps the full message but keeps short
@@ -144,6 +144,7 @@ sub header_raw {
 	my $re = re_memo($_[1]);
 	my @v = (${ $_[0]->{hdr} } =~ /$re/g);
 	for (@v) {
+		utf8::decode($_); # SMTPUTF8
 		# for compatibility w/ Email::Simple::Header,
 		s/\s+\z//s;
 		s/\A\s+//s;
@@ -359,14 +360,15 @@ sub header_set {
 	$pfx .= ': ';
 	my $len = 78 - length($pfx);
 	@vals = map {;
+		utf8::encode(my $v = $_); # to bytes, support SMTPUTF8
 		# folding differs from Email::Simple::Header,
 		# we favor tabs for visibility (and space savings :P)
 		if (length($_) >= $len && (/\n[^ \t]/s || !/\n/s)) {
 			local $Text::Wrap::columns = $len;
 			local $Text::Wrap::huge = 'overflow';
-			$pfx . wrap('', "\t", $_) . $self->{crlf};
+			$pfx . wrap('', "\t", $v) . $self->{crlf};
 		} else {
-			$pfx . $_ . $self->{crlf};
+			$pfx . $v . $self->{crlf};
 		}
 	} @vals;
 	$$hdr =~ s!$re!shift(@vals) // ''!ge; # replace current headers, first

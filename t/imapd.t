@@ -534,6 +534,34 @@ SKIP: {
 	}
 }
 
+{
+	ok(my $ic = $imap_client->new(%mic_opt), 'logged in');
+	my $mb = "$ibx[0]->{newsgroup}.$first_range";
+	ok($ic->examine($mb), "EXAMINE $mb");
+	my $uidnext = $ic->uidnext($mb); # we'll fetch BODYSTRUCTURE on this
+	my $im = $ibx[0]->importer(0);
+	$im->add(PublicInbox::Eml->new(<<EOF)) or BAIL_OUT;
+Subject: test Ævar
+Message-ID: <smtputf8-delivered-mess\@age>
+From: Ævar Arnfjörð Bjarmason <avarab\@example>
+To: git\@vger.kernel.org
+
+EOF
+	$im->done;
+	my $envl = $ic->get_envelope($uidnext);
+	is($envl->{subject}, 'test Ævar', 'UTF-8 subject');
+	is($envl->{sender}->[0]->{personalname}, 'Ævar Arnfjörð Bjarmason',
+		'UTF-8 sender[0].personalname');
+	SKIP: {
+		skip 'need compress for comparisons', 1 if !$can_compress;
+		ok($ic = $imap_client->new(%mic_opt), 'uncompressed logged in');
+		ok($ic && $ic->compress, 'compress enabled');
+		ok($ic->examine($mb), "EXAMINE $mb");
+		my $raw = $ic->get_envelope($uidnext);
+		is_deeply($envl, $raw, 'raw and compressed match');
+	}
+}
+
 $td->kill;
 $td->join;
 is($?, 0, 'no error in exited process') if !$ENV{TEST_KILL_IMAPD};
