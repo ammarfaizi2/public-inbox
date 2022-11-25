@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # SpamAssassin rules useful for running a mailing list mirror.  We want to:
@@ -39,7 +39,11 @@ sub check_list_mirror_received {
 		my $v = $pms->get($hdr) or next;
 		local $/ = "\n";
 		chomp $v;
-		next if $v ne $hval;
+		if (ref($hval)) {
+			next if $v !~ $hval;
+		} else {
+			next if $v ne $hval;
+		}
 		return 1 if $recvd !~ $host_re;
 	}
 
@@ -91,6 +95,8 @@ sub config_list_mirror {
 	$host_glob =~ s!(.)!$patmap{$1} || "\Q$1"!ge;
 	my $host_re = qr/\A\s*from\s+$host_glob(?:\s|$)/si;
 
+	(lc($hdr) eq 'list-id' && $hval =~ /<([^>]+)>/) and
+		$hval = qr/\A<\Q$1\E>\z/;
 	push @{$self->{list_mirror_check}}, [ $hdr, $hval, $host_re, $addr ];
 }
 

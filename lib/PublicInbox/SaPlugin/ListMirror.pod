@@ -6,11 +6,11 @@ PublicInbox::SaPlugin::ListMirror - SpamAssassin plugin for mailing list mirrors
 
   loadplugin PublicInbox::SaPlugin::ListMirror
 
-Declare some mailing lists based on the expected List-Id value,
+Declare some mailing lists based on the expected List-ID value,
 expected servers, and mailing list address:
 
-  list_mirror List-Id <foo.example.com> *.example.com foo@example.com
-  list_mirror List-Id <bar.example.com> *.example.com bar@example.com
+  list_mirror List-ID <foo.example.com> *.example.com foo@example.com
+  list_mirror List-ID <bar.example.com> *.example.com bar@example.com
 
 Bump the score for messages which come from unexpected servers:
 
@@ -43,14 +43,25 @@ C<allow_user_rules 1>
 
 =item list_mirror HEADER HEADER_VALUE HOSTNAME_GLOB [LIST_ADDRESS]
 
-Declare a list based on an expected C<HEADER> matching C<HEADER_NAME>
-exactly coming from C<HOSTNAME_GLOB>.  C<LIST_ADDRESS> is optional,
+Declare a list based on an expected C<HEADER> matching C<HEADER_VALUE>
+coming from C<HOSTNAME_GLOB>.  C<LIST_ADDRESS> is optional,
 but may specify the address of the mailing list being mirrored.
 
-C<List-Id> or C<X-Mailing-List> are common values of C<HEADER>
+C<List-ID> is the recommended value of C<HEADER> as most
+mailing lists support it.
 
 An example of C<HEADER_VALUE> is C<E<lt>foo.example.orgE<gt>>
-if C<HEADER> is C<List-Id>.
+if C<HEADER> is C<List-ID>.
+
+As of public-inbox 2.0, using C<List-ID> as the C<HEADER> and a
+C<HEADER_VALUE> contained by angle brackets (E<lt>list-idE<gt>),
+matching is done in accordance with
+L<RFC 2919|https://tools.ietf.org/html/rfc2919>.  That is,
+C<HEADER_VALUE> will be a case-insensitive substring match
+and ignore the optional description C<phrase> as documented
+in RFC 2919.
+
+All other C<HEADER> values use exact matches for backwards-compatibility.
 
 C<HOSTNAME_GLOB> may be a wildcard match for machines where mail can
 come from or an exact match.
@@ -105,7 +116,7 @@ and L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta
 
 =head1 COPYRIGHT
 
-Copyright (C) 2016-2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright (C) all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<http://www.gnu.org/licenses/agpl-3.0.txt>
 
