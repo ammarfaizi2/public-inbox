@@ -1,8 +1,7 @@
-# Copyright (C) 2017-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
-use Test::More;
+use v5.12;
 use PublicInbox::Eml;
 use PublicInbox::TestCommon;
 use_ok 'PublicInbox::Filter::RubyLang';
@@ -56,6 +55,15 @@ EOF
 	$mime = PublicInbox::Eml->new($msg);
 	$ret = $f->delivery($mime);
 	is($ret, 100, "delivery rejected without X-Mail-Count");
+
+	$mime = PublicInbox::Eml->new(<<'EOM');
+Message-ID: <new@host>
+Subject: [ruby-core:13] times
+
+EOM
+	$ret = $f->delivery($mime);
+	is($ret, $mime, "delivery successful");
+	is($mm->num_for('new@host'), 13, 'MM entry created based on Subject');
 }
 
 done_testing();

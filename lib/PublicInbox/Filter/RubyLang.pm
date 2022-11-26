@@ -1,11 +1,10 @@
-# Copyright (C) 2017-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Filter for lists.ruby-lang.org trailers
 package PublicInbox::Filter::RubyLang;
-use base qw(PublicInbox::Filter::Base);
-use strict;
-use warnings;
+use v5.10.1;
+use parent qw(PublicInbox::Filter::Base);
 use PublicInbox::MID qw(mids);
 
 my $l1 = qr/Unsubscribe:\s
@@ -56,16 +55,22 @@ sub scrub {
 		my $hdr = $mime->header_obj;
 		my $mids = mids($hdr);
 		return $self->REJECT('Message-ID missing') unless (@$mids);
-		my @v = $hdr->header_raw('X-Mail-Count');
 		my $n;
-		foreach (@v) {
-			/\A\s*([0-9]+)\s*\z/ or next;
-			$n = $1;
-			last;
+		my @v = $hdr->header_raw('X-Mail-Count'); # old host only
+		if (@v) {
+			for (@v) {
+				/\A\s*([0-9]+)\s*\z/ or next;
+				$n = $1;
+				last;
+			}
+		} else { # new host: nue.mailmanlists.eu
+			for ($hdr->header_str('Subject')) {
+				/\A\[ruby-[^:]+:([0-9]+)\]/ or next;
+				$n = $1;
+				last;
+			}
 		}
-		unless (defined $n) {
-			return $self->REJECT('X-Mail-Count not numeric');
-		}
+		$n // return $self->REJECT('could not get count not numeric');
 		foreach my $mid (@$mids) {
 			my $r = $altid->mm_alt->mid_set($n, $mid);
 			next if $r == 0;
