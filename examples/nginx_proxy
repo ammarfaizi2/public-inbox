@@ -1,8 +1,14 @@
 # Example NGINX configuration to proxy-pass requests
-# to public-inbox-httpd or to a standalone PSGI/Plack server.
+# to varnish, public-inbox-(httpd|netd) or any PSGI/Plack server.
 # The daemon is assumed to be running locally on port 8001.
 # Adjust ssl certificate paths if you use any, or remove
 # the ssl configuration directives if you don't.
+#
+# Note: public-inbox-httpd and -netd both support HTTPS, but they
+# don't support caching which Varnish provides.  The recommended
+# setup is currently:
+#
+#   (nginx|any-HTTPS-proxy) <-> varnish <-> public-inbox-(httpd|netd)
 server {
 	server_name _;
 	listen 80;
@@ -14,6 +20,7 @@ server {
 		proxy_set_header    HOST $host;
 		proxy_set_header    X-Real-IP $remote_addr;
 		proxy_set_header    X-Forwarded-Proto $scheme;
+		proxy_buffering off; # lowers response latency
 		proxy_pass          http://127.0.0.1:8001$request_uri;
 	}
 
