@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Unstable internal API.
@@ -63,8 +63,9 @@ sub content_digest ($;$) {
 	# do NOT consider the Message-ID as part of the content_hash
 	# if we got here, we've already got Message-ID reuse
 	my %seen = map { $_ => 1 } @{mids($eml)};
-	foreach my $mid (@{references($eml)}) {
-		$dig->add("ref\0$mid\0") unless $seen{$mid}++;
+	for (grep { !$seen{$_}++ } @{references($eml)}) {
+		utf8::encode($_);
+		$dig->add("ref\0$_\0");
 	}
 
 	# Only use Sender: if From is not present

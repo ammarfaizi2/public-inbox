@@ -283,6 +283,22 @@ EOF
 	is($msgs->[1]->{mid}, 'y'x244, 'stored truncated mid(2)');
 }
 
+if ('UTF-8 References') {
+	my @w;
+	local $SIG{__WARN__} = sub { push @w, @_ };
+	my $msg = <<EOM;
+From: a\@example.com
+Subject: b
+Message-ID: <horrible\@example>
+References: <\xc4\x80\@example>
+
+EOM
+	ok($im->add(PublicInbox::Eml->new($msg."a\n")), 'UTF-8 References 1');
+	ok($im->add(PublicInbox::Eml->new($msg."b\n")), 'UTF-8 References 2');
+	$im->done;
+	ok(!grep(/Wide character/, @w), 'no wide characters') or xbail(\@w);
+}
+
 my $tmp = {
 	inboxdir => "$inboxdir/non-existent/subdir",
 	name => 'nope',
