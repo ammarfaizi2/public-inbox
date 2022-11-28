@@ -93,6 +93,13 @@ close $cfgfh or BAIL_OUT;
 	is_deeply([$n->group($group)], [ qw(0 1 1), $group ], 'GROUP works');
 	is_deeply($n->listgroup($group), [1], 'listgroup OK');
 	# TODO: Net::NNTP::listgroup does not support range at the moment
+	my $s = tcp_connect($sock);
+	sysread($s, my $buf, 4096);
+	is($buf, "201 " . hostname . " ready - post via email\r\n",
+		'got greeting');
+	syswrite($s, "LISTGROUP $group 1-1\r\n");
+	$buf = read_til_dot($s);
+	like($buf, qr/\r\n1\r\n/s, 'LISTGROUP with range works');
 
 	{
 		my $expect = [ qw(Subject: From: Date: Message-ID:
@@ -120,8 +127,8 @@ close $cfgfh or BAIL_OUT;
 		'references' => '<reftabsqueezed>',
 	);
 
-	my $s = tcp_connect($sock);
-	sysread($s, my $buf, 4096);
+	$s = tcp_connect($sock);
+	sysread($s, $buf, 4096);
 	is($buf, "201 " . hostname . " ready - post via email\r\n",
 		'got greeting');
 
