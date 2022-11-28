@@ -123,6 +123,21 @@ sub ft_rename ($$$) {
 	$ft->unlink_on_destroy(0);
 }
 
+sub do_reap ($;$) {
+	my ($self, $jobs) = @_;
+	$jobs //= $self->{-jobs} //= $self->{lei}->{opt}->{jobs} // 1;
+	$jobs = 1 if $jobs < 1;
+	while (keys(%$LIVE) >= $jobs) {
+		my $pid = waitpid(-1, 0) // die "waitpid(-1): $!";
+		if (my $x = delete $LIVE->{$pid}) {
+			my $cb = shift @$x;
+			$cb->(@$x) if $cb;
+		} else {
+			warn "reaped unknown PID=$pid ($?)\n";
+		}
+	}
+}
+
 sub _get_txt_start { # non-fatal
 	my ($self, $endpoint, $fini) = @_;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
@@ -135,8 +150,7 @@ sub _get_txt_start { # non-fatal
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
 	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(-f --compressed -R -o),
 					$ft->filename);
-	my $jobs = $lei->{opt}->{jobs} // 1;
-	reap_live() while keys(%$LIVE) >= $jobs;
+	do_reap($self);
 	$lei->qerr("# @$cmd");
 	return if $self->{dry_run};
 	$self->{"-get_txt.$endpoint"} = [ $ft, $cmd, $uri ];
@@ -247,8 +261,7 @@ sub run_reap {
 
 sub start_clone {
 	my ($self, $cmd, $opt, $fini) = @_;
-	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
-	reap_live() while keys(%$LIVE) >= $jobs;
+	do_reap($self);
 	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd, $fini ]
@@ -273,9 +286,8 @@ sub fgrp_update_old ($) { # for git <1.8.5
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		fetch_args($fgrp->{lei}, my $opt = {}) ];
 	$fgrp->{lei}->qerr("# @$cmd");
+	do_reap($fgrp);
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $fgrp, $cmd ];
-	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
-	reap_live() while keys(%$LIVE) >= $jobs;
 }
 
 sub upr { # feed `git update-ref --stdin -z' verbosely
@@ -315,8 +327,7 @@ sub fgrp_update {
 	}
 	if (close($w)) { # git >= 1.8.5
 		$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
-		my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
-		reap_live() while keys(%$LIVE) >= $jobs;
+		do_reap($fgrp);
 	} else { # git <1.8.5 w/o update-ref --stdin
 		warn "E: close(update-ref --stdin): $!\n";
 		$update_ref_stdin = 0;
@@ -332,10 +343,9 @@ sub fgrp_fetched {
 	my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
 	my $cmd = [ 'git', "--git-dir=$fgrp->{-osdir}",
 			qw(pack-refs --all --prune) ];
+	do_reap($fgrp);
 	$fgrp->{lei}->qerr("# @$cmd");
 	$LIVE->{spawn($cmd, undef, \%opt)} = [ \&reap_cmd, $fgrp, $cmd ];
-	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
-	reap_live() while keys(%$LIVE) >= $jobs;
 
 	$update_ref_stdin or return fgrp_update_old($fgrp);
 
@@ -344,19 +354,19 @@ sub fgrp_fetched {
 	my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
 		"--format=refs/%(refname:lstrip=3)%00%(objectname)",
 		"refs/remotes/$rn/" ];
+	do_reap($fgrp);
 	open($fgrp->{srcfh}, '+>', undef) or die "open(src): $!";
 	$fgrp->{lei}->qerr("# @$src >SRC");
 	my $pid = spawn($src, undef, { %opt, 1 => $fgrp->{srcfh} });
 	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $src, $update_ref ];
-	reap_live() while keys(%$LIVE) >= $jobs;
 
 	my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
 		'--format=%(refname)%00%(objectname)' ];
+	do_reap($fgrp);
 	open($fgrp->{dstfh}, '+>', undef) or die "open(dst): $!";
 	$fgrp->{lei}->qerr("# @$dst >DST");
 	$pid = spawn($dst, undef, { %opt, 1 => $fgrp->{dstfh} });
 	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $dst, $update_ref ];
-	reap_live() while keys(%$LIVE) >= $jobs;
 }
 
 sub fgrp_fetch {
@@ -365,8 +375,7 @@ sub fgrp_fetch {
 			fetch_args($fgrp->{lei}, my $opt = {}),
 			$fgrp->{-remote} ];
 	$fgrp->{-fini} = $fini;
-	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
-	reap_live() while keys(%$LIVE) >= $jobs;
+	do_reap($fgrp);
 	$fgrp->{lei}->qerr("# @$cmd");
 	return if $fgrp->{dry_run};
 	my $fgrp_fini = PublicInbox::OnDestroy->new($$, \&fgrp_fetched, $fgrp);
@@ -451,7 +460,7 @@ sub clone_v1 {
 	(!defined($d) && !$nohang) and
 		_get_txt_start($self, 'description', $fini);
 
-	reap_live() until ($nohang || !keys(%$LIVE)); # for non-manifest clone
+	$nohang or do_reap($self, 1); # for non-manifest clone
 }
 
 sub parse_epochs ($$) {
@@ -588,16 +597,6 @@ sub v2_done { # called via OnDestroy
 	write_makefile($dst, 2);
 	undef $lck; # unlock
 	index_cloned_inbox($self, 2);
-}
-
-sub reap_live {
-	my $pid = waitpid(-1, 0) // die "waitpid(-1): $!";
-	if (my $x = delete $LIVE->{$pid}) {
-		my $cb = shift @$x;
-		$cb->(@$x) if $cb;
-	} else {
-		warn "reaped unknown PID=$pid ($?)\n";
-	}
 }
 
 sub clone_v2_prep ($$;$) {
@@ -762,7 +761,7 @@ EOM
 			last; # restart %$todo iteration
 		}
 	}
-	reap_live() while keys(%$LIVE);
+	do_reap($self, 1);
 }
 
 sub dump_manifest ($$) {
