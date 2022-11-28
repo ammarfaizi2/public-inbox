@@ -43,7 +43,7 @@ sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 
 # for old installations without manifest.js.gz
 sub try_scrape {
-	my ($self) = @_;
+	my ($self, $fallback_manifest) = @_;
 	my $uri = URI->new($self->{src});
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
@@ -54,9 +54,17 @@ sub try_scrape {
 	close($fh) or return $lei->child_error($?, "@$cmd failed");
 
 	# we grep with URL below, we don't want Subject/From headers
-	# making us clone random URLs
+	# making us clone random URLs.  This assumes remote instances
+	# prior to public-inbox 1.7.0
+	# 5b96edcb1e0d8252 (www: move mirror instructions to /text/, 2021-08-28)
 	my @html = split(/<hr>/, $html);
 	my @urls = ($html[-1] =~ m!\bgit clone --mirror ([a-z\+]+://\S+)!g);
+	if (!@urls && $fallback_manifest) {
+		warn <<EOM;
+W: failed to extract URLs from $uri, trying manifest.js.gz...
+EOM
+		return start_clone_url($self);
+	}
 	my $url = $uri->as_string;
 	chop($url) eq '/' or die "BUG: $uri not canonicalized";
 
@@ -603,7 +611,6 @@ sub try_manifest {
 	my $cmd = $curl->for_uri($lei, $uri, '-R', '-o', $fn);
 	my %opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
-	local $LIVE;
 	if ($cerr) {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
 		return $lei->child_error($cerr, "@$cmd failed");
@@ -698,15 +705,15 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
 --inbox-config must be one of `always', `v2', `v1', or `never'
 
-		my $iv = $lei->{opt}->{'inbox-version'};
-		if (defined $iv) {
-			local $LIVE;
-			return clone_v1($self) if $iv == 1;
-			return try_scrape($self) if $iv == 2;
-			die "bad --inbox-version=$iv\n";
-		}
-		return start_clone_url($self) if $self->{src} =~ m!://!;
-		die "TODO: cloning local directories not supported, yet";
+		local $LIVE;
+		my $iv = $lei->{opt}->{'inbox-version'} //
+			return start_clone_url($self);
+		return clone_v1($self) if $iv == 1;
+		die "bad --inbox-version=$iv\n" if $iv != 2;
+		die <<EOM if $self->{src} !~ m!://!;
+cloning local v2 inboxes not supported
+EOM
+		try_scrape($self, 1);
 	};
 	$lei->fail($@) if $@;
 }

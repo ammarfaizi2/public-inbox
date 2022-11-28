@@ -75,7 +75,9 @@ Default: C<auto>
 
 =item --inbox-version=NUM
 
-Force a public-inbox version (must be C<1> or C<2>).
+Force a remote public-inbox version (must be C<1> or C<2>).
+This is auto-detected by default, and this option exists mainly
+for testing.
 
 =back
 
