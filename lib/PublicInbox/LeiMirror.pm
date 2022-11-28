@@ -434,10 +434,10 @@ sub forkgroup_prep {
 	my $os = $self->{-objstore} // return;
 	my $fg = $self->{-ent}->{forkgroup} // return;
 	my $dir = "$os/$fg.git";
-	my @cmd = ('git', "--git-dir=$dir", 'config');
-	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
 	if (!-d $dir && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($dir);
+		my @cmd = ('git', "--git-dir=$dir", 'config');
+		my $opt = { 2 => $self->{lei}->{2} };
 		for ('repack.useDeltaIslands=true',
 				'pack.island=refs/remotes/([^/]+)/') {
 			run_die([@cmd, split(/=/, $_, 2)], undef, $opt);
@@ -445,15 +445,6 @@ sub forkgroup_prep {
 	}
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my $rn = substr(sha256_hex($key), 0, 16);
-	unless ($self->{dry_run}) {
-		# --no-tags is required to avoid conflicts
-		for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*",
-				'tagopt=--no-tags') {
-			my @kv = split(/=/, $_, 2);
-			$kv[0] = "remote.$rn.$kv[0]";
-			run_die([@cmd, @kv], undef, $opt);
-		}
-	}
 	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
 		PublicInbox::Import::init_bare($self->{cur_dst});
@@ -480,7 +471,9 @@ sub forkgroup_prep {
 EOM
 		close $fh or die "close($f): $!";
 	}
-	bless { %$self, -osdir => $dir, -remote => $rn }, __PACKAGE__;
+	bless {
+		%$self, -osdir => $dir, -remote => $rn, -uri => $uri
+	}, __PACKAGE__;
 }
 
 sub fp_done {
@@ -547,6 +540,17 @@ sub fgrp_enqueue_maybe {
 
 sub fgrp_enqueue {
 	my ($self, $fgrp) = @_;
+	my $opt = { 2 => $self->{lei}->{2} };
+	# --no-tags is required to avoid conflicts
+	my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
+	my $rn = $fgrp->{-remote} // die 'BUG: no {-remote}';
+	my @cmd = ('git', "--git-dir=$fgrp->{-osdir}", 'config');
+	for ("url=$u", "fetch=+refs/*:refs/remotes/$rn/*", 'tagopt=--no-tags') {
+		my @kv = split(/=/, $_, 2);
+		$kv[0] = "remote.$rn.$kv[0]";
+		$self->{dry_run} ? $self->{lei}->qerr("# @cmd @kv") :
+				run_die([@cmd, @kv], undef, $opt);
+	}
 	push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
 }
 
