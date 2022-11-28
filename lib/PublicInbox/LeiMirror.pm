@@ -113,9 +113,9 @@ sub clone_cmd {
 	@cmd;
 }
 
-sub ft_rename ($$$) {
-	my ($ft, $dst, $open_mode) = @_;
-	my @st = stat($dst);
+sub ft_rename ($$$;$) {
+	my ($ft, $dst, $open_mode, $fh) = @_;
+	my @st = stat($fh // $dst);
 	my $mode = @st ? ($st[2] & 07777) : ($open_mode & ~umask);
 	chmod($mode, $ft) or croak "E: chmod($ft): $!";
 	require File::Copy;
@@ -565,19 +565,21 @@ sub v1_done { # called via OnDestroy
 		run_die([qw(git config -f), "$dst/config", 'gitweb.owner', $o]);
 	}
 	my $o = "$dst/objects";
-	if (open(my $fh, '<', "$o/info/alternates")) {
+	if (open(my $fh, '<', my $fn = "$o/info/alternates")) {;
 		my $base = File::Spec->rel2abs($o);
-		chomp(my @l = <$fh>);
+		my @l = <$fh>;
+		my $ft;
 		for (@l) {
-			$_ = File::Spec->abs2rel($_, $base) if m!\A/!;
-			$_ .= "\n";
+			next unless m!\A/!;
+			$_ = File::Spec->abs2rel($_, $base);
+			$ft //= File::Temp->new(TEMPLATE => '.XXXX',
+						DIR => "$o/info");
 		}
-		my $f = File::Temp->new(TEMPLATE => '.XXXX', DIR => "$o/info");
-		print $f @l;
-		$f->flush or die "flush($f): $!";
-		rename($f->filename, "$o/info/alternates") or
-			die "rename($f, $o/info/alternates): $!";
-		$f->unlink_on_destroy(0);
+		if ($ft) {
+			print $ft @l or die "print($ft): $!";
+			$ft->flush or die "flush($ft): $!";
+			ft_rename($ft, $fn, 0666, $fh);
+		}
 	}
 	pack_refs($self, $dst) if delete $self->{-do_pack_refs};
 	eval { set_description($self) };
