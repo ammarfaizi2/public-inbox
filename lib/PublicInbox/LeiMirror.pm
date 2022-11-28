@@ -21,7 +21,6 @@ use PublicInbox::OnDestroy;
 use Digest::SHA qw(sha256_hex);
 
 our $LIVE; # pid => callback
-my $update_ref_stdin = $ENV{GIT_CAN_UPDATE_REF_STDIN} // 1;
 
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
@@ -279,15 +278,6 @@ sub fetch_args ($$) {
 	@cmd;
 }
 
-sub fgrp_update_old ($) { # for git <1.8.5
-	my ($fgrp) = @_;
-	my $cmd = [ @{$fgrp->{-torsocks}}, 'git', "--git-dir=$fgrp->{cur_dst}",
-		fetch_args($fgrp->{lei}, my $opt = {}) ];
-	$fgrp->{lei}->qerr("# @$cmd");
-	do_reap($fgrp);
-	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $fgrp, $cmd ];
-}
-
 sub upr { # feed `git update-ref --stdin -z' verbosely
 	my ($lei, $w, $op, $ref, $oid) = @_;
 	$lei->qerr("# $op $ref $oid") if $lei->{opt}->{verbose};
@@ -324,15 +314,9 @@ sub fgrp_update {
 	while (my ($ref, $oid) = each %src) {
 		upr($lei, $w, 'create', $ref, $oid);
 	}
-	if (close($w)) { # git >= 1.8.5
-		$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
-		do_reap($fgrp);
-	} else { # git <1.8.5 w/o update-ref --stdin
-		warn "E: close(update-ref --stdin): $!\n";
-		$update_ref_stdin = 0;
-		waitpid($pid, 0) // die "waitpid(update-ref --stdin): $!";
-		fgrp_update_old($fgrp);
-	}
+	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
+	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
+	do_reap($fgrp);
 }
 
 sub pack_refs {
@@ -350,8 +334,6 @@ sub fgrp_fetched {
 	my $rn = $fgrp->{-remote};
 	my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
 	pack_refs($fgrp, $fgrp->{-osdir}); # objstore refs always packed
-
-	$update_ref_stdin or return fgrp_update_old($fgrp);
 
 	my $update_ref = PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
 
@@ -427,11 +409,18 @@ sub forkgroup_prep {
 			say $fh $l or die "say($f): $!";
 		}
 		close $fh or die "close($f): $!";
-		@cmd = ('git', "--git-dir=$self->{cur_dst}",
-			qw(remote add --mirror=fetch origin), "$uri");
-		my $pid = spawn(\@cmd, undef, $opt);
-		waitpid($pid, 0) // die "waitpid(@cmd): $!";
-		die "E: @cmd: \$?=$?" if ($? && ($? >> 8) != 3);
+		$f = "$self->{cur_dst}/config";
+		open $fh, '+>>', $f or die "open:($f): $!";
+		print $fh <<EOM or die "print($f): $!";
+; rely on the "$rn" remote in the
+; $fg fork group for fetches
+; only uncomment the following iff you detach from fork groups
+; [remote "origin"]
+;	url = $uri
+;	fetch = +refs/*:refs/*
+;	mirror = true
+EOM
+		close $fh or die "close($f): $!";
 	}
 	bless { %$self, -osdir => $dir, -remote => $rn }, __PACKAGE__;
 }
