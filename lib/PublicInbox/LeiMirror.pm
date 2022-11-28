@@ -497,6 +497,13 @@ sub fp_done {
 
 sub cmp_fp_fetch {
 	my ($self, $go_fetch) = @_;
+	# $go_fetch is either resume_fetch or fgrp_enqueue
+	my $new = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
+	my $key = $self->{-key} // die 'BUG: no -key';
+	if (my $cur_ent = $self->{-local_manifest}->{$key}) {
+		# runs go_fetch->DESTROY run if eq
+		return $go_fetch->cancel if $cur_ent->{fingerprint} eq $new;
+	}
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
 	my $opt = { 2 => $self->{lei}->{2} };
@@ -677,7 +684,10 @@ sub v1_done { # called via OnDestroy
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
-		run_die([qw(git config -f), "$dst/config", 'gitweb.owner', $o]);
+		my $key = $self->{-key} // die 'BUG: no -key';
+		my $cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
+		$cur eq $o or run_die([qw(git config -f),
+					"$dst/config", 'gitweb.owner', $o]);
 	}
 	my $o = "$dst/objects";
 	if (open(my $fh, '<', my $fn = "$o/info/alternates")) {;
@@ -794,6 +804,19 @@ sub decode_manifest ($$$) {
 	die "$uri: error decoding `$js': $@\n" if $@;
 	ref($m) eq 'HASH' or die "$uri unknown type: ".ref($m);
 	$m;
+}
+
+sub load_current_manifest ($) {
+	my ($self) = @_;
+	my $fn = $self->{-manifest} // return;
+	if (open(my $fh, '<', $fn)) {
+		decode_manifest($fh, $fn, $fn);
+	} elsif ($!{ENOENT}) { # non-fatal, we can just do it slowly
+		warn "open($fn): $!\n";
+		undef;
+	} else {
+		die "open($fn): $!\n";
+	}
 }
 
 sub multi_inbox ($$$) {
@@ -932,6 +955,7 @@ sub try_manifest {
 		warn $@;
 		return try_scrape($self);
 	}
+	local $self->{-local_manifest} = load_current_manifest($self);
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
@@ -1012,10 +1036,13 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
 --inbox-config must be one of `always', `v2', `v1', or `never'
 
-		if (defined(my $os = $lei->{opt}->{objstore})) {
-			$os = 'objstore' if $os eq ''; # --objstore w/o args
-			$os = "$self->{dst}/$os" if $os !~ m!\A/!;
-			$self->{-objstore} = $os;
+		# we support --objstore= and --manifest= with '' (empty string)
+		for my $default (qw(objstore manifest.js.gz)) {
+			my ($k) = (split(/\./, $default))[0];
+			my $v = $lei->{opt}->{$k} // next;
+			$v = $default if $v eq '';
+			$v = "$self->{dst}/$v" if $v !~ m!\A/!;
+			$self->{"-$k"} = $v;
 		}
 		local $LIVE;
 		my $iv = $lei->{opt}->{'inbox-version'} //
