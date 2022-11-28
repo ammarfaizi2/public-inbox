@@ -991,6 +991,34 @@ sub dump_manifest ($$) {
 	utime($mtime, $mtime, "$ft") or die "utime(..., $ft): $!";
 }
 
+sub dump_project_list ($$) {
+	my ($self, $m) = @_;
+	my $f = $self->{'-project-list'} // return;
+	my $old = PublicInbox::Git::try_cat($f);
+	my %new;
+
+	open my $dh, '<', '.' or die "open(.): $!";
+	chdir($self->{dst}) or die "chdir($self->{dst}): $!";
+	my @local = grep { -e $_ ? ($new{$_} = undef) : 1 } split(/\n/s, $old);
+	chdir($dh) or die "chdir(restore): $!";
+
+	$new{substr($_, 1)} = 1 for keys %$m; # drop leading '/'
+	my @list = sort keys %new;
+	my @remote = grep { !defined($new{$_}) } @list;
+
+	warn <<EOM if @remote;
+The following local repositories are ignored/gone from $self->{src}:
+EOM
+	warn "\t", $_, "\n" for @remote;
+	warn <<EOM if @local;
+The following repos in $f no longer exist on the filesystem:
+EOM
+	warn "\t", $_, "\n" for @local;
+
+	my (undef, $dn, $bn) = File::Spec->splitpath($f);
+	atomic_write($dn, $bn, join("\n", @list, ''));
+}
+
 # FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
 sub try_manifest {
 	my ($self) = @_;
@@ -1104,6 +1132,7 @@ EOM
 	warn(<<EOM, map { ("\t", $_, "\n") } @$bad) if $bad;
 W: The following exist and have not been converted to symlinks
 EOM
+	dump_project_list($self, $m);
 	ft_rename($ft, $manifest, 0666);
 }
 
@@ -1124,14 +1153,18 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
 --inbox-config must be one of `always', `v2', `v1', or `never'
 
-		# we support --objstore= and --manifest= with '' (empty string)
-		for my $default (qw(objstore manifest.js.gz)) {
-			my ($k) = (split(/\./, $default))[0];
+		# we support these switches with '' (empty string).
+		# defaults match example conf distributed with grokmirror
+		my @pairs = qw(objstore objstore manifest manifest.js.gz
+				project-list projects.list);
+		while (@pairs) {
+			my ($k, $default) = splice(@pairs, 0, 2);
 			my $v = $lei->{opt}->{$k} // next;
 			$v = $default if $v eq '';
 			$v = "$self->{dst}/$v" if $v !~ m!\A\.{0,2}/!;
 			$self->{"-$k"} = $v;
 		}
+
 		local $LIVE = {};
 		local $TODO = {};
 		local $FGRP_TODO = {};
