@@ -307,7 +307,7 @@ EOM
 }
 
 sub init_placeholder ($$$) {
-	my ($src, $edst, $owner) = @_;
+	my ($src, $edst, $ent) = @_;
 	PublicInbox::Import::init_bare($edst);
 	my $f = "$edst/config";
 	open my $fh, '>>', $f or die "open($f): $!";
@@ -321,13 +321,19 @@ sub init_placeholder ($$$) {
 ; will not fetch updates for it unless write permission is added.
 ; Hint: chmod +w $edst
 EOM
-	if (defined($owner)) {
+	if (defined($ent->{owner})) {
 		print $fh <<EOM or die "print($f): $!";
 [gitweb]
-	owner = $owner
+	owner = $ent->{owner}
 EOM
 	}
-	close $fh or die "close:($f): $!";
+	close $fh or die "close($f): $!";
+	if (defined $ent->{head}) {
+		$f = "$edst/HEAD";
+		open $fh, '>', $f or die "open($f): $!";
+		print $fh $ent->{head}, "\n" or die "print($f): $!";
+		close $fh or die "close($f): $!";
+	}
 }
 
 sub reap_clone { # async, called via SIGCHLD
@@ -410,7 +416,7 @@ failed to extract epoch number from $src
 			my $o = $m->{$key}->{owner};
 			push(@{$task->{-owner}}, $edst, $o) if defined($o);
 		} else { # create a placeholder so users only need to chmod +w
-			init_placeholder($src, $edst, $m->{$key}->{owner});
+			init_placeholder($src, $edst, $m->{$key});
 			push @{$task->{-read_only}}, $edst;
 			push @skip, $key;
 		}
