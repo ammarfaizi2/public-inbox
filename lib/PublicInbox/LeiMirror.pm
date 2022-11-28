@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # "lei add-external --mirror" support (also "public-inbox-clone");
@@ -58,7 +58,7 @@ sub try_scrape {
 	if (my @v2_urls = grep(m!\A\Q$url\E/[0-9]+\z!, @urls)) {
 		my %v2_epochs = map {
 			my ($n) = (m!/([0-9]+)\z!);
-			$n => URI->new($_)
+			$n => [ URI->new($_), '' ]
 		} @v2_urls; # uniq
 		return clone_v2($self, \%v2_epochs);
 	}
@@ -104,26 +104,27 @@ sub ft_rename ($$$) {
 
 sub _get_txt { # non-fatal
 	my ($self, $endpoint, $file, $mode) = @_;
-	my $uri = URI->new($self->{src});
+	my $uri = URI->new($self->{cur_src} // $self->{src});
 	my $lei = $self->{lei};
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
 	$uri->path("$path/$endpoint");
-	my $ft = File::Temp->new(TEMPLATE => "$file-XXXX", DIR => $self->{dst});
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my $ft = File::Temp->new(TEMPLATE => "$file-XXXX", DIR => $dst);
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
 	my $cmd = $self->{curl}->for_uri($lei, $uri,
 					qw(--compressed -R -o), $ft->filename);
 	my $cerr = run_reap($lei, $cmd, $opt);
 	return "$uri missing" if ($cerr >> 8) == 22;
 	return "# @$cmd failed (non-fatal)" if $cerr;
-	ft_rename($ft, "$self->{dst}/$file", $mode);
+	ft_rename($ft, "$dst/$file", $mode);
 	undef; # success
 }
 
 # tries the relatively new /$INBOX/_/text/config/raw endpoint
 sub _try_config {
 	my ($self) = @_;
-	my $dst = $self->{dst};
+	my $dst = $self->{cur_dst} // $self->{dst};
 	if (!-d $dst || !mkdir($dst)) {
 		require File::Path;
 		File::Path::mkpath($dst);
@@ -132,7 +133,7 @@ sub _try_config {
 	my $err = _get_txt($self,
 			qw(_/text/config/raw inbox.config.example), 0444);
 	return warn($err, "\n") if $err;
-	my $f = "$self->{dst}/inbox.config.example";
+	my $f = "$dst/inbox.config.example";
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
 	my $ibx = $self->{ibx} = {};
 	for my $sec (grep(/\Apublicinbox\./, @{$cfg->{-section_order}})) {
@@ -144,7 +145,8 @@ sub _try_config {
 
 sub set_description ($) {
 	my ($self) = @_;
-	my $f = "$self->{dst}/description";
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my $f = "$dst/description";
 	open my $fh, '+>>', $f or die "open($f): $!";
 	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
 	chomp(my $d = do { local $/; <$fh> } // die "read($f): $!");
@@ -152,7 +154,8 @@ sub set_description ($) {
 			$d =~ /^Unnamed repository/ || $d !~ /\S/) {
 		seek($fh, 0, SEEK_SET) or die "seek($f): $!";
 		truncate($fh, 0) or die "truncate($f): $!";
-		print $fh "mirror of $self->{src}\n" or die "print($f): $!";
+		my $src = $self->{cur_src} // $self->{src};
+		print $fh "mirror of $src\n" or die "print($f): $!";
 		close $fh or die "close($f): $!";
 	}
 }
@@ -172,7 +175,7 @@ sub index_cloned_inbox {
 			address => [ 'lei@example.com' ],
 			version => $iv,
 		};
-		$ibx->{inboxdir} = $self->{dst};
+		$ibx->{inboxdir} = $self->{cur_dst} // $self->{dst};
 		PublicInbox::Inbox->new($ibx);
 		PublicInbox::InboxWritable->new($ibx);
 		my $opt = {};
@@ -188,6 +191,7 @@ sub index_cloned_inbox {
 		PublicInbox::Admin::progress_prepare($opt, $lei->{2});
 		PublicInbox::Admin::index_inbox($ibx, undef, $opt);
 	}
+	return if defined $self->{cur_dst};
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
@@ -205,21 +209,22 @@ sub clone_v1 {
 	my ($self) = @_;
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
-	my $uri = URI->new($self->{src});
+	my $uri = URI->new($self->{cur_src} // $self->{src});
 	defined($lei->{opt}->{epoch}) and
 		die "$uri is a v1 inbox, --epoch is not supported\n";
 	my $pfx = $curl->torsocks($lei, $uri) or return;
+	my $dst = $self->{cur_dst} // $self->{dst};
 	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}),
-			$uri->as_string, $self->{dst} ];
+			$uri->as_string, $dst ];
 	my $cerr = run_reap($lei, $cmd, $opt);
 	return $lei->child_error($cerr, "@$cmd failed") if $cerr;
 	_try_config($self);
-	write_makefile($self->{dst}, 1);
+	write_makefile($dst, 1);
 	index_cloned_inbox($self, 1);
 }
 
 sub parse_epochs ($$) {
-	my ($opt_epochs, $v2_epochs) = @_; # $epcohs "LOW..HIGH"
+	my ($opt_epochs, $v2_epochs) = @_; # $epochs "LOW..HIGH"
 	$opt_epochs // return; # undef => all epochs
 	my ($lo, $dotdot, $hi, @extra) = split(/(\.\.)/, $opt_epochs);
 	undef($lo) if ($lo // '') eq '';
@@ -282,12 +287,13 @@ sub clone_v2 ($$;$) {
 	my ($self, $v2_epochs, $m) = @_; # $m => manifest.js.gz hashref
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
-	my $pfx = $curl->torsocks($lei, (values %$v2_epochs)[0]) or return;
-	my $dst = $self->{dst};
+	my $first_uri = (map { $_->[0] } values %$v2_epochs)[0];
+	my $pfx = $curl->torsocks($lei, $first_uri) or return;
+	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
-	my (@src_edst, @read_only, @skip_nr);
+	my (@src_edst, @read_only, @skip);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
-		my $uri = $v2_epochs->{$nr};
+		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
 		my $edst = $dst;
 		$src =~ m!/([0-9]+)(?:\.git)?\z! or die <<"";
@@ -300,15 +306,11 @@ failed to extract epoch number from $src
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst);
 			push @read_only, $edst;
-			push @skip_nr, $nr;
+			push @skip, $key;
 		}
 	}
-	if (@skip_nr) { # filter out the epochs we skipped
-		my $re = join('|', @skip_nr);
-		my @del = grep(m!/git/$re\.git\z!, keys %$m);
-		delete @$m{@del};
-		$self->{-culled_manifest} = 1;
-	}
+	# filter out the epochs we skipped
+	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	_try_config($self);
 	my $on_destroy = $lk->lock_for_scope($$);
@@ -326,23 +328,9 @@ failed to extract epoch number from $src
 		my @st = stat($edst) or die "stat($edst): $!";
 		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
 	}
-	write_makefile($self->{dst}, 2);
+	write_makefile($dst, 2);
 	undef $on_destroy; # unlock
 	index_cloned_inbox($self, 2);
-}
-
-# PSGI mount prefixes and manifest.js.gz prefixes don't always align...
-sub deduce_epochs ($$) {
-	my ($m, $path) = @_;
-	my ($v1_ent, @v2_epochs);
-	my $path_pfx = '';
-	$path =~ s!/+\z!!;
-	do {
-		$v1_ent = $m->{$path};
-		@v2_epochs = grep(m!\A\Q$path\E/git/[0-9]+\.git\z!, keys %$m);
-	} while (!defined($v1_ent) && !@v2_epochs &&
-		$path =~ s!\A(/[^/]+)/!/! and $path_pfx .= $1);
-	($path_pfx, $v1_ent ? $path : undef, @v2_epochs);
 }
 
 sub decode_manifest ($$$) {
@@ -357,6 +345,40 @@ sub decode_manifest ($$$) {
 	$m;
 }
 
+sub multi_inbox ($$$) {
+	my ($self, $path, $m) = @_;
+
+	# assuming everything not v2 is v1, for now
+	my @v1 = sort grep(!m!.+/git/[0-9]+\.git\z!, keys %$m);
+	my @v2_epochs = sort grep(m!.+/git/[0-9]+\.git\z!, keys %$m);
+	my $v2 = {};
+
+	for (@v2_epochs) {
+		m!\A/(.+)/git/[0-9]+\.git\z! or die "BUG: $_";
+		push @{$v2->{$1}}, $_;
+	}
+	my $n = scalar(keys %$v2) + scalar(@v1);
+	my $ret; # { v1 => [ ... ], v2 => { $inbox_name => [ epochs ] }}
+	$ret->{v1} = \@v1 if @v1;
+	$ret->{v2} = $v2 if keys %$v2;
+	my $path_pfx = '';
+
+	# PSGI mount prefixes and manifest.js.gz prefixes don't always align...
+	if (@v2_epochs) {
+		until (grep(m!\A\Q$$path\E/git/[0-9]+\.git\z!,
+				@v2_epochs) == @v2_epochs) {
+			$$path =~ s!\A(/[^/]+)/!/! or last;
+			$path_pfx .= $1;
+		}
+	} elsif (@v1) {
+		while (!defined($m->{$$path}) && $$path =~ s!\A(/[^/]+)/!/!) {
+			$path_pfx .= $1;
+		}
+	}
+	($path_pfx, $n, $ret);
+}
+
+# FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
 sub try_manifest {
 	my ($self) = @_;
 	my $uri = URI->new($self->{src});
@@ -384,25 +406,48 @@ sub try_manifest {
 		warn $@;
 		return try_scrape($self);
 	}
-	my ($path_pfx, $v1_path, @v2_epochs) = deduce_epochs($m, $path);
-	if (@v2_epochs) {
-		# It may be possible to have v1 + v2 in parallel someday:
-		warn(<<EOM) if defined $v1_path;
-# `$v1_path' appears to be a v1 inbox while v2 epochs exist:
-# @v2_epochs
-# ignoring $v1_path (use --inbox-version=1 to force v1 instead)
+	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
+	if (my $v2 = delete $multi->{v2}) {
+		for my $name (sort keys %$v2) {
+			my $epochs = delete $v2->{$name};
+			my %v2_epochs = map {
+				$uri->path($n > 1 ? $path_pfx.$path.$_
+						: $path_pfx.$_);
+				my ($e) = ("$uri" =~ m!/([0-9]+)\.git\z!);
+				$e // die "no [0-9]+\.git in `$uri'";
+				$e => [ $uri->clone, $_ ];
+			} @$epochs;
+			("$uri" =~ m!\A(.+/)git/[0-9]+\.git\z!) or
+				die "BUG: `$uri' !~ m!/git/[0-9]+.git!";
+			local $self->{cur_src} = $1;
+			local $self->{cur_dst} = $self->{dst};
+			if ($n > 1 && $uri->path =~ m!\A\Q$path_pfx$path\E/(.+)/
+							git/[0-9]+\.git\z!x) {
+				$self->{cur_dst} .= "/$1";
+			}
+			index($self->{cur_dst}, "\n") >= 0 and die <<EOM;
+E: `$self->{cur_dst}' must not contain newline
 EOM
-		my %v2_epochs = map {
-			$uri->path($path_pfx.$_);
-			my ($n) = ("$uri" =~ m!/([0-9]+)\.git\z!);
-			$n => $uri->clone
-		} @v2_epochs;
-		clone_v2($self, \%v2_epochs, $m);
-	} elsif (defined $v1_path) {
-		clone_v1($self);
-	} else {
-		die "E: confused by <$uri>, possible matches:\n\t",
-			join("\n\t", sort keys %$m), "\n";
+			clone_v2($self, \%v2_epochs, $m);
+		}
+	}
+	if (my $v1 = delete $multi->{v1}) {
+		my $p = $path_pfx.$path;
+		chop($p) if substr($p, -1, 1) eq '/';
+		$uri->path($p);
+		for my $name (@$v1) {
+			local $self->{cur_src} = "$uri";
+			local $self->{cur_dst} = $self->{dst};
+			if ($n > 1) {
+				$self->{cur_dst} .= $name;
+				$self->{cur_src} .= $name;
+			}
+			index($self->{cur_dst}, "\n") >= 0 and die <<EOM;
+E: `$self->{cur_dst}' must not contain newline
+EOM
+			$self->{cur_src} .= '/';
+			clone_v1($self, 1);
+		}
 	}
 	if (delete $self->{-culled_manifest}) { # set by clone_v2
 		# write the smaller manifest if epochs were skipped so
@@ -414,6 +459,7 @@ EOM
 		utime($mtime, $mtime, $fn) or die "utime(..., $fn): $!";
 	}
 	ft_rename($ft, "$self->{dst}/manifest.js.gz", 0666);
+	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
 sub start_clone_url {

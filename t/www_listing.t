@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # manifest.js.gz generation and grok-pull integration test
 use strict; use v5.10.1; use PublicInbox::TestCommon;
@@ -115,10 +115,38 @@ SKIP: {
 
 	my $env = { PI_CONFIG => $cfgfile };
 	my $cmd = [ '-httpd', '-W0', "--stdout=$out", "--stderr=$err" ];
+	my $psgi = "$tmpdir/pfx.psgi";
+	{
+		open my $psgi_fh, '>', $psgi or xbail "open: $!";
+		print $psgi_fh <<'EOM' or xbail "print $!";
+use PublicInbox::WWW;
+use Plack::Builder;
+my $www = PublicInbox::WWW->new;
+builder {
+	enable 'Head';
+	mount '/pfx/' => sub { $www->call(@_) }
+}
+EOM
+		close $psgi_fh or xbail "close: $!";
+	}
+
+	# ensure prefixed mount full clones work:
+	$td = start_script([@$cmd, $psgi], $env, { 3 => $sock });
+	my $opt = { 2 => \(my $clone_err = '') };
+	ok(run_script(['-clone', "http://$host:$port/pfx", "$tmpdir/pfx" ],
+		undef, $opt), 'pfx clone w/pfx') or diag "clone_err=$clone_err";
+	undef $td;
+
 	$td = start_script($cmd, $env, { 3 => $sock });
 
 	# default publicinboxGrokManifest match=domain default
 	tiny_test($json, $host, $port);
+
+	# normal full clone on /
+	$clone_err = '';
+	ok(run_script(['-clone', "http://$host:$port/", "$tmpdir/full" ],
+		undef, $opt), 'full clone') or diag "clone_err=$clone_err";
+
 	undef $td;
 
 	print $fh <<"" or xbail "print $!";
@@ -127,9 +155,11 @@ SKIP: {
 
 	close $fh or xbail "close $!";
 	$td = start_script($cmd, $env, { 3 => $sock });
-	tiny_test($json, $host, $port, 1);
 	undef $sock;
+	tiny_test($json, $host, $port, 1);
 
+	# grok-pull sleeps a long while some places:
+	# https://lore.kernel.org/tools/20211013110344.GA10632@dcvr/
 	skip 'TEST_GROK unset', 12 unless $ENV{TEST_GROK};
 	my $grok_pull = require_cmd('grok-pull', 1) or
 		skip('grok-pull not available', 12);

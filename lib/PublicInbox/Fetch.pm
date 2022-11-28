@@ -44,6 +44,21 @@ sub remote_url ($$) {
 	undef
 }
 
+# PSGI mount prefixes and manifest.js.gz prefixes don't always align...
+# TODO: remove, handle multi-inbox fetch
+sub deduce_epochs ($$) {
+	my ($m, $path) = @_;
+	my ($v1_ent, @v2_epochs);
+	my $path_pfx = '';
+	$path =~ s!/+\z!!;
+	do {
+		$v1_ent = $m->{$path};
+		@v2_epochs = grep(m!\A\Q$path\E/git/[0-9]+\.git\z!, keys %$m);
+	} while (!defined($v1_ent) && !@v2_epochs &&
+		$path =~ s!\A(/[^/]+)/!/! and $path_pfx .= $1);
+	($path_pfx, $v1_ent ? $path : undef, @v2_epochs);
+}
+
 sub do_manifest ($$$) {
 	my ($lei, $dir, $ibx_uri) = @_;
 	my $muri = URI->new("$ibx_uri/manifest.js.gz");
@@ -88,7 +103,7 @@ sub do_manifest ($$$) {
 		return;
 	}
 	my (undef, $v1_path, @v2_epochs) =
-		PublicInbox::LeiMirror::deduce_epochs($mdiff, $ibx_uri->path);
+		deduce_epochs($mdiff, $ibx_uri->path);
 	[ 200, $muri, $v1_path, \@v2_epochs, $ft, $mf, $m1 ];
 }
 
