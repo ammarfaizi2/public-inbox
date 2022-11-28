@@ -826,7 +826,7 @@ sub load_current_manifest ($) {
 	if (open(my $fh, '<', $fn)) {
 		decode_manifest($fh, $fn, $fn);
 	} elsif ($!{ENOENT}) { # non-fatal, we can just do it slowly
-		warn "open($fn): $!\n" if -d $self->{dst};
+		warn "open($fn): $!\n" if !$self->{-initial_clone};
 		undef;
 	} else {
 		die "open($fn): $!\n";
@@ -955,10 +955,15 @@ sub try_manifest {
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
 	$uri->path($path . '/manifest.js.gz');
-	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX',
-				UNLINK => 1, TMPDIR => 1, SUFFIX => '.tmp');
+	my $manifest = $self->{-manifest} // "$self->{dst}/manifest.js.gz";
+	my %opt = (UNLINK => 1, SUFFIX => '.tmp', TMPDIR => 1);
+	if (!$self->{dry_run} && $manifest =~ m!\A(.+?)/[^/]+\z! and -d $1) {
+		$opt{DIR} = $1; # allows fast rename(2) w/o EXDEV
+		delete $opt{TMPDIR};
+	}
+	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX', %opt);
 	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $ft->filename);
-	my %opt = map { $_ => $lei->{$_} } (0..2);
+	%opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
 	if ($cerr) {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
@@ -1030,7 +1035,7 @@ EOM
 
 	# set by clone_v2_prep/-I/--exclude
 	dump_manifest($m => $ft) if delete $self->{-culled_manifest};
-	ft_rename($ft, "$self->{dst}/manifest.js.gz", 0666);
+	ft_rename($ft, $manifest, 0666);
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
@@ -1045,6 +1050,7 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 	my $lei = $self->{lei};
 	$self->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 	umask($lei->{client_umask}) if defined $lei->{client_umask};
+	$self->{-initial_clone} = 1 if !-d $self->{dst};
 	eval {
 		my $ic = $lei->{opt}->{'inbox-config'} //= 'always';
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";

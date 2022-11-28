@@ -99,6 +99,10 @@ is specified where C<DIR> is an empty string (C<"">), then C<objstore>
 When incrementally updating an existing mirror, load the given
 manifest (typically C<manifest.js.gz>) to speed up updates.
 
+By default, public-inbox writes the retrieved manifest to
+C<$DESTINATION/manifest.js.gz>, this directive also
+changes the destination to the specified C<FILE>
+
 If C<FILE> does not start with C</>, C<./>, or C<../>, it is treated
 as relative to the C<DESTINATION> directory.  If only C<--manifest=>
 is specified where C<FILE> is an empty string (C<"">), then C<manifest.js.gz>
