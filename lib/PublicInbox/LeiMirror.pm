@@ -386,7 +386,8 @@ sub v1_done { # called via OnDestroy
 			die "rename($f, $o/info/alternates): $!";
 		$f->unlink_on_destroy(0);
 	}
-	return if $self->{-is_epoch};
+	return if ($self->{-is_epoch} ||
+		$self->{lei}->{opt}->{'inbox-config'} ne 'always');
 	write_makefile($dst, 1);
 	index_cloned_inbox($self, 1);
 }
