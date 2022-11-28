@@ -104,6 +104,13 @@ C<DESTINATION> directory.  If only C<--manifest => is specified
 where C<FILE > is an empty string (C<"">), then C<manifest.js.gz>
 (C<$DESTINATION/manifest.js.gz>) is the implied value of C<FILE>.
 
+=item -p
+
+=item --prune
+
+Pass the C<--prune> and C<--prune-tags> flags to L<git-fetch(1)>
+calls on incremental clones.
+
 =item -n
 
 =item --dry-run

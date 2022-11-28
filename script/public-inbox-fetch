@@ -23,6 +23,7 @@ options:
     -C DIR            chdir to specified directory
 EOF
 GetOptions($opt, qw(help|h quiet|q verbose|v+ C=s@ c=s@ try-remote|T=s@
+	prune|p
 	no-torsocks torsocks=s exit-code)) or die $help;
 if ($opt->{help}) { print $help; exit };
 require PublicInbox::Fetch; # loads Admin

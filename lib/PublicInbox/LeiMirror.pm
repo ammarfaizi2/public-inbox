@@ -275,6 +275,7 @@ sub fetch_args ($$) {
 	push @cmd, '-q' if $lei->{opt}->{quiet} ||
 			($lei->{opt}->{jobs} // 1) > 1;
 	push @cmd, '-v' if $lei->{opt}->{verbose};
+	push(@cmd, '-p') if $lei->{opt}->{prune};
 	@cmd;
 }
 
@@ -527,6 +528,7 @@ sub resume_fetch {
 	}
 	my $cmd = [ @{$self->{-torsocks}}, @git,
 			fetch_args($self->{lei}, $opt), $rn ];
+	push @$cmd, '-P' if $self->{lei}->{prune}; # --prune-tags implied
 	start_cmd($self, $cmd, $opt, $fini);
 }
 

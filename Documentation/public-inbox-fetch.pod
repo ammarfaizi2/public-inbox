@@ -61,6 +61,12 @@ there are no updates:
 	public-inbox-fetch -q --exit-code && public-inbox-index
 	test $? -eq 0 || exit $?
 
+=item -p
+
+=item --prune
+
+Pass the C<--prune> and C<--prune-tags> flags to L<git-fetch(1)> calls.
+
 =item -v
 
 =item --verbose
