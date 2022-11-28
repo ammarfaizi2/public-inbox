@@ -91,6 +91,10 @@ SKIP: {
 		is(xsys(@clone, $alt, "$v2/git/$i.git"), 0, "clone epoch $i")
 	}
 	ok(open(my $fh, '>', "$v2/inbox.lock"), 'mock a v2 inbox');
+	open($fh, '>', "$v2/description") or xbail "open $v2/description: $!";
+	print $fh "a v2 inbox\n" or xbail "print $!";
+	close $fh or xbail "write: $v2/description $!";
+
 	open $fh, '>', "$alt/description" or xbail "open $alt/description $!";
 	print $fh "we're \xc4\x80ll clones\n" or xbail "print $!";
 	close $fh or xbail "write: $alt/description $!";
@@ -143,6 +147,9 @@ EOM
 					/v2/git/1.git /v2/git/2.git) ],
 		'manifest saved');
 	for (keys %$mf) { ok(-d "$tmpdir/pfx$_", "pfx/$_ cloned") }
+	open my $desc, '<', "$tmpdir/pfx/v2/description" or xbail "open: $!";
+	$desc = <$desc>;
+	is($desc, "a v2 inbox\n", 'v2 description retrieved');
 
 	$clone_err = '';
 	ok(run_script(['-clone', '--include=*/alt',

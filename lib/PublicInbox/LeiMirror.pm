@@ -449,7 +449,7 @@ failed to extract epoch number from $src
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
 		_get_txt_start($task, '_/text/config/raw', $fini);
 
-	_get_txt_start($self, 'description', $fini);
+	_get_txt_start($task, 'description', $fini);
 
 	$task->{-locked} = $lk->lock_for_scope($$) if !$self->{dry_run};
 	my @cmd = clone_cmd($lei, my $opt = {});
