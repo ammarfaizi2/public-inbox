@@ -18,7 +18,7 @@ use PublicInbox::Config;
 use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
-use Digest::SHA qw(sha256_hex);
+use Digest::SHA qw(sha256_hex sha1_hex);
 
 our $LIVE; # pid => callback
 
@@ -483,6 +483,36 @@ EOM
 	bless { %$self, -osdir => $dir, -remote => $rn }, __PACKAGE__;
 }
 
+sub fp_done {
+	my ($self, $go_fetch) = @_;
+	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
+	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
+	$self->{-ent} // die 'BUG: no -ent';
+	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
+	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
+	return if $A ne $B; # $go_fetch->DESTROY fires
+	$go_fetch->cancel;
+	$self->{lei}->qerr("# $self->{-key} up-to-date");
+}
+
+sub cmp_fp_fetch {
+	my ($self, $go_fetch) = @_;
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
+	my $opt = { 2 => $self->{lei}->{2} };
+	open($opt->{1}, '+>', undef) or die "open(tmp): $!";
+	$self->{-show_ref} = $opt->{1};
+	my $done = PublicInbox::OnDestroy->new($$, \&fp_done, $self, $go_fetch);
+	start_cmd($self, $cmd, $opt, $done);
+}
+
+sub resume_fetch_maybe {
+	my ($self, $uri, $fini) = @_;
+	my $go_fetch = PublicInbox::OnDestroy->new($$, \&resume_fetch, @_);
+	cmp_fp_fetch($self, $go_fetch) if $self->{-ent} &&
+				defined($self->{-ent}->{fingerprint});
+}
+
 sub resume_fetch {
 	my ($self, $uri, $fini) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
@@ -500,6 +530,19 @@ sub resume_fetch {
 	start_cmd($self, $cmd, $opt, $fini);
 }
 
+sub fgrp_enqueue_maybe {
+	my ($self, $fgrp) = @_;
+	my $enq = PublicInbox::OnDestroy->new($$, \&fgrp_enqueue, $self, $fgrp);
+	cmp_fp_fetch($self, $enq) if $self->{-ent} &&
+					defined($self->{-ent}->{fingerprint});
+	# $enq->DESTROY calls fgrp_enqueue otherwise
+}
+
+sub fgrp_enqueue {
+	my ($self, $fgrp) = @_;
+	push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
+}
+
 sub clone_v1 {
 	my ($self, $nohang) = @_;
 	my $lei = $self->{lei};
@@ -510,11 +553,13 @@ sub clone_v1 {
 	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
+	my $resume = -d $dst;
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
-		push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
-	} elsif (-d $dst) {
-		resume_fetch($self, $uri, $fini);
+		$resume ? fgrp_enqueue_maybe($self, $fgrp) :
+				fgrp_enqueue($self, $fgrp);
+	} elsif ($resume) {
+		resume_fetch_maybe($self, $uri, $fini);
 	} else { # normal clone
 		my $cmd = [ @{$self->{-torsocks}},
 				clone_cmd($lei, my $opt = {}), "$uri", $dst ];
@@ -844,6 +889,7 @@ EOM
 			last; # restart %$todo iteration
 		}
 	}
+	do_reap($self, 1); # finish all fingerprint checks
 	fgrp_fetch_all($self);
 	do_reap($self, 1);
 }
