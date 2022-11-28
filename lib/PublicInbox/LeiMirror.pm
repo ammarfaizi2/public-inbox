@@ -7,7 +7,6 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
 use PublicInbox::Config;
-use PublicInbox::AutoReap;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
 use PublicInbox::Spawn qw(popen_rd spawn);
@@ -166,12 +165,6 @@ sub _get_txt { # non-fatal temporary compat function
 	_get_txt_done($_[0]);
 }
 
-# tries the relatively new /$INBOX/_/text/config/raw endpoint
-sub _try_config { # temporary compat function
-	waitpid(_try_config_start($_[0]), 0) > 0 or die "waitpid: $!";
-	_try_config_done($_[0]);
-}
-
 sub set_description ($) {
 	my ($self) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
@@ -227,15 +220,14 @@ sub index_cloned_inbox {
 sub run_reap {
 	my ($lei, $cmd, $opt) = @_;
 	$lei->qerr("# @$cmd");
-	my $ar = PublicInbox::AutoReap->new(spawn($cmd, undef, $opt));
-	$ar->join;
+	waitpid(spawn($cmd, undef, $opt), 0) // die "waitpid: $!";
 	my $ret = $?;
 	$? = 0; # don't let it influence normal exit
 	$ret;
 }
 
 sub clone_v1 {
-	my ($self) = @_;
+	my ($self, $nohang) = @_;
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
@@ -243,13 +235,17 @@ sub clone_v1 {
 		die "$uri is a v1 inbox, --epoch is not supported\n";
 	my $pfx = $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
-	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}),
-			$uri->as_string, $dst ];
-	my $cerr = run_reap($lei, $cmd, $opt);
-	return $lei->child_error($cerr, "@$cmd failed") if $cerr;
-	_try_config($self);
-	write_makefile($dst, 1);
-	index_cloned_inbox($self, 1);
+	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
+	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
+	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}), "$uri", $dst ];
+	$lei->qerr("# @$cmd");
+	$LIVE{spawn($cmd, undef, $opt)} = [ \&reap_clone, $lei, $cmd, $fini ];
+	reap_live() while keys(%LIVE) >= $jobs;
+
+	# wait for `git clone' to mkdir $dst (TODO: inotify/kevent?)
+	select(undef, undef, undef, 0.011) until -d $dst;
+	$LIVE{_try_config_start($self)} = [ \&_try_config_done, $self, $fini ];
+	reap_live() until ($nohang || !keys(%LIVE));
 }
 
 sub parse_epochs ($$) {
@@ -320,6 +316,13 @@ sub reap_clone { # async, called via SIGCHLD
 		kill('TERM', keys %LIVE);
 		$lei->child_error($cerr, "@$cmd failed");
 	}
+}
+
+sub v1_done { # called via OnDestroy
+	my ($self) = @_;
+	my $dst = $self->{cur_dst} // $self->{dst};
+	write_makefile($dst, 1);
+	index_cloned_inbox($self, 1);
 }
 
 sub v2_done { # called via OnDestroy
@@ -527,20 +530,26 @@ EOM
 		chop($p) if substr($p, -1, 1) eq '/';
 		$uri->path($p);
 		for my $name (@$v1) {
-			local $self->{cur_src} = "$uri";
-			local $self->{cur_dst} = $self->{dst};
+			reap_live() while keys(%LIVE) >= $jobs;
+			return if $self->{lei}->{child_error};
+
+			my $task = bless { %$self }, __PACKAGE__;
+			$task->{cur_src} = "$uri";
+			$task->{cur_dst} = $task->{dst};
 			if ($n > 1) {
-				$self->{cur_dst} .= $name;
-				$self->{cur_src} .= $name;
+				$task->{cur_dst} .= $name;
+				$task->{cur_src} .= $name;
 			}
-			index($self->{cur_dst}, "\n") >= 0 and die <<EOM;
-E: `$self->{cur_dst}' must not contain newline
+			index($task->{cur_dst}, "\n") >= 0 and die <<EOM;
+E: `$task->{cur_dst}' must not contain newline
 EOM
-			$self->{cur_src} .= '/';
-			clone_v1($self, 1);
+			$task->{cur_src} .= '/';
+			clone_v1($task, 1);
 		}
 	}
 	reap_live() while keys(%LIVE);
+	return if $self->{lei}->{child_error};
+
 	if (delete $self->{-culled_manifest}) { # set by clone_v2/-I/--exclude
 		# write the smaller manifest if epochs were skipped so
 		# users won't have to delete manifest if they +w an
