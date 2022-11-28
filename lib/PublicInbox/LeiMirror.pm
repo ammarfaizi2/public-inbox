@@ -113,12 +113,11 @@ sub clone_cmd {
 
 sub ft_rename ($$$) {
 	my ($ft, $dst, $open_mode) = @_;
-	my $fn = $ft->filename;
 	my @st = stat($dst);
 	my $mode = @st ? ($st[2] & 07777) : ($open_mode & ~umask);
-	chmod($mode, $ft) or croak "E: chmod $fn: $!";
+	chmod($mode, $ft) or croak "E: chmod($ft): $!";
 	require File::Copy;
-	File::Copy::mv($fn, $dst) or croak "E: mv($fn => $ft): $!";
+	File::Copy::mv($ft->filename, $dst) or croak "E: mv($ft => $dst): $!";
 	$ft->unlink_on_destroy(0);
 }
 
@@ -606,15 +605,14 @@ sub try_manifest {
 	$uri->path($path . '/manifest.js.gz');
 	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX',
 				UNLINK => 1, TMPDIR => 1, SUFFIX => '.tmp');
-	my $fn = $ft->filename;
-	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $fn);
+	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $ft->filename);
 	my %opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
 	if ($cerr) {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
 		return $lei->child_error($cerr, "@$cmd failed");
 	}
-	my $m = eval { decode_manifest($ft, $fn, $uri) };
+	my $m = eval { decode_manifest($ft, $ft, $uri) };
 	if ($@) {
 		warn $@;
 		return try_scrape($self);
@@ -681,9 +679,12 @@ EOM
 		# users won't have to delete manifest if they +w an
 		# epoch they no longer want to skip
 		my $json = PublicInbox::Config->json->encode($m);
-		my $mtime = (stat($fn))[9];
-		gzip(\$json => $fn) or die "gzip: $GzipError";
-		utime($mtime, $mtime, $fn) or die "utime(..., $fn): $!";
+		my $mtime = (stat($ft))[9];
+		seek($ft, SEEK_SET, 0) or die "seek($ft): $!";
+		truncate($ft, 0) or die "truncate($ft): $!";
+		gzip(\$json => $ft) or die "gzip($ft): $GzipError";
+		$ft->flush or die "flush($ft): $!";
+		utime($mtime, $mtime, "$ft") or die "utime(..., $ft): $!";
 	}
 	ft_rename($ft, "$self->{dst}/manifest.js.gz", 0666);
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
