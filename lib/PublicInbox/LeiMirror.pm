@@ -103,7 +103,7 @@ sub ft_rename ($$$) {
 	$ft->unlink_on_destroy(0);
 }
 
-sub _get_txt { # non-fatal
+sub _get_txt_start { # non-fatal
 	my ($self, $endpoint, $file, $mode) = @_;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
 	my $lei = $self->{lei};
@@ -115,15 +115,25 @@ sub _get_txt { # non-fatal
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
 	my $cmd = $self->{curl}->for_uri($lei, $uri,
 					qw(--compressed -R -o), $ft->filename);
-	my $cerr = run_reap($lei, $cmd, $opt);
+	$self->{-get_txt} = [ $ft, $cmd, $uri, $file, $mode ];
+	$lei->qerr("# @$cmd");
+	spawn($cmd, undef, $opt);
+}
+
+sub _get_txt_done {
+	my ($self) = @_;
+	my ($ft, $cmd, $uri, $file, $mode) = @{delete $self->{-get_txt}};
+	my $cerr = $?;
+	$? = 0;
 	return "$uri missing" if ($cerr >> 8) == 22;
 	return "# @$cmd failed (non-fatal)" if $cerr;
+	my $dst = $self->{cur_dst} // $self->{dst};
 	ft_rename($ft, "$dst/$file", $mode);
 	undef; # success
 }
 
 # tries the relatively new /$INBOX/_/text/config/raw endpoint
-sub _try_config {
+sub _try_config_start {
 	my ($self) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (!-d $dst || !mkdir($dst)) {
@@ -131,9 +141,14 @@ sub _try_config {
 		File::Path::mkpath($dst);
 		-d $dst or die "mkpath($dst): $!\n";
 	}
-	my $err = _get_txt($self,
-			qw(_/text/config/raw inbox.config.example), 0444);
+	_get_txt_start($self, qw(_/text/config/raw inbox.config.example), 0444);
+}
+
+sub _try_config_done {
+	my ($self) = @_;
+	my $err = _get_txt_done($self);
 	return warn($err, "\n") if $err;
+	my $dst = $self->{cur_dst} // $self->{dst};
 	my $f = "$dst/inbox.config.example";
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
 	my $ibx = $self->{ibx} = {};
@@ -142,6 +157,17 @@ sub _try_config {
 			$ibx->{$_} = $cfg->{"$sec.$_"};
 		}
 	}
+}
+
+sub _get_txt { # non-fatal temporary compat function
+	waitpid(_get_txt_start(@_), 0) > 0 or die "waitpid: $!";
+	_get_txt_done($_[0]);
+}
+
+# tries the relatively new /$INBOX/_/text/config/raw endpoint
+sub _try_config { # temporary compat function
+	waitpid(_try_config_start($_[0]), 0) > 0 or die "waitpid: $!";
+	_try_config_done($_[0]);
 }
 
 sub set_description ($) {
@@ -324,12 +350,11 @@ failed to extract epoch number from $src
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
-
-	_try_config($task);
+	my %live;
+	$live{_try_config_start($task)} = [ \&_try_config_done, $task ];
 	my $on_destroy = $lk->lock_for_scope($$);
 	my @cmd = clone_cmd($lei, my $opt = {});
 	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
-	my %live;
 	my $sigchld = sub {
 		my ($sig) = @_;
 		my $flags = $sig ? WNOHANG : 0;
