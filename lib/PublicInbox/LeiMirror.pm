@@ -10,6 +10,7 @@ use PublicInbox::Config;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
 use PublicInbox::Spawn qw(popen_rd spawn);
+use File::Path ();
 use File::Temp ();
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
 use Carp qw(croak);
@@ -387,11 +388,7 @@ failed to extract epoch number from $src
 	# filter out the epochs we skipped
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 
-	if (!-d $dst || !mkdir($dst)) {
-		require File::Path;
-		File::Path::mkpath($dst);
-		-d $dst or die "mkpath($dst): $!\n";
-	}
+	-d $dst || File::Path::mkpath($dst);
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 
@@ -486,6 +483,7 @@ sub try_manifest {
 	$uri->path($path . '/manifest.js.gz');
 	my $pdir = $lei->rel2abs($self->{dst});
 	$pdir =~ s!/[^/]+/?\z!!;
+	-d $pdir || File::Path::mkpath($pdir);
 	my $ft = File::Temp->new(TEMPLATE => 'm-XXXX',
 				UNLINK => 1, DIR => $pdir, SUFFIX => '.tmp');
 	my $fn = $ft->filename;
