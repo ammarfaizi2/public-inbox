@@ -107,6 +107,8 @@ sub epoll_ctl {
 		$kq->EV_SET($fd, EVFILT_READ, kq_flag(EPOLLIN, $ev));
 		eval { $kq->EV_SET($fd, EVFILT_WRITE, kq_flag(EPOLLOUT, $ev)) };
 	} elsif ($op == EPOLL_CTL_DEL) {
+		use Carp ();
+		$kq // Carp::confess("nokq $fd");
 		$kq->EV_SET($fd, EVFILT_READ, EV_DISABLE);
 		eval { $kq->EV_SET($fd, EVFILT_WRITE, EV_DISABLE) };
 	} else { # EPOLL_CTL_ADD
