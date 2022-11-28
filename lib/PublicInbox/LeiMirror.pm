@@ -315,7 +315,12 @@ sub fgrp_update {
 		upr($lei, $w, 'create', $ref, $oid);
 	}
 	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
-	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
+	my $pack = PublicInbox::OnDestroy->new($$, \&pack_dst, $fgrp);
+	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd, $pack ];
+}
+
+sub pack_dst { # packs lightweight satellite repos
+	my ($fgrp) = @_;
 	pack_refs($fgrp, $fgrp->{cur_dst});
 }
 
