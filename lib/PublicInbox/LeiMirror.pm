@@ -181,13 +181,16 @@ sub _write_inbox_config {
 	my $buf = delete($self->{'txt._/text/config/raw'}) // return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $f = "$dst/inbox.config.example";
-	open my $fh, '>', $f or die "open($f): $!";
-	print $fh $buf or die "print: $!";
-	chmod(0444 & ~umask, $fh) or die "chmod($f): $!";
 	my $mtime = delete $self->{'mtime._/text/config/raw'};
-	$fh->flush or die "flush($f): $!";
-	if (defined $mtime) {
-		utime($mtime, $mtime, $fh) or die "utime($f): $!";
+	if (sysopen(my $fh, $f, O_CREAT|O_EXCL|O_WRONLY)) {
+		print $fh $buf or die "print: $!";
+		chmod(0444 & ~umask, $fh) or die "chmod($f): $!";
+		$fh->flush or die "flush($f): $!";
+		if (defined $mtime) {
+			utime($mtime, $mtime, $fh) or die "utime($f): $!";
+		}
+	} elsif (!$!{EEXIST}) {
+		die "open($f): $!";
 	}
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
 	my $ibx = $self->{ibx} = {};
