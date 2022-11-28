@@ -538,9 +538,13 @@ sub clone_all {
 	# resolve references, deepest, first:
 	while (scalar keys %$todo) {
 		for my $x (keys %$todo) {
+			my $nr;
 			# resolve multi-level references
 			while (defined(my $nxt = $m->{$x}->{reference})) {
 				exists($todo->{$nxt}) or last;
+				die <<EOM if ++$nr > 1000;
+E: dependency loop detected (`$x' => `$nxt')
+EOM
 				$x = $nxt;
 			}
 			my $y = delete $todo->{$x} // next; # already done
