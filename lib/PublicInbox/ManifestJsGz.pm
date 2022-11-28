@@ -1,10 +1,10 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# generates manifest.js.gz for grokmirror(1)
+# generates manifest.js.gz for grokmirror(1) via PublicInbox::WWW
+# This doesn't parse manifest.js.gz (that happens in LeiMirror)
 package PublicInbox::ManifestJsGz;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::WwwListing);
 use PublicInbox::Config;
 use IO::Compress::Gzip qw(gzip);
