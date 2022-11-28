@@ -67,8 +67,9 @@ sub try_scrape {
 			my ($n) = (m!/([0-9]+)\z!);
 			$n => [ URI->new($_), '' ]
 		} @v2_urls; # uniq
-		clone_v2($self, \%v2_epochs);
-		reap_live() while keys(%$LIVE);
+		clone_v2_prep($self, \%v2_epochs);
+		delete local $lei->{opt}->{epoch};
+		clone_all($self);
 		return;
 	}
 
@@ -223,7 +224,7 @@ sub index_cloned_inbox {
 		PublicInbox::Admin::progress_prepare($opt, $lei->{2});
 		PublicInbox::Admin::index_inbox($ibx, undef, $opt);
 	}
-	return if defined $self->{cur_dst};
+	return if defined $self->{cur_dst}; # one of many repos to clone
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
@@ -396,19 +397,6 @@ sub v2_done { # called via OnDestroy
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
 	$mg->fill_alternates;
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
-	my $entries = delete($self->{-entv}) // [];
-	while (@$entries) {
-		my ($edst, $ent) = splice(@$entries);
-		if (defined(my $o = $ent->{owner})) {
-			run_die [qw(git config -f), "$edst/config",
-				'gitweb.owner', $o];
-		}
-		my $d = $ent->{description} // next;
-		my $fn = "$edst/description";
-		open my $fh, '>', $fn or die "open($fn): $!";
-		print $fh $d, "\n" or die "print($fn): $!";
-		close $fh or die "close($fn): $!";
-	}
 	for my $edst (@{delete($self->{-read_only}) // []}) {
 		my @st = stat($edst) or die "stat($edst): $!";
 		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
@@ -428,7 +416,7 @@ sub reap_live {
 	}
 }
 
-sub clone_v2 ($$;$) {
+sub clone_v2_prep ($$;$) {
 	my ($self, $v2_epochs, $m) = @_; # $m => manifest.js.gz hashref
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
@@ -438,7 +426,7 @@ sub clone_v2 ($$;$) {
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
 	delete $task->{todo}; # $self->{todo} still exists
-	my (@src_edst, @skip, $desc);
+	my (@src_edst, @skip, $desc, @entv);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
@@ -448,14 +436,18 @@ failed to extract epoch number from $src
 
 		$1 + 0 == $nr or die "BUG: <$uri> miskeyed $1 != $nr";
 		$edst .= "/git/$nr.git";
-		my $ent = $m->{$key} // die "BUG: `$key' not in manifest.js.gz";
-		if (defined(my $d = $ent->{description})) {
-			$d =~ s/ \[epoch [0-9]+\]\z//s;
-			$desc = $d;
+		my $ent;
+		if ($m) {
+			$ent = $m->{$key} //
+				die("BUG: `$key' not in manifest.js.gz");
+			if (defined(my $d = $ent->{description})) {
+				$d =~ s/ \[epoch [0-9]+\]\z//s;
+				$desc = $d;
+			}
 		}
 		if (!$want || $want->{$nr}) {
 			push @src_edst, $src, $edst;
-			push @{$task->{-entv}}, $edst, $ent;
+			push @entv, $edst, $ent;
 			$self->{any_want}->{$key} = 1;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst, $ent);
@@ -464,7 +456,7 @@ failed to extract epoch number from $src
 		}
 	}
 	# filter out the epochs we skipped
-	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
+	$self->{-culled_manifest} = 1 if $m && delete(@$m{@skip});
 
 	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
 
@@ -475,27 +467,16 @@ failed to extract epoch number from $src
 
 	defined($desc) ? ($task->{'txt.description'} = $desc) :
 		_get_txt_start($task, 'description', $fini);
-	if (my $todo = $self->{todo}) {  # manifest clone, deal with references
-		my $entv = delete $task->{-entv};
-		while (@$entv) {
-			my ($edst, $ent) = splice(@$entv, 0, 2);
-			my $etask = bless { %$task }, __PACKAGE__;
-			$etask->{-ent} = $ent; # may have {reference}
-			$etask->{cur_src} = shift @src_edst //
-				die 'BUG: no cur_src';
-			$etask->{cur_dst} = shift @src_edst //
-				die 'BUG: no cur_dst';
-			$etask->{cur_dst} eq $edst or
-				die "BUG: `$etask->{cur_dst}' != `$edst'";
-			$etask->{-is_epoch} = $fini;
-			push @{$todo->{($ent->{reference} // '')}}, $etask;
-		}
-	} else {
-		my @cmd = clone_cmd($lei, my $opt = {});
-		while (@src_edst && !$lei->{child_error}) {
-			my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
-			start_clone($self, $cmd, $opt, $fini);
-		}
+	while (@entv) {
+		my ($edst, $ent) = splice(@entv, 0, 2);
+		my $etask = bless { %$task }, __PACKAGE__;
+		$etask->{-ent} = $ent; # may have {reference}
+		$etask->{cur_src} = shift @src_edst // die 'BUG: no cur_src';
+		$etask->{cur_dst} = shift @src_edst // die 'BUG: no cur_dst';
+		$etask->{cur_dst} eq $edst or
+			die "BUG: `$etask->{cur_dst}' != `$edst'";
+		$etask->{-is_epoch} = $fini;
+		push @{$self->{todo}->{($ent->{reference} // '')}}, $etask;
 	}
 }
 
@@ -568,7 +549,7 @@ sub multi_inbox ($$$) {
 	($path_pfx, $n, $ret);
 }
 
-sub clone_all ($$) {
+sub clone_all {
 	my ($self, $m) = @_;
 	my $todo = delete $self->{todo};
 	my $nodep = delete $todo->{''};
@@ -587,9 +568,9 @@ sub clone_all ($$) {
 	# resolve references, deepest, first:
 	while (scalar keys %$todo) {
 		for my $x (keys %$todo) {
-			my $nr;
+			my ($nr, $nxt);
 			# resolve multi-level references
-			while (defined(my $nxt = $m->{$x}->{reference})) {
+			while ($m && defined($nxt = $m->{$x}->{reference})) {
 				exists($todo->{$nxt}) or last;
 				die <<EOM if ++$nr > 1000;
 E: dependency loop detected (`$x' => `$nxt')
@@ -604,6 +585,7 @@ EOM
 			last; # restart %$todo iteration
 		}
 	}
+	reap_live() while keys(%$LIVE);
 }
 
 # FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
@@ -656,7 +638,7 @@ sub try_manifest {
 			index($self->{cur_dst}, "\n") >= 0 and die <<EOM;
 E: `$self->{cur_dst}' must not contain newline
 EOM
-			clone_v2($self, \%v2_epochs, $m);
+			clone_v2_prep($self, \%v2_epochs, $m);
 			return if $self->{lei}->{child_error};
 		}
 	}
@@ -679,16 +661,16 @@ E: `$task->{cur_dst}' must not contain newline
 EOM
 			$task->{cur_src} .= '/';
 			my $dep = $task->{-ent}->{reference} // '';
-			push @{$self->{todo}->{$dep}}, $task;
+			push @{$self->{todo}->{$dep}}, $task; # for clone_all
 			$self->{any_want}->{$name} = 1;
 		}
 	}
 	delete local $lei->{opt}->{epoch} if defined($v2);
 	clone_all($self, $m);
-	reap_live() while keys(%$LIVE);
 	return if $self->{lei}->{child_error} || $self->{dry_run};
 
-	if (delete $self->{-culled_manifest}) { # set by clone_v2/-I/--exclude
+	# set by clone_v2_prep/-I/--exclude
+	if (delete $self->{-culled_manifest}) {
 		# write the smaller manifest if epochs were skipped so
 		# users won't have to delete manifest if they +w an
 		# epoch they no longer want to skip
