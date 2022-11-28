@@ -1,6 +1,5 @@
 #!perl -w
-use strict;
-use v5.10.1;
+use v5.12;
 use Test::More;
 require_ok 'PublicInbox::OnDestroy';
 my @x;
@@ -24,6 +23,11 @@ is(-s $tmp, 0, '$tmp is empty on pid mismatch');
 $od = PublicInbox::OnDestroy->new($$, sub { $tmp = $$ });
 undef $od;
 is($tmp, $$, '$tmp set to $$ by callback');
+
+$od = PublicInbox::OnDestroy->new($$, sub { $tmp = 'foo' });
+$od->cancel;
+$od = undef;
+isnt($tmp, 'foo', '->cancel');
 
 if (my $nr = $ENV{TEST_LEAK_NR}) {
 	for (0..$nr) {

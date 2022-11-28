@@ -1,12 +1,15 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 package PublicInbox::OnDestroy;
+use v5.12;
 
 sub new {
 	shift; # ($class, $cb, @args)
 	bless [ @_ ], __PACKAGE__;
 }
+
+sub cancel { @{$_[0]} = () }
 
 sub DESTROY {
 	my ($cb, @args) = @{$_[0]};
