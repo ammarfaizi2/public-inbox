@@ -106,45 +106,50 @@ sub ft_rename ($$$) {
 }
 
 sub _get_txt_start { # non-fatal
-	my ($self, $endpoint, $file, $mode) = @_;
+	my ($self, $endpoint, $fini) = @_;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
 	my $lei = $self->{lei};
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
 	$uri->path("$path/$endpoint");
-	my $dst = $self->{cur_dst} // $self->{dst};
-	my $ft = File::Temp->new(TEMPLATE => "$file-XXXX", DIR => $dst);
+	my $f = (split(m!/!, $endpoint))[-1];
+	my $ft = File::Temp->new(TEMPLATE => "$f-XXXX", TMPDIR => 1);
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
-	my $cmd = $self->{curl}->for_uri($lei, $uri,
-					qw(--compressed -R -o), $ft->filename);
-	$self->{-get_txt} = [ $ft, $cmd, $uri, $file, $mode ];
+	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(--compressed -R -o),
+					$ft->filename);
+	$self->{"-get_txt.$endpoint"} = [ $ft, $cmd, $uri ];
 	$lei->qerr("# @$cmd");
-	spawn($cmd, undef, $opt);
+	my $jobs = $lei->{opt}->{jobs} // 1;
+	reap_live() while keys(%LIVE) >= $jobs;
+	$LIVE{spawn($cmd, undef, $opt)} =
+			[ \&_get_txt_done, $self, $endpoint, $fini ];
 }
 
 sub _get_txt_done { # returns true on error (non-fatal), undef on success
-	my ($self) = @_;
-	my ($ft, $cmd, $uri, $file, $mode) = @{delete $self->{-get_txt}};
+	my ($self, $endpoint) = @_;
+	my ($fh, $cmd, $uri) = @{delete $self->{"-get_txt.$endpoint"}};
 	my $cerr = $?;
-	$? = 0;
+	$? = 0; # don't influence normal lei exit
 	return warn("$uri missing\n") if ($cerr >> 8) == 22;
 	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
-	my $dst = $self->{cur_dst} // $self->{dst};
-	ft_rename($ft, "$dst/$file", $mode);
+	seek($fh, SEEK_SET, 0) or die "seek: $!";
+	$self->{"mtime.$endpoint"} = (stat($fh))[9];
+	local $/;
+	$self->{"txt.$endpoint"} = <$fh>;
 	undef; # success
 }
 
-# tries the relatively new /$INBOX/_/text/config/raw endpoint
-sub _try_config_start {
+sub _write_inbox_config {
 	my ($self) = @_;
-	_get_txt_start($self, qw(_/text/config/raw inbox.config.example), 0444);
-}
-
-sub _try_config_done {
-	my ($self) = @_;
-	_get_txt_done($self) and return;
+	my $buf = delete($self->{'txt._/text/config/raw'}) // return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $f = "$dst/inbox.config.example";
+	open my $fh, '>', $f or die "open($f): $!";
+	print $fh $buf or die "print: $!";
+	chmod(0444 & ~umask, $fh) or die "chmod($f): $!";
+	my $mtime = delete $self->{'mtime._/text/config/raw'} // die 'BUG: no mtime';
+	$fh->flush or die "flush($f): $!";
+	utime($mtime, $mtime, $fh) or die "utime($f): $!";
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
 	my $ibx = $self->{ibx} = {};
 	for my $sec (grep(/\Apublicinbox\./, @{$cfg->{-section_order}})) {
@@ -160,15 +165,18 @@ sub set_description ($) {
 	my $f = "$dst/description";
 	open my $fh, '+>>', $f or die "open($f): $!";
 	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
-	chomp(my $d = do { local $/; <$fh> } // die "read($f): $!");
-	if ($d eq '($INBOX_DIR/description missing)' ||
-			$d =~ /^Unnamed repository/ || $d !~ /\S/) {
-		seek($fh, 0, SEEK_SET) or die "seek($f): $!";
-		truncate($fh, 0) or die "truncate($f): $!";
-		my $src = $self->{cur_src} // $self->{src};
-		print $fh "mirror of $src\n" or die "print($f): $!";
-		close $fh or die "close($f): $!";
+	my $d = do { local $/; <$fh> } // die "read($f): $!";
+	my $orig = $d;
+	while (defined($d) && ($d =~ m!^\(\$INBOX_DIR/description missing\)! ||
+			$d =~ /^Unnamed repository/ || $d !~ /\S/)) {
+		$d = delete($self->{'txt.description'});
 	}
+	$d //= 'mirror of '.($self->{cur_src} // $self->{src})."\n";
+	return if $d eq $orig;
+	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
+	truncate($fh, 0) or die "truncate($f): $!";
+	print $fh $d or die "print($f): $!";
+	close $fh or die "close($f): $!";
 }
 
 sub index_cloned_inbox {
@@ -229,12 +237,8 @@ sub clone_v1 {
 	$LIVE{spawn($cmd, undef, $opt)} = [ \&reap_clone, $lei, $cmd, $fini ];
 	reap_live() while keys(%LIVE) >= $jobs;
 
-	# wait for `git clone' to mkdir $dst (TODO: inotify/kevent?)
-	select(undef, undef, undef, 0.011) until -d $dst;
-	$LIVE{_try_config_start($self)} = [ \&_try_config_done, $self, $fini ];
-	reap_live() while keys(%LIVE) >= $jobs;
-	$LIVE{_get_txt_start($self, qw(description description), 0666)} =
-			[ \&_get_txt_done, $self, $fini ];
+	_get_txt_start($self, '_/text/config/raw', $fini);
+	_get_txt_start($self, 'description', $fini);
 	reap_live() until ($nohang || !keys(%LIVE));
 }
 
@@ -310,13 +314,14 @@ sub reap_clone { # async, called via SIGCHLD
 
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
-	my $dst = $self->{cur_dst} // $self->{dst};
-	write_makefile($dst, 1);
+	_write_inbox_config($self);
+	write_makefile($self->{cur_dst} // $self->{dst}, 1);
 	index_cloned_inbox($self, 1);
 }
 
 sub v2_done { # called via OnDestroy
 	my ($self) = @_;
+	_write_inbox_config($self);
 	require PublicInbox::MultiGit;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
@@ -378,13 +383,13 @@ failed to extract epoch number from $src
 	}
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
-	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
-	$LIVE{_try_config_start($task)} = [ \&_try_config_done, $task, $fini ];
-	reap_live() while keys(%LIVE) >= $jobs;
-	$LIVE{_get_txt_start($self, qw(description description), 0666)} =
-				[ \&_get_txt_done, $self, $fini ];
+
+	_get_txt_start($task, '_/text/config/raw', $fini);
+	_get_txt_start($self, 'description', $fini);
+
 	$task->{-locked} = $lk->lock_for_scope($$);
 	my @cmd = clone_cmd($lei, my $opt = {});
+	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	do {
 		reap_live() while keys(%LIVE) >= $jobs;
 		while (keys(%LIVE) < $jobs && @src_edst &&
