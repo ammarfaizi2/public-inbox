@@ -51,6 +51,20 @@ C<--epoch=~2..> clones the three latest epochs.
 Default: C<0..~0> or C<0..> or C<..~0>
 (all epochs, all three examples are equivalent)
 
+=item -I PATTERN
+
+=item --include=PATTERN
+
+When cloning a top-level with multiple inboxes, only clone inboxes and
+repositories matching a given wildcard pattern (using C<*?> and C<[]> is
+supported).
+
+=item --exclude=PATTERN
+
+When cloning a top-level with multiple inboxes, ignore inboxes and
+repositories matching the given wildcard pattern.  Supports the same
+wildcards as L</--include>
+
 =item -q
 
 =item --quiet

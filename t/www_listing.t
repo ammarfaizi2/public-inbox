@@ -135,7 +135,28 @@ EOM
 	my $opt = { 2 => \(my $clone_err = '') };
 	ok(run_script(['-clone', "http://$host:$port/pfx", "$tmpdir/pfx" ],
 		undef, $opt), 'pfx clone w/pfx') or diag "clone_err=$clone_err";
+
+	open my $mh, '<', "$tmpdir/pfx/manifest.js.gz" or xbail "open: $!";
+	gunzip(\(do { local $/; <$mh> }) => \(my $mjs = ''));
+	my $mf = $json->decode($mjs);
+	is_deeply([sort keys %$mf], [ qw(/alt /bare /v2/git/0.git
+					/v2/git/1.git /v2/git/2.git) ],
+		'manifest saved');
+	for (keys %$mf) { ok(-d "$tmpdir/pfx$_", "pfx/$_ cloned") }
+
+	$clone_err = '';
+	ok(run_script(['-clone', '--include=*/alt',
+			"http://$host:$port/pfx", "$tmpdir/incl" ],
+		undef, $opt), 'clone w/include') or diag "clone_err=$clone_err";
+	ok(-d "$tmpdir/incl/alt", 'alt cloned');
+	ok(!-d "$tmpdir/incl/v2" && !-d "$tmpdir/incl/bare", 'only alt cloned');
+
 	undef $td;
+
+	open $mh, '<', "$tmpdir/incl/manifest.js.gz" or xbail "open: $!";
+	gunzip(\(do { local $/; <$mh> }) => \($mjs = ''));
+	$mf = $json->decode($mjs);
+	is_deeply([keys %$mf], [ '/alt' ], 'excluded keys skipped in manifest');
 
 	$td = start_script($cmd, $env, { 3 => $sock });
 
@@ -146,6 +167,7 @@ EOM
 	$clone_err = '';
 	ok(run_script(['-clone', "http://$host:$port/", "$tmpdir/full" ],
 		undef, $opt), 'full clone') or diag "clone_err=$clone_err";
+	ok(-d "$tmpdir/full/$_", "$_ cloned") for qw(alt v2 bare);
 
 	undef $td;
 

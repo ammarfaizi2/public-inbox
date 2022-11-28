@@ -347,6 +347,8 @@ sub decode_manifest ($$$) {
 
 sub multi_inbox ($$$) {
 	my ($self, $path, $m) = @_;
+	my $incl = $self->{lei}->{opt}->{include};
+	my $excl = $self->{lei}->{opt}->{exclude};
 
 	# assuming everything not v2 is v1, for now
 	my @v1 = sort grep(!m!.+/git/[0-9]+\.git\z!, keys %$m);
@@ -354,13 +356,35 @@ sub multi_inbox ($$$) {
 	my $v2 = {};
 
 	for (@v2_epochs) {
-		m!\A/(.+)/git/[0-9]+\.git\z! or die "BUG: $_";
+		m!\A(/.+)/git/[0-9]+\.git\z! or die "BUG: $_";
 		push @{$v2->{$1}}, $_;
 	}
 	my $n = scalar(keys %$v2) + scalar(@v1);
-	my $ret; # { v1 => [ ... ], v2 => { $inbox_name => [ epochs ] }}
+	my @orig = defined($incl // $excl) ? (keys %$v2, @v1) : ();
+	if (defined $incl) {
+		my $re = '(?:'.join('|', map {
+				$self->{lei}->glob2re($_) // qr/\A\Q$_\E\z/
+			} @$incl).')';
+		my @gone = delete @$v2{grep(!/$re/, keys %$v2)};
+		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
+		delete @$m{grep(!/$re/, @v1)} and $self->{-culled_manifest} = 1;
+		@v1 = grep(/$re/, @v1);
+	}
+	if (defined $excl) {
+		my $re = '(?:'.join('|', map {
+				$self->{lei}->glob2re($_) // qr/\A\Q$_\E\z/
+			} @$excl).')';
+		my @gone = delete @$v2{grep(/$re/, keys %$v2)};
+		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
+		delete @$m{grep(/$re/, @v1)} and $self->{-culled_manifest} = 1;
+		@v1 = grep(!/$re/, @v1);
+	}
+	my $ret; # { v1 => [ ... ], v2 => { "/$inbox_name" => [ epochs ] }}
 	$ret->{v1} = \@v1 if @v1;
 	$ret->{v2} = $v2 if keys %$v2;
+	$ret //= @orig ? "Nothing to clone, available repositories:\n\t".
+				join("\n\t", sort @orig)
+			: "Nothing available to clone\n";
 	my $path_pfx = '';
 
 	# PSGI mount prefixes and manifest.js.gz prefixes don't always align...
@@ -407,6 +431,7 @@ sub try_manifest {
 		return try_scrape($self);
 	}
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
+	return $lei->child_error(1, $multi) if !ref($multi);
 	if (my $v2 = delete $multi->{v2}) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
@@ -449,7 +474,7 @@ EOM
 			clone_v1($self, 1);
 		}
 	}
-	if (delete $self->{-culled_manifest}) { # set by clone_v2
+	if (delete $self->{-culled_manifest}) { # set by clone_v2/-I/--exclude
 		# write the smaller manifest if epochs were skipped so
 		# users won't have to delete manifest if they +w an
 		# epoch they no longer want to skip
