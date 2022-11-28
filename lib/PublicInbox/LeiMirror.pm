@@ -51,7 +51,7 @@ sub try_scrape {
 	my $uri = URI->new($self->{src});
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
-	my $cmd = $curl->for_uri($lei, $uri, qw(-f --compressed));
+	my $cmd = $curl->for_uri($lei, $uri, '--compressed');
 	my $opt = { 0 => $lei->{0}, 2 => $lei->{2} };
 	my $fh = popen_rd($cmd, undef, $opt);
 	my $html = do { local $/; <$fh> } // die "read(curl $uri): $!";
@@ -151,7 +151,7 @@ sub _get_txt_start { # non-fatal
 	my $f = (split(m!/!, $endpoint))[-1];
 	my $ft = File::Temp->new(TEMPLATE => "$f-XXXX", TMPDIR => 1);
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
-	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(-f --compressed -R -o),
+	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(--compressed -R -o),
 					$ft->filename);
 	do_reap($self);
 	$lei->qerr("# @$cmd");
@@ -994,7 +994,7 @@ sub try_manifest {
 		delete $opt{TMPDIR};
 	}
 	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX', %opt);
-	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $ft->filename);
+	my $cmd = $curl->for_uri($lei, $uri, qw(-R -o), $ft->filename);
 	push(@$cmd, '-z', $manifest) if -f $manifest;
 	my $mf_url = "$uri";
 	%opt = map { $_ => $lei->{$_} } (0..2);
