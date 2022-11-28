@@ -122,13 +122,13 @@ sub _get_txt_start { # non-fatal
 	spawn($cmd, undef, $opt);
 }
 
-sub _get_txt_done {
+sub _get_txt_done { # returns true on error (non-fatal), undef on success
 	my ($self) = @_;
 	my ($ft, $cmd, $uri, $file, $mode) = @{delete $self->{-get_txt}};
 	my $cerr = $?;
 	$? = 0;
-	return "$uri missing" if ($cerr >> 8) == 22;
-	return "# @$cmd failed (non-fatal)" if $cerr;
+	return warn("$uri missing\n") if ($cerr >> 8) == 22;
+	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	ft_rename($ft, "$dst/$file", $mode);
 	undef; # success
@@ -142,8 +142,7 @@ sub _try_config_start {
 
 sub _try_config_done {
 	my ($self) = @_;
-	my $err = _get_txt_done($self);
-	return warn($err, "\n") if $err;
+	_get_txt_done($self) and return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $f = "$dst/inbox.config.example";
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
@@ -153,11 +152,6 @@ sub _try_config_done {
 			$ibx->{$_} = $cfg->{"$sec.$_"};
 		}
 	}
-}
-
-sub _get_txt { # non-fatal temporary compat function
-	waitpid(_get_txt_start(@_), 0) > 0 or die "waitpid: $!";
-	_get_txt_done($_[0]);
 }
 
 sub set_description ($) {
@@ -180,8 +174,6 @@ sub set_description ($) {
 sub index_cloned_inbox {
 	my ($self, $iv) = @_;
 	my $lei = $self->{lei};
-	my $err = _get_txt($self, qw(description description), 0666);
-	warn($err, "\n") if $err; # non fatal
 	eval { set_description($self) };
 	warn $@ if $@;
 
@@ -240,6 +232,9 @@ sub clone_v1 {
 	# wait for `git clone' to mkdir $dst (TODO: inotify/kevent?)
 	select(undef, undef, undef, 0.011) until -d $dst;
 	$LIVE{_try_config_start($self)} = [ \&_try_config_done, $self, $fini ];
+	reap_live() while keys(%LIVE) >= $jobs;
+	$LIVE{_get_txt_start($self, qw(description description), 0666)} =
+			[ \&_get_txt_done, $self, $fini ];
 	reap_live() until ($nohang || !keys(%LIVE));
 }
 
@@ -383,10 +378,13 @@ failed to extract epoch number from $src
 	}
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
+	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	$LIVE{_try_config_start($task)} = [ \&_try_config_done, $task, $fini ];
+	reap_live() while keys(%LIVE) >= $jobs;
+	$LIVE{_get_txt_start($self, qw(description description), 0666)} =
+				[ \&_get_txt_done, $self, $fini ];
 	$task->{-locked} = $lk->lock_for_scope($$);
 	my @cmd = clone_cmd($lei, my $opt = {});
-	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	do {
 		reap_live() while keys(%LIVE) >= $jobs;
 		while (keys(%LIVE) < $jobs && @src_edst &&
