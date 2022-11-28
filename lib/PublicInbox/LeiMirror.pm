@@ -692,17 +692,46 @@ sub reap_cmd { # async, called via SIGCHLD
 	$self->{lei}->child_error($cerr, "@$cmd failed (\$?=$cerr)") if $cerr;
 }
 
+sub up_fp_done {
+	my ($self) = @_;
+	return if !keep_going($self);
+	my $fh = delete $self->{-show_ref_up} // die 'BUG: no show-ref output';
+	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
+	$self->{-ent} // die 'BUG: no -ent';
+	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
+	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
+	return if $A eq $B;
+	$self->{-ent}->{fingerprint} = $B;
+	push @{$self->{chg}->{fp_mismatch}}, $self->{-key};
+}
+
+sub update_ent {
+	my ($self) = @_;
+	my $key = $self->{-key} // die 'BUG: no -key';
+	my $new = $self->{-ent}->{fingerprint};
+	my $cur = $self->{-local_manifest}->{$key}->{fingerprint} // "\0";
+	my $dst = $self->{cur_dst} // $self->{dst};
+	if (defined($new) && $new ne $cur) {
+		my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
+		my $opt = { 2 => $self->{lei}->{2} };
+		open($opt->{1}, '+>', undef) or die "open(tmp): $!";
+		$self->{-show_ref_up} = $opt->{1};
+		my $done = PublicInbox::OnDestroy->new($$, \&up_fp_done, $self);
+		start_cmd($self, $cmd, $opt, $done);
+	}
+	$new = $self->{-ent}->{owner} // return;
+	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
+	return if $cur eq $new;
+	my $cmd = [ qw(git config -f), "$dst/config", 'gitweb.owner', $new ];
+	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
+}
+
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
 	return if $self->{dry_run} || !keep_going($self);
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
-	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
-		my $key = $self->{-key} // die 'BUG: no -key';
-		my $cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
-		$cur eq $o or run_die([qw(git config -f),
-					"$dst/config", 'gitweb.owner', $o]);
-	}
+	update_ent($self) if $self->{-ent};
 	my $o = "$dst/objects";
 	if (open(my $fh, '<', my $fn = "$o/info/alternates")) {;
 		my $base = File::Spec->rel2abs($o);
@@ -797,7 +826,7 @@ failed to extract epoch number from $src
 		}
 	}
 	# filter out the epochs we skipped
-	$self->{-culled_manifest} = 1 if $m && delete(@$m{@skip});
+	$self->{chg}->{manifest} = 1 if $m && delete(@$m{@skip});
 
 	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
 
@@ -854,8 +883,8 @@ sub multi_inbox ($$$) {
 				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
 			} @$incl).'\\z)';
 		my @gone = delete @$v2{grep(!/$re/, keys %$v2)};
-		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
-		delete @$m{grep(!/$re/, @v1)} and $self->{-culled_manifest} = 1;
+		delete @$m{map { @$_ } @gone} and $self->{chg}->{manifest} = 1;
+		delete @$m{grep(!/$re/, @v1)} and $self->{chg}->{manifest} = 1;
 		@v1 = grep(/$re/, @v1);
 	}
 	if (defined $excl) {
@@ -863,8 +892,8 @@ sub multi_inbox ($$$) {
 				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
 			} @$excl).'\\z)';
 		my @gone = delete @$v2{grep(/$re/, keys %$v2)};
-		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
-		delete @$m{grep(/$re/, @v1)} and $self->{-culled_manifest} = 1;
+		delete @$m{map { @$_ } @gone} and $self->{chg}->{manifest} = 1;
+		delete @$m{grep(/$re/, @v1)} and $self->{chg}->{manifest} = 1;
 		@v1 = grep(!/$re/, @v1);
 	}
 	my $ret; # { v1 => [ ... ], v2 => { "/$inbox_name" => [ epochs ] }}
@@ -963,6 +992,7 @@ sub try_manifest {
 	}
 	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX', %opt);
 	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $ft->filename);
+	my $mf_url = "$uri";
 	%opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
 	if ($cerr) {
@@ -974,6 +1004,7 @@ sub try_manifest {
 		warn $@;
 		return try_scrape($self);
 	}
+	local $self->{chg} = {};
 	local $self->{-local_manifest} = load_current_manifest($self);
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
@@ -1034,7 +1065,22 @@ EOM
 	return if $self->{dry_run} || !keep_going($self);
 
 	# set by clone_v2_prep/-I/--exclude
-	dump_manifest($m => $ft) if delete $self->{-culled_manifest};
+	my $mis = delete $self->{chg}->{fp_mismatch};
+	if ($mis) {
+		my $t = (stat($ft))[9];
+		require POSIX;
+		$t = POSIX::strftime('%Y-%m-%d %k:%M:%S %z', localtime($t));
+		warn <<EOM;
+W: Fingerprints for the following repositories do not match
+W: $mf_url @ $t:
+W: These repositories may have updated since $t:
+EOM
+		warn "\t", $_, "\n" for @$mis;
+		warn <<EOM if !$self->{lei}->{opt}->{prune};
+W: The above fingerprints may never match without --prune
+EOM
+	}
+	dump_manifest($m => $ft) if delete($self->{chg}->{manifest}) || $mis;
 	ft_rename($ft, $manifest, 0666);
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
