@@ -259,7 +259,8 @@ sub clone_v1 {
 		push @$cmd, '--reference', "$self->{dst}$ref";
 	start_clone($self, $cmd, $opt, $fini);
 
-	_get_txt_start($self, '_/text/config/raw', $fini);
+	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v1)\z/s and
+		_get_txt_start($self, '_/text/config/raw', $fini);
 	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
 	defined($d) ? ($self->{'txt.description'} = $d) :
 		_get_txt_start($self, 'description', $fini);
@@ -445,7 +446,9 @@ failed to extract epoch number from $src
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 
-	_get_txt_start($task, '_/text/config/raw', $fini);
+	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
+		_get_txt_start($task, '_/text/config/raw', $fini);
+
 	_get_txt_start($self, 'description', $fini);
 
 	$task->{-locked} = $lk->lock_for_scope($$) if !$self->{dry_run};
@@ -649,11 +652,15 @@ sub start_clone_url {
 	die "TODO: non-HTTP/HTTPS clone of $self->{src} not supported, yet";
 }
 
-sub do_mirror { # via wq_io_do
+sub do_mirror { # via wq_io_do or public-inbox-clone
 	my ($self) = @_;
 	my $lei = $self->{lei};
 	umask($lei->{client_umask}) if defined $lei->{client_umask};
 	eval {
+		my $ic = $lei->{opt}->{'inbox-config'} //= 'always';
+		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
+--inbox-config must be one of `always', `v2', `v1', or `never'
+
 		my $iv = $lei->{opt}->{'inbox-version'};
 		if (defined $iv) {
 			local $LIVE;

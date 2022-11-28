@@ -65,6 +65,17 @@ When cloning a top-level with multiple inboxes, ignore inboxes and
 repositories matching the given wildcard pattern.  Supports the same
 wildcards as L</--include>
 
+=item --inbox-config=always|v2|v1|never
+
+Whether or not to retrieve the C<$INBOX/_/text/config/raw> HTTP(S)
+endpoint when cloning.
+
+Since we can't deduce v1 inboxes from code repositories, setting this
+to C<v2> or C<never> can allow faster clones of code repositories if
+no v1 inboxes are present.
+
+Default: C<always>
+
 =item -n
 
 =item --dry-run
