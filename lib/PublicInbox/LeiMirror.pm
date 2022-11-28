@@ -377,9 +377,11 @@ sub v1_done { # called via OnDestroy
 sub v2_done { # called via OnDestroy
 	my ($self) = @_;
 	return if $self->{dry_run} || !$LIVE;
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
+	my $lck = $lk->lock_for_scope($$);
 	_write_inbox_config($self);
 	require PublicInbox::MultiGit;
-	my $dst = $self->{cur_dst} // $self->{dst};
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
 	$mg->fill_alternates;
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
@@ -393,7 +395,7 @@ sub v2_done { # called via OnDestroy
 		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
 	}
 	write_makefile($dst, 2);
-	delete $self->{-locked} // die "BUG: $dst not locked"; # unlock
+	undef $lck; # unlock
 	index_cloned_inbox($self, 2);
 }
 
@@ -443,7 +445,6 @@ failed to extract epoch number from $src
 	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
 
 	require PublicInbox::Lock;
-	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
@@ -451,7 +452,6 @@ failed to extract epoch number from $src
 
 	_get_txt_start($task, 'description', $fini);
 
-	$task->{-locked} = $lk->lock_for_scope($$) if !$self->{dry_run};
 	my @cmd = clone_cmd($lei, my $opt = {});
 	while (@src_edst && !$lei->{child_error}) {
 		my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
