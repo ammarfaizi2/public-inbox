@@ -303,6 +303,7 @@ sub init_placeholder ($$) {
 
 ; This git epoch was created read-only and "public-inbox-fetch"
 ; will not fetch updates for it unless write permission is added.
+; Hint: chmod +w $edst
 EOM
 	close $fh or die "close:($f): $!";
 }
