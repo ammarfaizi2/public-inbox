@@ -15,19 +15,6 @@ use File::Temp ();
 
 sub new { bless {}, __PACKAGE__ }
 
-sub fetch_args ($$) {
-	my ($lei, $opt) = @_;
-	my @cmd; # (git --git-dir=...) to be added by caller
-	$opt->{$_} = $lei->{$_} for (0..2);
-	# we support "-c $key=$val" for arbitrary git config options
-	# e.g.: git -c http.proxy=socks5h://127.0.0.1:9050
-	push(@cmd, '-c', $_) for @{$lei->{opt}->{c} // []};
-	push @cmd, 'fetch';
-	push @cmd, '-q' if $lei->{opt}->{quiet};
-	push @cmd, '-v' if $lei->{opt}->{verbose};
-	@cmd;
-}
-
 sub remote_url ($$) {
 	my ($lei, $dir) = @_;
 	my $rn = $lei->{opt}->{'try-remote'} // [ 'origin', '_grokmirror' ];
@@ -205,7 +192,7 @@ EOM
 		if (-d $d) {
 			$fp2->[0] = get_fingerprint2($d) if $fp2;
 			$cmd = [ @$torsocks, 'git', "--git-dir=$d",
-				fetch_args($lei, $opt) ];
+			       PublicInbox::LeiMirror::fetch_args($lei, $opt)];
 		} else {
 			my $e_uri = $ibx_uri->clone;
 			my ($epath) = ($d =~ m!(/git/[0-9]+\.git)\z!);

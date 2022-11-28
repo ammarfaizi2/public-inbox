@@ -18,8 +18,10 @@ use PublicInbox::Config;
 use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
+use Digest::SHA qw(sha256_hex);
 
 our $LIVE; # pid => callback
+my $update_ref_stdin = $ENV{GIT_CAN_UPDATE_REF_STDIN} // 1;
 
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
@@ -249,7 +251,173 @@ sub start_clone {
 	reap_live() while keys(%$LIVE) >= $jobs;
 	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
-	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_clone, $self, $cmd, $fini ]
+	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd, $fini ]
+}
+
+sub fetch_args ($$) {
+	my ($lei, $opt) = @_;
+	my @cmd; # (git --git-dir=...) to be added by caller
+	$opt->{$_} = $lei->{$_} for (0..2);
+	# we support "-c $key=$val" for arbitrary git config options
+	# e.g.: git -c http.proxy=socks5h://127.0.0.1:9050
+	push(@cmd, '-c', $_) for @{$lei->{opt}->{c} // []};
+	push @cmd, 'fetch';
+	push @cmd, '-q' if $lei->{opt}->{quiet} ||
+			($lei->{opt}->{jobs} // 1) > 1;
+	push @cmd, '-v' if $lei->{opt}->{verbose};
+	@cmd;
+}
+
+sub fgrp_update_old ($) { # for git <1.8.5
+	my ($fgrp) = @_;
+	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
+		fetch_args($fgrp->{lei}, my $opt = {}) ];
+	$fgrp->{lei}->qerr("# @$cmd");
+	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $fgrp, $cmd ];
+	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
+	reap_live() while keys(%$LIVE) >= $jobs;
+}
+
+sub upr { # feed `git update-ref --stdin -z' verbosely
+	my ($fgrp, $w, $op, $ref, $oid) = @_;
+	$fgrp->{lei}->qerr("# $op $ref $oid");
+	print $w "$op $ref\0$oid\0" or die "print(w): $!";
+}
+
+sub fgrp_update {
+	my ($fgrp) = @_;
+	my $srcfh = delete $fgrp->{srcfh} or return;
+	my $dstfh = delete $fgrp->{dstfh} or return;
+	seek($srcfh, SEEK_SET, 0) or die "seek(src): $!";
+	seek($dstfh, SEEK_SET, 0) or die "seek(dst): $!";
+	my %src = map { chomp; split(/\0/) } (<$srcfh>);
+	close $srcfh;
+	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
+	close $dstfh;
+	pipe(my ($r, $w)) or die "pipe: $!";
+	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
+		qw(update-ref --stdin -z) ];
+	$fgrp->{lei}->qerr("# @$cmd");
+	my $opt = { 0 => $r, 1 => $fgrp->{lei}->{1}, 2 => $fgrp->{lei}->{2} };
+	my $pid = spawn($cmd, undef, $opt);
+	close $r or die "close(r): $!";
+	for my $ref (keys %dst) {
+		my $new = delete $src{$ref};
+		my $old = $dst{$ref};
+		if (defined $new) {
+			upr($fgrp, $w, 'update', $ref, $new) if $new ne $old;
+		} else {
+			upr($fgrp, $w, 'delete', $ref, $old);
+		}
+	}
+	while (my ($ref, $oid) = each %src) {
+		upr($fgrp, $w, 'create', $ref, $oid);
+	}
+	if (close($w)) { # git >= 1.8.5
+		$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
+		my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
+		reap_live() while keys(%$LIVE) >= $jobs;
+	} else { # git <1.8.5 w/o update-ref --stdin
+		warn "E: close(update-ref --stdin): $!\n";
+		$update_ref_stdin = 0;
+		waitpid($pid, 0) // die "waitpid(update-ref --stdin): $!";
+		fgrp_update_old($fgrp);
+	}
+}
+
+sub fgrp_fetched {
+	my ($fgrp) = @_;
+	return if $fgrp->{dry_run} || !$LIVE;
+	my $rn = $fgrp->{-remote};
+	my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
+	my $cmd = [ 'git', "--git-dir=$fgrp->{-osdir}",
+			qw(pack-refs --all --prune) ];
+	$fgrp->{lei}->qerr("# @$cmd");
+	$LIVE->{spawn($cmd, undef, \%opt)} = [ \&reap_cmd, $fgrp, $cmd ];
+	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
+	reap_live() while keys(%$LIVE) >= $jobs;
+
+	$update_ref_stdin or return fgrp_update_old($fgrp);
+
+	my $update_ref = PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
+
+	my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
+		"--format=refs/%(refname:lstrip=3)%00%(objectname)",
+		"refs/remotes/$rn/" ];
+	open($fgrp->{srcfh}, '+>', undef) or die "open(src): $!";
+	$fgrp->{lei}->qerr("# @$src >SRC");
+	my $pid = spawn($src, undef, { %opt, 1 => $fgrp->{srcfh} });
+	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $src, $update_ref ];
+	reap_live() while keys(%$LIVE) >= $jobs;
+
+	my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
+		'--format=%(refname)%00%(objectname)' ];
+	open($fgrp->{dstfh}, '+>', undef) or die "open(dst): $!";
+	$fgrp->{lei}->qerr("# @$dst >DST");
+	$pid = spawn($dst, undef, { %opt, 1 => $fgrp->{dstfh} });
+	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $dst, $update_ref ];
+	reap_live() while keys(%$LIVE) >= $jobs;
+}
+
+sub fgrp_fetch {
+	my ($fgrp, $pfx, $fini) = @_;
+	my $cmd = [ @$pfx, 'git', "--git-dir=$fgrp->{-osdir}",
+			fetch_args($fgrp->{lei}, my $opt = {}),
+			$fgrp->{-remote} ];
+	$fgrp->{-fini} = $fini;
+	my $jobs = $fgrp->{lei}->{opt}->{jobs} // 1;
+	reap_live() while keys(%$LIVE) >= $jobs;
+	$fgrp->{lei}->qerr("# @$cmd");
+	return if $fgrp->{dry_run};
+	my $fgrp_fini = PublicInbox::OnDestroy->new($$, \&fgrp_fetched, $fgrp);
+	my $pid = spawn($cmd, undef, $opt);
+	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd, $fgrp_fini ];
+}
+
+# keep this idempotent for future use by public-inbox-fetch
+sub forkgroup_prep {
+	my ($self, $uri) = @_;
+	$self->{-ent} // return;
+	my $os = $self->{-objstore} // return;
+	my $fg = $self->{-ent}->{forkgroup} // return;
+	my $dir = "$os/$fg.git";
+	my @cmd = ('git', "--git-dir=$dir", 'config');
+	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
+	if (!-d $dir) {
+		PublicInbox::Import::init_bare($dir);
+		for ('repack.useDeltaIslands=true',
+				'pack.island=refs/remotes/([^/]+)/') {
+			run_die([@cmd, split(/=/, $_, 2)], undef, $opt);
+		}
+	}
+	my $key = $self->{-key} // die 'BUG: no -key';
+	my ($bn) = ($key =~ m{/([a-z0-9_,;=!\+\{\}\|][^/]*)(?:\.git)?\z}i);
+	my $rn = "$bn-".substr(sha256_hex($key), 0, 16);
+	for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*") {
+		my @kv = split(/=/, $_, 2);
+		$kv[0] = "remote.$rn.$kv[0]";
+		run_die([@cmd, @kv], undef, $opt);
+	}
+	if (!-d $self->{cur_dst}) {
+		my $alt = File::Spec->rel2abs("$dir/objects");
+		PublicInbox::Import::init_bare($self->{cur_dst});
+		my $o = "$self->{cur_dst}/objects";
+		my $f = "$o/info/alternates";
+		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
+		open my $fh, '+>>', $f or die "open($f): $!";
+		seek($fh, SEEK_SET, 0) or die "seek($f): $!";
+		chomp(my @cur = <$fh>);
+		if (!grep(/\A\Q$l\E\z/, @cur)) {
+			say $fh $l or die "say($f): $!";
+		}
+		close $fh or die "close($f): $!";
+		@cmd = ('git', "--git-dir=$self->{cur_dst}",
+			qw(remote add --mirror=fetch origin), "$uri");
+		my $pid = spawn(\@cmd, undef, $opt);
+		waitpid($pid, 0) // die "waitpid(@cmd): $!";
+		die "E: @cmd: \$?=$?" if ($? && ($? >> 8) != 3);
+	}
+	bless { %$self, -osdir => $dir, -remote => $rn }, __PACKAGE__;
 }
 
 sub clone_v1 {
@@ -263,10 +431,15 @@ sub clone_v1 {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
 	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}), "$uri", $dst ];
-	my $ref = $self->{-ent} ? $self->{-ent}->{reference} : undef;
-	defined($ref) && -e "$self->{dst}$ref" and
-		push @$cmd, '--reference', "$self->{dst}$ref";
-	start_clone($self, $cmd, $opt, $fini);
+	my $fgrp = forkgroup_prep($self, $uri);
+	if (!defined($fgrp) && defined($self->{-ent})) {
+		if (defined(my $ref = $self->{-ent}->{reference})) {
+			-e "$self->{dst}$ref" and
+				push @$cmd, '--reference', "$self->{dst}$ref";
+		}
+	}
+	$fgrp ? fgrp_fetch($fgrp, $pfx, $fini) :
+		start_clone($self, $cmd, $opt, $fini);
 
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
 				/\A(?:always|v1)\z/s) {
@@ -357,7 +530,7 @@ EOM
 	}
 }
 
-sub reap_clone { # async, called via SIGCHLD
+sub reap_cmd { # async, called via SIGCHLD
 	my ($self, $cmd) = @_;
 	my $cerr = $?;
 	$? = 0; # don't let it influence normal exit
@@ -377,8 +550,12 @@ sub v1_done { # called via OnDestroy
 	}
 	my $o = "$dst/objects";
 	if (open(my $fh, '<', "$o/info/alternates")) {
+		my $base = File::Spec->rel2abs($o);
 		chomp(my @l = <$fh>);
-		for (@l) { $_ = File::Spec->abs2rel($_, $o)."\n" }
+		for (@l) {
+			$_ = File::Spec->abs2rel($_, $base) if m!\A/!;
+			$_ .= "\n";
+		}
 		my $f = File::Temp->new(TEMPLATE => '.XXXX', DIR => "$o/info");
 		print $f @l;
 		$f->flush or die "flush($f): $!";
@@ -417,7 +594,7 @@ sub reap_live {
 	my $pid = waitpid(-1, 0) // die "waitpid(-1): $!";
 	if (my $x = delete $LIVE->{$pid}) {
 		my $cb = shift @$x;
-		$cb->(@$x);
+		$cb->(@$x) if $cb;
 	} else {
 		warn "reaped unknown PID=$pid ($?)\n";
 	}
@@ -454,7 +631,7 @@ failed to extract epoch number from $src
 			}
 		}
 		if (!$want || $want->{$nr}) {
-			my $etask = bless { %$task }, __PACKAGE__;
+			my $etask = bless { %$task, -key => $key }, __PACKAGE__;
 			$etask->{-ent} = $ent; # may have {reference}
 			$etask->{cur_src} = $src;
 			$etask->{cur_dst} = $edst;
@@ -664,6 +841,7 @@ EOM
 					die("BUG: no `$name' in manifest");
 			$task->{cur_src} = "$uri";
 			$task->{cur_dst} = $task->{dst};
+			$task->{-key} = $name;
 			if ($n > 1) {
 				$task->{cur_dst} .= $name;
 				$task->{cur_src} .= $name;
@@ -702,6 +880,10 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
 --inbox-config must be one of `always', `v2', `v1', or `never'
 
+		if (defined(my $os = $lei->{opt}->{objstore})) {
+			$os = 'objstore' if $os eq ''; # --objstore w/o args
+			$self->{-objstore} = "$self->{dst}/$os";
+		}
 		local $LIVE;
 		my $iv = $lei->{opt}->{'inbox-version'} //
 			return start_clone_url($self);
