@@ -433,7 +433,8 @@ sub clone_v2_prep ($$;$) {
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
 	delete $task->{todo}; # $self->{todo} still exists
-	my (@src_edst, @skip, $desc, @entv);
+	my (@skip, $desc);
+	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
@@ -453,8 +454,13 @@ failed to extract epoch number from $src
 			}
 		}
 		if (!$want || $want->{$nr}) {
-			push @src_edst, $src, $edst;
-			push @entv, $edst, $ent;
+			my $etask = bless { %$task }, __PACKAGE__;
+			$etask->{-ent} = $ent; # may have {reference}
+			$etask->{cur_src} = $src;
+			$etask->{cur_dst} = $edst;
+			$etask->{-is_epoch} = $fini;
+			my $ref = $ent->{reference} // '';
+			push @{$self->{todo}->{$ref}}, $etask;
 			$self->{any_want}->{$key} = 1;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst, $ent);
@@ -467,24 +473,11 @@ failed to extract epoch number from $src
 
 	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
 
-	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
-
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
 		_get_txt_start($task, '_/text/config/raw', $fini);
 
 	defined($desc) ? ($task->{'txt.description'} = $desc) :
 		_get_txt_start($task, 'description', $fini);
-	while (@entv) {
-		my ($edst, $ent) = splice(@entv, 0, 2);
-		my $etask = bless { %$task }, __PACKAGE__;
-		$etask->{-ent} = $ent; # may have {reference}
-		$etask->{cur_src} = shift @src_edst // die 'BUG: no cur_src';
-		$etask->{cur_dst} = shift @src_edst // die 'BUG: no cur_dst';
-		$etask->{cur_dst} eq $edst or
-			die "BUG: `$etask->{cur_dst}' != `$edst'";
-		$etask->{-is_epoch} = $fini;
-		push @{$self->{todo}->{($ent->{reference} // '')}}, $etask;
-	}
 }
 
 sub decode_manifest ($$$) {
