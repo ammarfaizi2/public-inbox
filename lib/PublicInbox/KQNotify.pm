@@ -1,11 +1,10 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # implements the small subset of Linux::Inotify2 functionality we use
 # using IO::KQueue on *BSD systems.
 package PublicInbox::KQNotify;
-use strict;
-use v5.10.1;
+use v5.12;
 use IO::KQueue;
 use PublicInbox::DSKQXS; # wraps IO::KQueue for fork-safe DESTROY
 use PublicInbox::FakeInotify qw(fill_dirlist on_dir_change);
@@ -29,8 +28,7 @@ sub watch {
 			'PublicInbox::KQNotify::Watchdir';
 	} else {
 		open($fh, '<', $path) or return;
-		$watch = bless [ $fh, $path ],
-			'PublicInbox::KQNotify::Watch';
+		$watch = bless [ $fh, $path ], 'PublicInbox::KQNotify::Watch';
 	}
 	my $ident = fileno($fh);
 	$self->{dskq}->{kq}->EV_SET($ident, # ident (fd)
@@ -100,14 +98,14 @@ sub read {
 }
 
 package PublicInbox::KQNotify::Watch;
-use strict;
+use v5.12;
 
 sub name { $_[0]->[1] }
 
 sub cancel { close $_[0]->[0] or die "close: $!" }
 
 package PublicInbox::KQNotify::Watchdir;
-use strict;
+use v5.12;
 
 sub name { $_[0]->[1] }
 

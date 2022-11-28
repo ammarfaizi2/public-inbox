@@ -5,7 +5,7 @@
 # inot: Linux::Inotify2-like object
 # pathmap => { inboxdir => [ ibx, watch1, watch2, watch3... ] } mapping
 package PublicInbox::InboxIdle;
-use strict;
+use v5.12;
 use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN);
 my $IN_MODIFY = 0x02; # match Linux inotify

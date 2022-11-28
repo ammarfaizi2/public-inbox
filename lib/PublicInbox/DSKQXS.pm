@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # Licensed the same as Danga::Socket (and Perl5)
 # License: GPL-1.0+ or Artistic-1.0-Perl
 #  <https://www.gnu.org/licenses/gpl-1.0.txt>
@@ -11,8 +11,7 @@
 #
 # It also implements signalfd(2) emulation via "tie".
 package PublicInbox::DSKQXS;
-use strict;
-use warnings;
+use v5.12;
 use parent qw(Exporter);
 use Symbol qw(gensym);
 use IO::KQueue;

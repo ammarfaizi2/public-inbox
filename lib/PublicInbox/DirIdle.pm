@@ -1,9 +1,9 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Used by public-inbox-watch for Maildir (and possibly MH in the future)
 package PublicInbox::DirIdle;
-use strict;
+use v5.12;
 use parent 'PublicInbox::DS';
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::In2Tie;

@@ -1,10 +1,10 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # used to ensure PublicInbox::DS can call fileno() as a function
 # on Linux::Inotify2 objects
 package PublicInbox::In2Tie;
-use strict;
+use v5.12;
 use Symbol qw(gensym);
 
 sub io {

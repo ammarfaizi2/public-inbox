@@ -1,11 +1,10 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # for systems lacking Linux::Inotify2 or IO::KQueue, just emulates
 # enough of Linux::Inotify2
 package PublicInbox::FakeInotify;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(Exporter);
 use Time::HiRes qw(stat);
 use PublicInbox::DS qw(add_timer);
@@ -119,7 +118,7 @@ sub poll_once {
 }
 
 package PublicInbox::FakeInotify::Watch;
-use strict;
+use v5.12;
 
 sub cancel {
 	my ($self) = @_;
@@ -132,7 +131,7 @@ sub name {
 }
 
 package PublicInbox::FakeInotify::Event;
-use strict;
+use v5.12;
 
 sub fullname { ${$_[0]} }
 
@@ -141,14 +140,14 @@ sub IN_MOVED_FROM { 0 }
 sub IN_DELETE_SELF { 0 }
 
 package PublicInbox::FakeInotify::GoneEvent;
-use strict;
+use v5.12;
 our @ISA = qw(PublicInbox::FakeInotify::Event);
 
 sub IN_DELETE { 1 }
 sub IN_MOVED_FROM { 0 }
 
 package PublicInbox::FakeInotify::SelfGoneEvent;
-use strict;
+use v5.12;
 our @ISA = qw(PublicInbox::FakeInotify::GoneEvent);
 
 sub IN_DELETE_SELF { 1 }
