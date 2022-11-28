@@ -882,7 +882,8 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 
 		if (defined(my $os = $lei->{opt}->{objstore})) {
 			$os = 'objstore' if $os eq ''; # --objstore w/o args
-			$self->{-objstore} = "$self->{dst}/$os";
+			$os = "$self->{dst}/$os" if $os !~ m!\A/!;
+			$self->{-objstore} = $os;
 		}
 		local $LIVE;
 		my $iv = $lei->{opt}->{'inbox-version'} //
