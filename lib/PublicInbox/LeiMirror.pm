@@ -386,8 +386,11 @@ sub forkgroup_prep {
 		}
 	}
 	my $key = $self->{-key} // die 'BUG: no -key';
-	my ($bn) = ($key =~ m{/([a-z0-9_,;=!\+\{\}\|][^/]*)(?:\.git)?\z}i);
-	my $rn = "$bn-".substr(sha256_hex($key), 0, 16);
+	my $rn = $key;
+	$rn =~ s!\A[\./]+!!s;
+	$rn =~ s/\.*?(?:\.git)?\.*?\z//s;
+	$rn =~ s![\@\{\}/:\?\[\]\^~\s\f[:cntrl:]\*]!_!isg;
+	$rn .= '-'.substr(sha256_hex($key), 0, 16);
 	# --no-tags is required to avoid conflicts
 	for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*",
 			'tagopt=--no-tags') {
