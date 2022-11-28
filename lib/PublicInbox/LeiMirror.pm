@@ -664,6 +664,7 @@ sub up_fp_done {
 	push @{$self->{chg}->{fp_mismatch}}, $self->{-key};
 }
 
+# modifies the to-be-written manifest entry, and sets values from it, too
 sub update_ent {
 	my ($self) = @_;
 	my $key = $self->{-key} // die 'BUG: no -key';
@@ -694,7 +695,26 @@ sub update_ent {
 		}
 		start_cmd($self, $cmd, { 2 => $self->{lei}->{2} }) if $cmd;
 	}
-
+	if (my $symlinks = $self->{-ent}->{symlinks}) {
+		my $top = File::Spec->rel2abs($self->{dst});
+		for my $p (@$symlinks) {
+			my $ln = "$top/$p";
+			$ln =~ tr!/!/!s;
+			my (undef, $dn, $bn) = File::Spec->splitpath($ln);
+			File::Path::mkpath($dn);
+			my $tgt = "$top/$key";
+			$tgt = File::Spec->abs2rel($tgt, $dn);
+			if (lstat($ln)) {
+				if (-l _) {
+					next if readlink($ln) eq $tgt;
+					unlink($ln) or die "unlink($ln): $!";
+				} else {
+					push @{$self->{chg}->{badlink}}, $p;
+				}
+			}
+			symlink($tgt, $ln) or die "symlink($tgt, $ln): $!";
+		}
+	}
 	$new = $self->{-ent}->{owner} // return;
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
@@ -1059,6 +1079,10 @@ W: The above fingerprints may never match without --prune
 EOM
 	}
 	dump_manifest($m => $ft) if delete($self->{chg}->{manifest}) || $mis;
+	my $bad = delete $self->{chg}->{badlink};
+	warn(<<EOM, map { ("\t", $_, "\n") } @$bad) if $bad;
+W: The following exist and have not been converted to symlinks
+EOM
 	ft_rename($ft, $manifest, 0666);
 }
 
