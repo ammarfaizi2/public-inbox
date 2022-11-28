@@ -87,7 +87,8 @@ sub clone_cmd {
 	# e.g.: git -c http.proxy=socks5h://127.0.0.1:9050
 	push(@cmd, '-c', $_) for @{$lei->{opt}->{c} // []};
 	push @cmd, qw(clone --mirror);
-	push @cmd, '-q' if $lei->{opt}->{quiet};
+	push @cmd, '-q' if $lei->{opt}->{quiet} ||
+			($lei->{opt}->{jobs} // 1) > 1;
 	push @cmd, '-v' if $lei->{opt}->{verbose};
 	# XXX any other options to support?
 	# --reference is tricky with multiple epochs...
@@ -236,7 +237,7 @@ sub clone_v1 {
 	my $pfx = $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
-	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
+	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}), "$uri", $dst ];
 	$lei->qerr("# @$cmd");
 	$LIVE{spawn($cmd, undef, $opt)} = [ \&reap_clone, $lei, $cmd, $fini ];
@@ -385,7 +386,7 @@ failed to extract epoch number from $src
 	$LIVE{_try_config_start($task)} = [ \&_try_config_done, $task, $fini ];
 	$task->{-locked} = $lk->lock_for_scope($$);
 	my @cmd = clone_cmd($lei, my $opt = {});
-	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
+	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	do {
 		reap_live() while keys(%LIVE) >= $jobs;
 		while (keys(%LIVE) < $jobs && @src_edst &&
@@ -498,7 +499,7 @@ sub try_manifest {
 	}
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
-	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
+	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	if (my $v2 = delete $multi->{v2}) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
