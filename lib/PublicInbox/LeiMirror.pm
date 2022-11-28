@@ -579,7 +579,8 @@ sub try_manifest {
 	}
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
-	if (my $v2 = delete $multi->{v2}) {
+	my $v2 = delete $multi->{v2};
+	if ($v2) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
 			my %v2_epochs = map {
@@ -605,6 +606,7 @@ EOM
 		}
 	}
 	if (my $v1 = delete $multi->{v1}) {
+		delete local $lei->{opt}->{epoch} if defined($v2);
 		my $p = $path_pfx.$path;
 		chop($p) if substr($p, -1, 1) eq '/';
 		$uri->path($p);
