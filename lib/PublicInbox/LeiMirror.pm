@@ -336,16 +336,21 @@ sub fgrp_update {
 	}
 }
 
+sub pack_refs {
+	my ($self, $git_dir) = @_;
+	do_reap($self);
+	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
+	$self->{lei}->qerr("# @$cmd");
+	my $opt = { 1 => $self->{lei}->{1}, 2 => $self->{lei}->{2} };
+	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd ];
+}
+
 sub fgrp_fetched {
 	my ($fgrp) = @_;
 	return if $fgrp->{dry_run} || !$LIVE;
 	my $rn = $fgrp->{-remote};
 	my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
-	my $cmd = [ 'git', "--git-dir=$fgrp->{-osdir}",
-			qw(pack-refs --all --prune) ];
-	do_reap($fgrp);
-	$fgrp->{lei}->qerr("# @$cmd");
-	$LIVE->{spawn($cmd, undef, \%opt)} = [ \&reap_cmd, $fgrp, $cmd ];
+	pack_refs($fgrp, $fgrp->{-osdir}); # objstore refs always packed
 
 	$update_ref_stdin or return fgrp_update_old($fgrp);
 
@@ -407,6 +412,7 @@ sub forkgroup_prep {
 		$kv[0] = "remote.$rn.$kv[0]";
 		run_die([@cmd, @kv], undef, $opt);
 	}
+	$self->{-do_pack_refs} = 1; # likely coderepo
 	if (!-d $self->{cur_dst}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
 		PublicInbox::Import::init_bare($self->{cur_dst});
@@ -573,6 +579,7 @@ sub v1_done { # called via OnDestroy
 			die "rename($f, $o/info/alternates): $!";
 		$f->unlink_on_destroy(0);
 	}
+	pack_refs($self, $dst) if delete $self->{-do_pack_refs};
 	return if ($self->{-is_epoch} ||
 		$self->{lei}->{opt}->{'inbox-config'} ne 'always');
 	write_makefile($dst, 1);
