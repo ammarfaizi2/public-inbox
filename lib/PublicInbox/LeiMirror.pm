@@ -11,6 +11,7 @@ use IO::Compress::Gzip qw(gzip $GzipError);
 use PublicInbox::Spawn qw(popen_rd spawn run_die);
 use File::Path ();
 use File::Temp ();
+use File::Spec ();
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
 use Carp qw(croak);
 use URI;
@@ -253,6 +254,9 @@ sub clone_v1 {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
 	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}), "$uri", $dst ];
+	my $ref = $self->{-ent} ? $self->{-ent}->{reference} : undef;
+	defined($ref) && -e "$self->{dst}$ref" and
+		push @$cmd, '--reference', "$self->{dst}$ref";
 	start_clone($self, $cmd, $opt, $fini);
 
 	_get_txt_start($self, '_/text/config/raw', $fini);
@@ -353,6 +357,17 @@ sub v1_done { # called via OnDestroy
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
 		run_die([qw(git config -f), "$dst/config", 'gitweb.owner', $o]);
+	}
+	my $o = "$dst/objects";
+	if (open(my $fh, '<', "$o/info/alternates")) {
+		chomp(my @l = <$fh>);
+		for (@l) { $_ = File::Spec->abs2rel($_, $o)."\n" }
+		my $f = File::Temp->new(TEMPLATE => '.XXXX', DIR => "$o/info");
+		print $f @l;
+		$f->flush or die "flush($f): $!";
+		rename($f->filename, "$o/info/alternates") or
+			die "rename($f, $o/info/alternates): $!";
+		$f->unlink_on_destroy(0);
 	}
 	write_makefile($dst, 1);
 	index_cloned_inbox($self, 1);
@@ -510,6 +525,30 @@ sub multi_inbox ($$$) {
 	($path_pfx, $n, $ret);
 }
 
+sub clone_all {
+	my ($self, $todo, $m) = @_;
+	# handle no-dependency repos, first
+	for (@{delete($todo->{''}) // []}) {
+		clone_v1($_, 1);
+		return if $self->{lei}->{child_error};
+	}
+	# resolve references, deepest, first:
+	while (scalar keys %$todo) {
+		for my $x (keys %$todo) {
+			# resolve multi-level references
+			while (defined($m->{$x}->{reference})) {
+				$x = $m->{$x}->{reference};
+			}
+			my $y = delete $todo->{$x} // next; # already done
+			for (@$y) {
+				clone_v1($_, 1);
+				return if $self->{lei}->{child_error};
+			}
+			last; # restart %$todo iteration
+		}
+	}
+}
+
 # FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
 sub try_manifest {
 	my ($self) = @_;
@@ -566,9 +605,9 @@ EOM
 		my $p = $path_pfx.$path;
 		chop($p) if substr($p, -1, 1) eq '/';
 		$uri->path($p);
+		my $todo = {};
+		my %want = map { $_ => 1 } @$v1;
 		for my $name (@$v1) {
-			return if $self->{lei}->{child_error};
-
 			my $task = bless { %$self }, __PACKAGE__;
 			$task->{-ent} = $m->{$name} //
 					die("BUG: no `$name' in manifest");
@@ -582,8 +621,11 @@ EOM
 E: `$task->{cur_dst}' must not contain newline
 EOM
 			$task->{cur_src} .= '/';
-			clone_v1($task, 1);
+			my $dep = $task->{-ent}->{reference} // '';
+			$dep = '' if !$want{$dep};
+			push @{$todo->{$dep}}, $task;
 		}
+		clone_all($self, $todo, $m);
 	}
 	reap_live() while keys(%LIVE);
 	return if $self->{lei}->{child_error} || $self->{dry_run};
