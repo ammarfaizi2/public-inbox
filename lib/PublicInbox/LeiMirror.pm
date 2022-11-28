@@ -533,6 +533,8 @@ sub clone_v1 {
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
+	my $path = $uri->path;
+	$path =~ s!/*\z!! and $uri->path($path);
 	defined($lei->{opt}->{epoch}) and
 		die "$uri is a v1 inbox, --epoch is not supported\n";
 	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
