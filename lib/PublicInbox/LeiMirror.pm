@@ -392,7 +392,7 @@ sub v2_done { # called via OnDestroy
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
 	$mg->fill_alternates;
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
-	my $entries = delete($self->{-ent}) // [];
+	my $entries = delete($self->{-entv}) // [];
 	while (@$entries) {
 		my ($edst, $ent) = splice(@$entries);
 		if (defined(my $o = $ent->{owner})) {
@@ -450,7 +450,7 @@ failed to extract epoch number from $src
 		}
 		if (!$want || $want->{$nr}) {
 			push @src_edst, $src, $edst;
-			push @{$task->{-ent}}, $edst, $ent;
+			push @{$task->{-entv}}, $edst, $ent;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst, $ent);
 			push @{$task->{-read_only}}, $edst;
