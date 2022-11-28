@@ -301,10 +301,10 @@ sub fgrp_update {
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
 	my $lei = $fgrp->{lei};
-	$lei->qerr("# @$cmd");
-	my $opt = { 0 => $r, 2 => $lei->{2} };
-	my $pid = spawn($cmd, undef, $opt);
+	my $pack = PublicInbox::OnDestroy->new($$, \&pack_dst, $fgrp);
+	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $lei->{2} }, $pack);
 	close $r or die "close(r): $!";
+	return if $fgrp->{dry_run};
 	for my $ref (keys %dst) {
 		my $new = delete $src{$ref};
 		my $old = $dst{$ref};
@@ -319,8 +319,6 @@ sub fgrp_update {
 		upr($lei, $w, 'create', $ref, $oid);
 	}
 	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
-	my $pack = PublicInbox::OnDestroy->new($$, \&pack_dst, $fgrp);
-	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd, $pack ];
 }
 
 sub pack_dst { # packs lightweight satellite repos
@@ -330,19 +328,13 @@ sub pack_dst { # packs lightweight satellite repos
 
 sub pack_refs {
 	my ($self, $git_dir) = @_;
-	do_reap($self);
-	return if !keep_going($self);
 	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
-	$self->{lei}->qerr("# @$cmd");
-	return if $self->{dry_run};
-	my $opt = { 2 => $self->{lei}->{2} };
-	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd ];
+	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
 }
 
 sub fgrpv_done {
 	my ($fgrpv) = @_;
 	return if !$LIVE;
-	my $pid;
 	my $first = $fgrpv->[0] // die 'BUG: no fgrpv->[0]';
 	return if !keep_going($first);
 	pack_refs($first, $first->{-osdir}); # objstore refs always packed
@@ -350,30 +342,20 @@ sub fgrpv_done {
 		my $rn = $fgrp->{-remote};
 		my %opt = ( 2 => $fgrp->{lei}->{2} );
 
-		my $update_ref = $fgrp->{dry_run} ? undef :
-			PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
+		my $update_ref = PublicInbox::OnDestroy->new($$,
+							\&fgrp_update, $fgrp);
 
 		my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
 			"--format=refs/%(refname:lstrip=3)%00%(objectname)",
 			"refs/remotes/$rn/" ];
-		do_reap($fgrp);
-		$fgrp->{lei}->qerr("# @$src >SRC");
-		if ($update_ref) {
-			open(my $fh, '+>', undef) or die "open(src): $!";
-			$pid = spawn($src, undef, { %opt, 1 => $fh });
-			$fgrp->{srcfh} = $fh;
-			$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $src, $update_ref ]
-		}
+		open(my $sfh, '+>', undef) or die "open(src): $!";
+		$fgrp->{srcfh} = $sfh;
+		start_cmd($fgrp, $src, { %opt, 1 => $sfh }, $update_ref);
 		my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
 			'--format=%(refname)%00%(objectname)' ];
-		do_reap($fgrp);
-		$fgrp->{lei}->qerr("# @$dst >DST");
-		if ($update_ref) {
-			open(my $fh, '+>', undef) or die "open(dst): $!";
-			$pid = spawn($dst, undef, { %opt, 1 => $fh });
-			$fgrp->{dstfh} = $fh;
-			$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $dst, $update_ref ]
-		}
+		open(my $dfh, '+>', undef) or die "open(dst): $!";
+		$fgrp->{dstfh} = $dfh;
+		start_cmd($fgrp, $dst, { %opt, 1 => $dfh }, $update_ref);
 	}
 }
 
@@ -396,7 +378,6 @@ sub fgrp_fetch_all {
 			qw(--no-tags --multiple));
 	};
 	push(@fetch, "-j$j") if $j;
-	my $pid;
 	while (my ($osdir, $fgrpv) = each %$todo) {
 		my $f = "$osdir/config";
 
@@ -405,7 +386,7 @@ sub fgrp_fetch_all {
 				$f, '--unset-all', "remotes.$grp"];
 		$self->{lei}->qerr("# @$cmd");
 		if (!$self->{dry_run}) {
-			$pid = spawn($cmd, undef, { 2 => $self->{lei}->{2} });
+			my $pid = spawn($cmd, undef, { 2 => $self->{lei}->{2} });
 			waitpid($pid, 0) // die "waitpid: $!";
 			die "E: @$cmd: \$?=$?" if ($? && ($? >> 8) != 5);
 
@@ -423,12 +404,8 @@ sub fgrp_fetch_all {
 		}
 
 		$cmd = [ @git, "--git-dir=$osdir", @fetch, $grp ];
-		do_reap($self);
-		$self->{lei}->qerr("# @$cmd");
 		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $fgrpv);
-		return if $self->{dry_run};
-		$pid = spawn($cmd, undef, $opt);
-		$LIVE->{$pid} = [ \&reap_cmd, $self, $cmd, $end ];
+		start_cmd($self, $cmd, $opt, $end);
 	}
 }
 
