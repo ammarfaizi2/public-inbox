@@ -256,7 +256,7 @@ sub run_reap {
 	$ret;
 }
 
-sub start_clone {
+sub start_cmd {
 	my ($self, $cmd, $opt, $fini) = @_;
 	do_reap($self);
 	$self->{lei}->qerr("# @$cmd");
@@ -279,9 +279,9 @@ sub fetch_args ($$) {
 }
 
 sub upr { # feed `git update-ref --stdin -z' verbosely
-	my ($lei, $w, $op, $ref, $oid) = @_;
-	$lei->qerr("# $op $ref $oid") if $lei->{opt}->{verbose};
-	print $w "$op $ref\0$oid\0" or die "print(w): $!";
+	my ($lei, $w, $op, @rest) = @_; # ($ref, $oid) = @rest
+	$lei->qerr("# $op @rest") if $lei->{opt}->{verbose};
+	print $w "$op ", join("\0", @rest, '') or die "print(w): $!";
 }
 
 sub fgrp_update {
@@ -306,7 +306,8 @@ sub fgrp_update {
 		my $new = delete $src{$ref};
 		my $old = $dst{$ref};
 		if (defined $new) {
-			upr($lei, $w, 'update', $ref, $new) if $new ne $old;
+			$new eq $old or
+				upr($lei, $w, 'update', $ref, $new, $old);
 		} else {
 			upr($lei, $w, 'delete', $ref, $old);
 		}
@@ -482,6 +483,23 @@ EOM
 	bless { %$self, -osdir => $dir, -remote => $rn }, __PACKAGE__;
 }
 
+sub resume_fetch {
+	my ($self, $uri, $fini) = @_;
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my @git = ('git', "--git-dir=$dst");
+	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
+	my $rn = 'origin'; # configurable?
+	for ("url=$uri", "fetch=+refs/*:refs/*", 'mirror=true') {
+		my @kv = split(/=/, $_, 2);
+		$kv[0] = "remote.$rn.$kv[0]";
+		next if $self->{dry_run};
+		run_die([@git, 'config', @kv], undef, $opt);
+	}
+	my $cmd = [ @{$self->{-torsocks}}, @git,
+			fetch_args($self->{lei}, $opt), $rn ];
+	start_cmd($self, $cmd, $opt, $fini);
+}
+
 sub clone_v1 {
 	my ($self, $nohang) = @_;
 	my $lei = $self->{lei};
@@ -495,7 +513,9 @@ sub clone_v1 {
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
 		push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
-	} else { # normal fetch
+	} elsif (-d $dst) {
+		resume_fetch($self, $uri, $fini);
+	} else { # normal clone
 		my $cmd = [ @{$self->{-torsocks}},
 				clone_cmd($lei, my $opt = {}), "$uri", $dst ];
 		if (defined($self->{-ent})) {
@@ -505,7 +525,7 @@ sub clone_v1 {
 						"$self->{dst}$ref";
 			}
 		}
-		start_clone($self, $cmd, $opt, $fini);
+		start_cmd($self, $cmd, $opt, $fini);
 	}
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
 				/\A(?:always|v1)\z/s) {
