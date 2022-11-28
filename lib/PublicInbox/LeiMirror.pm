@@ -31,9 +31,9 @@ sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 		warn("unlink($f): $!\n") unless $!{ENOENT};
 	} else {
 		if (!$mrr->{dry_run} && $lei->{cmd} ne 'public-inbox-clone') {
-			# calls _finish_add_external
-			$lei->lazy_cb('add-external', '_finish_'
-					)->($lei, $mrr->{dst});
+			require PublicInbox::LeiAddExternal;
+			PublicInbox::LeiAddExternal::_finish_add_external(
+							$lei, $mrr->{dst});
 		}
 		$lei->qerr("# mirrored $mrr->{src} => $mrr->{dst}");
 	}

@@ -787,7 +787,7 @@ EOM
 	}
 }
 
-sub lazy_cb ($$$) {
+sub lazy_cb ($$$) { # $pfx is _complete_ or lei_
 	my ($self, $cmd, $pfx) = @_;
 	my $ucmd = $cmd;
 	$ucmd =~ tr/-/_/;
