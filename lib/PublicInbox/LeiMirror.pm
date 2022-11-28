@@ -602,7 +602,7 @@ sub reap_cmd { # async, called via SIGCHLD
 	$? = 0; # don't let it influence normal exit
 	if ($cerr) {
 		kill('TERM', keys %$LIVE);
-		$self->{lei}->child_error($cerr, "@$cmd failed");
+		$self->{lei}->child_error($cerr, "@$cmd failed (\$?=$cerr)");
 	}
 }
 
