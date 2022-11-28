@@ -3,8 +3,7 @@
 
 # "lei add-external --mirror" support (also "public-inbox-clone");
 package PublicInbox::LeiMirror;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::IPC);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
