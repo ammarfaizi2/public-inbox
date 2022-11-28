@@ -881,18 +881,20 @@ sub multi_inbox ($$$) {
 sub clone_all {
 	my ($self, $m) = @_;
 	my $todo = delete $self->{todo};
-	my $nodep = delete $todo->{''};
+	{
+		my $nodep = delete $todo->{''};
 
-	# do not download unwanted deps
-	my $any_want = delete $self->{any_want};
-	my @unwanted = grep { !$any_want->{$_} } keys %$todo;
-	my @nodep = delete(@$todo{@unwanted});
-	push(@$nodep, @$_) for @nodep;
+		# do not download unwanted deps
+		my $any_want = delete $self->{any_want};
+		my @unwanted = grep { !$any_want->{$_} } keys %$todo;
+		my @nodep = delete(@$todo{@unwanted});
+		push(@$nodep, @$_) for @nodep;
 
-	# handle no-dependency repos, first
-	for (@$nodep) {
-		clone_v1($_, 1);
-		return if !keep_going($self);
+		# handle no-dependency repos, first
+		for (@$nodep) {
+			clone_v1($_, 1);
+			return if !keep_going($self);
+		}
 	}
 	# resolve references, deepest, first:
 	while (scalar keys %$todo) {
