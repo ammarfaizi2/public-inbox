@@ -30,12 +30,9 @@ sub keep_going ($) {
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
 	my ($mrr, $lei) = @$arg;
-	my $f = "$mrr->{dst}/mirror.done";
 	if ($?) {
 		$lei->child_error($?);
-	} elsif (!$mrr->{dry_run} && !unlink($f)) {
-		warn("unlink($f): $!\n") unless $!{ENOENT};
-	} else {
+	} elsif (!$lei->{child_error}) {
 		if (!$mrr->{dry_run} && $lei->{cmd} ne 'public-inbox-clone') {
 			require PublicInbox::LeiAddExternal;
 			PublicInbox::LeiAddExternal::_finish_add_external(
@@ -249,7 +246,6 @@ sub index_cloned_inbox {
 		PublicInbox::Admin::index_inbox($ibx, undef, $opt);
 	}
 	return if defined $self->{cur_dst}; # one of many repos to clone
-	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
 sub run_reap {
@@ -1082,7 +1078,6 @@ EOM
 	}
 	dump_manifest($m => $ft) if delete($self->{chg}->{manifest}) || $mis;
 	ft_rename($ft, $manifest, 0666);
-	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }
 
 sub start_clone_url {

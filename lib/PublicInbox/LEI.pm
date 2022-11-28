@@ -544,12 +544,11 @@ sub child_error { # passes non-fatal curl exit codes to user
 	local $current_lei = $self;
 	$child_error ||= 1 << 8;
 	warn(substr($msg, -1, 1) eq "\n" ? $msg : "$msg\n") if defined $msg;
+	$self->{child_error} ||= $child_error;
 	if ($self->{pkt_op_p}) { # to top lei-daemon
 		$self->{pkt_op_p}->pkt_do('child_error', $child_error);
 	} elsif ($self->{sock}) { # to lei(1) client
 		send($self->{sock}, "child_error $child_error", MSG_EOR);
-	} else { # non-lei admin command
-		$self->{child_error} ||= $child_error;
 	} # else noop if client disconnected
 }
 
