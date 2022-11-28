@@ -21,6 +21,8 @@ use PublicInbox::OnDestroy;
 use Digest::SHA qw(sha256_hex sha1_hex);
 
 our $LIVE; # pid => callback
+our $FGRP_TODO; # objstore -> [ fgrp mirror objects ]
+our $TODO; # reference => [ non-fgrp mirror objects ]
 
 sub keep_going ($) {
 	$LIVE && (!$_[0]->{lei}->{child_error} ||
@@ -324,7 +326,6 @@ sub fgrp_update {
 sub pack_dst { # packs lightweight satellite repos
 	my ($fgrp) = @_;
 	pack_refs($fgrp, $fgrp->{cur_dst});
-	delete($fgrp->{-fini}) // die 'BUG: no {-fini}'; # call v1_done
 }
 
 sub pack_refs {
@@ -362,7 +363,8 @@ sub fgrpv_done {
 
 sub fgrp_fetch_all {
 	my ($self) = @_;
-	my $todo = delete $self->{fgrp_todo} or return;
+	my $todo = $FGRP_TODO;
+	$FGRP_TODO = \'BUG on further use';
 	keys(%$todo) or return;
 
 	# Rely on the fgrptmp remote groups in the config file rather
@@ -510,7 +512,7 @@ sub resume_fetch {
 }
 
 sub fgrp_enqueue {
-	my ($fgrp) = @_;
+	my ($fgrp, $end) = @_; # $end calls fgrp_fetch_all
 	return if !keep_going($fgrp);
 	my $opt = { 2 => $fgrp->{lei}->{2} };
 	# --no-tags is required to avoid conflicts
@@ -523,12 +525,11 @@ sub fgrp_enqueue {
 		$fgrp->{dry_run} ? $fgrp->{lei}->qerr("# @cmd @kv") :
 				run_die([@cmd, @kv], undef, $opt);
 	}
-	$fgrp->{fgrp_todo} // die 'BUG: no fgrp_todo';
-	push @{$fgrp->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
+	push @{$FGRP_TODO->{$fgrp->{-osdir}}}, $fgrp;
 }
 
 sub clone_v1 {
-	my ($self, $nohang) = @_;
+	my ($self, $end) = @_;
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
 	my $uri = URI->new($self->{cur_src} // $self->{src});
@@ -540,7 +541,8 @@ sub clone_v1 {
 	my $resume = -d $dst;
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
-		$resume ? cmp_fp_do($fgrp, \&fgrp_enqueue) : fgrp_enqueue($fgrp)
+		$resume ? cmp_fp_do($fgrp, \&fgrp_enqueue, $end)
+			: fgrp_enqueue($fgrp, $end);
 	} elsif ($resume) {
 		cmp_fp_do($self, \&resume_fetch, $uri, $fini);
 	} else { # normal clone
@@ -562,10 +564,10 @@ sub clone_v1 {
 
 	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
 	$self->{'txt.description'} = $d if defined $d;
-	(!defined($d) && !$nohang) and
+	(!defined($d) && !$end) and
 		_get_txt_start($self, 'description', $fini);
 
-	$nohang or do_reap($self, 1); # for non-manifest clone
+	$end or do_reap($self, 1); # for non-manifest clone
 }
 
 sub parse_epochs ($$) {
@@ -785,7 +787,6 @@ sub clone_v2_prep ($$;$) {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
-	delete $task->{todo}; # $self->{todo} still exists
 	my (@skip, $desc);
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
@@ -813,7 +814,7 @@ failed to extract epoch number from $src
 			$etask->{cur_dst} = $edst;
 			$etask->{-is_epoch} = $fini;
 			my $ref = $ent->{reference} // '';
-			push @{$self->{todo}->{$ref}}, $etask;
+			push @{$TODO->{$ref}}, $etask;
 			$self->{any_want}->{$key} = 1;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst, $ent);
@@ -917,7 +918,9 @@ sub multi_inbox ($$$) {
 
 sub clone_all {
 	my ($self, $m) = @_;
-	my $todo = delete $self->{todo};
+	my $todo = $TODO;
+	$TODO = \'BUG on further use';
+	my $end = PublicInbox::OnDestroy->new($$, \&fgrp_fetch_all, $self);
 	{
 		my $nodep = delete $todo->{''};
 
@@ -929,7 +932,7 @@ sub clone_all {
 
 		# handle no-dependency repos, first
 		for (@$nodep) {
-			clone_v1($_, 1);
+			clone_v1($_, $end);
 			return if !keep_going($self);
 		}
 	}
@@ -947,14 +950,16 @@ EOM
 			}
 			my $y = delete $todo->{$x} // next; # already done
 			for (@$y) {
-				clone_v1($_, 1);
+				clone_v1($_, $end);
 				return if !keep_going($self);
 			}
 			last; # restart %$todo iteration
 		}
 	}
-	do_reap($self, 1); # finish all fingerprint checks
-	fgrp_fetch_all($self);
+
+	# $end->DESTROY will call fgrp_fetch_all once all references
+	# in $LIVE are gone, and do_reap will eventually drain $LIVE
+	$end = undef;
 	do_reap($self, 1);
 }
 
@@ -1007,8 +1012,6 @@ sub try_manifest {
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
-	local $self->{todo} = {};
-	local $self->{fgrp_todo} = {}; # { objstore_dir => [fgrp, ...] }
 	if ($v2) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
@@ -1054,7 +1057,7 @@ E: `$task->{cur_dst}' must not contain newline
 EOM
 			$task->{cur_src} .= '/';
 			my $dep = $task->{-ent}->{reference} // '';
-			push @{$self->{todo}->{$dep}}, $task; # for clone_all
+			push @{$TODO->{$dep}}, $task; # for clone_all
 			$self->{any_want}->{$name} = 1;
 		}
 	}
@@ -1112,6 +1115,8 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 			$self->{"-$k"} = $v;
 		}
 		local $LIVE = {};
+		local $TODO = {};
+		local $FGRP_TODO = {};
 		my $iv = $lei->{opt}->{'inbox-version'} //
 			return start_clone_url($self);
 		return clone_v1($self) if $iv == 1;
