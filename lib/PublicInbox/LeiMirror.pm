@@ -763,6 +763,7 @@ help :
 	@echo Rarely needed targets:
 	@echo '    make reindex      - may be needed for new features/bugfixes'
 	@echo '    make compact      - rewrite Xapian storage to save space'
+	@echo '    make index        - initial index after clone
 
 fetch :
 	public-inbox-fetch
@@ -779,12 +780,14 @@ update :
 		echo 'public-inbox index not initialized'; \
 		echo 'see public-inbox-index(1) man page'; \
 	fi
+index :
+	public-inbox-index
 reindex :
 	public-inbox-index --reindex
 compact :
 	public-inbox-compact
 
-.PHONY : help fetch update reindex compact
+.PHONY : help fetch update index reindex compact
 EOM
 		close $fh or die "close($f): $!";
 	} else {
