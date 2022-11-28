@@ -428,20 +428,9 @@ sub forkgroup_prep {
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my $rn = substr(sha256_hex($key), 0, 16);
 	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
-		my $alt = File::Spec->rel2abs("$dir/objects");
 		PublicInbox::Import::init_bare($self->{cur_dst});
-		my $o = "$self->{cur_dst}/objects";
-		my $f = "$o/info/alternates";
-		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
-		open my $fh, '+>>', $f or die "open($f): $!";
-		seek($fh, SEEK_SET, 0) or die "seek($f): $!";
-		chomp(my @cur = <$fh>);
-		if (!grep(/\A\Q$l\E\z/, @cur)) {
-			say $fh $l or die "say($f): $!";
-		}
-		close $fh or die "close($f): $!";
-		$f = "$self->{cur_dst}/config";
-		open $fh, '+>>', $f or die "open:($f): $!";
+		my $f = "$self->{cur_dst}/config";
+		open my $fh, '+>>', $f or die "open:($f): $!";
 		print $fh <<EOM or die "print($f): $!";
 ; rely on the "$rn" remote in the
 ; $fg fork group for fetches
@@ -451,6 +440,19 @@ sub forkgroup_prep {
 ;	fetch = +refs/*:refs/*
 ;	mirror = true
 EOM
+		close $fh or die "close($f): $!";
+	}
+	if (!$self->{dry_run}) {
+		my $alt = File::Spec->rel2abs("$dir/objects");
+		my $o = "$self->{cur_dst}/objects";
+		my $f = "$o/info/alternates";
+		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
+		open my $fh, '+>>', $f or die "open($f): $!";
+		seek($fh, SEEK_SET, 0) or die "seek($f): $!";
+		chomp(my @cur = <$fh>);
+		if (!grep(/\A\Q$l\E\z/, @cur)) {
+			say $fh $l or die "say($f): $!";
+		}
 		close $fh or die "close($f): $!";
 	}
 	bless {
