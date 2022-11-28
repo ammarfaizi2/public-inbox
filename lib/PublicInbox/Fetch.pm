@@ -48,7 +48,6 @@ sub do_manifest ($$$) {
 	my $muri = URI->new("$ibx_uri/manifest.js.gz");
 	my $ft = File::Temp->new(TEMPLATE => 'm-XXXX',
 				UNLINK => 1, DIR => $dir, SUFFIX => '.tmp');
-	my $fn = $ft->filename;
 	my $mf = "$dir/manifest.js.gz";
 	my $m0; # current manifest.js.gz contents
 	if (open my $fh, '<', $mf) {
@@ -57,7 +56,7 @@ sub do_manifest ($$$) {
 		};
 		warn($@) if $@;
 	}
-	my ($bn) = ($fn =~ m!/([^/]+)\z!);
+	my ($bn) = ($ft->filename =~ m!/([^/]+)\z!);
 	my $curl_cmd = $lei->{curl}->for_uri($lei, $muri, qw(-R -o), $bn);
 	my $opt = { -C => $dir };
 	$opt->{$_} = $lei->{$_} for (0..2);
@@ -68,7 +67,7 @@ sub do_manifest ($$$) {
 		return;
 	}
 	my $m1 = eval {
-		PublicInbox::LeiMirror::decode_manifest($ft, $fn, $muri);
+		PublicInbox::LeiMirror::decode_manifest($ft, $ft, $muri);
 	} or return [ 404, $muri ];
 	my $mdiff = { %$m1 };
 
