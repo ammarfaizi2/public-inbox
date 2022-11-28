@@ -289,8 +289,8 @@ sub fgrp_update_old ($) { # for git <1.8.5
 }
 
 sub upr { # feed `git update-ref --stdin -z' verbosely
-	my ($fgrp, $w, $op, $ref, $oid) = @_;
-	$fgrp->{lei}->qerr("# $op $ref $oid");
+	my ($lei, $w, $op, $ref, $oid) = @_;
+	$lei->qerr("# $op $ref $oid") if $lei->{opt}->{verbose};
 	print $w "$op $ref\0$oid\0" or die "print(w): $!";
 }
 
@@ -307,21 +307,22 @@ sub fgrp_update {
 	pipe(my ($r, $w)) or die "pipe: $!";
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
-	$fgrp->{lei}->qerr("# @$cmd");
-	my $opt = { 0 => $r, 1 => $fgrp->{lei}->{1}, 2 => $fgrp->{lei}->{2} };
+	my $lei = $fgrp->{lei};
+	$lei->qerr("# @$cmd");
+	my $opt = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2} };
 	my $pid = spawn($cmd, undef, $opt);
 	close $r or die "close(r): $!";
 	for my $ref (keys %dst) {
 		my $new = delete $src{$ref};
 		my $old = $dst{$ref};
 		if (defined $new) {
-			upr($fgrp, $w, 'update', $ref, $new) if $new ne $old;
+			upr($lei, $w, 'update', $ref, $new) if $new ne $old;
 		} else {
-			upr($fgrp, $w, 'delete', $ref, $old);
+			upr($lei, $w, 'delete', $ref, $old);
 		}
 	}
 	while (my ($ref, $oid) = each %src) {
-		upr($fgrp, $w, 'create', $ref, $oid);
+		upr($lei, $w, 'create', $ref, $oid);
 	}
 	if (close($w)) { # git >= 1.8.5
 		$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
