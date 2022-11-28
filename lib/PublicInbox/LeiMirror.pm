@@ -6,7 +6,6 @@ package PublicInbox::LeiMirror;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
-use PublicInbox::Config;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
 use PublicInbox::Spawn qw(popen_rd spawn);
@@ -14,7 +13,13 @@ use File::Path ();
 use File::Temp ();
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
 use Carp qw(croak);
-our %LIVE;
+use URI;
+use PublicInbox::Config;
+use PublicInbox::Inbox;
+use PublicInbox::LeiCurl;
+use PublicInbox::OnDestroy;
+
+our %LIVE; # pid => callback
 
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
@@ -191,6 +196,8 @@ sub index_cloned_inbox {
 	# n.b. public-inbox-clone works w/o (SQLite || Xapian)
 	# lei is useless without Xapian + SQLite
 	if ($lei->{cmd} ne 'public-inbox-clone') {
+		require PublicInbox::InboxWritable;
+		require PublicInbox::Admin;
 		my $ibx = delete($self->{ibx}) // {
 			address => [ 'lei@example.com' ],
 			version => $iv,
@@ -389,6 +396,7 @@ failed to extract epoch number from $src
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 
 	-d $dst || File::Path::mkpath($dst);
+	require PublicInbox::Lock;
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 
@@ -595,14 +603,6 @@ sub do_mirror { # via wq_io_do
 sub start {
 	my ($cls, $lei, $src, $dst) = @_;
 	my $self = bless { src => $src, dst => $dst }, $cls;
-	if ($src =~ m!https?://!) {
-		require URI;
-		require PublicInbox::LeiCurl;
-	}
-	require PublicInbox::Lock;
-	require PublicInbox::Inbox;
-	require PublicInbox::Admin;
-	require PublicInbox::InboxWritable;
 	$lei->request_umask;
 	my ($op_c, $ops) = $lei->workers_start($self, 1);
 	$lei->{wq1} = $self;
