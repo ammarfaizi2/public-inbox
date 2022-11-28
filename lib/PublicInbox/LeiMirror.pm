@@ -1055,7 +1055,7 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 			my ($k) = (split(/\./, $default))[0];
 			my $v = $lei->{opt}->{$k} // next;
 			$v = $default if $v eq '';
-			$v = "$self->{dst}/$v" if $v !~ m!\A/!;
+			$v = "$self->{dst}/$v" if $v !~ m!\A\.{0,2}/!;
 			$self->{"-$k"} = $v;
 		}
 		local $LIVE = {};
