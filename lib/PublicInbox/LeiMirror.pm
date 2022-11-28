@@ -826,7 +826,7 @@ sub load_current_manifest ($) {
 	if (open(my $fh, '<', $fn)) {
 		decode_manifest($fh, $fn, $fn);
 	} elsif ($!{ENOENT}) { # non-fatal, we can just do it slowly
-		warn "open($fn): $!\n";
+		warn "open($fn): $!\n" if -d $self->{dst};
 		undef;
 	} else {
 		die "open($fn): $!\n";
