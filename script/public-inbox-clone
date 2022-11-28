@@ -59,7 +59,6 @@ my $mrr = bless {
 }, 'PublicInbox::LeiMirror';
 
 $? = 0;
-$mrr->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 $mrr->do_mirror;
 $mrr->can('_wq_done_wait')->([$mrr, $lei], $$);
 exit(($lei->{child_error} // 0) >> 8);

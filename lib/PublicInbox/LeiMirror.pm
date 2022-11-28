@@ -938,6 +938,7 @@ sub start_clone_url {
 sub do_mirror { # via wq_io_do or public-inbox-clone
 	my ($self) = @_;
 	my $lei = $self->{lei};
+	$self->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 	umask($lei->{client_umask}) if defined $lei->{client_umask};
 	eval {
 		my $ic = $lei->{opt}->{'inbox-config'} //= 'always';
