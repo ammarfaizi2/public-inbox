@@ -995,6 +995,7 @@ sub try_manifest {
 	}
 	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX', %opt);
 	my $cmd = $curl->for_uri($lei, $uri, qw(-f -R -o), $ft->filename);
+	push(@$cmd, '-z', $manifest) if -f $manifest;
 	my $mf_url = "$uri";
 	%opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
@@ -1002,6 +1003,10 @@ sub try_manifest {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
 		return $lei->child_error($cerr, "@$cmd failed");
 	}
+
+	# bail out if curl -z/--timecond hit 304 Not Modified, $ft will be empty
+	return $lei->qerr("# $manifest unchanged") if -f $manifest && !-s $ft;
+
 	my $m = eval { decode_manifest($ft, $ft, $uri) };
 	if ($@) {
 		warn $@;
