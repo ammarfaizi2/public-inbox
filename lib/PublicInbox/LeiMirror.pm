@@ -320,6 +320,22 @@ sub reap_clone { # async, called via SIGCHLD
 	}
 }
 
+sub v2_done {
+	my ($self) = @_;
+	require PublicInbox::MultiGit;
+	my $dst = $self->{cur_dst} // $self->{dst};
+	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
+	$mg->fill_alternates;
+	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
+	for my $edst (@{delete($self->{-read_only}) // []}) {
+		my @st = stat($edst) or die "stat($edst): $!";
+		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
+	}
+	write_makefile($dst, 2);
+	delete $self->{-locked} // die "BUG: $dst not locked"; # unlock
+	index_cloned_inbox($self, 2);
+}
+
 sub clone_v2 ($$;$) {
 	my ($self, $v2_epochs, $m) = @_; # $m => manifest.js.gz hashref
 	my $lei = $self->{lei};
@@ -328,7 +344,8 @@ sub clone_v2 ($$;$) {
 	my $pfx = $curl->torsocks($lei, $first_uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
-	my (@src_edst, @read_only, @skip);
+	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
+	my (@src_edst, @skip);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
@@ -342,17 +359,17 @@ failed to extract epoch number from $src
 			push @src_edst, $src, $edst;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst);
-			push @read_only, $edst;
+			push @{$task->{-read_only}}, $edst;
 			push @skip, $key;
 		}
 	}
 	# filter out the epochs we skipped
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
-	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
 	my %live;
-	$live{_try_config_start($task)} = [ \&_try_config_done, $task ];
-	my $on_destroy = $lk->lock_for_scope($$);
+	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
+	$live{_try_config_start($task)} = [ \&_try_config_done, $task, $fini ];
+	$task->{-locked} = $lk->lock_for_scope($$);
 	my @cmd = clone_cmd($lei, my $opt = {});
 	my $jobs = $self->{lei}->{opt}->{jobs} // 2;
 	my $sigchld = sub {
@@ -371,29 +388,15 @@ failed to extract epoch number from $src
 	};
 	do {
 		$sigchld->(0) while keys(%live) >= $jobs;
-		local $SIG{CHLD} = $sigchld;
 		while (keys(%live) < $jobs && @src_edst &&
 				!$lei->{child_error}) {
 			my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
 			$lei->qerr("# @$cmd");
 			my $pid = spawn($cmd, undef, $opt);
-			$live{$pid} = [ \&reap_clone, $lei, $cmd ];
+			$live{$pid} = [ \&reap_clone, $lei, $cmd, $fini ];
 		}
 	} while (@src_edst && !$lei->{child_error});
 	$sigchld->(0) while keys(%live);
-	return if $lei->{child_error};
-
-	require PublicInbox::MultiGit;
-	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
-	$mg->fill_alternates;
-	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
-	for my $edst (@read_only) {
-		my @st = stat($edst) or die "stat($edst): $!";
-		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
-	}
-	write_makefile($dst, 2);
-	undef $on_destroy; # unlock
-	index_cloned_inbox($task, 2);
 }
 
 sub decode_manifest ($$$) {
