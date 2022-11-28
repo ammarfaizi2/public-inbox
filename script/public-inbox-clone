@@ -38,12 +38,9 @@ defined($dst) or ($dst) = ($url =~ m!/([^/]+)/?\z!);
 index($dst, "\n") >= 0 and die "`\\n' not allowed in `$dst'";
 
 # n.b. this is still a truckload of code...
-require URI;
 require PublicInbox::LEI;
 require PublicInbox::LeiExternal;
 require PublicInbox::LeiMirror;
-require PublicInbox::LeiCurl;
-require PublicInbox::Lock;
 
 $url = PublicInbox::LeiExternal::ext_canonicalize($url);
 my $lei = bless {
