@@ -218,8 +218,6 @@ sub set_description ($) {
 sub index_cloned_inbox {
 	my ($self, $iv) = @_;
 	my $lei = $self->{lei};
-	eval { set_description($self) };
-	warn $@ if $@;
 
 	# n.b. public-inbox-clone works w/o (SQLite || Xapian)
 	# lei is useless without Xapian + SQLite
@@ -580,6 +578,8 @@ sub v1_done { # called via OnDestroy
 		$f->unlink_on_destroy(0);
 	}
 	pack_refs($self, $dst) if delete $self->{-do_pack_refs};
+	eval { set_description($self) };
+	warn $@ if $@;
 	return if ($self->{-is_epoch} ||
 		$self->{lei}->{opt}->{'inbox-config'} ne 'always');
 	write_makefile($dst, 1);
@@ -604,6 +604,8 @@ sub v2_done { # called via OnDestroy
 	}
 	write_makefile($dst, 2);
 	undef $lck; # unlock
+	eval { set_description($self) };
+	warn $@ if $@;
 	index_cloned_inbox($self, 2);
 }
 
