@@ -8,7 +8,7 @@ use v5.10.1;
 use parent qw(PublicInbox::IPC);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
-use PublicInbox::Spawn qw(popen_rd spawn);
+use PublicInbox::Spawn qw(popen_rd spawn run_die);
 use File::Path ();
 use File::Temp ();
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
@@ -303,8 +303,8 @@ EOM
 	$want
 }
 
-sub init_placeholder ($$) {
-	my ($src, $edst) = @_;
+sub init_placeholder ($$$) {
+	my ($src, $edst, $owner) = @_;
 	PublicInbox::Import::init_bare($edst);
 	my $f = "$edst/config";
 	open my $fh, '>>', $f or die "open($f): $!";
@@ -318,6 +318,12 @@ sub init_placeholder ($$) {
 ; will not fetch updates for it unless write permission is added.
 ; Hint: chmod +w $edst
 EOM
+	if (defined($owner)) {
+		print $fh <<EOM or die "print($f): $!";
+[gitweb]
+	owner = $owner
+EOM
+	}
 	close $fh or die "close:($f): $!";
 }
 
@@ -334,7 +340,11 @@ sub reap_clone { # async, called via SIGCHLD
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
 	_write_inbox_config($self);
-	write_makefile($self->{cur_dst} // $self->{dst}, 1);
+	my $dst = $self->{cur_dst} // $self->{dst};
+	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
+		run_die([qw(git config -f), "$dst/config", 'gitweb.owner', $o]);
+	}
+	write_makefile($dst, 1);
 	index_cloned_inbox($self, 1);
 }
 
@@ -346,6 +356,11 @@ sub v2_done { # called via OnDestroy
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
 	$mg->fill_alternates;
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
+	my $edst_owner = delete($self->{-owner}) // [];
+	while (@$edst_owner) {
+		my ($edst, $o) = splice(@$edst_owner);
+		run_die [qw(git config -f), "$edst/config", 'gitweb.owner', $o];
+	}
 	for my $edst (@{delete($self->{-read_only}) // []}) {
 		my @st = stat($edst) or die "stat($edst): $!";
 		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
@@ -384,10 +399,13 @@ failed to extract epoch number from $src
 
 		$1 + 0 == $nr or die "BUG: <$uri> miskeyed $1 != $nr";
 		$edst .= "/git/$nr.git";
+		$m->{$key} // die "BUG: `$key' not in manifest.js.gz";
 		if (!$want || $want->{$nr}) {
 			push @src_edst, $src, $edst;
+			my $o = $m->{$key}->{owner};
+			push(@{$task->{-owner}}, $edst, $o) if defined($o);
 		} else { # create a placeholder so users only need to chmod +w
-			init_placeholder($src, $edst);
+			init_placeholder($src, $edst, $m->{$key}->{owner});
 			push @{$task->{-read_only}}, $edst;
 			push @skip, $key;
 		}

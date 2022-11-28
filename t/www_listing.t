@@ -150,6 +150,8 @@ EOM
 		undef, $opt), 'clone w/include') or diag "clone_err=$clone_err";
 	ok(-d "$tmpdir/incl/alt", 'alt cloned');
 	ok(!-d "$tmpdir/incl/v2" && !-d "$tmpdir/incl/bare", 'only alt cloned');
+	is(xqx([qw(git config -f), "$tmpdir/incl/alt/config", 'gitweb.owner']),
+		"lorelei \xc4\x80\n", 'gitweb.owner set by -clone');
 
 	undef $td;
 
