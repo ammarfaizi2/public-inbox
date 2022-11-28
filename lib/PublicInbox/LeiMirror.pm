@@ -378,7 +378,7 @@ sub forkgroup_prep {
 	my $dir = "$os/$fg.git";
 	my @cmd = ('git', "--git-dir=$dir", 'config');
 	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
-	if (!-d $dir) {
+	if (!-d $dir && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($dir);
 		for ('repack.useDeltaIslands=true',
 				'pack.island=refs/remotes/([^/]+)/') {
@@ -391,15 +391,17 @@ sub forkgroup_prep {
 	$rn =~ s/\.*?(?:\.git)?\.*?\z//s;
 	$rn =~ s![\@\{\}/:\?\[\]\^~\s\f[:cntrl:]\*]!_!isg;
 	$rn .= '-'.substr(sha256_hex($key), 0, 16);
-	# --no-tags is required to avoid conflicts
-	for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*",
-			'tagopt=--no-tags') {
-		my @kv = split(/=/, $_, 2);
-		$kv[0] = "remote.$rn.$kv[0]";
-		run_die([@cmd, @kv], undef, $opt);
+	unless ($self->{dry_run}) {
+		# --no-tags is required to avoid conflicts
+		for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*",
+				'tagopt=--no-tags') {
+			my @kv = split(/=/, $_, 2);
+			$kv[0] = "remote.$rn.$kv[0]";
+			run_die([@cmd, @kv], undef, $opt);
+		}
 	}
 	$self->{-do_pack_refs} = 1; # likely coderepo
-	if (!-d $self->{cur_dst}) {
+	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
 		PublicInbox::Import::init_bare($self->{cur_dst});
 		my $o = "$self->{cur_dst}/objects";
