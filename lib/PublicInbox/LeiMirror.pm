@@ -147,9 +147,11 @@ sub _write_inbox_config {
 	open my $fh, '>', $f or die "open($f): $!";
 	print $fh $buf or die "print: $!";
 	chmod(0444 & ~umask, $fh) or die "chmod($f): $!";
-	my $mtime = delete $self->{'mtime._/text/config/raw'} // die 'BUG: no mtime';
+	my $mtime = delete $self->{'mtime._/text/config/raw'};
 	$fh->flush or die "flush($f): $!";
-	utime($mtime, $mtime, $fh) or die "utime($f): $!";
+	if (defined $mtime) {
+		utime($mtime, $mtime, $fh) or die "utime($f): $!";
+	}
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
 	my $ibx = $self->{ibx} = {};
 	for my $sec (grep(/\Apublicinbox\./, @{$cfg->{-section_order}})) {
@@ -238,8 +240,11 @@ sub clone_v1 {
 	reap_live() while keys(%LIVE) >= $jobs;
 
 	_get_txt_start($self, '_/text/config/raw', $fini);
-	_get_txt_start($self, 'description', $fini);
-	reap_live() until ($nohang || !keys(%LIVE));
+	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
+	defined($d) ? ($self->{'txt.description'} = $d) :
+		_get_txt_start($self, 'description', $fini);
+
+	reap_live() until ($nohang || !keys(%LIVE)); # for non-manifest clone
 }
 
 sub parse_epochs ($$) {
@@ -538,6 +543,8 @@ EOM
 			return if $self->{lei}->{child_error};
 
 			my $task = bless { %$self }, __PACKAGE__;
+			$task->{-ent} = $m->{$name} //
+					die("BUG: no `$name' in manifest");
 			$task->{cur_src} = "$uri";
 			$task->{cur_dst} = $task->{dst};
 			if ($n > 1) {
