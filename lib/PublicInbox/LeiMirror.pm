@@ -375,7 +375,7 @@ sub fgrp_fetched {
 sub fgrp_fetch {
 	my ($fgrp, $fini) = @_;
 	my $cmd = [ @{$fgrp->{-torsocks}}, 'git', "--git-dir=$fgrp->{-osdir}",
-			fetch_args($fgrp->{lei}, my $opt = {}),
+			fetch_args($fgrp->{lei}, my $opt = {}), '--no-tags',
 			$fgrp->{-remote} ];
 	$fgrp->{-fini} = $fini;
 	do_reap($fgrp);
@@ -405,7 +405,9 @@ sub forkgroup_prep {
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my ($bn) = ($key =~ m{/([a-z0-9_,;=!\+\{\}\|][^/]*)(?:\.git)?\z}i);
 	my $rn = "$bn-".substr(sha256_hex($key), 0, 16);
-	for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*") {
+	# --no-tags is required to avoid conflicts
+	for ("url=$uri", "fetch=+refs/*:refs/remotes/$rn/*",
+			'tagopt=--no-tags') {
 		my @kv = split(/=/, $_, 2);
 		$kv[0] = "remote.$rn.$kv[0]";
 		run_die([@cmd, @kv], undef, $opt);
