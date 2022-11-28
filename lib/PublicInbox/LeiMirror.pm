@@ -316,7 +316,7 @@ sub fgrp_update {
 	}
 	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
 	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd ];
-	do_reap($fgrp);
+	pack_refs($fgrp, $fgrp->{cur_dst});
 }
 
 sub pack_refs {
@@ -324,49 +324,101 @@ sub pack_refs {
 	do_reap($self);
 	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
 	$self->{lei}->qerr("# @$cmd");
+	return if $self->{dry_run};
 	my $opt = { 1 => $self->{lei}->{1}, 2 => $self->{lei}->{2} };
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd ];
 }
 
-sub fgrp_fetched {
-	my ($fgrp) = @_;
-	return if $fgrp->{dry_run} || !$LIVE;
-	my $rn = $fgrp->{-remote};
-	my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
-	pack_refs($fgrp, $fgrp->{-osdir}); # objstore refs always packed
+sub fgrpv_done {
+	my ($fgrpv) = @_;
+	return if !$LIVE;
+	my $pid;
+	my $first = $fgrpv->[0] // die 'BUG: no fgrpv->[0]';
+	pack_refs($first, $first->{-osdir}); # objstore refs always packed
+	for my $fgrp (@$fgrpv) {
+		my $rn = $fgrp->{-remote};
+		my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
 
-	my $update_ref = PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
+		my $update_ref = $fgrp->{dry_run} ? undef :
+			PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
 
-	my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
-		"--format=refs/%(refname:lstrip=3)%00%(objectname)",
-		"refs/remotes/$rn/" ];
-	do_reap($fgrp);
-	open($fgrp->{srcfh}, '+>', undef) or die "open(src): $!";
-	$fgrp->{lei}->qerr("# @$src >SRC");
-	my $pid = spawn($src, undef, { %opt, 1 => $fgrp->{srcfh} });
-	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $src, $update_ref ];
-
-	my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
-		'--format=%(refname)%00%(objectname)' ];
-	do_reap($fgrp);
-	open($fgrp->{dstfh}, '+>', undef) or die "open(dst): $!";
-	$fgrp->{lei}->qerr("# @$dst >DST");
-	$pid = spawn($dst, undef, { %opt, 1 => $fgrp->{dstfh} });
-	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $dst, $update_ref ];
+		my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
+			"--format=refs/%(refname:lstrip=3)%00%(objectname)",
+			"refs/remotes/$rn/" ];
+		do_reap($fgrp);
+		$fgrp->{lei}->qerr("# @$src >SRC");
+		if ($update_ref) {
+			open(my $fh, '+>', undef) or die "open(src): $!";
+			$pid = spawn($src, undef, { %opt, 1 => $fh });
+			$fgrp->{srcfh} = $fh;
+			$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $src, $update_ref ]
+		}
+		my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
+			'--format=%(refname)%00%(objectname)' ];
+		do_reap($fgrp);
+		$fgrp->{lei}->qerr("# @$dst >DST");
+		if ($update_ref) {
+			open(my $fh, '+>', undef) or die "open(dst): $!";
+			$pid = spawn($dst, undef, { %opt, 1 => $fh });
+			$fgrp->{dstfh} = $fh;
+			$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $dst, $update_ref ]
+		}
+	}
 }
 
-sub fgrp_fetch {
-	my ($fgrp, $fini) = @_;
-	my $cmd = [ @{$fgrp->{-torsocks}}, 'git', "--git-dir=$fgrp->{-osdir}",
-			fetch_args($fgrp->{lei}, my $opt = {}), '--no-tags',
-			$fgrp->{-remote} ];
-	$fgrp->{-fini} = $fini;
-	do_reap($fgrp);
-	$fgrp->{lei}->qerr("# @$cmd");
-	return if $fgrp->{dry_run};
-	my $fgrp_fini = PublicInbox::OnDestroy->new($$, \&fgrp_fetched, $fgrp);
-	my $pid = spawn($cmd, undef, $opt);
-	$LIVE->{$pid} = [ \&reap_cmd, $fgrp, $cmd, $fgrp_fini ];
+sub fgrp_fetch_all {
+	my ($self) = @_;
+	my $todo = delete $self->{fgrp_todo} or return;
+	keys(%$todo) or return;
+
+	# Rely on the fgrptmp remote groups in the config file rather
+	# than listing all remotes since the remote name list may exceed
+	# system argv limits:
+	my $grp = 'fgrptmp';
+
+	my @git = (@{$self->{-torsocks}}, 'git');
+	my $j = $self->{lei}->{opt}->{jobs};
+	my $opt = {};
+	my @fetch = do {
+		local $self->{lei}->{opt}->{jobs} = 1;
+		(fetch_args($self->{lei}, $opt),
+			qw(--no-tags --multiple));
+	};
+	push(@fetch, "-j$j") if $j;
+	my $pid;
+	while (my ($osdir, $fgrpv) = each %$todo) {
+		my $f = "$osdir/config";
+
+		# clobber group from previous run atomically
+		my $cmd = ['git', "--git-dir=$osdir", qw(config -f),
+				$f, '--unset-all', "remotes.$grp"];
+		$self->{lei}->qerr("# @$cmd");
+		if (!$self->{dry_run}) {
+			$pid = spawn($cmd);
+			waitpid($pid, 0) // die "waitpid: $!";
+			die "E: @$cmd: \$?=$?" if ($? && ($? >> 8) != 5);
+
+			# update the config atomically via O_APPEND while
+			# respecting git-config locking
+			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY)
+				or die "open($f.lock): $!";
+			open my $fh, '>>', $f or die "open(>>$f): $!";
+			$fh->autoflush(1);
+			my $buf = join('', "[remotes]\n",
+				map { "\t$grp = $_->{-remote}\n" } @$fgrpv);
+			print $fh $buf or die "print($f): $!";
+			close $fh or die "close($f): $!";
+			unlink("$f.lock") or die "unlink($f.lock): $!";
+		}
+
+		$cmd = [ @git, "--git-dir=$osdir", @fetch, $grp ];
+		do_reap($self);
+		$self->{lei}->qerr("# @$cmd");
+		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $fgrpv);
+		return if $self->{dry_run};
+		$pid = spawn($cmd, undef, $opt);
+		$LIVE->{$pid} = [ \&reap_cmd, $self, $cmd, $end ];
+	}
 }
 
 # keep this idempotent for future use by public-inbox-fetch
@@ -400,7 +452,6 @@ sub forkgroup_prep {
 			run_die([@cmd, @kv], undef, $opt);
 		}
 	}
-	$self->{-do_pack_refs} = 1; # likely coderepo
 	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
 		PublicInbox::Import::init_bare($self->{cur_dst});
@@ -440,18 +491,21 @@ sub clone_v1 {
 	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
-	my $cmd = [ @{$self->{-torsocks}}, clone_cmd($lei, my $opt = {}),
-		"$uri", $dst ];
-	my $fgrp = forkgroup_prep($self, $uri);
-	if (!defined($fgrp) && defined($self->{-ent})) {
-		if (defined(my $ref = $self->{-ent}->{reference})) {
-			-e "$self->{dst}$ref" and
-				push @$cmd, '--reference', "$self->{dst}$ref";
+	if (my $fgrp = forkgroup_prep($self, $uri)) {
+		$fgrp->{-fini} = $fini;
+		push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
+	} else { # normal fetch
+		my $cmd = [ @{$self->{-torsocks}},
+				clone_cmd($lei, my $opt = {}), "$uri", $dst ];
+		if (defined($self->{-ent})) {
+			if (defined(my $ref = $self->{-ent}->{reference})) {
+				-e "$self->{dst}$ref" and
+					push @$cmd, '--reference',
+						"$self->{dst}$ref";
+			}
 		}
-	}
-	$fgrp ? fgrp_fetch($fgrp, $fini) :
 		start_clone($self, $cmd, $opt, $fini);
-
+	}
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
 				/\A(?:always|v1)\z/s) {
 		_get_txt_start($self, '_/text/config/raw', $fini);
@@ -576,7 +630,6 @@ sub v1_done { # called via OnDestroy
 			ft_rename($ft, $fn, 0666, $fh);
 		}
 	}
-	pack_refs($self, $dst) if delete $self->{-do_pack_refs};
 	eval { set_description($self) };
 	warn $@ if $@;
 	return if ($self->{-is_epoch} ||
@@ -770,6 +823,7 @@ EOM
 			last; # restart %$todo iteration
 		}
 	}
+	fgrp_fetch_all($self);
 	do_reap($self, 1);
 }
 
@@ -793,6 +847,7 @@ sub try_manifest {
 	my $uri = URI->new($self->{src});
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
+	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
 	$uri->path($path . '/manifest.js.gz');
@@ -814,6 +869,7 @@ sub try_manifest {
 	return $lei->child_error(1, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
 	local $self->{todo} = {};
+	local $self->{fgrp_todo} = {}; # { objstore_dir => [fgrp, ...] }
 	if ($v2) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
