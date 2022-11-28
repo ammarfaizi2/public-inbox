@@ -460,41 +460,34 @@ EOM
 }
 
 sub fp_done {
-	my ($self, $go_fetch) = @_;
+	my ($self, $cb, @arg) = @_;
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
 	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
 	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
-	return if $A ne $B; # $go_fetch->DESTROY fires
-	$go_fetch->cancel;
+	return $cb->($self, @arg) if $A ne $B;
 	$self->{lei}->qerr("# $self->{-key} up-to-date");
 }
 
-sub cmp_fp_fetch {
-	my ($self, $go_fetch) = @_;
-	# $go_fetch is either resume_fetch or fgrp_enqueue
-	my $new = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
+sub cmp_fp_do {
+	my ($self, $cb, @arg) = @_;
+	# $cb is either resume_fetch or fgrp_enqueue
+	$self->{-ent} // return $cb->($self, @arg);
+	my $new = $self->{-ent}->{fingerprint} // return $cb->($self, @arg);
 	my $key = $self->{-key} // die 'BUG: no -key';
 	if (my $cur_ent = $self->{-local_manifest}->{$key}) {
 		# runs go_fetch->DESTROY run if eq
-		return $go_fetch->cancel if $cur_ent->{fingerprint} eq $new;
+		return if $cur_ent->{fingerprint} eq $new;
 	}
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
 	my $opt = { 2 => $self->{lei}->{2} };
 	open($opt->{1}, '+>', undef) or die "open(tmp): $!";
 	$self->{-show_ref} = $opt->{1};
-	my $done = PublicInbox::OnDestroy->new($$, \&fp_done, $self, $go_fetch);
+	my $done = PublicInbox::OnDestroy->new($$, \&fp_done, $self, $cb, @arg);
 	start_cmd($self, $cmd, $opt, $done);
-}
-
-sub resume_fetch_maybe {
-	my ($self, $uri, $fini) = @_;
-	my $go_fetch = PublicInbox::OnDestroy->new($$, \&resume_fetch, @_);
-	cmp_fp_fetch($self, $go_fetch) if $self->{-ent} &&
-				defined($self->{-ent}->{fingerprint});
 }
 
 sub resume_fetch {
@@ -516,18 +509,10 @@ sub resume_fetch {
 	start_cmd($self, $cmd, $opt, $fini);
 }
 
-sub fgrp_enqueue_maybe {
-	my ($self, $fgrp) = @_;
-	my $enq = PublicInbox::OnDestroy->new($$, \&fgrp_enqueue, $self, $fgrp);
-	cmp_fp_fetch($self, $enq) if $self->{-ent} &&
-					defined($self->{-ent}->{fingerprint});
-	# $enq->DESTROY calls fgrp_enqueue otherwise
-}
-
 sub fgrp_enqueue {
-	my ($self, $fgrp) = @_;
-	return if !keep_going($self);
-	my $opt = { 2 => $self->{lei}->{2} };
+	my ($fgrp) = @_;
+	return if !keep_going($fgrp);
+	my $opt = { 2 => $fgrp->{lei}->{2} };
 	# --no-tags is required to avoid conflicts
 	my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
 	my $rn = $fgrp->{-remote} // die 'BUG: no {-remote}';
@@ -535,10 +520,11 @@ sub fgrp_enqueue {
 	for ("url=$u", "fetch=+refs/*:refs/remotes/$rn/*", 'tagopt=--no-tags') {
 		my @kv = split(/=/, $_, 2);
 		$kv[0] = "remote.$rn.$kv[0]";
-		$self->{dry_run} ? $self->{lei}->qerr("# @cmd @kv") :
+		$fgrp->{dry_run} ? $fgrp->{lei}->qerr("# @cmd @kv") :
 				run_die([@cmd, @kv], undef, $opt);
 	}
-	push @{$self->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
+	$fgrp->{fgrp_todo} // die 'BUG: no fgrp_todo';
+	push @{$fgrp->{fgrp_todo}->{$fgrp->{-osdir}}}, $fgrp;
 }
 
 sub clone_v1 {
@@ -554,10 +540,9 @@ sub clone_v1 {
 	my $resume = -d $dst;
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
-		$resume ? fgrp_enqueue_maybe($self, $fgrp) :
-				fgrp_enqueue($self, $fgrp);
+		$resume ? cmp_fp_do($fgrp, \&fgrp_enqueue) : fgrp_enqueue($fgrp)
 	} elsif ($resume) {
-		resume_fetch_maybe($self, $uri, $fini);
+		cmp_fp_do($self, \&resume_fetch, $uri, $fini);
 	} else { # normal clone
 		my $cmd = [ @{$self->{-torsocks}},
 				clone_cmd($lei, my $opt = {}), "$uri", $dst ];
