@@ -300,7 +300,7 @@ sub fgrp_update {
 		qw(update-ref --stdin -z) ];
 	my $lei = $fgrp->{lei};
 	$lei->qerr("# @$cmd");
-	my $opt = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2} };
+	my $opt = { 0 => $r, 2 => $lei->{2} };
 	my $pid = spawn($cmd, undef, $opt);
 	close $r or die "close(r): $!";
 	for my $ref (keys %dst) {
@@ -332,7 +332,7 @@ sub pack_refs {
 	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
 	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
-	my $opt = { 1 => $self->{lei}->{1}, 2 => $self->{lei}->{2} };
+	my $opt = { 2 => $self->{lei}->{2} };
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd ];
 }
 
@@ -344,7 +344,7 @@ sub fgrpv_done {
 	pack_refs($first, $first->{-osdir}); # objstore refs always packed
 	for my $fgrp (@$fgrpv) {
 		my $rn = $fgrp->{-remote};
-		my %opt = map { $_ => $fgrp->{lei}->{$_} } (0..2);
+		my %opt = ( 2 => $fgrp->{lei}->{2} );
 
 		my $update_ref = $fgrp->{dry_run} ? undef :
 			PublicInbox::OnDestroy->new($$, \&fgrp_update, $fgrp);
@@ -401,7 +401,7 @@ sub fgrp_fetch_all {
 				$f, '--unset-all', "remotes.$grp"];
 		$self->{lei}->qerr("# @$cmd");
 		if (!$self->{dry_run}) {
-			$pid = spawn($cmd);
+			$pid = spawn($cmd, undef, { 2 => $self->{lei}->{2} });
 			waitpid($pid, 0) // die "waitpid: $!";
 			die "E: @$cmd: \$?=$?" if ($? && ($? >> 8) != 5);
 
@@ -518,7 +518,7 @@ sub resume_fetch {
 	my ($self, $uri, $fini) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my @git = ('git', "--git-dir=$dst");
-	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
+	my $opt = { 2 => $self->{lei}->{2} };
 	my $rn = 'origin'; # configurable?
 	for ("url=$uri", "fetch=+refs/*:refs/*", 'mirror=true') {
 		my @kv = split(/=/, $_, 2);
