@@ -20,7 +20,7 @@ use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 
-our %LIVE; # pid => callback
+our $LIVE; # pid => callback
 
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
@@ -68,7 +68,7 @@ sub try_scrape {
 			$n => [ URI->new($_), '' ]
 		} @v2_urls; # uniq
 		clone_v2($self, \%v2_epochs);
-		reap_live() while keys(%LIVE);
+		reap_live() while keys(%$LIVE);
 		return;
 	}
 
@@ -126,11 +126,11 @@ sub _get_txt_start { # non-fatal
 	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(--compressed -R -o),
 					$ft->filename);
 	my $jobs = $lei->{opt}->{jobs} // 1;
-	reap_live() while keys(%LIVE) >= $jobs;
+	reap_live() while keys(%$LIVE) >= $jobs;
 	$lei->qerr("# @$cmd");
 	return if $self->{dry_run};
 	$self->{"-get_txt.$endpoint"} = [ $ft, $cmd, $uri ];
-	$LIVE{spawn($cmd, undef, $opt)} =
+	$LIVE->{spawn($cmd, undef, $opt)} =
 			[ \&_get_txt_done, $self, $endpoint, $fini ];
 }
 
@@ -237,10 +237,10 @@ sub run_reap {
 sub start_clone {
 	my ($self, $cmd, $opt, $fini) = @_;
 	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
-	reap_live() while keys(%LIVE) >= $jobs;
+	reap_live() while keys(%$LIVE) >= $jobs;
 	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
-	$LIVE{spawn($cmd, undef, $opt)} = [ \&reap_clone, $self, $cmd, $fini ];
+	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_clone, $self, $cmd, $fini ]
 }
 
 sub clone_v1 {
@@ -264,7 +264,7 @@ sub clone_v1 {
 	defined($d) ? ($self->{'txt.description'} = $d) :
 		_get_txt_start($self, 'description', $fini);
 
-	reap_live() until ($nohang || !keys(%LIVE)); # for non-manifest clone
+	reap_live() until ($nohang || !keys(%$LIVE)); # for non-manifest clone
 }
 
 sub parse_epochs ($$) {
@@ -345,14 +345,14 @@ sub reap_clone { # async, called via SIGCHLD
 	my $cerr = $?;
 	$? = 0; # don't let it influence normal exit
 	if ($cerr) {
-		kill('TERM', keys %LIVE);
+		kill('TERM', keys %$LIVE);
 		$self->{lei}->child_error($cerr, "@$cmd failed");
 	}
 }
 
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
-	return if $self->{dry_run};
+	return if $self->{dry_run} || !$LIVE;
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
@@ -375,7 +375,7 @@ sub v1_done { # called via OnDestroy
 
 sub v2_done { # called via OnDestroy
 	my ($self) = @_;
-	return if $self->{dry_run};
+	return if $self->{dry_run} || !$LIVE;
 	_write_inbox_config($self);
 	require PublicInbox::MultiGit;
 	my $dst = $self->{cur_dst} // $self->{dst};
@@ -398,7 +398,7 @@ sub v2_done { # called via OnDestroy
 
 sub reap_live {
 	my $pid = waitpid(-1, 0) // die "waitpid(-1): $!";
-	if (my $x = delete $LIVE{$pid}) {
+	if (my $x = delete $LIVE->{$pid}) {
 		my $cb = shift @$x;
 		$cb->(@$x);
 	} else {
@@ -564,7 +564,7 @@ sub try_manifest {
 	my $cmd = $curl->for_uri($lei, $uri, '-R', '-o', $fn);
 	my %opt = map { $_ => $lei->{$_} } (0..2);
 	my $cerr = run_reap($lei, $cmd, \%opt);
-	local %LIVE;
+	local $LIVE;
 	if ($cerr) {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
 		return $lei->child_error($cerr, "@$cmd failed");
@@ -627,7 +627,7 @@ EOM
 		}
 		clone_all($self, $todo, $m);
 	}
-	reap_live() while keys(%LIVE);
+	reap_live() while keys(%$LIVE);
 	return if $self->{lei}->{child_error} || $self->{dry_run};
 
 	if (delete $self->{-culled_manifest}) { # set by clone_v2/-I/--exclude
@@ -656,7 +656,7 @@ sub do_mirror { # via wq_io_do
 	eval {
 		my $iv = $lei->{opt}->{'inbox-version'};
 		if (defined $iv) {
-			local %LIVE;
+			local $LIVE;
 			return clone_v1($self) if $iv == 1;
 			return try_scrape($self) if $iv == 2;
 			die "bad --inbox-version=$iv\n";
