@@ -111,6 +111,12 @@ where C<FILE > is an empty string (C<"">), then C<manifest.js.gz>
 Pass the C<--prune> and C<--prune-tags> flags to L<git-fetch(1)>
 calls on incremental clones.
 
+=item -k
+
+=item --keep-going
+
+Continue as much as possible after an error.
+
 =item -n
 
 =item --dry-run

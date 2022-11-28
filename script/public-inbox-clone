@@ -24,7 +24,7 @@ options:
 EOF
 GetOptions($opt, qw(help|h quiet|q verbose|v+ C=s@ c=s@ include|I=s@ exclude=s@
 	inbox-config=s inbox-version=i objstore=s manifest=s
-	prune|p
+	prune|p keep-going|k
 	dry-run|n jobs|j=i no-torsocks torsocks=s epoch=s)) or die $help;
 if ($opt->{help}) { print $help; exit };
 require PublicInbox::Admin; # loads Config

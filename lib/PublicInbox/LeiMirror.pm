@@ -22,6 +22,11 @@ use Digest::SHA qw(sha256_hex sha1_hex);
 
 our $LIVE; # pid => callback
 
+sub keep_going ($) {
+	$LIVE && (!$_[0]->{lei}->{child_error} ||
+		$_[0]->{lei}->{opt}->{'keep-going'});
+}
+
 sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my ($arg, $pid) = @_;
 	my ($mrr, $lei) = @$arg;
@@ -287,6 +292,7 @@ sub upr { # feed `git update-ref --stdin -z' verbosely
 
 sub fgrp_update {
 	my ($fgrp) = @_;
+	return if !keep_going($fgrp);
 	my $srcfh = delete $fgrp->{srcfh} or return;
 	my $dstfh = delete $fgrp->{dstfh} or return;
 	seek($srcfh, SEEK_SET, 0) or die "seek(src): $!";
@@ -329,6 +335,7 @@ sub pack_dst { # packs lightweight satellite repos
 sub pack_refs {
 	my ($self, $git_dir) = @_;
 	do_reap($self);
+	return if !keep_going($self);
 	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
 	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
@@ -341,6 +348,7 @@ sub fgrpv_done {
 	return if !$LIVE;
 	my $pid;
 	my $first = $fgrpv->[0] // die 'BUG: no fgrpv->[0]';
+	return if !keep_going($first);
 	pack_refs($first, $first->{-osdir}); # objstore refs always packed
 	for my $fgrp (@$fgrpv) {
 		my $rn = $fgrp->{-remote};
@@ -479,6 +487,7 @@ EOM
 
 sub fp_done {
 	my ($self, $go_fetch) = @_;
+	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
 	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
 	$self->{-ent} // die 'BUG: no -ent';
@@ -516,6 +525,7 @@ sub resume_fetch_maybe {
 
 sub resume_fetch {
 	my ($self, $uri, $fini) = @_;
+	return if !keep_going($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my @git = ('git', "--git-dir=$dst");
 	my $opt = { 2 => $self->{lei}->{2} };
@@ -542,6 +552,7 @@ sub fgrp_enqueue_maybe {
 
 sub fgrp_enqueue {
 	my ($self, $fgrp) = @_;
+	return if !keep_going($self);
 	my $opt = { 2 => $self->{lei}->{2} };
 	# --no-tags is required to avoid conflicts
 	my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
@@ -678,15 +689,12 @@ sub reap_cmd { # async, called via SIGCHLD
 	my ($self, $cmd) = @_;
 	my $cerr = $?;
 	$? = 0; # don't let it influence normal exit
-	if ($cerr) {
-		kill('TERM', keys %$LIVE);
-		$self->{lei}->child_error($cerr, "@$cmd failed (\$?=$cerr)");
-	}
+	$self->{lei}->child_error($cerr, "@$cmd failed (\$?=$cerr)") if $cerr;
 }
 
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
-	return if $self->{dry_run} || !$LIVE;
+	return if $self->{dry_run} || !keep_going($self);
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
@@ -722,7 +730,7 @@ sub v1_done { # called via OnDestroy
 
 sub v2_done { # called via OnDestroy
 	my ($self) = @_;
-	return if $self->{dry_run} || !$LIVE;
+	return if $self->{dry_run} || !keep_going($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	require PublicInbox::Lock;
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
@@ -896,7 +904,7 @@ sub clone_all {
 	# handle no-dependency repos, first
 	for (@$nodep) {
 		clone_v1($_, 1);
-		return if $self->{lei}->{child_error};
+		return if !keep_going($self);
 	}
 	# resolve references, deepest, first:
 	while (scalar keys %$todo) {
@@ -913,7 +921,7 @@ EOM
 			my $y = delete $todo->{$x} // next; # already done
 			for (@$y) {
 				clone_v1($_, 1);
-				return if $self->{lei}->{child_error};
+				return if !keep_going($self);
 			}
 			last; # restart %$todo iteration
 		}
@@ -989,7 +997,7 @@ sub try_manifest {
 E: `$self->{cur_dst}' must not contain newline
 EOM
 			clone_v2_prep($self, \%v2_epochs, $m);
-			return if $self->{lei}->{child_error};
+			return if !keep_going($self);
 		}
 	}
 	if (my $v1 = delete $multi->{v1}) {
@@ -1018,7 +1026,7 @@ EOM
 	}
 	delete local $lei->{opt}->{epoch} if defined($v2);
 	clone_all($self, $m);
-	return if $self->{lei}->{child_error} || $self->{dry_run};
+	return if $self->{dry_run} || !keep_going($self);
 
 	# set by clone_v2_prep/-I/--exclude
 	dump_manifest($m => $ft) if delete $self->{-culled_manifest};
@@ -1050,7 +1058,7 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 			$v = "$self->{dst}/$v" if $v !~ m!\A/!;
 			$self->{"-$k"} = $v;
 		}
-		local $LIVE;
+		local $LIVE = {};
 		my $iv = $lei->{opt}->{'inbox-version'} //
 			return start_clone_url($self);
 		return clone_v1($self) if $iv == 1;
