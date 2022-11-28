@@ -2,8 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Wrapper to "git fetch" remote public-inboxes
 package PublicInbox::Fetch;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::IPC);
 use URI ();
 use PublicInbox::Spawn qw(popen_rd run_die spawn);
