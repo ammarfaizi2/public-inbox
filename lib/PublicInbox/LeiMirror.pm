@@ -98,7 +98,8 @@ sub clone_cmd {
 			($lei->{opt}->{jobs} // 1) > 1;
 	push @cmd, '-v' if $lei->{opt}->{verbose};
 	# XXX any other options to support?
-	# --reference is tricky with multiple epochs...
+	# --reference is tricky with multiple epochs, but handled
+	# automatically if using manifest.js.gz
 	@cmd;
 }
 
@@ -260,8 +261,10 @@ sub clone_v1 {
 		push @$cmd, '--reference', "$self->{dst}$ref";
 	start_clone($self, $cmd, $opt, $fini);
 
-	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v1)\z/s and
+	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
+				/\A(?:always|v1)\z/s) {
 		_get_txt_start($self, '_/text/config/raw', $fini);
+	}
 
 	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
 	$self->{'txt.description'} = $d if defined $d;
@@ -376,6 +379,7 @@ sub v1_done { # called via OnDestroy
 			die "rename($f, $o/info/alternates): $!";
 		$f->unlink_on_destroy(0);
 	}
+	return if $self->{-is_epoch};
 	write_makefile($dst, 1);
 	index_cloned_inbox($self, 1);
 }
@@ -433,6 +437,7 @@ sub clone_v2 ($$;$) {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
+	delete $task->{todo}; # $self->{todo} still exists
 	my (@src_edst, @skip, $desc);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
@@ -451,6 +456,7 @@ failed to extract epoch number from $src
 		if (!$want || $want->{$nr}) {
 			push @src_edst, $src, $edst;
 			push @{$task->{-entv}}, $edst, $ent;
+			$self->{any_want}->{$key} = 1;
 		} else { # create a placeholder so users only need to chmod +w
 			init_placeholder($src, $edst, $ent);
 			push @{$task->{-read_only}}, $edst;
@@ -469,11 +475,27 @@ failed to extract epoch number from $src
 
 	defined($desc) ? ($task->{'txt.description'} = $desc) :
 		_get_txt_start($task, 'description', $fini);
-
-	my @cmd = clone_cmd($lei, my $opt = {});
-	while (@src_edst && !$lei->{child_error}) {
-		my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
-		start_clone($self, $cmd, $opt, $fini);
+	if (my $todo = $self->{todo}) {  # manifest clone, deal with references
+		my $entv = delete $task->{-entv};
+		while (@$entv) {
+			my ($edst, $ent) = splice(@$entv, 0, 2);
+			my $etask = bless { %$task }, __PACKAGE__;
+			$etask->{-ent} = $ent; # may have {reference}
+			$etask->{cur_src} = shift @src_edst //
+				die 'BUG: no cur_src';
+			$etask->{cur_dst} = shift @src_edst //
+				die 'BUG: no cur_dst';
+			$etask->{cur_dst} eq $edst or
+				die "BUG: `$etask->{cur_dst}' != `$edst'";
+			$etask->{-is_epoch} = $fini;
+			push @{$todo->{($ent->{reference} // '')}}, $etask;
+		}
+	} else {
+		my @cmd = clone_cmd($lei, my $opt = {});
+		while (@src_edst && !$lei->{child_error}) {
+			my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
+			start_clone($self, $cmd, $opt, $fini);
+		}
 	}
 }
 
@@ -546,10 +568,19 @@ sub multi_inbox ($$$) {
 	($path_pfx, $n, $ret);
 }
 
-sub clone_all {
-	my ($self, $todo, $m) = @_;
+sub clone_all ($$) {
+	my ($self, $m) = @_;
+	my $todo = delete $self->{todo};
+	my $nodep = delete $todo->{''};
+
+	# do not download unwanted deps
+	my $any_want = delete $self->{any_want};
+	my @unwanted = grep { !$any_want->{$_} } keys %$todo;
+	my @nodep = delete(@$todo{@unwanted});
+	push(@$nodep, @$_) for @nodep;
+
 	# handle no-dependency repos, first
-	for (@{delete($todo->{''}) // []}) {
+	for (@$nodep) {
 		clone_v1($_, 1);
 		return if $self->{lei}->{child_error};
 	}
@@ -603,6 +634,7 @@ sub try_manifest {
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
+	local $self->{todo} = {};
 	if ($v2) {
 		for my $name (sort keys %$v2) {
 			my $epochs = delete $v2->{$name};
@@ -629,12 +661,9 @@ EOM
 		}
 	}
 	if (my $v1 = delete $multi->{v1}) {
-		delete local $lei->{opt}->{epoch} if defined($v2);
 		my $p = $path_pfx.$path;
 		chop($p) if substr($p, -1, 1) eq '/';
 		$uri->path($p);
-		my $todo = {};
-		my %want = map { $_ => 1 } @$v1;
 		for my $name (@$v1) {
 			my $task = bless { %$self }, __PACKAGE__;
 			$task->{-ent} = $m->{$name} //
@@ -650,11 +679,12 @@ E: `$task->{cur_dst}' must not contain newline
 EOM
 			$task->{cur_src} .= '/';
 			my $dep = $task->{-ent}->{reference} // '';
-			$dep = '' if !$want{$dep};
-			push @{$todo->{$dep}}, $task;
+			push @{$self->{todo}->{$dep}}, $task;
+			$self->{any_want}->{$name} = 1;
 		}
-		clone_all($self, $todo, $m);
 	}
+	delete local $lei->{opt}->{epoch} if defined($v2);
+	clone_all($self, $m);
 	reap_live() while keys(%$LIVE);
 	return if $self->{lei}->{child_error} || $self->{dry_run};
 
