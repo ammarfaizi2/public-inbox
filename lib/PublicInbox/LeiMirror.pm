@@ -384,6 +384,7 @@ sub v2_done { # called via OnDestroy
 	my ($self) = @_;
 	return if $self->{dry_run} || !$LIVE;
 	my $dst = $self->{cur_dst} // $self->{dst};
+	require PublicInbox::Lock;
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $lck = $lk->lock_for_scope($$);
 	_write_inbox_config($self);
@@ -461,7 +462,6 @@ failed to extract epoch number from $src
 
 	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
 
-	require PublicInbox::Lock;
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
