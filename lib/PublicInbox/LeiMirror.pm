@@ -379,6 +379,7 @@ sub fgrp_fetch_all {
 	push(@fetch, "-j$j") if $j;
 	while (my ($osdir, $fgrpv) = each %$todo) {
 		my $f = "$osdir/config";
+		return if !keep_going($self);
 
 		# clobber group from previous run atomically
 		my $cmd = ['git', "--git-dir=$osdir", qw(config -f),
