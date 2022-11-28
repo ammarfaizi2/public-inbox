@@ -177,16 +177,17 @@ sub set_description ($) {
 	open my $fh, '+>>', $f or die "open($f): $!";
 	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
 	my $d = do { local $/; <$fh> } // die "read($f): $!";
-	my $orig = $d;
+	chomp(my $orig = $d);
 	while (defined($d) && ($d =~ m!^\(\$INBOX_DIR/description missing\)! ||
 			$d =~ /^Unnamed repository/ || $d !~ /\S/)) {
 		$d = delete($self->{'txt.description'});
 	}
-	$d //= 'mirror of '.($self->{cur_src} // $self->{src})."\n";
+	$d //= 'mirror of '.($self->{cur_src} // $self->{src});
+	chomp $d;
 	return if $d eq $orig;
 	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
 	truncate($fh, 0) or die "truncate($f): $!";
-	print $fh $d or die "print($f): $!";
+	print $fh $d, "\n" or die "print($f): $!";
 	close $fh or die "close($f): $!";
 }
 
@@ -261,8 +262,10 @@ sub clone_v1 {
 
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v1)\z/s and
 		_get_txt_start($self, '_/text/config/raw', $fini);
+
 	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
-	defined($d) ? ($self->{'txt.description'} = $d) :
+	$self->{'txt.description'} = $d if defined $d;
+	(!defined($d) && !$nohang) and
 		_get_txt_start($self, 'description', $fini);
 
 	reap_live() until ($nohang || !keys(%$LIVE)); # for non-manifest clone
@@ -333,11 +336,14 @@ EOM
 EOM
 	}
 	close $fh or die "close($f): $!";
-	if (defined $ent->{head}) {
-		$f = "$edst/HEAD";
-		open $fh, '>', $f or die "open($f): $!";
-		print $fh $ent->{head}, "\n" or die "print($f): $!";
-		close $fh or die "close($f): $!";
+	my %map = (head => 'HEAD', description => undef);
+	while (my ($key, $fn) = each %map) {
+		my $val = $ent->{$key} // next;
+		$fn //= $key;
+		$fn = "$edst/$fn";
+		open $fh, '>', $fn or die "open($fn): $!";
+		print $fh $val, "\n" or die "print($fn): $!";
+		close $fh or die "close($fn): $!";
 	}
 }
 
@@ -385,10 +391,18 @@ sub v2_done { # called via OnDestroy
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');
 	$mg->fill_alternates;
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
-	my $edst_owner = delete($self->{-owner}) // [];
-	while (@$edst_owner) {
-		my ($edst, $o) = splice(@$edst_owner);
-		run_die [qw(git config -f), "$edst/config", 'gitweb.owner', $o];
+	my $entries = delete($self->{-ent}) // [];
+	while (@$entries) {
+		my ($edst, $ent) = splice(@$entries);
+		if (defined(my $o = $ent->{owner})) {
+			run_die [qw(git config -f), "$edst/config",
+				'gitweb.owner', $o];
+		}
+		my $d = $ent->{description} // next;
+		my $fn = "$edst/description";
+		open my $fh, '>', $fn or die "open($fn): $!";
+		print $fh $d, "\n" or die "print($fn): $!";
+		close $fh or die "close($fn): $!";
 	}
 	for my $edst (@{delete($self->{-read_only}) // []}) {
 		my @st = stat($edst) or die "stat($edst): $!";
@@ -418,7 +432,7 @@ sub clone_v2 ($$;$) {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
-	my (@src_edst, @skip);
+	my (@src_edst, @skip, $desc);
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
@@ -428,13 +442,16 @@ failed to extract epoch number from $src
 
 		$1 + 0 == $nr or die "BUG: <$uri> miskeyed $1 != $nr";
 		$edst .= "/git/$nr.git";
-		$m->{$key} // die "BUG: `$key' not in manifest.js.gz";
+		my $ent = $m->{$key} // die "BUG: `$key' not in manifest.js.gz";
+		if (defined(my $d = $ent->{description})) {
+			$d =~ s/ \[epoch [0-9]+\]\z//s;
+			$desc = $d;
+		}
 		if (!$want || $want->{$nr}) {
 			push @src_edst, $src, $edst;
-			my $o = $m->{$key}->{owner};
-			push(@{$task->{-owner}}, $edst, $o) if defined($o);
+			push @{$task->{-ent}}, $edst, $ent;
 		} else { # create a placeholder so users only need to chmod +w
-			init_placeholder($src, $edst, $m->{$key});
+			init_placeholder($src, $edst, $ent);
 			push @{$task->{-read_only}}, $edst;
 			push @skip, $key;
 		}
@@ -450,7 +467,8 @@ failed to extract epoch number from $src
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
 		_get_txt_start($task, '_/text/config/raw', $fini);
 
-	_get_txt_start($task, 'description', $fini);
+	defined($desc) ? ($task->{'txt.description'} = $desc) :
+		_get_txt_start($task, 'description', $fini);
 
 	my @cmd = clone_cmd($lei, my $opt = {});
 	while (@src_edst && !$lei->{child_error}) {
