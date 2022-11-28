@@ -595,6 +595,20 @@ EOM
 	reap_live() while keys(%$LIVE);
 }
 
+sub dump_manifest ($$) {
+	my ($m, $ft) = @_;
+	# write the smaller manifest if epochs were skipped so
+	# users won't have to delete manifest if they +w an
+	# epoch they no longer want to skip
+	my $json = PublicInbox::Config->json->encode($m);
+	my $mtime = (stat($ft))[9];
+	seek($ft, SEEK_SET, 0) or die "seek($ft): $!";
+	truncate($ft, 0) or die "truncate($ft): $!";
+	gzip(\$json => $ft) or die "gzip($ft): $GzipError";
+	$ft->flush or die "flush($ft): $!";
+	utime($mtime, $mtime, "$ft") or die "utime(..., $ft): $!";
+}
+
 # FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
 sub try_manifest {
 	my ($self) = @_;
@@ -675,18 +689,7 @@ EOM
 	return if $self->{lei}->{child_error} || $self->{dry_run};
 
 	# set by clone_v2_prep/-I/--exclude
-	if (delete $self->{-culled_manifest}) {
-		# write the smaller manifest if epochs were skipped so
-		# users won't have to delete manifest if they +w an
-		# epoch they no longer want to skip
-		my $json = PublicInbox::Config->json->encode($m);
-		my $mtime = (stat($ft))[9];
-		seek($ft, SEEK_SET, 0) or die "seek($ft): $!";
-		truncate($ft, 0) or die "truncate($ft): $!";
-		gzip(\$json => $ft) or die "gzip($ft): $GzipError";
-		$ft->flush or die "flush($ft): $!";
-		utime($mtime, $mtime, "$ft") or die "utime(..., $ft): $!";
-	}
+	dump_manifest($m => $ft) if delete $self->{-culled_manifest};
 	ft_rename($ft, "$self->{dst}/manifest.js.gz", 0666);
 	open my $x, '>', "$self->{dst}/mirror.done"; # for _wq_done_wait
 }

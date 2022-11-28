@@ -12,8 +12,6 @@ use PublicInbox::LEI;
 use PublicInbox::LeiCurl;
 use PublicInbox::LeiMirror;
 use File::Temp ();
-use PublicInbox::Config;
-use IO::Compress::Gzip qw(gzip $GzipError);
 
 sub new { bless {}, __PACKAGE__ }
 
@@ -233,13 +231,7 @@ EOM
 	}
 	for my $i (@new_epoch) { $mg->epoch_cfg_set($i) }
 	if ($ft) {
-		if ($mculled) {
-			my $json = PublicInbox::Config->json->encode($m1);
-			my $fn = $ft->filename;
-			my $mtime = (stat($fn))[9];
-			gzip(\$json => $fn) or die "gzip: $GzipError";
-			utime($mtime, $mtime, $fn) or die "utime(..., $fn): $!";
-		}
+		PublicInbox::LeiMirror::dump_manifest($m1 => $ft) if $mculled;
 		PublicInbox::LeiMirror::ft_rename($ft, $mf, 0666);
 	}
 	$lei->child_error($xit << 8) if $fp2 && $xit;
