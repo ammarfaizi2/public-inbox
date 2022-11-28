@@ -324,6 +324,7 @@ sub fgrp_update {
 sub pack_dst { # packs lightweight satellite repos
 	my ($fgrp) = @_;
 	pack_refs($fgrp, $fgrp->{cur_dst});
+	delete($fgrp->{-fini}) // die 'BUG: no {-fini}'; # call v1_done
 }
 
 sub pack_refs {
