@@ -137,12 +137,6 @@ sub _get_txt_done {
 # tries the relatively new /$INBOX/_/text/config/raw endpoint
 sub _try_config_start {
 	my ($self) = @_;
-	my $dst = $self->{cur_dst} // $self->{dst};
-	if (!-d $dst || !mkdir($dst)) {
-		require File::Path;
-		File::Path::mkpath($dst);
-		-d $dst or die "mkpath($dst): $!\n";
-	}
 	_get_txt_start($self, qw(_/text/config/raw inbox.config.example), 0444);
 }
 
@@ -381,6 +375,12 @@ failed to extract epoch number from $src
 	}
 	# filter out the epochs we skipped
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
+
+	if (!-d $dst || !mkdir($dst)) {
+		require File::Path;
+		File::Path::mkpath($dst);
+		-d $dst or die "mkpath($dst): $!\n";
+	}
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
 	$LIVE{_try_config_start($task)} = [ \&_try_config_done, $task, $fini ];
