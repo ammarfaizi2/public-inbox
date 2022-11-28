@@ -539,8 +539,9 @@ sub clone_all {
 	while (scalar keys %$todo) {
 		for my $x (keys %$todo) {
 			# resolve multi-level references
-			while (defined($m->{$x}->{reference})) {
-				$x = $m->{$x}->{reference};
+			while (defined(my $nxt = $m->{$x}->{reference})) {
+				exists($todo->{$nxt}) or last;
+				$x = $nxt;
 			}
 			my $y = delete $todo->{$x} // next; # already done
 			for (@$y) {
