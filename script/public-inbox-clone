@@ -37,6 +37,7 @@ defined($dst) or ($dst) = ($url =~ m!/([^/]+)/?\z!);
 index($dst, "\n") >= 0 and die "`\\n' not allowed in `$dst'";
 
 # n.b. this is still a truckload of code...
+require File::Spec;
 require PublicInbox::LEI;
 require PublicInbox::LeiExternal;
 require PublicInbox::LeiMirror;
@@ -51,7 +52,7 @@ open $lei->{3}, '.' or die "open . $!";
 my $mrr = bless {
 	lei => $lei,
 	src => $url,
-	dst => $dst,
+	dst => File::Spec->canonpath($dst),
 }, 'PublicInbox::LeiMirror';
 
 $? = 0;
