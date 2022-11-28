@@ -291,6 +291,7 @@ sub run_script ($;$$) {
 	my ($cmd, $env, $opt) = @_;
 	my ($key, @argv) = @$cmd;
 	my $run_mode = $ENV{TEST_RUN_MODE} // $opt->{run_mode} // 1;
+	$run_mode = 0 if $key eq '-clone'; # relies on SIGCHLD + waitpid(-1)
 	my $sub = $run_mode == 0 ? undef : key2sub($key);
 	my $fhref = [];
 	my $spawn_opt = {};

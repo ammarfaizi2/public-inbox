@@ -22,7 +22,7 @@ options:
     -C DIR            chdir to specified directory
 EOF
 GetOptions($opt, qw(help|h quiet|q verbose|v+ C=s@ c=s@ include|I=s@ exclude=s@
-		no-torsocks torsocks=s epoch=s)) or die $help;
+		jobs|j=i no-torsocks torsocks=s epoch=s)) or die $help;
 if ($opt->{help}) { print $help; exit };
 require PublicInbox::Admin; # loads Config
 PublicInbox::Admin::do_chdir(delete $opt->{C});
