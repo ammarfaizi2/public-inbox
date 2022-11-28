@@ -506,18 +506,18 @@ sub multi_inbox ($$$) {
 	my $n = scalar(keys %$v2) + scalar(@v1);
 	my @orig = defined($incl // $excl) ? (keys %$v2, @v1) : ();
 	if (defined $incl) {
-		my $re = '(?:'.join('|', map {
-				$self->{lei}->glob2re($_) // qr/\A\Q$_\E\z/
-			} @$incl).')';
+		my $re = '(?:'.join('\\z|', map {
+				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
+			} @$incl).'\\z)';
 		my @gone = delete @$v2{grep(!/$re/, keys %$v2)};
 		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
 		delete @$m{grep(!/$re/, @v1)} and $self->{-culled_manifest} = 1;
 		@v1 = grep(/$re/, @v1);
 	}
 	if (defined $excl) {
-		my $re = '(?:'.join('|', map {
-				$self->{lei}->glob2re($_) // qr/\A\Q$_\E\z/
-			} @$excl).')';
+		my $re = '(?:'.join('\\z|', map {
+				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
+			} @$excl).'\\z)';
 		my @gone = delete @$v2{grep(/$re/, keys %$v2)};
 		delete @$m{map { @$_ } @gone} and $self->{-culled_manifest} = 1;
 		delete @$m{grep(/$re/, @v1)} and $self->{-culled_manifest} = 1;
