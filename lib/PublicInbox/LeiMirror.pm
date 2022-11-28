@@ -678,6 +678,23 @@ sub update_ent {
 		my $done = PublicInbox::OnDestroy->new($$, \&up_fp_done, $self);
 		start_cmd($self, $cmd, $opt, $done);
 	}
+
+	$new = $self->{-ent}->{head};
+	$cur = $self->{-local_manifest}->{$key}->{head} // "\0";
+	if (defined($new) && $new ne $cur) {
+		# n.b. grokmirror writes raw contents to $dst/HEAD w/o locking
+		my $cmd = [ 'git', "--git-dir=$dst" ];
+		if ($new =~ s/\Aref: //) {
+			push @$cmd, qw(symbolic-ref HEAD), $new;
+		} elsif ($new =~ /\A[a-f0-9]{40,}\z/) {
+			push @$cmd, qw(update-ref --no-deref HEAD), $new;
+		} else {
+			undef $cmd;
+			warn "W: $key: {head} => `$new' not understood\n";
+		}
+		start_cmd($self, $cmd, { 2 => $self->{lei}->{2} }) if $cmd;
+	}
+
 	$new = $self->{-ent}->{owner} // return;
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
