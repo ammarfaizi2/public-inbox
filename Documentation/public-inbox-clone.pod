@@ -65,6 +65,12 @@ When cloning a top-level with multiple inboxes, ignore inboxes and
 repositories matching the given wildcard pattern.  Supports the same
 wildcards as L</--include>
 
+=item -n
+
+=item --dry-run
+
+Show what would be done, without making any changes.
+
 =item -q
 
 =item --quiet

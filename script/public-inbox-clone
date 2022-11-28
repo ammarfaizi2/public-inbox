@@ -17,12 +17,13 @@ options:
   --torsocks VAL      whether or not to wrap git and curl commands with
                       torsocks (default: `auto')
                       Must be one of: `auto', `no' or `yes'
+  --dry-run | -n      show what would be cloned without cloning
   --verbose | -v      increase verbosity (may be repeated)
     --quiet | -q      increase verbosity (may be repeated)
     -C DIR            chdir to specified directory
 EOF
 GetOptions($opt, qw(help|h quiet|q verbose|v+ C=s@ c=s@ include|I=s@ exclude=s@
-		jobs|j=i no-torsocks torsocks=s epoch=s)) or die $help;
+	dry-run|n jobs|j=i no-torsocks torsocks=s epoch=s)) or die $help;
 if ($opt->{help}) { print $help; exit };
 require PublicInbox::Admin; # loads Config
 PublicInbox::Admin::do_chdir(delete $opt->{C});
@@ -54,6 +55,9 @@ my $mrr = bless {
 	src => $url,
 	dst => $dst,
 }, 'PublicInbox::LeiMirror';
+
+$? = 0;
+$mrr->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 $mrr->do_mirror;
 $mrr->can('_wq_done_wait')->([$mrr, $lei], $$);
 exit(($lei->{child_error} // 0) >> 8);

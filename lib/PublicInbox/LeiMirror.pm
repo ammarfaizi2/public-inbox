@@ -27,10 +27,10 @@ sub _wq_done_wait { # dwaitpid callback (via wq_eof)
 	my $f = "$mrr->{dst}/mirror.done";
 	if ($?) {
 		$lei->child_error($?);
-	} elsif (!unlink($f)) {
+	} elsif (!$mrr->{dry_run} && !unlink($f)) {
 		warn("unlink($f): $!\n") unless $!{ENOENT};
 	} else {
-		if ($lei->{cmd} ne 'public-inbox-clone') {
+		if (!$mrr->{dry_run} && $lei->{cmd} ne 'public-inbox-clone') {
 			# calls _finish_add_external
 			$lei->lazy_cb('add-external', '_finish_'
 					)->($lei, $mrr->{dst});
@@ -107,7 +107,8 @@ sub ft_rename ($$$) {
 	my @st = stat($dst);
 	my $mode = @st ? ($st[2] & 07777) : ($open_mode & ~umask);
 	chmod($mode, $ft) or croak "E: chmod $fn: $!";
-	rename($fn, $dst) or croak "E: rename($fn => $ft): $!";
+	require File::Copy;
+	File::Copy::mv($fn, $dst) or croak "E: mv($fn => $ft): $!";
 	$ft->unlink_on_destroy(0);
 }
 
@@ -123,10 +124,11 @@ sub _get_txt_start { # non-fatal
 	my $opt = { 0 => $lei->{0}, 1 => $lei->{1}, 2 => $lei->{2} };
 	my $cmd = $self->{curl}->for_uri($lei, $uri, qw(--compressed -R -o),
 					$ft->filename);
-	$self->{"-get_txt.$endpoint"} = [ $ft, $cmd, $uri ];
 	my $jobs = $lei->{opt}->{jobs} // 1;
 	reap_live() while keys(%LIVE) >= $jobs;
 	$lei->qerr("# @$cmd");
+	return if $self->{dry_run};
+	$self->{"-get_txt.$endpoint"} = [ $ft, $cmd, $uri ];
 	$LIVE{spawn($cmd, undef, $opt)} =
 			[ \&_get_txt_done, $self, $endpoint, $fini ];
 }
@@ -236,6 +238,7 @@ sub start_clone {
 	my $jobs = $self->{lei}->{opt}->{jobs} // 1;
 	reap_live() while keys(%LIVE) >= $jobs;
 	$self->{lei}->qerr("# @$cmd");
+	return if $self->{dry_run};
 	$LIVE{spawn($cmd, undef, $opt)} = [ \&reap_clone, $self, $cmd, $fini ];
 }
 
@@ -339,6 +342,7 @@ sub reap_clone { # async, called via SIGCHLD
 
 sub v1_done { # called via OnDestroy
 	my ($self) = @_;
+	return if $self->{dry_run};
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined(my $o = $self->{-ent} ? $self->{-ent}->{owner} : undef)) {
@@ -350,6 +354,7 @@ sub v1_done { # called via OnDestroy
 
 sub v2_done { # called via OnDestroy
 	my ($self) = @_;
+	return if $self->{dry_run};
 	_write_inbox_config($self);
 	require PublicInbox::MultiGit;
 	my $dst = $self->{cur_dst} // $self->{dst};
@@ -413,7 +418,8 @@ failed to extract epoch number from $src
 	# filter out the epochs we skipped
 	$self->{-culled_manifest} = 1 if delete(@$m{@skip});
 
-	-d $dst || File::Path::mkpath($dst);
+	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
+
 	require PublicInbox::Lock;
 	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
 	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
@@ -421,7 +427,7 @@ failed to extract epoch number from $src
 	_get_txt_start($task, '_/text/config/raw', $fini);
 	_get_txt_start($self, 'description', $fini);
 
-	$task->{-locked} = $lk->lock_for_scope($$);
+	$task->{-locked} = $lk->lock_for_scope($$) if !$self->{dry_run};
 	my @cmd = clone_cmd($lei, my $opt = {});
 	while (@src_edst && !$lei->{child_error}) {
 		my $cmd = [ @$pfx, @cmd, splice(@src_edst, 0, 2) ];
@@ -507,17 +513,12 @@ sub try_manifest {
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
 	$uri->path($path . '/manifest.js.gz');
-	my $pdir = $lei->rel2abs($self->{dst});
-	$pdir =~ s!/[^/]+/?\z!!;
-	-d $pdir || File::Path::mkpath($pdir);
-	my $ft = File::Temp->new(TEMPLATE => 'm-XXXX',
-				UNLINK => 1, DIR => $pdir, SUFFIX => '.tmp');
+	my $ft = File::Temp->new(TEMPLATE => '.manifest-XXXX',
+				UNLINK => 1, TMPDIR => 1, SUFFIX => '.tmp');
 	my $fn = $ft->filename;
-	my ($bn) = ($fn =~ m!/([^/]+)\z!);
-	my $cmd = $curl->for_uri($lei, $uri, '-R', '-o', $bn);
-	my $opt = { -C => $pdir };
-	$opt->{$_} = $lei->{$_} for (0..2);
-	my $cerr = run_reap($lei, $cmd, $opt);
+	my $cmd = $curl->for_uri($lei, $uri, '-R', '-o', $fn);
+	my %opt = map { $_ => $lei->{$_} } (0..2);
+	my $cerr = run_reap($lei, $cmd, \%opt);
 	local %LIVE;
 	if ($cerr) {
 		return try_scrape($self) if ($cerr >> 8) == 22; # 404 missing
@@ -579,7 +580,7 @@ EOM
 		}
 	}
 	reap_live() while keys(%LIVE);
-	return if $self->{lei}->{child_error};
+	return if $self->{lei}->{child_error} || $self->{dry_run};
 
 	if (delete $self->{-culled_manifest}) { # set by clone_v2/-I/--exclude
 		# write the smaller manifest if epochs were skipped so

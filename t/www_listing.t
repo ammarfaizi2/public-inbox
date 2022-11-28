@@ -153,6 +153,12 @@ EOM
 	is(xqx([qw(git config -f), "$tmpdir/incl/alt/config", 'gitweb.owner']),
 		"lorelei \xc4\x80\n", 'gitweb.owner set by -clone');
 
+	$clone_err = '';
+	ok(run_script(['-clone', '--dry-run',
+			"http://$host:$port/pfx", "$tmpdir/dry-run" ],
+		undef, $opt), 'clone --dry-run') or diag "clone_err=$clone_err";
+	ok(!-d "$tmpdir/dry-run", 'nothing cloned with --dry-run');
+
 	undef $td;
 
 	open $mh, '<', "$tmpdir/incl/manifest.js.gz" or xbail "open: $!";
