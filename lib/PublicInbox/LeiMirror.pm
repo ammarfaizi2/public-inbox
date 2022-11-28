@@ -19,6 +19,7 @@ use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use Digest::SHA qw(sha256_hex sha1_hex);
+use POSIX qw(strftime);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [ fgrp mirror objects ]
@@ -200,22 +201,14 @@ sub _write_inbox_config {
 sub set_description ($) {
 	my ($self) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
-	my $f = "$dst/description";
-	open my $fh, '+>>', $f or die "open($f): $!";
-	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
-	my $d = do { local $/; <$fh> } // die "read($f): $!";
-	chomp(my $orig = $d);
+	chomp(my $orig = PublicInbox::Git::try_cat("$dst/description"));
+	my $d = $orig;
 	while (defined($d) && ($d =~ m!^\(\$INBOX_DIR/description missing\)! ||
 			$d =~ /^Unnamed repository/ || $d !~ /\S/)) {
 		$d = delete($self->{'txt.description'});
 	}
 	$d //= 'mirror of '.($self->{cur_src} // $self->{src});
-	chomp $d;
-	return if $d eq $orig;
-	seek($fh, 0, SEEK_SET) or die "seek($f): $!";
-	truncate($fh, 0) or die "truncate($f): $!";
-	print $fh $d, "\n" or die "print($f): $!";
-	close $fh or die "close($f): $!";
+	atomic_write($dst, 'description', $d."\n") if $d ne $orig;
 }
 
 sub index_cloned_inbox {
@@ -668,6 +661,14 @@ sub up_fp_done {
 	push @{$self->{chg}->{fp_mismatch}}, $self->{-key};
 }
 
+sub atomic_write ($$$) {
+	my ($dn, $bn, $raw) = @_;
+	my $ft = File::Temp->new(DIR => $dn, TEMPLATE => "$bn-XXXX");
+	print $ft $raw or die "print($ft): $!";
+	$ft->flush or die "flush($ft): $!";
+	ft_rename($ft, "$dn/$bn", 0666);
+}
+
 # modifies the to-be-written manifest entry, and sets values from it, too
 sub update_ent {
 	my ($self) = @_;
@@ -683,7 +684,6 @@ sub update_ent {
 		my $done = PublicInbox::OnDestroy->new($$, \&up_fp_done, $self);
 		start_cmd($self, $cmd, $opt, $done);
 	}
-
 	$new = $self->{-ent}->{head};
 	$cur = $self->{-local_manifest}->{$key}->{head} // "\0";
 	if (defined($new) && $new ne $cur) {
@@ -719,6 +719,14 @@ sub update_ent {
 			symlink($tgt, $ln) or die "symlink($tgt, $ln): $!";
 		}
 	}
+	if (defined(my $t = $self->{-ent}->{modified})) {
+		my ($dn, $bn) = ("$dst/info/web", 'last-modified');
+		my $orig = PublicInbox::Git::try_cat("$dn/$bn");
+		$t = strftime('%F %T', gmtime($t))." +0000\n";
+		File::Path::mkpath($dn);
+		atomic_write($dn, $bn, $t) if $orig ne $t;
+	}
+
 	$new = $self->{-ent}->{owner} // return;
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
@@ -1076,8 +1084,7 @@ EOM
 	my $mis = delete $self->{chg}->{fp_mismatch};
 	if ($mis) {
 		my $t = (stat($ft))[9];
-		require POSIX;
-		$t = POSIX::strftime('%Y-%m-%d %k:%M:%S %z', localtime($t));
+		$t = strftime('%F %k:%M:%S %z', localtime($t));
 		warn <<EOM;
 W: Fingerprints for the following repositories do not match
 W: $mf_url @ $t:
