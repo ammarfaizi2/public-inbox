@@ -283,7 +283,7 @@ sub fetch_args ($$) {
 
 sub fgrp_update_old ($) { # for git <1.8.5
 	my ($fgrp) = @_;
-	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
+	my $cmd = [ @{$fgrp->{-torsocks}}, 'git', "--git-dir=$fgrp->{cur_dst}",
 		fetch_args($fgrp->{lei}, my $opt = {}) ];
 	$fgrp->{lei}->qerr("# @$cmd");
 	do_reap($fgrp);
@@ -370,8 +370,8 @@ sub fgrp_fetched {
 }
 
 sub fgrp_fetch {
-	my ($fgrp, $pfx, $fini) = @_;
-	my $cmd = [ @$pfx, 'git', "--git-dir=$fgrp->{-osdir}",
+	my ($fgrp, $fini) = @_;
+	my $cmd = [ @{$fgrp->{-torsocks}}, 'git', "--git-dir=$fgrp->{-osdir}",
 			fetch_args($fgrp->{lei}, my $opt = {}),
 			$fgrp->{-remote} ];
 	$fgrp->{-fini} = $fini;
@@ -436,10 +436,11 @@ sub clone_v1 {
 	my $uri = URI->new($self->{cur_src} // $self->{src});
 	defined($lei->{opt}->{epoch}) and
 		die "$uri is a v1 inbox, --epoch is not supported\n";
-	my $pfx = $curl->torsocks($lei, $uri) or return;
+	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
-	my $cmd = [ @$pfx, clone_cmd($lei, my $opt = {}), "$uri", $dst ];
+	my $cmd = [ @{$self->{-torsocks}}, clone_cmd($lei, my $opt = {}),
+		"$uri", $dst ];
 	my $fgrp = forkgroup_prep($self, $uri);
 	if (!defined($fgrp) && defined($self->{-ent})) {
 		if (defined(my $ref = $self->{-ent}->{reference})) {
@@ -447,7 +448,7 @@ sub clone_v1 {
 				push @$cmd, '--reference', "$self->{dst}$ref";
 		}
 	}
-	$fgrp ? fgrp_fetch($fgrp, $pfx, $fini) :
+	$fgrp ? fgrp_fetch($fgrp, $fini) :
 		start_clone($self, $cmd, $opt, $fini);
 
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
@@ -604,7 +605,7 @@ sub clone_v2_prep ($$;$) {
 	my $lei = $self->{lei};
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
 	my $first_uri = (map { $_->[0] } values %$v2_epochs)[0];
-	my $pfx = $curl->torsocks($lei, $first_uri) or return;
+	$self->{-torsocks} //= $curl->torsocks($lei, $first_uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
