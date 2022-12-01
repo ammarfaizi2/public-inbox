@@ -74,6 +74,12 @@ sub qstr_add { # PublicInbox::InputPipe::consume callback for --stdin
 	$lei->fail($@) if $@;
 }
 
+# make the URI||PublicInbox::{Inbox,ExtSearch} a config-file friendly string
+sub cfg_ext ($) {
+	my ($x) = @_;
+	$x->isa('URI') ? "$x" : ($x->{inboxdir} // $x->{topdir});
+}
+
 sub lxs_prepare {
 	my ($self) = @_;
 	require PublicInbox::LeiXSearch;
@@ -89,21 +95,32 @@ sub lxs_prepare {
 		$lxs->prepare_external($self->{lse});
 	}
 	if (@only) {
+		my $only;
 		for my $loc (@only) {
 			my @loc = $self->get_externals($loc) or return;
-			$lxs->prepare_external($_) for @loc;
+			for (@loc) {
+				my $x = $lxs->prepare_external($_);
+				push(@$only, cfg_ext($x)) if $x;
+			}
 		}
+		$opt->{only} = $only if $only;
 	} else {
-		my (@ilocals, @iremotes);
+		my (@ilocals, @iremotes, $incl);
 		for my $loc (@{$opt->{include} // []}) {
 			my @loc = $self->get_externals($loc) or return;
-			$lxs->prepare_external($_) for @loc;
+			for (@loc) {
+				my $x = $lxs->prepare_external($_);
+				push(@$incl, cfg_ext($x)) if $x;
+			}
 			@ilocals = @{$lxs->{locals} // []};
 			@iremotes = @{$lxs->{remotes} // []};
 		}
+		$opt->{include} = $incl if $incl;
 		# --external is enabled by default, but allow --no-external
 		if ($opt->{external} //= 1) {
 			my $ex = $self->canonicalize_excludes($opt->{exclude});
+			my @excl = keys %$ex;
+			$opt->{exclude} = \@excl if scalar(@excl);
 			$self->externals_each(\&prep_ext, $lxs, $ex);
 			$opt->{remote} //= !($lxs->locals - $opt->{'local'});
 			$lxs->{locals} = \@ilocals if !$opt->{'local'};

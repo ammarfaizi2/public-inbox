@@ -605,15 +605,19 @@ sub add_uri {
 		require IO::Uncompress::Gunzip;
 		require PublicInbox::LeiCurl;
 		push @{$self->{remotes}}, $uri;
+		$uri;
 	} else {
 		warn "curl missing, ignoring $uri\n";
+		undef;
 	}
 }
 
+# returns URI or PublicInbox::Inbox-like object
 sub prepare_external {
 	my ($self, $loc, $boost) = @_; # n.b. already ordered by boost
 	if (ref $loc) { # already a URI, or PublicInbox::Inbox-like object
 		return add_uri($self, $loc) if $loc->can('scheme');
+		# fall-through on Inbox-like objects
 	} elsif ($loc =~ m!\Ahttps?://!) {
 		require URI;
 		return add_uri($self, URI->new($loc));
@@ -628,12 +632,13 @@ sub prepare_external {
 		$loc = bless { inboxdir => $loc }, 'PublicInbox::Inbox';
 	} elsif (!-e $loc) {
 		warn "W: $loc gone, perhaps run: lei forget-external $loc\n";
-		return;
+		return undef;
 	} else {
 		warn "W: $loc ignored, unable to determine external type\n";
-		return;
+		return undef;
 	}
 	push @{$self->{locals}}, $loc;
+	$loc;
 }
 
 sub _lcat_i { # LeiMailSync->each_src iterator callback

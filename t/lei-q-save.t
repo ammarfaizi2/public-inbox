@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use PublicInbox::Smsg;
@@ -12,7 +12,7 @@ my $doc2 = eml_load('t/utf8.eml');
 $doc2->header_set('Date', PublicInbox::Smsg::date({ds => time - (86400 * 4)}));
 my $doc3 = eml_load('t/msg_iter-order.eml');
 $doc3->header_set('Date', PublicInbox::Smsg::date({ds => time - (86400 * 4)}));
-
+my $cat_env = { VISUAL => 'cat', EDITOR => 'cat' };
 my $pre_existing = <<'EOF';
 From x Mon Sep 17 00:00:00 2001
 Message-ID: <import-before@example.com>
@@ -183,7 +183,12 @@ test_lei(sub {
 	lei_ok(qw(q z:0.. -o), "v2:$v2");
 	like($lei_err, qr/^# ([1-9][0-9]*) written to \Q$v2\E/sm,
 		'non-zero write output to stderr');
-	lei_ok(qw(q z:0.. -o), "mboxrd:$home/before", '--only', $v2, '-j1,1');
+	lei_ok('-C', $v2, qw(q z:0.. -o), "mboxrd:$home/before",
+		'--only', '.', '-j1,1');
+	lei_ok(['edit-search', "$home/before"], $cat_env);
+	like($lei_out, qr/^\tonly = \Q$v2\E$/sm,
+		'relative --only saved to absolute path');
+
 	open my $fh, '<', "$home/before";
 	PublicInbox::MboxReader->mboxrd($fh, sub { push @before, $_[0] });
 	isnt(scalar(@before), 0, 'initial v2 written');
@@ -207,7 +212,7 @@ test_lei(sub {
 	ok($shared < $orig, 'fewer bytes stored with --shared') or
 		diag "shared=$shared orig=$orig";
 
-	lei_ok([qw(edit-search), $v2s], { VISUAL => 'cat', EDITOR => 'cat' });
+	lei_ok([qw(edit-search), $v2s], $cat_env);
 	like($lei_out, qr/^\[lei/sm, 'edit-search can cat');
 
 	lei_ok('-C', "$home/v2s", qw(q -q -o ../s m:testmessage@example.com));
