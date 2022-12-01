@@ -617,11 +617,12 @@ sub prepare_external {
 	} elsif ($loc =~ m!\Ahttps?://!) {
 		require URI;
 		return add_uri($self, URI->new($loc));
-	} elsif (-f "$loc/ei.lock") {
+	} elsif (-f "$loc/ei.lock" && -d "$loc/ALL.git/objects") {
 		require PublicInbox::ExtSearch;
 		die "`\\n' not allowed in `$loc'\n" if index($loc, "\n") >= 0;
 		$loc = PublicInbox::ExtSearch->new($loc);
-	} elsif (-f "$loc/inbox.lock" || -d "$loc/public-inbox") {
+	} elsif ((-f "$loc/inbox.lock" && -d "$loc/all.git/objects") ||
+			(-d "$loc/public-inbox" && -d "$loc/objects")) {
 		die "`\\n' not allowed in `$loc'\n" if index($loc, "\n") >= 0;
 		require PublicInbox::Inbox; # v2, v1
 		$loc = bless { inboxdir => $loc }, 'PublicInbox::Inbox';
