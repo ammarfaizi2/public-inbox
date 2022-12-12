@@ -707,6 +707,7 @@ sub update_ent {
 	}
 	if (my $symlinks = $self->{-ent}->{symlinks}) {
 		my $top = File::Spec->rel2abs($self->{dst});
+		push @{$self->{-new_symlinks}}, @$symlinks;
 		for my $p (@$symlinks) {
 			my $ln = "$top/$p";
 			$ln =~ tr!/!/!s;
@@ -1007,6 +1008,8 @@ sub dump_project_list ($$) {
 	$new{substr($_, 1)} = 1 for keys %$m; # drop leading '/'
 	my @list = sort keys %new;
 	my @remote = grep { !defined($new{$_}) } @list;
+	my %lnk = map { substr($_, 1) => undef } @{$self->{-new_symlinks}};
+	@remote = grep { !exists($lnk{$_}) } @remote;
 
 	warn <<EOM if @remote;
 The following local repositories are ignored/gone from $self->{src}:
@@ -1058,6 +1061,7 @@ sub try_manifest {
 	}
 	local $self->{chg} = {};
 	local $self->{-local_manifest} = load_current_manifest($self);
+	local $self->{-new_symlinks} = [];
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
 	return $lei->child_error(1, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
