@@ -8,14 +8,25 @@ use PublicInbox::TestCommon;
 use Errno qw(EADDRINUSE);
 use Cwd qw(abs_path);
 use Carp qw(croak);
+use Fcntl qw(FD_CLOEXEC F_SETFD);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
 use IO::Socket::UNIX;
+use POSIX qw(mkfifo);
 my ($tmpdir, $for_destroy) = tmpdir();
 my $unix = "$tmpdir/unix.sock";
 my $psgi = './t/httpd-corner.psgi';
 my $out = "$tmpdir/out.log";
 my $err = "$tmpdir/err.log";
 my $td;
+
+my $register_exit_fifo = sub {
+	my ($s, $f) = @_;
+	my $sock = new_sock($s);
+	ok($sock->write("GET /exit-fifo$f HTTP/1.0\r\n\r\n"),
+		'request exit-fifo');
+	ok($sock->read(my $buf, 4096), 'read exit-fifo response');
+	like($buf, qr!\r\n\r\nfifo \Q$f\E registered\z!, 'set exit fifo');
+};
 
 my $spawn_httpd = sub {
 	my (@args) = @_;
@@ -32,18 +43,24 @@ my $spawn_httpd = sub {
 }
 
 ok(!-S $unix, 'UNIX socket does not exist, yet');
-$spawn_httpd->("-l$unix", '-W0');
-my %o = (Peer => $unix, Type => SOCK_STREAM);
-for (1..1000) {
-	last if -S $unix && IO::Socket::UNIX->new(%o);
-	tick(0.02);
+my $f1 = "$tmpdir/f1";
+mkfifo($f1, 0600);
+{
+	local $ENV{TEST_OPEN_FIFO} = $f1;
+	$spawn_httpd->("-l$unix", '-W0');
+	open my $fh, '<', $f1 or xbail "open($f1): $!";
+	is(my $hi = <$fh>, "hi\n", 'got FIFO greeting');
+}
+ok(-S $unix, 'UNIX socket was bound by -httpd');
+
+sub new_sock ($) {
+	IO::Socket::UNIX->new(Peer => $_[0], Type => SOCK_STREAM)
+		// xbail "E: $! connecting to $_[0]";
 }
 
-ok(-S $unix, 'UNIX socket was bound by -httpd');
 sub check_sock ($) {
 	my ($unix) = @_;
-	my $sock = IO::Socket::UNIX->new(Peer => $unix, Type => SOCK_STREAM)
-		// BAIL_OUT "E: $! connecting to $unix";
+	my $sock = new_sock($unix);
 	ok($sock->write("GET /host-port HTTP/1.0\r\n\r\n"),
 		'wrote req to server');
 	ok($sock->read(my $buf, 4096), 'read response');
@@ -107,95 +124,116 @@ SKIP: {
 	};
 
 	for my $w (qw(-W0 -W1)) {
+		pipe(my ($p0, $p1)) or xbail "pipe: $!";
+		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
 		# wait for daemonization
 		$spawn_httpd->("-l$unix", '-D', '-P', $pid_file, $w);
+		close $p1 or xbail "close: $!";
 		$td->join;
 		is($?, 0, "daemonized $w process");
 		check_sock($unix);
 		ok(-s $pid_file, "$w pid file written");
 		my $pid = $read_pid->($pid_file);
 		is(kill('TERM', $pid), 1, "signaled daemonized $w process");
-		delay_until(sub { !kill(0, $pid) });
-		is(kill(0, $pid), 0, "daemonized $w process exited");
+		vec(my $rvec = '', fileno($p0), 1) = 1;
+		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
+		is(my $undef = <$p0>, undef, 'process closed pipe writer at exit');
 		ok(!-e $pid_file, "$w pid file unlinked at exit");
 	}
 
-	# try a USR2 upgrade with workers:
 	my $httpd = abs_path('blib/script/public-inbox-httpd');
 	$psgi = abs_path($psgi);
 	my $opt = { run_mode => 0 };
-
 	my @args = ("-l$unix", '-D', '-P', $pid_file, -1, $out, -2, $err);
-	$td = start_script([$httpd, @args, $psgi], undef, $opt);
-	$td->join;
-	is($?, 0, "daemonized process again");
-	check_sock($unix);
-	ok(-s $pid_file, 'pid file written');
-	my $pid = $read_pid->($pid_file);
 
-	# stop worker to ensure check_sock below hits $new_pid
-	kill('TTOU', $pid) or die "TTOU failed: $!";
+	if ('USR2 upgrades with workers') {
+		pipe(my ($p0, $p1)) or xbail "pipe: $!";
+		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
 
-	kill('USR2', $pid) or die "USR2 failed: $!";
-	delay_until(sub {
-		$pid != (eval { $read_pid->($pid_file) } // $pid)
-	});
-	my $new_pid = $read_pid->($pid_file);
-	isnt($new_pid, $pid, 'new child started');
-	ok($new_pid > 0, '$new_pid valid');
-	delay_until(sub { -s "$pid_file.oldbin" });
-	my $old_pid = $read_pid->("$pid_file.oldbin");
-	is($old_pid, $pid, '.oldbin pid file written');
-	ok($old_pid > 0, '$old_pid valid');
+		$td = start_script([$httpd, @args, $psgi], undef, $opt);
+		close($p1) or xbail "close: $!";
+		$td->join;
+		is($?, 0, "daemonized process again");
+		check_sock($unix);
+		ok(-s $pid_file, 'pid file written');
+		my $pid = $read_pid->($pid_file);
 
-	check_sock($unix); # ensures $new_pid is ready to receive signals
+		# stop worker to ensure check_sock below hits $new_pid
+		kill('TTOU', $pid) or die "TTOU failed: $!";
 
-	# first, back out of the upgrade
-	kill('QUIT', $new_pid) or die "kill new PID failed: $!";
-	delay_until(sub {
-		$pid == (eval { $read_pid->($pid_file) } // 0)
-	});
-	is($read_pid->($pid_file), $pid, 'old PID file restored');
-	ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
+		kill('USR2', $pid) or die "USR2 failed: $!";
+		delay_until(sub {
+			$pid != (eval { $read_pid->($pid_file) } // $pid)
+		});
+		my $new_pid = $read_pid->($pid_file);
+		isnt($new_pid, $pid, 'new child started');
+		ok($new_pid > 0, '$new_pid valid');
+		delay_until(sub { -s "$pid_file.oldbin" });
+		my $old_pid = $read_pid->("$pid_file.oldbin");
+		is($old_pid, $pid, '.oldbin pid file written');
+		ok($old_pid > 0, '$old_pid valid');
 
-	# retry USR2 upgrade
-	kill('USR2', $pid) or die "USR2 failed: $!";
-	delay_until(sub {
-		$pid != (eval { $read_pid->($pid_file) } // $pid)
-	});
-	$new_pid = $read_pid->($pid_file);
-	isnt($new_pid, $pid, 'new child started again');
-	$old_pid = $read_pid->("$pid_file.oldbin");
-	is($old_pid, $pid, '.oldbin pid file written');
+		check_sock($unix); # ensures $new_pid is ready to receive signals
 
-	# drop the old parent
-	kill('QUIT', $old_pid) or die "QUIT failed: $!";
-	delay_until(sub { !kill(0, $old_pid) });
-	ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
+		# first, back out of the upgrade
+		kill('QUIT', $new_pid) or die "kill new PID failed: $!";
+		delay_until(sub {
+			$pid == (eval { $read_pid->($pid_file) } // 0)
+		});
+		is($read_pid->($pid_file), $pid, 'old PID file restored');
+		ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
 
-	# drop the new child
-	check_sock($unix);
-	kill('QUIT', $new_pid) or die "QUIT failed: $!";
-	delay_until(sub { !kill(0, $new_pid) });
-	ok(!-f $pid_file, 'PID file is gone');
+		# retry USR2 upgrade
+		kill('USR2', $pid) or die "USR2 failed: $!";
+		delay_until(sub {
+			$pid != (eval { $read_pid->($pid_file) } // $pid)
+		});
+		$new_pid = $read_pid->($pid_file);
+		isnt($new_pid, $pid, 'new child started again');
+		$old_pid = $read_pid->("$pid_file.oldbin");
+		is($old_pid, $pid, '.oldbin pid file written');
 
+		# drop the old parent
+		kill('QUIT', $old_pid) or die "QUIT failed: $!";
+		delay_until(sub { !kill(0, $old_pid) }); # UGH
 
-	# try USR2 without workers (-W0)
-	$td = start_script([$httpd, @args, '-W0', $psgi], undef, $opt);
-	$td->join;
-	is($?, 0, 'daemonized w/o workers');
-	check_sock($unix);
-	$pid = $read_pid->($pid_file);
+		ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
 
-	# replace running process
-	kill('USR2', $pid) or die "USR2 failed: $!";
-	delay_until(sub { !kill(0, $pid) });
+		# drop the new child
+		check_sock($unix);
+		kill('QUIT', $new_pid) or die "QUIT failed: $!";
 
-	check_sock($unix);
-	$pid = $read_pid->($pid_file);
-	kill('QUIT', $pid) or die "USR2 failed: $!";
-	delay_until(sub { !kill(0, $pid) });
-	ok(!-f $pid_file, 'PID file is gone');
+		vec(my $rvec = '', fileno($p0), 1) = 1;
+		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
+		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
+
+		ok(!-f $pid_file, 'PID file is gone');
+	}
+
+	if ('try USR2 without workers (-W0)') {
+		pipe(my ($p0, $p1)) or xbail "pipe: $!";
+		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
+		$td = start_script([$httpd, @args, '-W0', $psgi], undef, $opt);
+		close $p1 or xbail "close: $!";
+		$td->join;
+		is($?, 0, 'daemonized w/o workers');
+		$register_exit_fifo->($unix, $f1);
+		my $pid = $read_pid->($pid_file);
+
+		# replace running process
+		kill('USR2', $pid) or xbail "USR2 failed: $!";
+		open my $fh, '<', $f1 or xbail "open($f1): $!";
+		is(my $bye = <$fh>, "bye from $pid\n", 'got FIFO bye');
+
+		check_sock($unix);
+		$pid = $read_pid->($pid_file);
+		kill('QUIT', $pid) or xbail "USR2 failed: $!";
+
+		vec(my $rvec = '', fileno($p0), 1) = 1;
+		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
+		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
+		ok(!-f $pid_file, 'PID file is gone');
+	}
 }
 
 done_testing();

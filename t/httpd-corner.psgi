@@ -3,9 +3,22 @@
 # corner case tests for the generic PSGI server
 # Usage: plackup [OPTIONS] /path/to/this/file
 use v5.12;
-use warnings;
 use Plack::Builder;
 require Digest::SHA;
+if (defined(my $f = $ENV{TEST_OPEN_FIFO})) {
+	open my $fh, '>', $f or die "open($f): $!";
+	say $fh 'hi';
+	close $fh;
+}
+
+END {
+	if (defined(my $f = $ENV{TEST_EXIT_FIFO})) {
+		open my $fh, '>', $f or die "open($f): $!";
+		say $fh "bye from $$";
+		close $fh;
+	}
+}
+
 my $pi_config = $ENV{PI_CONFIG} // 'unset'; # capture ASAP
 my $app = sub {
 	my ($env) = @_;
@@ -118,6 +131,10 @@ my $app = sub {
 	} elsif ($path eq '/PI_CONFIG') {
 		$code = 200;
 		push @$body, $pi_config; # show value at ->refresh_groups
+	} elsif ($path =~ m!\A/exit-fifo(.+)\z!) {
+		$code = 200;
+		$ENV{TEST_EXIT_FIFO} = $1; # for END {}
+		push @$body, "fifo $1 registered";
 	}
 	[ $code, $h, $body ]
 };
