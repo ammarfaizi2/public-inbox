@@ -960,9 +960,13 @@ sub clone_all {
 			# resolve multi-level references
 			while ($m && defined($nxt = $m->{$x}->{reference})) {
 				exists($todo->{$nxt}) or last;
-				die <<EOM if ++$nr > 1000;
-E: dependency loop detected (`$x' => `$nxt')
+				if (++$nr > 1000) {
+					$m->{$x}->{reference} = undef;
+					$m->{$nxt}->{reference} = undef;
+					warn <<EOM
+E: dependency loop detected (`$x' => `$nxt'), breaking
 EOM
+				}
 				$x = $nxt;
 			}
 			my $y = delete $todo->{$x} // next; # already done
