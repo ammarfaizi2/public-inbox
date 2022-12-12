@@ -320,7 +320,7 @@ sub conn_for {
 	$spawn_httpd->('-W0');
 }
 
-sub delay { select(undef, undef, undef, shift || rand(0.02)) }
+sub delay { tick(shift || rand(0.02)) }
 
 my $str = 'abcdefghijklmnopqrstuvwxyz';
 my $len = length $str;

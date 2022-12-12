@@ -358,7 +358,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 		}
 		ok(run_script([qw(-index -c -j0 --reindex), $ibx->{inboxdir}],
 				undef, $noerr), '-compacted');
-		select(undef, undef, undef, $fast_idle ? 0.1 : 2.1);
+		tick($fast_idle ? 0.1 : 2.1);
 		$art = $n->article($ex->header('Message-ID'));
 		ok($art, 'new article retrieved after compact');
 		$lsof or skip 'lsof missing', 1;
@@ -372,9 +372,9 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 	{
 		setsockopt($s, IPPROTO_TCP, TCP_NODELAY, 1);
 		syswrite($s, 'HDR List-id 1-');
-		select(undef, undef, undef, 0.15);
+		tick(0.15);
 		ok($td->kill, 'killed nntpd');
-		select(undef, undef, undef, 0.15);
+		tick(0.15);
 		syswrite($s, "\r\n");
 		$buf = '';
 		do {

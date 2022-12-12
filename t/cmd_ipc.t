@@ -10,7 +10,6 @@ pipe(my ($r, $w)) or BAIL_OUT;
 my ($send, $recv);
 require_ok 'PublicInbox::Spawn';
 my $SOCK_SEQPACKET = eval { Socket::SOCK_SEQPACKET() } // undef;
-use Time::HiRes qw(usleep);
 
 my $do_test = sub { SKIP: {
 	my ($type, $flag, $desc) = @_;
@@ -61,7 +60,7 @@ my $do_test = sub { SKIP: {
 			if ($pid == 0) {
 				# need to loop since Perl signals are racy
 				# (the interpreter doesn't self-pipe)
-				while (usleep(1000)) {
+				while (tick(0.01)) {
 					kill 'ALRM', $tgt;
 				}
 			}

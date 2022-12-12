@@ -1,8 +1,8 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Tests for binding Unix domain sockets
 use strict;
-use warnings;
 use Test::More;
 use PublicInbox::TestCommon;
 use Errno qw(EADDRINUSE);
@@ -36,7 +36,7 @@ $spawn_httpd->("-l$unix", '-W0');
 my %o = (Peer => $unix, Type => SOCK_STREAM);
 for (1..1000) {
 	last if -S $unix && IO::Socket::UNIX->new(%o);
-	select undef, undef, undef, 0.02
+	tick(0.02);
 }
 
 ok(-S $unix, 'UNIX socket was bound by -httpd');
@@ -89,7 +89,7 @@ sub delay_until {
 	my $end = time + 30;
 	do {
 		return if $cond->();
-		select undef, undef, undef, 0.012;
+		tick(0.012);
 	} until (time > $end);
 	Carp::confess('condition failed');
 }
