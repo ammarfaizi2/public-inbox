@@ -465,6 +465,7 @@ sub apply_result ($$) {
 			dbg($self, 'trying '.di_url($self, $nxt));
 			return do_git_apply($self);
 		} else {
+			$msg .= " (no patches left to try for $di->{oid_b})\n";
 			ERR($self, $msg);
 		}
 	} else {
