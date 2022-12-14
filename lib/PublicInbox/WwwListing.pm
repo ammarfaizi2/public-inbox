@@ -162,7 +162,7 @@ sub mset_footer ($$) {
 	# no footer if too few matches
 	return '' if $mset->get_matches_estimated == $mset->size;
 	require PublicInbox::SearchView;
-	PublicInbox::SearchView::search_nav_bot($mset, $ctx->{-sq});
+	PublicInbox::SearchView::search_nav_bot($ctx, $mset, $ctx->{-sq});
 }
 
 sub mset_nav_top {

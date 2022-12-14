@@ -134,7 +134,7 @@ sub mset_summary {
 		$q->{-min_pct} = $min;
 		$q->{-max_pct} = $max;
 	}
-	$$res .= search_nav_bot($mset, $q);
+	$$res .= search_nav_bot($ctx, $mset, $q);
 	undef;
 }
 
@@ -225,7 +225,7 @@ EOM
 }
 
 sub search_nav_bot { # also used by WwwListing for searching extindex miscidx
-	my ($mset, $q) = @_;
+	my ($ctx, $mset, $q) = @_;
 	my $total = $mset->get_matches_estimated;
 	my $l = $q->{l};
 	my $rv = '</pre><hr><pre id=t>';
@@ -274,9 +274,10 @@ sub search_nav_bot { # also used by WwwListing for searching extindex miscidx
 	$rv .= qq{<a\nhref="?$prev"\nrel=prev>prev $pd</a>} if $prev;
 
 	my $rev = $q->qs_html(o => $o < 0 ? 0 : -1);
-	$rv .= qq{ | <a\nhref="?$rev">reverse</a>} .
-		q{ | sort options + mbox downloads } .
-		q{<a href=#d>above</a></pre>};
+	$rv .= qq{ | <a\nhref="?$rev">reverse</a>};
+	exists($ctx->{ibx}) and
+		$rv .= q{ | sort options + mbox downloads <a href=#d>above</a></pre>};
+	$rv;
 }
 
 sub sort_relevance {
@@ -301,7 +302,7 @@ sub mset_thread {
 	my $rootset = PublicInbox::SearchThread::thread($msgs,
 		$r ? \&sort_relevance : \&PublicInbox::View::sort_ds,
 		$ctx);
-	my $skel = search_nav_bot($mset, $q).
+	my $skel = search_nav_bot($ctx, $mset, $q).
 		"<pre>-- links below jump to the message on this page --\n";
 
 	$ctx->{-upfx} = '';
