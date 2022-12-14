@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # used by PublicInbox::SearchView and PublicInbox::WwwListing
@@ -16,10 +16,11 @@ sub new {
 	my $t = $qp->{t}; # collapse threads
 	my ($l) = (($qp->{l} || '') =~ /([0-9]+)/);
 	$l = $LIM if !$l || $l > $LIM;
+	my ($o) = (($qp->{o} || '0') =~ /(-?[0-9]+)/);
 	bless {
 		q => $qp->{'q'},
 		x => $qp->{x} || '',
-		o => (($qp->{o} || '0') =~ /(-?[0-9]+)/),
+		o => $o,
 		l => $l,
 		r => (defined $r && $r ne '0'),
 		t => (defined $t && $t ne '0'),
