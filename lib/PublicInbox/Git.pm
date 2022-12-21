@@ -28,8 +28,10 @@ our $in_cleanup;
 our $RDTIMEO = 60_000; # milliseconds
 our $async_warn; # true in read-only daemons
 
-use constant MAX_INFLIGHT => (POSIX::PIPE_BUF * 3) /
-	65; # SHA-256 hex size + "\n" in preparation for git using non-SHA1
+# 512: POSIX PIPE_BUF minimum (see pipe(7))
+# 3: @$inflight is flattened [ $OID, $cb, $arg ]
+# 65: SHA-256 hex size + "\n" in preparation for git using non-SHA1
+use constant MAX_INFLIGHT => 512 * 3 / 65;
 
 my %GIT_ESC = (
 	a => "\a",
