@@ -396,6 +396,8 @@ t/altid.t
 t/altid_v2.t
 t/cgi.t
 t/check-www-inbox.perl
+t/clone-coderepo.psgi
+t/clone-coderepo.t
 t/cmd_ipc.t
 t/config.t
 t/config_limiter.t
