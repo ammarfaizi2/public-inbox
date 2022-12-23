@@ -247,9 +247,9 @@ sub psgi_return_init_cb {
 					delete($self->{hdr_buf}));
 	} else { # for synchronous PSGI servers
 		require PublicInbox::GetlineBody;
+		my $buf = delete $self->{hdr_buf};
 		$r->[2] = PublicInbox::GetlineBody->new($self->{rpipe},
-					\&event_step, $self,
-					${$self->{hdr_buf}}, $filter);
+					\&event_step, $self, $$buf, $filter);
 		$wcb->($r);
 	}
 }
