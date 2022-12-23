@@ -126,7 +126,7 @@ sub add_uniq_timer { # ($name, $secs, $coderef, @args) = @_;
 
 # caller sets return value to $Epoll
 sub _InitPoller () {
-	if (PublicInbox::Syscall::epoll_defined())  {
+	if (defined $PublicInbox::Syscall::SYS_epoll_create)  {
 		my $fd = epoll_create();
 		die "epoll_create: $!" if $fd < 0;
 		open($ep_io, '+<&=', $fd) or return;

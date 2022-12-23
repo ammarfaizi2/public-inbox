@@ -285,8 +285,6 @@ if ($^O eq "linux") {
 # epoll functions
 ############################################################################
 
-sub epoll_defined { $SYS_epoll_create ? 1 : 0; }
-
 sub epoll_create {
 	syscall($SYS_epoll_create, $no_deprecated ? 0 : 100);
 }
