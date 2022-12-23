@@ -48,7 +48,8 @@ sub event_step {
 		# this may call async_pass when headers are done
 		$cb->(my $refcnt_guard = delete $self->{arg});
 	} elsif (my $sock = $self->{sock}) {
-		my $http = $self->{http};
+		# $http may be undef if discarding body output from cgit on 404
+		my $http = $self->{http} or return $self->close;
 		# $self->{sock} is a read pipe for git-http-backend or cgit
 		# and 65536 is the default Linux pipe size
 		my $r = sysread($sock, my $buf, 65536);

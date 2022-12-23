@@ -128,7 +128,7 @@ sub input_prepare {
 	{ 0 => $in };
 }
 
-sub parse_cgi_headers {
+sub parse_cgi_headers { # {parse_hdr} for Qspawn
 	my ($r, $bref, $ctx) = @_;
 	return r(500) unless defined $r && $r >= 0;
 	$$bref =~ s/\A(.*?)\r?\n\r?\n//s or return $r == 0 ? r(500) : undef;
@@ -145,7 +145,9 @@ sub parse_cgi_headers {
 	}
 
 	# fallback to WwwCoderepo if cgit 404s.  Duplicating $ctx prevents
-	# ->finalize from the current Qspawn from using qspawn.wcb
+	# ->finalize from the current Qspawn from using qspawn.wcb.
+	# This makes qspawn skip ->async_pass and causes
+	# PublicInbox::HTTPD::Async::event_step to close shortly after
 	if ($code == 404 && $ctx->{www} && !$ctx->{_coderepo_tried}++) {
 		my %ctx = %$ctx;
 		$ctx{env} = +{ %{$ctx->{env}} };
