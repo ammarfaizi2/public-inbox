@@ -187,7 +187,7 @@ sub event_step {
 	my ($self, $err) = @_; # $err: $!
 	warn "psgi_{return,qx} $err" if defined($err);
 	finish($self);
-	my ($fh, $qx_fh) = delete(@$self{qw(fh qx_fh)});
+	my ($fh, $qx_fh) = delete(@$self{qw(qfh qx_fh)});
 	$fh->close if $fh; # async-only (psgi_return)
 }
 
@@ -242,7 +242,7 @@ sub psgi_return_init_cb {
 		# done reading headers, handoff to read body
 		my $fh = $wcb->($r); # scalar @$r == 2
 		$fh = $filter->attach($fh) if $filter;
-		$self->{fh} = $fh;
+		$self->{qfh} = $fh;
 		$async->async_pass($env->{'psgix.io'}, $fh,
 					delete($self->{hdr_buf}));
 	} else { # for synchronous PSGI servers

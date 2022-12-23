@@ -37,7 +37,7 @@ sub new {
 		arg => $arg, # arg for $cb
 		end_obj => $end_obj, # like END{}, can ->event_step
 	}, $class;
-	my $pp = tied *$io;
+	my $pp = tied *$io; # ProcessPipe
 	$pp->{fh}->blocking(0) // die "$io->blocking(0): $!";
 	$self->SUPER::new($io, EPOLLIN);
 }
@@ -54,7 +54,7 @@ sub event_step {
 		# and 65536 is the default Linux pipe size
 		my $r = sysread($sock, my $buf, 65536);
 		if ($r) {
-			$self->{fh}->write($buf); # may call $http->close
+			$self->{ofh}->write($buf); # may call $http->close
 			# let other clients get some work done, too
 			return if $http->{sock}; # !closed
 
@@ -63,7 +63,7 @@ sub event_step {
 			return; # EPOLLIN means we'll be notified
 		}
 
-		# Done! Error handling will happen in $self->{fh}->close
+		# Done! Error handling will happen in $self->{ofh}->close
 		# called by end_obj->event_step handler
 		delete $http->{forward};
 		$self->close; # queues end_obj->event_step to be called
@@ -71,9 +71,11 @@ sub event_step {
 }
 
 # once this is called, all data we read is passed to the
-# to the PublicInbox::HTTP instance ($http) via $fh->write
+# to the PublicInbox::HTTP instance ($http) via $ofh->write
+# $ofh is typically PublicInbox::HTTP::{Chunked,Identity}, but
+# may be PublicInbox::GzipFilter or $PublicInbox::Qspawn::qx_fh
 sub async_pass {
-	my ($self, $http, $fh, $bref) = @_;
+	my ($self, $http, $ofh, $bref) = @_;
 	# In case the client HTTP connection ($http) dies, it
 	# will automatically close this ($self) object.
 	$http->{forward} = $self;
@@ -82,10 +84,10 @@ sub async_pass {
 	# This is typically PublicInbox:HTTP::{chunked,identity}_wcb,
 	# but may be PublicInbox::GzipFilter::write.  PSGI requires
 	# *_wcb methods respond to ->write (and ->close), not ->print
-	$fh->write($$bref);
+	$ofh->write($$bref);
 
 	$self->{http} = $http;
-	$self->{fh} = $fh;
+	$self->{ofh} = $ofh;
 }
 
 # may be called as $forward->close in PublicInbox::HTTP or EOF (event_step)
