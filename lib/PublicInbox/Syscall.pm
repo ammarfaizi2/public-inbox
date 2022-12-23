@@ -60,21 +60,6 @@ use constant {
 };
 
 my @BYTES_4_hole = BYTES_4_hole ? (0) : ();
-our $loaded_syscall = 0;
-
-sub _load_syscall {
-    # props to Gaal for this!
-    return if $loaded_syscall++;
-    my $clean = sub {
-        delete @INC{qw<syscall.ph asm/unistd.ph bits/syscall.ph
-                        _h2ph_pre.ph sys/syscall.ph>};
-    };
-    $clean->(); # don't trust modules before us
-    my $rv = eval { require 'syscall.ph'; 1 } || eval { require 'sys/syscall.ph'; 1 };
-    $clean->(); # don't require modules after us trust us
-    $rv;
-}
-
 
 our (
      $SYS_epoll_create,
@@ -256,19 +241,12 @@ if ($^O eq "linux") {
 	$FS_IOC_SETFLAGS = 0x80046602;
 	$SIGNUM{WINCH} = 20;
     } else {
-        # as a last resort, try using the *.ph files which may not
-        # exist or may be wrong
-        _load_syscall();
-        $SYS_epoll_create = eval { &SYS_epoll_create; } || 0;
-        $SYS_epoll_ctl    = eval { &SYS_epoll_ctl;    } || 0;
-        $SYS_epoll_wait   = eval { &SYS_epoll_wait;   } || 0;
-
-	# Note: do NOT add new syscalls to depend on *.ph, here.
-	# Better to miss syscalls (so we can fallback to IO::Poll)
-	# than to use wrong ones, since the names are not stable
-	# (at least not on FreeBSD), if the actual numbers are.
+        warn <<EOM;
+machine=$machine ptrsize=$Config{ptrsize} has no syscall definitions
+git clone https://80x24.org/public-inbox.git and
+Send the output of ./devel/syscall-list to meta\@public-inbox.org
+EOM
     }
-
     if ($u64_mod_8) {
         *epoll_wait = \&epoll_wait_mod8;
         *epoll_ctl = \&epoll_ctl_mod8;
@@ -279,7 +257,7 @@ if ($^O eq "linux") {
 }
 # use Inline::C for *BSD-only or general POSIX stuff.
 # Linux guarantees stable syscall numbering, BSDs only offer a stable libc
-# use scripts/syscall-list on Linux to detect new syscall numbers
+# use devel/syscall-list on Linux to detect new syscall numbers
 
 ############################################################################
 # epoll functions
