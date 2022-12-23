@@ -461,7 +461,11 @@ EOM
 }
 
 sub fp_done {
-	my ($self, $cb, @arg) = @_;
+	my ($self, $cmd, $cb, @arg) = @_;
+	if ($?) {
+		$self->{lei}->err("@$cmd failed (\$?=$?) (non-fatal)");
+		$? = 0; # don't let it influence normal exit
+	}
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
 	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
@@ -487,8 +491,11 @@ sub cmp_fp_do {
 	my $opt = { 2 => $self->{lei}->{2} };
 	open($opt->{1}, '+>', undef) or die "open(tmp): $!";
 	$self->{-show_ref} = $opt->{1};
-	my $done = PublicInbox::OnDestroy->new($$, \&fp_done, $self, $cb, @arg);
-	start_cmd($self, $cmd, $opt, $done);
+	do_reap($self);
+	$self->{lei}->qerr("# @$cmd");
+	return if $self->{dry_run};
+	$LIVE->{spawn($cmd, undef, $opt)} = [ \&fp_done, $self, $cmd,
+						$cb, @arg ];
 }
 
 sub resume_fetch {
