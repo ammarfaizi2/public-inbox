@@ -84,10 +84,6 @@ sub async_pass {
 	# *_wcb methods respond to ->write (and ->close), not ->print
 	$fh->write($$bref);
 
-	# we're done with this, free this memory up ASAP since the
-	# calls after this may use much memory:
-	$$bref = undef;
-
 	$self->{http} = $http;
 	$self->{fh} = $fh;
 }
