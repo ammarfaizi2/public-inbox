@@ -6,7 +6,7 @@ package PublicInbox::TestCommon;
 use strict;
 use parent qw(Exporter);
 use v5.10.1;
-use Fcntl qw(FD_CLOEXEC F_SETFD F_GETFD :seek);
+use Fcntl qw(F_SETFD :seek);
 use POSIX qw(dup2);
 use IO::Socket::INET;
 use File::Spec;
@@ -479,16 +479,14 @@ sub start_script {
 		# pretend to be systemd (cf. sd_listen_fds(3))
 		# 3 == SD_LISTEN_FDS_START
 		my $fd;
-		for ($fd = 0; 1; $fd++) {
-			my $s = $opt->{$fd};
-			last if $fd >= 3 && !defined($s);
-			next unless $s;
-			my $fl = fcntl($s, F_GETFD, 0);
-			if (($fl & FD_CLOEXEC) != FD_CLOEXEC) {
-				warn "got FD:".fileno($s)." w/o CLOEXEC\n";
+		for ($fd = 0; $fd < 3 || defined($opt->{$fd}); $fd++) {
+			my $io = $opt->{$fd} // next;
+			my $old = fileno($io);
+			if ($old == $fd) {
+				fcntl($io, F_SETFD, 0) // die "F_SETFD: $!";
+			} else {
+				dup2($old, $fd) // die "dup2($old, $fd): $!";
 			}
-			fcntl($s, F_SETFD, $fl &= ~FD_CLOEXEC);
-			dup2(fileno($s), $fd) or die "dup2 failed: $!\n";
 		}
 		%ENV = (%ENV, %$env) if $env;
 		my $fds = $fd - 3;
