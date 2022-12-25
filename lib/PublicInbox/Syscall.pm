@@ -87,7 +87,9 @@ if ($^O eq "linux") {
 	# if we're running on an x86_64 kernel, but a 32-bit process,
 	# we need to use the x32 or i386 syscall numbers.
 	if ($machine eq 'x86_64') {
-	    $machine = $Config{cppsymbols} =~ /\b__ILP32__=1\b/ ? 'x32' : 'i386'
+	    my $s = $Config{cppsymbols};
+	    $machine = ($s =~ /\b__ILP32__=1\b/ && $s =~ /\b__x86_64__=1\b/) ?
+				'x32' : 'i386'
 	} elsif ($machine eq 'mips64') { # similarly for mips64 vs mips
 	    $machine = 'mips';
 	}
