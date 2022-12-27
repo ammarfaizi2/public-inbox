@@ -237,7 +237,12 @@ sub psgi_return_init_cb {
 			$self->{rpipe}->close;
 			event_step($self);
 		}
-		$wcb->($r) if ref($r) eq 'ARRAY';
+		if (ref($r) eq 'ARRAY') { # error
+			$wcb->($r)
+		} elsif (ref($r) eq 'CODE') { # chain another command
+			$r->($wcb)
+		}
+		# else do nothing
 	} elsif ($async) {
 		# done reading headers, handoff to read body
 		my $fh = $wcb->($r); # scalar @$r == 2

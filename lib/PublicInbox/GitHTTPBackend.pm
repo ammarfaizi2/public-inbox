@@ -154,12 +154,9 @@ sub parse_cgi_headers { # {parse_hdr} for Qspawn
 		delete $ctx->{env}->{'qspawn.wcb'};
 		$ctx->{env}->{'plack.skip-deflater'} = 1; # prevent 2x gzip
 		my $res = $ctx->{www}->coderepo->srv(\%ctx);
-		if (ref($res) eq 'CODE') {
-			$res->(delete $ctx{env}->{'qspawn.wcb'});
-		} else { # ref($res) eq 'ARRAY'
-			$ctx->{env}->{'qspawn.wcb'} = $ctx{env}->{'qspawn.wcb'};
-		}
-		$res; # non ARRAY ref for ->psgi_return_init_cb
+		# for ->psgi_return_init_cb:
+		$ctx->{env}->{'qspawn.wcb'} = $ctx{env}->{'qspawn.wcb'};
+		$res; # CODE or ARRAY ref
 	} else {
 		[ $code, \@h ]
 	}
