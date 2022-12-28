@@ -5,6 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use File::Temp;
+use File::Path qw(remove_tree);
 use Digest::SHA qw(sha1_hex);
 require_mods(qw(json Plack::Builder HTTP::Date HTTP::Status));
 require_git '1.8.5';
@@ -126,5 +127,26 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	like($err, qr/no longer exist.*\bgone\.git\b/s, 'gone.git noted');
 }
 
+{
+	my $x = [qw(-clone --inbox-config=never --manifest= --project-list=
+		--objstore= -p), $url, "$tmpdir/dst",
+		'--post-update-hook=./t/clone-coderepo-puh1.sh',
+		'--post-update-hook=./t/clone-coderepo-puh2.sh' ];
+	my $log = "$tmpdir/puh.log";
+	my $env = { CLONE_CODEREPO_TEST_OUT => $log };
+	ok(run_script($x, $env), 'no-op clone w/ post-update-hook');
+	ok(!-e $log, 'hooks not run on no-op');
+	remove_tree("$tmpdir/dst");
+	ok(run_script($x, $env), 'fresh clone w/ post-update-hook');
+	ok(-e $log, 'hooks run on fresh clone');
+	open my $lh, '<', $log or xbail "open $log: $!";
+	chomp(my @l = readline($lh));
+	is(scalar(@l), 4, '4 lines written by hooks');
+	for my $r (qw(a b)) {
+		is_xdeeply(['uno', 'dos'],
+			[ (map { s/ .+//; $_ } grep(m!/$r\.git\z!, @l)) ],
+			"$r.git hooks ran in order") or diag explain(\@l);
+	}
+}
 
 done_testing;

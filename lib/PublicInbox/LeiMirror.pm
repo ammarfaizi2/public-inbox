@@ -682,6 +682,22 @@ sub atomic_write ($$$) {
 	ft_rename($ft, "$dn/$bn", 0666);
 }
 
+sub run_next_puh {
+	my ($self) = @_;
+	my $puh = shift @{$self->{-puh_todo}} // return;
+	my $fini = PublicInbox::OnDestroy->new($$, \&run_next_puh, $self);
+	my $cmd = [ @$puh, ($self->{cur_dst} // $self->{dst}) ];
+	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
+	start_cmd($self, $cmd, undef, $opt, $fini);
+}
+
+sub run_post_update_hooks {
+	my ($self) = @_;
+	my $puh = $self->{-puh} // return;
+	@{$self->{-puh_todo}} = @$puh;
+	run_next_puh($self);
+}
+
 # modifies the to-be-written manifest entry, and sets values from it, too
 sub update_ent {
 	my ($self) = @_;
@@ -773,6 +789,7 @@ sub v1_done { # called via OnDestroy
 	}
 	eval { set_description($self) };
 	warn $@ if $@;
+	run_post_update_hooks($self);
 	return if ($self->{-is_epoch} ||
 		$self->{lei}->{opt}->{'inbox-config'} ne 'always');
 	write_makefile($dst, 1);
@@ -1165,6 +1182,13 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 	$self->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 	umask($lei->{client_umask}) if defined $lei->{client_umask};
 	$self->{-initial_clone} = 1 if !-d $self->{dst};
+	if (defined(my $puh = $lei->{opt}->{'post-update-hook'})) {
+		require Text::ParseWords;
+		for (@$puh) {
+			my $pfx = [ Text::ParseWords::shellwords($_) ];
+			push @{$self->{-puh}}, $pfx;
+		}
+	}
 	eval {
 		my $ic = $lei->{opt}->{'inbox-config'} //= 'always';
 		$ic =~ /\A(?:v1|v2|always|never)\z/s or die <<"";
