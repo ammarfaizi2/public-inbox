@@ -24,6 +24,7 @@ use POSIX qw(strftime);
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [ fgrp mirror objects ]
 our $TODO; # reference => [ non-fgrp mirror objects ]
+our @PUH; # post-update hooks
 
 sub keep_going ($) {
 	$LIVE && (!$_[0]->{lei}->{child_error} ||
@@ -299,7 +300,7 @@ sub fgrp_update {
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
 	my $lei = $fgrp->{lei};
-	my $pack = PublicInbox::OnDestroy->new($$, \&pack_dst, $fgrp);
+	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
 	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $lei->{2} }, $pack);
 	close $r or die "close(r): $!";
 	return if $fgrp->{dry_run};
@@ -319,9 +320,10 @@ sub fgrp_update {
 	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
 }
 
-sub pack_dst { # packs lightweight satellite repos
+sub satellite_done {
 	my ($fgrp) = @_;
 	pack_refs($fgrp, $fgrp->{cur_dst});
+	run_puh($fgrp);
 }
 
 sub pack_refs {
@@ -513,7 +515,8 @@ sub resume_fetch {
 	my $cmd = [ @{$self->{-torsocks}}, @git,
 			fetch_args($self->{lei}, $opt), $rn ];
 	push @$cmd, '-P' if $self->{lei}->{prune}; # --prune-tags implied
-	start_cmd($self, $cmd, $opt, $fini);
+	my $run_puh = PublicInbox::OnDestroy->new($$, \&run_puh, $self, $fini);
+	start_cmd($self, $cmd, $opt, $run_puh);
 }
 
 sub fgrp_enqueue {
@@ -562,7 +565,8 @@ sub clone_v1 {
 						"$self->{dst}$ref";
 			}
 		}
-		start_cmd($self, $cmd, $opt, $fini);
+		start_cmd($self, $cmd, $opt, PublicInbox::OnDestroy->new($$,
+						\&run_puh, $self, $fini));
 	}
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
 				/\A(?:always|v1)\z/s) {
@@ -683,17 +687,17 @@ sub atomic_write ($$$) {
 
 sub run_next_puh {
 	my ($self) = @_;
-	my $puh = shift @{$self->{-puh_todo}} // return;
+	my $puh = shift @{$self->{-puh_todo}} // return delete($self->{-fini});
 	my $fini = PublicInbox::OnDestroy->new($$, \&run_next_puh, $self);
 	my $cmd = [ @$puh, ($self->{cur_dst} // $self->{dst}) ];
 	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
 	start_cmd($self, $cmd, undef, $opt, $fini);
 }
 
-sub run_post_update_hooks {
-	my ($self) = @_;
-	my $puh = $self->{-puh} // return;
-	@{$self->{-puh_todo}} = @$puh;
+sub run_puh {
+	my ($self, $fini) = @_;
+	$self->{-fini} = $fini;
+	@{$self->{-puh_todo}} = @PUH;
 	run_next_puh($self);
 }
 
@@ -788,7 +792,6 @@ sub v1_done { # called via OnDestroy
 	}
 	eval { set_description($self) };
 	warn $@ if $@;
-	run_post_update_hooks($self);
 	return if ($self->{-is_epoch} ||
 		$self->{lei}->{opt}->{'inbox-config'} ne 'always');
 	write_makefile($dst, 1);
@@ -1181,12 +1184,10 @@ sub do_mirror { # via wq_io_do or public-inbox-clone
 	$self->{dry_run} = 1 if $lei->{opt}->{'dry-run'};
 	umask($lei->{client_umask}) if defined $lei->{client_umask};
 	$self->{-initial_clone} = 1 if !-d $self->{dst};
+	local @PUH;
 	if (defined(my $puh = $lei->{opt}->{'post-update-hook'})) {
 		require Text::ParseWords;
-		for (@$puh) {
-			my $pfx = [ Text::ParseWords::shellwords($_) ];
-			push @{$self->{-puh}}, $pfx;
-		}
+		@PUH = map { [ Text::ParseWords::shellwords($_) ] } @$puh;
 	}
 	eval {
 		my $ic = $lei->{opt}->{'inbox-config'} //= 'always';

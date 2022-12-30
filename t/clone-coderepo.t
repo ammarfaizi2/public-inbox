@@ -127,26 +127,36 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	like($err, qr/no longer exist.*\bgone\.git\b/s, 'gone.git noted');
 }
 
-{
+my $test_puh = sub {
+	my (@clone_arg) = @_;
 	my $x = [qw(-clone --inbox-config=never --manifest= --project-list=
-		--objstore= -p), $url, "$tmpdir/dst",
+		-q -p), $url, "$tmpdir/dst", @clone_arg,
 		'--post-update-hook=./t/clone-coderepo-puh1.sh',
 		'--post-update-hook=./t/clone-coderepo-puh2.sh' ];
 	my $log = "$tmpdir/puh.log";
 	my $env = { CLONE_CODEREPO_TEST_OUT => $log };
-	ok(run_script($x, $env), 'no-op clone w/ post-update-hook');
-	ok(!-e $log, 'hooks not run on no-op');
 	remove_tree("$tmpdir/dst");
-	ok(run_script($x, $env), 'fresh clone w/ post-update-hook');
-	ok(-e $log, 'hooks run on fresh clone');
+	ok(run_script($x, $env), "fresh clone @clone_arg w/ post-update-hook");
+	ok(-e $log, "hooks run on fresh clone @clone_arg");
 	open my $lh, '<', $log or xbail "open $log: $!";
 	chomp(my @l = readline($lh));
-	is(scalar(@l), 4, '4 lines written by hooks');
+	is(scalar(@l), 4, "4 lines written by hooks on @clone_arg");
 	for my $r (qw(a b)) {
 		is_xdeeply(['uno', 'dos'],
 			[ (map { s/ .+//; $_ } grep(m!/$r\.git\z!, @l)) ],
 			"$r.git hooks ran in order") or diag explain(\@l);
 	}
-}
+	unlink($log) or xbail "unlink: $!";
+	ok(run_script($x, $env), "no-op clone @clone_arg w/ post-update-hook");
+	ok(!-e $log, "hooks not run on no-op @clone_arg");
+};
+$test_puh->();
+ok(!-e "$tmpdir/dst/objstore", 'no objstore, yet');
+
+my $fgrp = 'fgrp';
+$m->{'/a.git'}->{forkgroup} = $m->{'/b.git'}->{forkgroup} = $fgrp;
+$set_manifest->($m);
+$test_puh->('--objstore=');
+ok(-e "$tmpdir/dst/objstore", 'objstore created');
 
 done_testing;
