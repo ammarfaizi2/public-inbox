@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Parallel test runner which preloads code and reuses worker processes
@@ -10,8 +10,7 @@
 #
 # Usage: $PERL -I lib -w t/run.perl -j4
 # Or via prove(1): prove -lvw t/run.perl :: -j4
-use strict;
-use v5.10.1;
+use v5.12;
 use IO::Handle; # ->autoflush
 use PublicInbox::TestCommon;
 use PublicInbox::Spawn;
@@ -167,7 +166,7 @@ my $start_worker = sub {
 	my ($j, $rd, $wr, $todo) = @_;
 	my $pid = fork // DIE "fork: $!";
 	if ($pid == 0) {
-		close $wr if $wr;
+		close $wr;
 		$SIG{USR1} = undef; # undo parent $SIG{USR1}
 		$worker = $$;
 		while (1) {
@@ -203,15 +202,11 @@ for (my $i = $repeat; $i != 0; $i--) {
 	pipe(my ($rd, $wr)) or DIE "pipe: $!";
 
 	# fill the queue before forking so children can start earlier
-	my $n = (POSIX::PIPE_BUF / UINT_SIZE);
-	if ($n >= $#todo) {
-		print $wr join('', map { pack('I', $_) } (0..$#todo)) or DIE;
-		undef $wr;
-	} else { # write what we can...
-		$wr->autoflush(1);
-		print $wr join('', map { pack('I', $_) } (0..$n)) or DIE;
-		$n += 1; # and send more ($n..$#todo), later
-	}
+	$wr->autoflush(1);
+	$wr->blocking(0);
+	my $todo_buf = join('', map { pack('I', $_) } (0..$#todo));
+	my $woff = syswrite($wr, $todo_buf) // DIE "syswrite: $!";
+	substr($todo_buf, 0, $woff, '');
 	$eof = undef;
 	local $SIG{USR1} = sub { $eof = 1 };
 	my $sigchld = sub {
@@ -243,12 +238,13 @@ for (my $i = $repeat; $i != 0; $i--) {
 	for (my $j = 0; $j < $jobs; $j++) {
 		$start_worker->($j, $rd, $wr, \@todo);
 	}
-	if ($wr) {
+	{
 		local $SIG{CHLD} = $sigchld;
 		# too many tests to fit in the pipe before starting workers,
 		# send the rest now the workers are running
-		print $wr join('', map { pack('I', $_) } ($n..$#todo)) or DIE;
-		undef $wr;
+		$wr->blocking(1);
+		print $wr $todo_buf or DIE;
+		close $wr;
 	}
 
 	$sigchld->(0) while scalar(keys(%pids));
