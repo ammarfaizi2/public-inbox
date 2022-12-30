@@ -493,7 +493,6 @@ sub cmp_fp_do {
 	$self->{-show_ref} = $opt->{1};
 	do_reap($self);
 	$self->{lei}->qerr("# @$cmd");
-	return if $self->{dry_run};
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&fp_done, $self, $cmd,
 						$cb, @arg ];
 }
