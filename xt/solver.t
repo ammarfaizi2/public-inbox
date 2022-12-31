@@ -36,8 +36,8 @@ my $todo = {
 my ($ibx_name, $urls, @gone);
 my $client = sub {
 	my ($cb) = @_;
-	for (@$urls) {
-		my $url = "/$ibx_name/$_";
+	for my $u (@$urls) {
+		my $url = "/$ibx_name/$u";
 		my $res = $cb->(GET($url));
 		is($res->code, 200, $url);
 		next if $res->code == 200;

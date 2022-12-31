@@ -27,8 +27,7 @@ sub prepare_coderepos {
 	my $pi_cfg = $self->{pi_cfg};
 
 	# TODO: support gitweb and other repository viewers?
-	defined($pi_cfg->{'publicinbox.cgitrc'}) and
-		$pi_cfg->parse_cgitrc(undef, 0);
+	$pi_cfg->parse_cgitrc(undef, 0);
 
 	my $code_repos = $pi_cfg->{-code_repos};
 	for my $k (grep(/\Acoderepo\.(?:.+)\.dir\z/, keys %$pi_cfg)) {

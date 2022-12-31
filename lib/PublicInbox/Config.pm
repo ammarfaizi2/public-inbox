@@ -276,7 +276,7 @@ sub scan_projects_coderepo ($$$) {
 
 sub parse_cgitrc {
 	my ($self, $cgitrc, $nesting) = @_;
-	$cgitrc //= $self->{'publicinbox.cgitrc'};
+	$cgitrc //= $self->{'publicinbox.cgitrc'} // return;
 	if ($nesting == 0) {
 		# defaults:
 		my %s = map { $_ => 1 } qw(/cgit.css /cgit.png
@@ -388,6 +388,7 @@ sub repo_objs {
 	my ($self, $ibxish) = @_;
 	my $ibx_code_repos = $ibxish->{coderepo} // return;
 	$ibxish->{-repo_objs} // do {
+		parse_cgitrc($self, undef, 0);
 		my $code_repos = $self->{-code_repos};
 		my @repo_objs;
 		for my $nick (@$ibx_code_repos) {
