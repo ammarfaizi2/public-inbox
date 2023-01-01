@@ -263,6 +263,16 @@ SKIP: {
 	cgiturl = http://example.com/binfoo
 EOF
 	close $cfgfh or die;
+	my $exp_digest;
+	{
+		my $exp = xqx([qw(git archive --format=tar.gz
+				--prefix=public-inbox-1.0.0/ v1.0.0)],
+				{ GIT_DIR => $git_dir });
+		is($?, 0, 'no error from git archive');
+		ok(length($exp) > 1024, 'expected archive generated');
+		$exp_digest = git_sha(256, \$exp)->hexdigest;
+	};
+
 	my $cfg = PublicInbox::Config->new($cfgpath);
 	my $www = PublicInbox::WWW->new($cfg);
 	my $client = sub {
@@ -341,14 +351,11 @@ EOF
 		is($res->header('Content-Disposition'),
 			qq'inline; filename="$fn"', 'c-d header');
 		is($res->header('ETag'), qq'"$v1_0_0_rev"', 'etag header');
-		my $exp = xqx([qw(git archive --format=tar.gz
-				--prefix=public-inbox-1.0.0/ v1.0.0)],
-				{ GIT_DIR => $git_dir });
+
 		my $got = $res->content;
-		is(length($got), length($exp),
-			"length matches installed `git archive' output") and
-		is(git_sha(1, \$got)->hexdigest, git_sha(1, \$exp)->hexdigest,
+		is(git_sha(256, \$got)->hexdigest, $exp_digest,
 			"content matches installed `git archive' output");
+		undef $got;
 
 		$fn = 'public-inbox-1.0.2.tar.gz';
 		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
