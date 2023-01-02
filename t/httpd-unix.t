@@ -136,6 +136,7 @@ SKIP: {
 		my $pid = $read_pid->($pid_file);
 		is(kill('TERM', $pid), 1, "signaled daemonized $w process");
 		vec(my $rvec = '', fileno($p0), 1) = 1;
+		delete $td->{-extra}; # drop tail(1) process
 		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
 		is(my $undef = <$p0>, undef, 'process closed pipe writer at exit');
 		ok(!-e $pid_file, "$w pid file unlinked at exit");
