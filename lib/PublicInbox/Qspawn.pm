@@ -233,9 +233,10 @@ sub psgi_return_init_cb {
 	if (ref($r) ne 'ARRAY' || scalar(@$r) == 3) { # error
 		if ($async) { # calls rpipe->close && ->event_step
 			$async->close; # PublicInbox::HTTPD::Async::close
-		} else {
-			$self->{rpipe}->close;
+		} else { # generic PSGI:
+			delete($self->{rpipe})->close;
 			event_step($self);
+			waitpid_err($self);
 		}
 		if (ref($r) eq 'ARRAY') { # error
 			$wcb->($r)
