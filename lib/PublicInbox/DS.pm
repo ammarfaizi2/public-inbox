@@ -130,8 +130,7 @@ sub _InitPoller () {
 		my $fd = epoll_create();
 		die "epoll_create: $!" if $fd < 0;
 		open($ep_io, '+<&=', $fd) or return;
-		my $fl = fcntl($ep_io, F_GETFD, 0);
-		fcntl($ep_io, F_SETFD, $fl | FD_CLOEXEC);
+		fcntl($ep_io, F_SETFD, FD_CLOEXEC);
 		$fd;
 	} else {
 		my $cls;

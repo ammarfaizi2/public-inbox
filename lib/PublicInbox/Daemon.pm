@@ -11,7 +11,7 @@ use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use IO::Socket;
 use File::Spec;
-use POSIX qw(WNOHANG :signal_h);
+use POSIX qw(WNOHANG :signal_h F_SETFD);
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 STDOUT->autoflush(1);
 STDERR->autoflush(1);
@@ -478,15 +478,12 @@ sub upgrade { # $_[0] = signal name or number (unused)
 		return;
 	}
 	if ($pid == 0) {
-		use Fcntl qw(FD_CLOEXEC F_SETFD F_GETFD);
 		$ENV{LISTEN_FDS} = scalar @listeners;
 		$ENV{LISTEN_PID} = $$;
 		foreach my $s (@listeners) {
 			# @listeners are globs with workers, PI::L w/o workers
 			$s = $s->{sock} if ref($s) eq 'PublicInbox::Listener';
-
-			my $fl = fcntl($s, F_GETFD, 0);
-			fcntl($s, F_SETFD, $fl &= ~FD_CLOEXEC);
+			fcntl($s, F_SETFD, 0) // die "F_SETFD: $!";
 		}
 		exec @CMD;
 		die "Failed to exec: $!\n";
