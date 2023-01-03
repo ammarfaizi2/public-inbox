@@ -123,8 +123,9 @@ sub http_out ($) {
 }
 
 sub write {
+	my $self = shift;
 	# my $ret = bytes::length($_[1]); # XXX does anybody care?
-	http_out($_[0])->write(translate(@_));
+	http_out($self)->write($self->translate(@_));
 }
 
 sub zfh {
@@ -166,7 +167,7 @@ sub zflush ($;@) {
 sub close {
 	my ($self) = @_;
 	my $http_out = http_out($self) // return;
-	$http_out->write(zflush($self));
+	$http_out->write($self->zflush);
 	(delete($self->{http_out}) // return)->close;
 }
 

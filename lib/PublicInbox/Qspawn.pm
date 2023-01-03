@@ -40,7 +40,7 @@ my $def_limiter;
 # $cmd_env is the environ for the child process (not PSGI env)
 # $opt can include redirects and perhaps other process spawning options
 # {qsp_err} is an optional error buffer callers may access themselves
-sub new ($$$;) {
+sub new {
 	my ($class, $cmd, $cmd_env, $opt) = @_;
 	bless { args => [ $cmd, $cmd_env, $opt ] }, $class;
 }
@@ -106,6 +106,7 @@ sub finalize ($$) {
 		return unless $@;
 		warn "E: $@"; # hope qspawn.wcb can handle it
 	}
+	return if $self->{passed}; # another command chained it
 	if (my $wcb = delete $env->{'qspawn.wcb'}) {
 		# have we started writing, yet?
 		require PublicInbox::WwwStatic;
@@ -225,7 +226,12 @@ sub psgi_return_init_cb {
 	my ($self) = @_;
 	my $r = rd_hdr($self) or return;
 	my $env = $self->{psgi_env};
-	my $filter = delete($env->{'qspawn.filter'}) // (ref($r) eq 'ARRAY' ?
+	my $filter;
+	if (ref($r) eq 'ARRAY' && Scalar::Util::blessed($r->[2]) &&
+			$r->[2]->can('attach')) {
+		$filter = pop @$r;
+	}
+	$filter //= delete($env->{'qspawn.filter'}) // (ref($r) eq 'ARRAY' ?
 		PublicInbox::GzipFilter::qsp_maybe($r->[1], $env) : undef);
 
 	my $wcb = delete $env->{'qspawn.wcb'};
@@ -241,7 +247,8 @@ sub psgi_return_init_cb {
 		if (ref($r) eq 'ARRAY') { # error
 			$wcb->($r)
 		} elsif (ref($r) eq 'CODE') { # chain another command
-			$r->($wcb)
+			$r->($wcb);
+			$self->{passed} = 1;
 		}
 		# else do nothing
 	} elsif ($async) {

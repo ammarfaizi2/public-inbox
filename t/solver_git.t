@@ -364,6 +364,23 @@ EOF
 		$fn = 'public-inbox-1.0.0.tar.bz2';
 		$res = $cb->(GET("/public-inbox/snapshot/$fn"));
 		is($res->code, 404, '404 on unconfigured snapshot format');
+
+		$res = $cb->(GET('/public-inbox/atom/'));
+		is($res->code, 200, 'Atom feed');
+		SKIP: {
+			require_mods('XML::TreePP', 1);
+			my $t = XML::TreePP->new->parse($res->content);
+			is(scalar @{$t->{feed}->{entry}}, 50,
+				'got 50 entries');
+
+			$res = $cb->(GET('/public-inbox/atom/COPYING'));
+			is($res->code, 200, 'file Atom feed');
+			$t = XML::TreePP->new->parse($res->content);
+			ok($t->{feed}->{entry}, 'got entry');
+
+			$res = $cb->(GET('/public-inbox/atom/README.md'));
+			is($res->code, 404, '404 on non-existent file Atom feed');
+		}
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

@@ -16,6 +16,7 @@ use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStream;
 use PublicInbox::Hval qw(ascii_html);
 use PublicInbox::RepoSnapshot;
+use PublicInbox::RepoAtom;
 
 my $EACH_REF = "git for-each-ref --sort=-creatordate --format='%(HEAD)%00".
 	join('%00', map { "%($_)" }
@@ -225,6 +226,11 @@ sub srv { # endpoint called by PublicInbox::WWW
 			($ctx->{git} = $self->{"\0$1"})) {
 		$ctx->{wcr} = $self;
 		return PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
+	}
+
+	if ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
+			($ctx->{git} = $self->{"\0$1"})) {
+		return PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
 	}
 
 	# enforce trailing slash:
