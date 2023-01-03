@@ -149,13 +149,11 @@ sub parse_cgi_headers { # {parse_hdr} for Qspawn
 	# This makes qspawn skip ->async_pass and causes
 	# PublicInbox::HTTPD::Async::event_step to close shortly after
 	if ($code == 404 && $ctx->{www} && !$ctx->{_coderepo_tried}++) {
-		my %ctx = %$ctx;
-		$ctx{env} = +{ %{$ctx->{env}} };
-		delete $ctx->{env}->{'qspawn.wcb'};
+		my $wcb = delete $ctx->{env}->{'qspawn.wcb'};
 		$ctx->{env}->{'plack.skip-deflater'} = 1; # prevent 2x gzip
-		my $res = $ctx->{www}->coderepo->srv(\%ctx);
-		# for ->psgi_return_init_cb:
-		$ctx->{env}->{'qspawn.wcb'} = $ctx{env}->{'qspawn.wcb'};
+		my $res = $ctx->{www}->coderepo->srv($ctx);
+		# for ->psgi_return_init_cb
+		$ctx->{env}->{'qspawn.wcb'} = $wcb;
 		$res; # CODE or ARRAY ref
 	} else {
 		[ $code, \@h ]

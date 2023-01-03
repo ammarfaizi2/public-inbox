@@ -100,7 +100,7 @@ sub stream_large_blob ($$) {
 	my $cmd = ['git', "--git-dir=$git->{git_dir}", 'cat-file', $type, $oid];
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	my $env = $ctx->{env};
-	$env->{'qspawn.wcb'} = delete $ctx->{-wcb};
+	$env->{'qspawn.wcb'} = $ctx->{-wcb};
 	$qsp->psgi_return($env, undef, \&stream_blob_parse_hdr, $ctx);
 }
 
@@ -282,7 +282,7 @@ possible to have multiple root commits when merging independent histories.
 
 Every commit references one top-level <dfn id=tree>tree</dfn> object.</pre>
 EOM
-	delete($ctx->{env}->{'qspawn.wcb'})->($ctx->html_done($x));
+	delete($ctx->{-wcb})->($ctx->html_done($x));
 }
 
 sub stream_patch_parse_hdr { # {parse_hdr} for Qspawn
@@ -312,7 +312,7 @@ sub show_patch ($$) {
 		qw(format-patch -1 --stdout -C),
 		"--signature=git format-patch -1 --stdout -C $oid", $oid);
 	my $qsp = PublicInbox::Qspawn->new(\@cmd);
-	$ctx->{env}->{'qspawn.wcb'} = delete $ctx->{-wcb};
+	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
 	$ctx->{patch_oid} = $oid;
 	$qsp->psgi_return($ctx->{env}, undef, \&stream_patch_parse_hdr, $ctx);
 }
@@ -333,7 +333,7 @@ sub show_commit ($$) {
 	my $e = { GIT_DIR => $git->{git_dir} };
 	my $qsp = PublicInbox::Qspawn->new($cmd, $e, { -C => "$ctx->{-tmp}" });
 	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
-	$ctx->{env}->{'qspawn.wcb'} = delete $ctx->{-wcb};
+	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
 	$ctx->{git} = $git;
 	$qsp->psgi_qx($ctx->{env}, undef, \&show_commit_start, $ctx);
 }
