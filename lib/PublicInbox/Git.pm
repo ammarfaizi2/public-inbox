@@ -477,10 +477,10 @@ sub local_nick ($) {
 sub host_prefix_url ($$) {
 	my ($env, $url) = @_;
 	return $url if index($url, '//') >= 0;
-	my $scheme = $env->{'psgi.url_scheme'};
 	my $host_port = $env->{HTTP_HOST} //
 		"$env->{SERVER_NAME}:$env->{SERVER_PORT}";
-	"$scheme://$host_port". ($env->{SCRIPT_NAME} || '/') . $url;
+	my $sn = $env->{SCRIPT_NAME} // '';
+	"$env->{'psgi.url_scheme'}://$host_port$sn/$url";
 }
 
 sub base_url { # for coderepos, PSGI-only
