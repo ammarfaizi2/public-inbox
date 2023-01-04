@@ -485,10 +485,11 @@ sub host_prefix_url ($$) {
 
 sub base_url { # for coderepos, PSGI-only
 	my ($self, $env) = @_; # env - PSGI env
+	my $nick = $self->{nick} // return undef;
 	my $url = host_prefix_url($env, '');
 	# for mount in Plack::Builder
 	$url .= '/' if substr($url, -1, 1) ne '/';
-	$url . $self->{nick} . '/';
+	$url . $nick . '/';
 }
 
 sub isrch {} # TODO
@@ -496,9 +497,10 @@ sub isrch {} # TODO
 sub pub_urls {
 	my ($self, $env) = @_;
 	if (my $urls = $self->{cgit_url}) {
-		return map { host_prefix_url($env, $_) } @$urls;
+		map { host_prefix_url($env, $_) } @$urls;
+	} else {
+		(base_url($self, $env) // '???');
 	}
-	(local_nick($self) // '???');
 }
 
 sub cat_async_begin {
