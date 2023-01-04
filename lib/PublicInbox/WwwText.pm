@@ -250,21 +250,15 @@ sub coderepos_raw ($$) {
 	my ($ctx, $top_url) = @_;
 	my $cr = $ctx->{ibx}->{coderepo} // return ();
 	my $cfg = $ctx->{www}->{pi_cfg};
-	my @ret = ('Code repositories for project(s) associated with this '.
-		$ctx->{ibx}->thing_type . "\n");
-	for my $cr_name (@$cr) {
-		my $urls = $cfg->get_all("coderepo.$cr_name.cgiturl");
-		if ($urls) {
-			for (@$urls) {
-				my $u = m!\A(?:[a-z\+]+:)?//!i ? $_ :
-					$top_url.$_;
-				$ret[0] .= "\n\t" . prurl($ctx->{env}, $u);
-			}
-		} else {
-			$ret[0] .= qq[\n\t$cr_name.git (no URL configured)];
+	my $buf = 'Code repositories for project(s) associated with this '.
+		$ctx->{ibx}->thing_type . "\n";
+	for my $git (@{$ctx->{www}->{pi_cfg}->repo_objs($ctx->{ibx})}) {
+		for ($git->pub_urls($ctx->{env})) {
+			my $u = m!\A(?:[a-z\+]+:)?//!i ? $_ : $top_url.$_;
+			$buf .= "\n\t" . prurl($ctx->{env}, $u);
 		}
 	}
-	@ret; # may be empty, this sub is called as an arg for join()
+	($buf);
 }
 
 sub _add_non_http_urls ($$) {

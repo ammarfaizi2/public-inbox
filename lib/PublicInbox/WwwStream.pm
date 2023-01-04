@@ -90,24 +90,22 @@ sub coderepos ($) {
 	my ($ctx) = @_;
 	$ctx->{ibx} // return inboxes($ctx);
 	my $cr = $ctx->{ibx}->{coderepo} // return ();
-	my $cfg = $ctx->{www}->{pi_cfg};
 	my $upfx = ($ctx->{-upfx} // ''). '../';
 	my $pfx = $ctx->{base_url} //= $ctx->base_url;
 	my $up = $upfx =~ tr!/!/!;
 	$pfx =~ s!/[^/]+\z!/! for (1..$up);
-	my @ret = ('<a id=code>' .
+	$pfx .= '/' if substr($pfx, -1, 1) ne '/';
+	my $buf = '<a id=code>' .
 		'Code repositories for project(s) associated with this '.
-		$ctx->{ibx}->thing_type . "\n");
-	my $objs = $cfg->repo_objs($ctx->{ibx});
-	for my $git (@$objs) {
-		my @urls = $git->pub_urls($ctx->{env});
-		for (@urls) {
-			my $u = m!\A(?:[a-z\+]+:)?//! ? $_ : $pfx.$_;
+		$ctx->{ibx}->thing_type . "\n";
+	for my $git (@{$ctx->{www}->{pi_cfg}->repo_objs($ctx->{ibx})}) {
+		for ($git->pub_urls($ctx->{env})) {
+			my $u = m!\A(?:[a-z\+]+:)?//!i ? $_ : $pfx.$_;
 			$u = ascii_html(prurl($ctx->{env}, $u));
-			$ret[0] .= qq(\n\t<a\nhref="$u">$u</a>);
+			$buf .= qq(\n\t<a\nhref="$u">$u</a>);
 		}
 	}
-	@ret; # may be empty, this sub is called as an arg for join()
+	($buf);
 }
 
 sub _html_end {
