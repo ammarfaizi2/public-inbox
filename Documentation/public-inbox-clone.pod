@@ -136,6 +136,12 @@ order specified on the command-line.
 Pass the C<--prune> and C<--prune-tags> flags to L<git-fetch(1)>
 calls on incremental clones.
 
+=item --exit-code
+
+Exit with C<127> if no updates are done when relying on a manifest.
+Updates include fingerprint mismatches in the manifest, new symlinks,
+new repositories, and removed repositories from the L<--project-list>
+
 =item -k
 
 =item --keep-going

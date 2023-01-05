@@ -516,6 +516,7 @@ sub resume_fetch {
 			fetch_args($self->{lei}, $opt), $rn ];
 	push @$cmd, '-P' if $self->{lei}->{prune}; # --prune-tags implied
 	my $run_puh = PublicInbox::OnDestroy->new($$, \&run_puh, $self, $fini);
+	++$self->{chg}->{nr_chg};
 	start_cmd($self, $cmd, $opt, $run_puh);
 }
 
@@ -533,6 +534,7 @@ sub fgrp_enqueue {
 		$fgrp->{dry_run} ? $fgrp->{lei}->qerr("# @cmd @kv") :
 				run_die([@cmd, @kv], undef, $opt);
 	}
+	++$fgrp->{chg}->{nr_chg};
 	push @{$FGRP_TODO->{$fgrp->{-osdir}}}, $fgrp;
 }
 
@@ -565,6 +567,7 @@ sub clone_v1 {
 						"$self->{dst}$ref";
 			}
 		}
+		++$self->{chg}->{nr_chg};
 		start_cmd($self, $cmd, $opt, PublicInbox::OnDestroy->new($$,
 						\&run_puh, $self, $fini));
 	}
@@ -750,6 +753,7 @@ sub update_ent {
 				}
 			}
 			symlink($tgt, $ln) or die "symlink($tgt, $ln): $!";
+			++$self->{chg}->{nr_chg};
 		}
 	}
 	if (defined(my $t = $self->{-ent}->{modified})) {
@@ -1051,6 +1055,7 @@ EOM
 	warn "\t", $_, "\n" for @local;
 
 	my (undef, $dn, $bn) = File::Spec->splitpath($f);
+	$self->{chg}->{nr_chg} += scalar(@remote) + scalar(@local);
 	atomic_write($dn, $bn, join("\n", @list, ''));
 }
 
@@ -1082,7 +1087,10 @@ sub try_manifest {
 	}
 
 	# bail out if curl -z/--timecond hit 304 Not Modified, $ft will be empty
-	return $lei->qerr("# $manifest unchanged") if -f $manifest && !-s $ft;
+	if (-f $manifest && !-s $ft) {
+		$lei->child_error(127 << 8) if $lei->{opt}->{'exit-code'};
+		return $lei->qerr("# $manifest unchanged");
+	}
 
 	my $m = eval { decode_manifest($ft, $ft, $uri) };
 	if ($@) {
@@ -1170,6 +1178,8 @@ W: The following exist and have not been converted to symlinks
 EOM
 	dump_project_list($self, $m);
 	ft_rename($ft, $manifest, 0666);
+	!$self->{chg}->{nr_chg} && $lei->{opt}->{'exit-code'} and
+		$lei->child_error(127 << 8);
 }
 
 sub start_clone_url {

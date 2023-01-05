@@ -86,7 +86,7 @@ EOM
 }
 
 my $cmd = [qw(-clone --inbox-config=never --manifest= --project-list=
-	--objstore= -p -q), $url, "$tmpdir/dst"];
+	--objstore= -p -q), $url, "$tmpdir/dst", '--exit-code'];
 ok(run_script($cmd), 'clone');
 is(xqx([qw(git config gitweb.owner)], { GIT_DIR => "$tmpdir/dst/a.git" }),
 	"Alice\n", 'a.git gitweb.owner set');
@@ -149,6 +149,10 @@ my $test_puh = sub {
 	unlink($log) or xbail "unlink: $!";
 	ok(run_script($x, $env), "no-op clone @clone_arg w/ post-update-hook");
 	ok(!-e $log, "hooks not run on no-op @clone_arg");
+
+	push @$x, '--exit-code';
+	ok(!run_script($x, $env), 'no-op clone w/ --exit-code fails');
+	is($? >> 8, 127, '--exit-code gave 127');
 };
 $test_puh->();
 ok(!-e "$tmpdir/dst/objstore", 'no objstore, yet');
