@@ -201,7 +201,7 @@ sub rd_hdr ($) {
 	my $total_rd = 0;
 	my $hdr_buf = $self->{hdr_buf};
 	my ($ph_cb, $ph_arg) = @{$self->{parse_hdr}};
-	do {
+	until (defined($ret)) {
 		my $r = sysread($self->{rpipe}, $$hdr_buf, 4096,
 				length($$hdr_buf));
 		if (defined($r)) {
@@ -225,7 +225,7 @@ EOM
 			warn "error reading header: $!";
 			$ret = [ 500, [], [ "Internal error\n" ] ];
 		}
-	} until (defined $ret);
+	}
 	delete $self->{parse_hdr}; # done parsing headers
 	$ret;
 }
