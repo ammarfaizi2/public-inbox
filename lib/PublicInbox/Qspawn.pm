@@ -210,6 +210,13 @@ sub rd_hdr ($) {
 			if ($@) {
 				warn "parse_hdr: $@";
 				$ret = [ 500, [], [ "Internal error\n" ] ];
+			} elsif (!defined($ret) && !$r) {
+				my $cmd = $self->{cmd} // [ '(?)' ];
+				my $env = $self->{psgi_env};
+				warn <<EOM;
+EOF parsing headers from @$cmd ($self->{psgi_env}->{REQUEST_URI})
+EOM
+				$ret = [ 500, [], [ "Internal error\n" ] ];
 			}
 		} else {
 			# caller should notify us when it's ready:
