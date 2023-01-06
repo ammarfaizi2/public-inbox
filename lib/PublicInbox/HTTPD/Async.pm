@@ -14,7 +14,7 @@
 # arg: arg for {cb}
 # end_obj: CODE or object which responds to ->event_step when ->close is called
 package PublicInbox::HTTPD::Async;
-use strict;
+use v5.12;
 use parent qw(PublicInbox::DS);
 use Errno qw(EAGAIN);
 use PublicInbox::Syscall qw(EPOLLIN);
@@ -44,9 +44,9 @@ sub new {
 
 sub event_step {
 	my ($self) = @_;
-	if (my $cb = delete $self->{cb}) {
+	if (defined $self->{cb}) {
 		# this may call async_pass when headers are done
-		$cb->(my $refcnt_guard = delete $self->{arg});
+		$self->{cb}->($self->{arg});
 	} elsif (my $sock = $self->{sock}) {
 		# $http may be undef if discarding body output from cgit on 404
 		my $http = $self->{http} or return $self->close;
@@ -76,6 +76,7 @@ sub event_step {
 # may be PublicInbox::GzipFilter or $PublicInbox::Qspawn::qx_fh
 sub async_pass {
 	my ($self, $http, $ofh, $bref) = @_;
+	delete @$self{qw(cb arg)};
 	# In case the client HTTP connection ($http) dies, it
 	# will automatically close this ($self) object.
 	$http->{forward} = $self;
@@ -94,6 +95,7 @@ sub async_pass {
 sub close {
 	my $self = $_[0];
 	$self->SUPER::close; # DS::close
+	delete @$self{qw(cb arg)};
 
 	# we defer this to the next timer loop since close is deferred
 	if (my $end_obj = delete $self->{end_obj}) {

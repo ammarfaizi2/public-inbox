@@ -134,7 +134,7 @@ sub start ($$$) {
 	}
 }
 
-sub psgi_qx_init_cb {
+sub psgi_qx_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	my ($self) = @_;
 	my $async = delete $self->{async}; # PublicInbox::HTTPD::Async
 	my ($r, $buf);
@@ -223,7 +223,7 @@ sub rd_hdr ($) {
 	$ret;
 }
 
-sub psgi_return_init_cb {
+sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	my ($self) = @_;
 	my $r = rd_hdr($self) or return;
 	my $env = $self->{psgi_env};
