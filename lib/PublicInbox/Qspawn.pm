@@ -25,8 +25,7 @@
 # processes such as git-apply(1).
 
 package PublicInbox::Qspawn;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::GzipFilter;
 
@@ -332,8 +331,7 @@ sub psgi_return {
 }
 
 package PublicInbox::Qspawn::Limiter;
-use strict;
-use warnings;
+use v5.12;
 
 sub new {
 	my ($class, $max) = @_;
