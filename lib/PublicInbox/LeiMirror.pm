@@ -1056,7 +1056,8 @@ EOM
 
 	my (undef, $dn, $bn) = File::Spec->splitpath($f);
 	$self->{chg}->{nr_chg} += scalar(@remote) + scalar(@local);
-	atomic_write($dn, $bn, join("\n", @list, ''));
+	my $new = join("\n", @list, '');
+	atomic_write($dn, $bn, $new) if $new ne $old;
 }
 
 # FIXME: this gets confused by single inbox instance w/ global manifest.js.gz
