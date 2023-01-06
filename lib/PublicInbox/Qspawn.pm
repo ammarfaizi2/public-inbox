@@ -109,8 +109,9 @@ sub finalize ($$) {
 	return if $self->{passed}; # another command chained it
 	if (my $wcb = delete $env->{'qspawn.wcb'}) {
 		# have we started writing, yet?
+		my $code = delete $env->{'qspawn.fallback'} // 500;
 		require PublicInbox::WwwStatic;
-		$wcb->(PublicInbox::WwwStatic::r(500));
+		$wcb->(PublicInbox::WwwStatic::r($code));
 	}
 }
 

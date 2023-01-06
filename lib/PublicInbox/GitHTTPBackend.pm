@@ -151,6 +151,7 @@ sub parse_cgi_headers { # {parse_hdr} for Qspawn
 	if ($code == 404 && $ctx->{www} && !$ctx->{_coderepo_tried}++) {
 		my $wcb = delete $ctx->{env}->{'qspawn.wcb'};
 		$ctx->{env}->{'plack.skip-deflater'} = 1; # prevent 2x gzip
+		$ctx->{env}->{'qspawn.fallback'} = $code;
 		my $res = $ctx->{www}->coderepo->srv($ctx);
 		# for ->psgi_return_init_cb
 		$ctx->{env}->{'qspawn.wcb'} = $wcb;
