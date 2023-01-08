@@ -49,9 +49,6 @@ sub prepare_coderepos {
 		$pi_cfg->repo_objs($eidx);
 		push @{$self->{-strong}}, $eidx; # strengthen {-ibxs} weakref
 	}
-	while (my ($nick, $repo) = each %$code_repos) {
-		$self->{"\0$nick"} = $repo;
-	}
 }
 
 sub new {
@@ -211,30 +208,31 @@ sub srv { # endpoint called by PublicInbox::WWW
 	my $path_info = $ctx->{env}->{PATH_INFO};
 	my $git;
 	# handle clone requests
+	my $cr = $self->{pi_cfg}->{-code_repos};
 	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!x) {
-		$git = $self->{"\0$1"} and return
+		$git = $cr->{$1} and return
 			PublicInbox::GitHTTPBackend::serve($ctx->{env},$git,$2);
 	}
 	$path_info =~ m!\A/(.+?)/\z! and
-		($ctx->{git} = $self->{"\0$1"}) and return summary($self, $ctx);
+		($ctx->{git} = $cr->{$1}) and return summary($self, $ctx);
 	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/\z! and
-			($ctx->{git} = $self->{"\0$1"}) and
+			($ctx->{git} = $cr->{$1}) and
 		return PublicInbox::ViewVCS::show($ctx, $2);
 
 	# snapshots:
 	if ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
-			($ctx->{git} = $self->{"\0$1"})) {
+			($ctx->{git} = $cr->{$1})) {
 		$ctx->{wcr} = $self;
 		return PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
 	}
 
 	if ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
-			($ctx->{git} = $self->{"\0$1"})) {
+			($ctx->{git} = $cr->{$1})) {
 		return PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
 	}
 
 	# enforce trailing slash:
-	if ($path_info =~ m!\A/(.+?)\z! and ($git = $self->{"\0$1"})) {
+	if ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
 		$url .= "?$qs" if $qs ne '';
