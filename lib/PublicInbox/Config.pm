@@ -226,7 +226,6 @@ sub cgit_repo_merge ($$$) {
 			$rel =~ s!/?\.git\z!!;
 	}
 	$self->{"coderepo.$rel.dir"} //= $path;
-	$self->{"coderepo.$rel.cgiturl"} //= _array($rel);
 }
 
 sub is_git_dir ($) {
