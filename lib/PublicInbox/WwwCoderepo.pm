@@ -15,6 +15,7 @@ use PublicInbox::Git;
 use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStream;
 use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
 
@@ -75,6 +76,10 @@ sub summary_finish {
 	# git log
 	my @r = split(/\n/s, pop(@x) // '');
 	my $last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_log};
+	my $tip_html = '';
+	if (defined(my $tip = $ctx->{qp}->{h})) {
+		$tip_html .= ' '.ascii_html($tip).' --';
+	}
 	print $zfh <<EOM;
 <pre>
 <a
@@ -83,7 +88,7 @@ href='#heads'>heads</a> <a
 href='#tags'>tags</a>
 
 <a
-id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'
+id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'$tip_html
 EOM
 	for (@r) {
 		my $d; # decorations
@@ -102,8 +107,10 @@ EOM
 	if ($bref) {
 		my $l = PublicInbox::Linkify->new;
 		$$bref =~ s/\s*\z//sm;
+		my (undef, $path) = split(/:/, $ref_path, 2); # HEAD:README
 		print $zfh "\n<a id=readme>\$</a> " .
-			"git cat-file blob <a href=./$oid/s/>",
+			qq(git cat-file blob <a href="./$oid/s/?b=) .
+			ascii_html(uri_escape_path($path)) . q(">).
 			ascii_html($ref_path), "</a>\n",
 			$l->to_html($$bref), '</pre><hr><pre>';
 	}
@@ -180,16 +187,25 @@ sub set_readme { # git->cat_async callback
 sub summary {
 	my ($self, $ctx) = @_;
 	$ctx->{wcr} = $self;
+	my $tip = $ctx->{qp}->{h}; # same as cgit
+	if (defined $tip && $tip eq '') {
+		delete $ctx->{qp}->{h};
+		undef($tip);
+	}
 	my $nb = $self->{summary_branches} + 1;
 	my $nt = $self->{summary_tags} + 1;
 	my $nl = $self->{summary_log} + 1;
-	my $qsp = PublicInbox::Qspawn->new([qw(/bin/sh -c),
+
+	my @cmd = (qw(/bin/sh -c),
 		"$EACH_REF --count=$nb refs/heads; echo && " .
 		"$EACH_REF --count=$nt refs/tags; echo && " .
-		"git log -$nl --pretty=format:'%d %H %h %cs %s' --" ],
+		qq(git log -$nl --pretty=format:'%d %H %h %cs %s' "\$@" --));
+	push @cmd, '--', $tip if defined($tip);
+	my $qsp = PublicInbox::Qspawn->new(\@cmd,
 		{ GIT_DIR => $ctx->{git}->{git_dir} });
 	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
-	my @try = qw(HEAD:README HEAD:README.md); # TODO: configurable
+	$tip //= 'HEAD';
+	my @try = ("$tip:README", "$tip:README.md"); # TODO: configurable
 	$ctx->{-nr_readme_tries} = [ @try ];
 	$ctx->{git}->cat_async($_, \&set_readme, $ctx) for @try;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
