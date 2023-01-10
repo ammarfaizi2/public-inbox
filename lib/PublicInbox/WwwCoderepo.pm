@@ -42,13 +42,11 @@ sub prepare_coderepos {
 		$k = substr($k, length('publicinbox.'), -length('.coderepo'));
 		my $ibx = $pi_cfg->lookup_name($k) // next;
 		$pi_cfg->repo_objs($ibx);
-		push @{$self->{-strong}}, $ibx; # strengthen {-ibxs} weakref
 	}
 	for my $k (grep(/\Aextindex\.(?:.+)\.coderepo\z/, keys %$pi_cfg)) {
 		$k = substr($k, length('extindex.'), -length('.coderepo'));
 		my $eidx = $pi_cfg->lookup_ei($k) // next;
 		$pi_cfg->repo_objs($eidx);
-		push @{$self->{-strong}}, $eidx; # strengthen {-ibxs} weakref
 	}
 }
 

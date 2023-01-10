@@ -155,21 +155,24 @@ sub show_commit_start { # ->psgi_qx callback
 
 sub ibx_url_for {
 	my ($ctx) = @_;
-	$ctx->{ibx} and return; # just fall back to $upfx
-	$ctx->{git} or return; # /$CODEREPO/$OID/s/ to (eidx|ibx)
+	$ctx->{ibx} and return; # fall back to $upfx
+	$ctx->{git} or return;
 	if (my $ALL = $ctx->{www}->{pi_cfg}->ALL) {
-		$ALL->base_url // $ALL->base_url($ctx->{env});
-	} elsif (my $ibxs = $ctx->{git}->{-ibxs}) {
-		for my $ibx (@$ibxs) {
-			if ($ibx->isrch) {
-				return defined($ibx->{url}) ?
-					prurl($ctx->{env}, $ibx->{url}) :
-					"../../../$ibx->{name}/";
-			}
+		return $ALL->base_url // $ALL->base_url($ctx->{env});
+	} elsif (my $ibx_names = $ctx->{git}->{ibx_names}) {
+		my $by_name = $ctx->{www}->{pi_cfg}->{-by_name};
+		for my $name (@$ibx_names) {
+			my $ibx = $by_name->{$name} // do {
+				warn "inbox `$name' no longer exists\n";
+				next;
+			};
+			$ibx->isrch // next;
+			return defined($ibx->{url}) ?
+				prurl($ctx->{env}, $ibx->{url}) :
+				"../../../$name/";
 		}
-	} else {
-		undef;
 	}
+	undef;
 }
 
 sub cmt_finalize {
