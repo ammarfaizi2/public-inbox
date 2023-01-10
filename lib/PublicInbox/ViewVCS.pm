@@ -212,7 +212,7 @@ href="$f.patch">patch</a>)\n   <a href=#parent>parent</a> $P->[0]};
 	my $zfh = $ctx->zfh;
 	print $zfh <<EOM;
 <pre>   <a href=#commit>commit</a> $H$x
-     <a href=#tree>tree</a> <a href="$upfx$T/s/">$T</a>
+     <a href=#tree>tree</a> <a href="$upfx$T/s/?b=">$T</a>
    author $au
 committer $co
 
@@ -362,9 +362,13 @@ sub show_tree_result ($$) {
 	my $pfx = $qp->{b};
 	$$bref = "<pre><a href=#tree>tree</a> $ctx->{tree_oid}";
 	if (defined $pfx) {
-		my $x = ascii_html($pfx);
-		$pfx .= '/';
-		$$bref .= qq(  <a href=#path>path</a>: $x</a>\n);
+		if ($pfx eq '') {
+			$$bref .= "  (root)\n";
+		} else {
+			my $x = ascii_html($pfx);
+			$pfx .= '/';
+			$$bref .= qq(  <a href=#path>path</a>: $x</a>\n);
+		}
 	} else {
 		$pfx = '';
 		$$bref .= qq[  (<a href=#path>path</a> unknown)\n];
