@@ -104,7 +104,7 @@ sub stream_large_blob ($$) {
 	$qsp->psgi_return($env, undef, \&stream_blob_parse_hdr, $ctx);
 }
 
-sub show_other_result ($$) { # tag
+sub show_other_result ($$) { # future-proofing
 	my ($bref, $ctx) = @_;
 	if (my $qsp_err = delete $ctx->{-qsp_err}) {
 		return html_page($ctx, 500, dbg_log($ctx) .
