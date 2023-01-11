@@ -163,6 +163,7 @@ lib/PublicInbox/CmdIPC4.pm
 lib/PublicInbox/CompressNoop.pm
 lib/PublicInbox/Config.pm
 lib/PublicInbox/ConfigIter.pm
+lib/PublicInbox/ContentDigestDbg.pm
 lib/PublicInbox/ContentHash.pm
 lib/PublicInbox/DS.pm
 lib/PublicInbox/DSKQXS.pm
@@ -280,6 +281,7 @@ lib/PublicInbox/Lock.pm
 lib/PublicInbox/MDA.pm
 lib/PublicInbox/MID.pm
 lib/PublicInbox/MIME.pm
+lib/PublicInbox/MailDiff.pm
 lib/PublicInbox/ManifestJsGz.pm
 lib/PublicInbox/Mbox.pm
 lib/PublicInbox/MboxGz.pm
@@ -478,6 +480,7 @@ t/lei-import.t
 t/lei-index.t
 t/lei-inspect.t
 t/lei-lcat.t
+t/lei-mail-diff.t
 t/lei-mirror.psgi
 t/lei-mirror.t
 t/lei-p2q.t

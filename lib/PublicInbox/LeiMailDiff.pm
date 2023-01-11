@@ -4,59 +4,16 @@
 # The "lei mail-diff" sub-command, diffs input contents against
 # the first message of input
 package PublicInbox::LeiMailDiff;
-use strict;
-use v5.10.1;
-use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
-use File::Temp 0.19 (); # 0.19 for ->newdir
+use v5.12;
+use parent qw(PublicInbox::IPC PublicInbox::LeiInput PublicInbox::MailDiff);
 use PublicInbox::Spawn qw(spawn which);
-use PublicInbox::MsgIter qw(msg_part_text);
-use File::Path qw(remove_tree);
-use PublicInbox::ContentHash qw(content_digest);
+use File::Path ();
 require PublicInbox::LeiRediff;
-use Data::Dumper ();
-
-sub write_part { # Eml->each_part callback
-	my ($ary, $self) = @_;
-	my ($part, $depth, $idx) = @$ary;
-	if ($idx ne '1' || $self->{lei}->{opt}->{'raw-header'}) {
-		open my $fh, '>', "$self->{curdir}/$idx.hdr" or die "open: $!";
-		print $fh ${$part->{hdr}} or die "print $!";
-		close $fh or die "close $!";
-	}
-	my $ct = $part->content_type || 'text/plain';
-	my ($s, $err) = msg_part_text($part, $ct);
-	my $sfx = defined($s) ? 'txt' : 'bin';
-	open my $fh, '>', "$self->{curdir}/$idx.$sfx" or die "open: $!";
-	print $fh ($s // $part->body) or die "print $!";
-	close $fh or die "close $!";
-}
-
-sub dump_eml ($$$) {
-	my ($self, $dir, $eml) = @_;
-	local $self->{curdir} = $dir;
-	mkdir $dir or die "mkdir($dir): $!";
-	$eml->each_part(\&write_part, $self);
-
-	open my $fh, '>', "$dir/content_digest" or die "open: $!";
-	my $dig = PublicInbox::ContentDigestDbg->new($fh);
-	local $Data::Dumper::Useqq = 1;
-	local $Data::Dumper::Terse = 1;
-	content_digest($eml, $dig);
-	print $fh "\n", $dig->hexdigest, "\n" or die "print $!";
-	close $fh or die "close: $!";
-}
-
-sub prep_a ($$) {
-	my ($self, $eml) = @_;
-	$self->{tmp} = File::Temp->newdir('lei-mail-diff-XXXX', TMPDIR => 1);
-	dump_eml($self, "$self->{tmp}/a", $eml);
-}
 
 sub diff_a ($$) {
 	my ($self, $eml) = @_;
-	++$self->{nr};
-	my $dir = "$self->{tmp}/N$self->{nr}";
-	dump_eml($self, $dir, $eml);
+	my $dir = "$self->{tmp}/N".(++$self->{nr});
+	$self->dump_eml($dir, $eml);
 	my $cmd = [ qw(git diff --no-index) ];
 	my $lei = $self->{lei};
 	PublicInbox::LeiRediff::_lei_diff_prepare($lei, $cmd);
@@ -71,7 +28,7 @@ sub diff_a ($$) {
 
 sub input_eml_cb { # used by PublicInbox::LeiInput::input_fh
 	my ($self, $eml) = @_;
-	$self->{tmp} ? diff_a($self, $eml) : prep_a($self, $eml);
+	$self->{tmp} ? diff_a($self, $eml) : $self->prep_a($eml);
 }
 
 sub lei_mail_diff {
@@ -82,24 +39,10 @@ sub lei_mail_diff {
 	$lei->{opt}->{color} //= $isatty;
 	$lei->start_pager if $isatty;
 	$lei->{-err_type} = 'non-fatal';
+	$self->{-raw_hdr} = $lei->{opt}->{'raw-header'};
 	$lei->wq1_start($self);
 }
 
 no warnings 'once';
 *net_merge_all_done = \&PublicInbox::LeiInput::input_only_net_merge_all_done;
-
-package PublicInbox::ContentDigestDbg; # cf. PublicInbox::ContentDigest
-use strict;
-use v5.10.1;
-use Data::Dumper;
-
-sub new { bless { dig => Digest::SHA->new(256), fh => $_[1] }, __PACKAGE__ }
-
-sub add {
-	$_[0]->{dig}->add($_[1]);
-	print { $_[0]->{fh} } Dumper([split(/^/sm, $_[1])]) or die "print $!";
-}
-
-sub hexdigest { $_[0]->{dig}->hexdigest; }
-
 1;
