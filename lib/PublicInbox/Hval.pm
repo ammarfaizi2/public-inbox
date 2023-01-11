@@ -118,7 +118,7 @@ $ESCAPES{'/'} = ':'; # common
 sub to_attr ($) {
 	my ($str) = @_;
 
-	# git would never do this to us:
+	# git would never do this to us, mail diff uses // to prevent anchors:
 	return if index($str, '//') >= 0;
 
 	my $first = '';

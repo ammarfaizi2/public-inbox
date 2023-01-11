@@ -623,7 +623,8 @@ sub _msg_page_prepare {
 			return;
 		}
 		$ctx->{-html_tip} =
-"<pre>WARNING: multiple messages have this Message-ID\n</pre><pre>";
+qq[<pre>WARNING: multiple messages have this Message-ID (<a
+href="d/">diff</a>)</pre><pre>];
 	} else {
 		$ctx->{first_hdr} = $eml->header_obj;
 		$ctx->{chash} = content_hash($eml) if $ctx->{smsg}; # reused MID
@@ -1223,6 +1224,32 @@ sub ghost_index_entry {
 	my ($beg, $end) = thread_adj_level($ctx,  $level);
 	$beg . '<pre>'. ghost_parent($ctx->{-upfx}, $node->{mid} // '?')
 		. '</pre>' . $end;
+}
+
+# /$INBOX/$MSGID/d/ endpoint
+sub diff_msg {
+	my ($ctx) = @_;
+	require PublicInbox::MailDiff;
+	my $ibx = $ctx->{ibx};
+	my $over = $ibx->over or return no_over_html($ctx);
+	my ($id, $prev);
+	my $md = bless { ctx => $ctx }, 'PublicInbox::MailDiff';
+	my $next_arg = $md->{next_arg} = [ $ctx->{mid}, \$id, \$prev ];
+	my $smsg = $md->{smsg} = $over->next_by_mid(@$next_arg) or
+		return; # undef == 404
+	$ctx->{-t_max} = $smsg->{ts};
+	$ctx->{-upfx} = '../../';
+	$ctx->{-apfx} = '//'; # fail on to_attr()
+	$ctx->{-linkify} = PublicInbox::Linkify->new;
+	my $mid = ascii_html($smsg->{mid});
+	$ctx->{-title_html} = "diff for duplicates of &lt;$mid&gt;";
+	PublicInbox::WwwStream::html_init($ctx);
+	print { $ctx->{zfh} } '<pre>diff for duplicates of &lt;<a href="../">',
+				$mid, "</a>&gt;\n\n";
+	sub {
+		$ctx->attach($_[0]->([200, delete $ctx->{-res_hdr}]));
+		$md->begin_mail_diff;
+	};
 }
 
 1;

@@ -220,6 +220,9 @@ my $client1 = sub {
 		like($raw, qr!>\Q$mid\E</a>!s, "Message-ID $mid shown");
 	}
 	like($raw, qr/\b3\+ messages\b/, 'thread overview shown');
+
+	$res = $cb->(GET('/v2test/a-mid@b/d/'));
+	is($res->code, 200, '/d/ (diff) endpoint works');
 };
 
 test_psgi(sub { $www->call(@_) }, $client1);

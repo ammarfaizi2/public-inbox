@@ -25,7 +25,7 @@ use PublicInbox::Eml;
 # TODO: consider a routing tree now that we have more endpoints:
 our $INBOX_RE = qr!\A/([\w\-][\w\.\-\+]*)!;
 our $MID_RE = qr!([^/]+)!;
-our $END_RE = qr!(T/|t/|t\.mbox(?:\.gz)?|t\.atom|raw|)!;
+our $END_RE = qr!(T/|t/|d/|t\.mbox(?:\.gz)?|t\.atom|raw|)!;
 our $ATTACH_RE = qr!([0-9][0-9\.]*)-($PublicInbox::Hval::FN)!;
 our $OID_RE = qr![a-f0-9]{7,}!;
 
@@ -452,6 +452,10 @@ sub msg_page {
 
 	# legacy, but no redirect for compatibility:
 	'f/' eq $e and return get_mid_html($ctx);
+	if ($e eq 'd/') {
+		require PublicInbox::View;
+		return PublicInbox::View::diff_msg($ctx);
+	}
 	r404($ctx);
 }
 
