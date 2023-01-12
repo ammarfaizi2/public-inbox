@@ -38,9 +38,60 @@ sub async_eml { # for async_blob_cb
 	$ctx->write($ctx->{cb}->($ctx, $eml));
 }
 
+sub html_repo_top ($) {
+	my ($ctx) = @_;
+	my $git = $ctx->{git};
+	my $desc = ascii_html($git->description);
+	my $title = delete($ctx->{-title_html}) // $desc;
+	my $upfx = $ctx->{-upfx} // '';
+	my $atom = $ctx->{-atom} // (substr($upfx, -1) eq '/' ?
+					"${upfx}atom/" : "$upfx/atom/");
+	my $top = ascii_html($git->{nick});
+	$top = qq(<a\nhref="$upfx">$top</a>) if length($upfx);
+	$top .= <<EOM;
+  <a href='$upfx#readme'>about</a> / <a
+href='$upfx#heads'>heads</a> / <a
+href='$upfx#tags'>tags</a>
+<b>$desc</b>
+EOM
+	my @url = PublicInbox::ViewVCS::ibx_url_for($ctx);
+	if (@url) {
+		$ctx->{-has_srch} = 1;
+		my $base_url = base_url($ctx);
+		my ($pfx, $sfx) = ($base_url =~ m!\A(https?://[^/]+/)(.*)\z!i);
+		my $iupfx = '../' x (($sfx =~ tr!/!/!) + 1);
+		$pfx = ascii_html($pfx);
+		$pfx = qr/\A\Q$pfx\E/i;
+		my $tmp = $top;
+		$top = '';
+		my ($s, $u, $same_host);
+		my $q_val = delete($ctx->{-q_value_html}) // '';
+		$q_val = qq(\nvalue="$q_val") if $q_val ne '';
+		for (@url) {
+			$u = $s = ascii_html($_);
+			substr($u, 0, 0, $iupfx) if $u !~ m!://!;
+			$s =~ s!$pfx!!;
+			$s =~ s!/\z!!;
+			$top .= qq{<form\naction="$u"><pre>$tmp} .
+				qq{<input\nname=q type=text$q_val />} .
+				qq{<input type=submit\n} .
+				qq{value="search mail in `$s&#39;"/>} .
+				q{</pre></form>};
+			$tmp = '';
+		}
+	} else {
+		$top = "<pre>$top</pre>";
+	}
+	"<html><head><title>$title</title>" .
+		qq(<link\nrel=alternate\ntitle="Atom feed"\n).
+		qq(href="$atom"\ntype="application/atom+xml"/>) .
+		$ctx->{www}->style($upfx) .
+		'</head><body>'.$top;
+}
+
 sub html_top ($) {
 	my ($ctx) = @_;
-	my $ibx = $ctx->{ibx} // $ctx->{git};
+	my $ibx = $ctx->{ibx} // return html_repo_top($ctx);
 	my $desc = ascii_html($ibx->description);
 	my $title = delete($ctx->{-title_html}) // $desc;
 	my $upfx = $ctx->{-upfx} || '';

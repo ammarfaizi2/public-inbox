@@ -156,10 +156,14 @@ sub show_commit_start { # ->psgi_qx callback
 sub ibx_url_for {
 	my ($ctx) = @_;
 	$ctx->{ibx} and return; # fall back to $upfx
-	$ctx->{git} or return;
+	$ctx->{git} or die 'BUG: no {git}';
 	if (my $ALL = $ctx->{www}->{pi_cfg}->ALL) {
-		return $ALL->base_url // $ALL->base_url($ctx->{env});
-	} elsif (my $ibx_names = $ctx->{git}->{ibx_names}) {
+		if (defined(my $u = $ALL->base_url($ctx->{env}))) {
+			return wantarray ? ($u) : $u;
+		}
+	}
+	my @ret;
+	if (my $ibx_names = $ctx->{git}->{ibx_names}) {
 		my $by_name = $ctx->{www}->{pi_cfg}->{-by_name};
 		for my $name (@$ibx_names) {
 			my $ibx = $by_name->{$name} // do {
@@ -167,12 +171,13 @@ sub ibx_url_for {
 				next;
 			};
 			$ibx->isrch // next;
-			return defined($ibx->{url}) ?
-				prurl($ctx->{env}, $ibx->{url}) :
-				"../../../$name/";
+			my $u = defined($ibx->{url}) ?
+				prurl($ctx->{env}, $ibx->{url}) : $name;
+			$u .= '/' if substr($u, -1) ne '/';
+			push @ret, $u;
 		}
 	}
-	undef;
+	wantarray ? (@ret) : $ret[0];
 }
 
 sub cmt_finalize {
@@ -253,8 +258,10 @@ EOM
 			my $ibx_url = ibx_url_for($ctx);
 			my $alt;
 			if (defined $ibx_url) {
+				$alt = " `$ibx_url'";
+				$ibx_url =~ m!://! or
+					substr($ibx_url, 0, 0, '../../../');
 				$ibx_url = ascii_html($ibx_url);
-				$alt = ' '.$ibx_url;
 			} else {
 				$ibx_url = $upfx;
 				$alt = '';

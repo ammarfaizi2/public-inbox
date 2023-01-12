@@ -79,14 +79,7 @@ sub summary_finish {
 		$tip_html .= ' '.ascii_html($tip).' --';
 	}
 	print $zfh <<EOM;
-<pre>
-<a
-href='#readme'>about</a> <a
-href='#heads'>heads</a> <a
-href='#tags'>tags</a>
-
-<a
-id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'$tip_html
+<pre><a id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'$tip_html
 EOM
 	for (@r) {
 		my $d; # decorations
