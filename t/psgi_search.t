@@ -93,6 +93,7 @@ test_psgi(sub { $www->call(@_) }, sub {
 
 	$res = $cb->(POST('/test/?q=s:bogus&x=m'));
 	is($res->code, 404, 'failed search result gives 404');
+	like($res->content, qr/No results found/, "`No results' shown");
 	is_deeply([], $warn, 'no warnings');
 
 	my $mid_re = qr/\Q$mid\E/o;

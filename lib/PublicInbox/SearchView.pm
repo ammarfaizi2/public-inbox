@@ -82,7 +82,7 @@ retry:
 		mset_summary($ctx, $mset, $q); # appends to {-html_tip}
 		$html = '';
 	}
-	html_oneshot($ctx, $code);
+	html_oneshot($ctx, $code, $html);
 }
 
 # display non-nested search results similar to what users expect from
