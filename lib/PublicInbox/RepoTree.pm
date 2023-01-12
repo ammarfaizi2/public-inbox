@@ -7,11 +7,51 @@ use v5.12;
 use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStatic qw(r);
+use PublicInbox::Qspawn;
+use PublicInbox::WwwStream qw(html_oneshot);
+use PublicInbox::Hval qw(ascii_html);
+
+sub rd_404_log {
+	my ($bref, $ctx) = @_;
+	my $path = $ctx->{-q_value_html} = ascii_html($ctx->{-path});
+	my $tip = 'HEAD';
+	$tip = ascii_html($ctx->{qp}->{h}) if defined($ctx->{qp}->{h});
+	PublicInbox::WwwStream::html_init($ctx);
+	my $zfh = $ctx->{zfh};
+	print $zfh "<pre>\$ git log -1 $tip -- $path\n";
+	if ($$bref eq '') {
+		say $zfh "found no record of `$path' in git history";
+		$ctx->{-has_srch} and
+			say $zfh 'perhaps try searching mail (above)';
+	} else {
+		my ($H, $h, $s_as) = split(/ /, $$bref, 3);
+		utf8::decode($s_as);
+		my $x = uri_escape_path($ctx->{-path});
+		$s_as = ascii_html($s_as);
+		print $zfh <<EOM;
+found last record of `$path' in the following commit:
+
+<a href="$ctx->{-upfx}$H/s/?b=$x">$h</a> $s_as
+EOM
+	}
+	delete($ctx->{-wcb})->($ctx->html_done);
+}
+
+sub find_missing {
+	my ($ctx) = @_;
+	my $cmd = ['git', "--git-dir=$ctx->{git}->{git_dir}",
+		qw(log --no-color -1), '--pretty=%H %h %s (%as)' ];
+	push @$cmd, $ctx->{qp}->{h} if defined($ctx->{qp}->{h});
+	push @$cmd, '--';
+	push @$cmd, $ctx->{-path} if $ctx->{-path} ne '';
+	my $qsp = PublicInbox::Qspawn->new($cmd);
+	$qsp->psgi_qx($ctx->{env}, undef, \&rd_404_log, $ctx);
+}
 
 sub tree_30x { # git check_async callback
 	my ($oid, $type, $size, $ctx) = @_;
+	return find_missing($ctx) if $type eq 'missing';
 	my $wcb = delete $ctx->{-wcb};
-	return $wcb->(r(404)) if $type eq 'missing';
 	my $u = $ctx->{git}->base_url($ctx->{env});
 	my $path = uri_escape_path(delete $ctx->{-path});
 	$u .= "$oid/s/?b=$path";
@@ -23,6 +63,7 @@ sub srv_tree {
 	my ($ctx, $path) = @_;
 	return if index($path, '//') >= 0 || index($path, '/') == 0;
 	my $tip = $ctx->{qp}->{h} // 'HEAD';
+	$ctx->{-upfx} = '../' x (($path =~ tr!/!/!) + 1);
 	$path =~ s!/\z!!;
 	my $obj = $ctx->{-obj} = "$tip:$path";
 	$ctx->{-path} = $path;
