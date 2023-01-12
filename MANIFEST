@@ -311,6 +311,7 @@ lib/PublicInbox/Qspawn.pm
 lib/PublicInbox/Reply.pm
 lib/PublicInbox/RepoAtom.pm
 lib/PublicInbox/RepoSnapshot.pm
+lib/PublicInbox/RepoTree.pm
 lib/PublicInbox/SaPlugin/ListMirror.pm
 lib/PublicInbox/SaPlugin/ListMirror.pod
 lib/PublicInbox/Search.pm

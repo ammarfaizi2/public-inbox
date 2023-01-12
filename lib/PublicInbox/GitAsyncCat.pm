@@ -75,7 +75,7 @@ sub ibx_async_cat ($$$$) {
 }
 
 sub async_check ($$$$) {
-	my ($ibx, $oidish, $cb, $arg) = @_;
+	my ($ibx, $oidish, $cb, $arg) = @_; # $ibx may be $ctx
 	my $git = $ibx->{git} // $ibx->git;
 	$git->check_async($oidish, $cb, $arg);
 	$git->{async_chk} //= do {

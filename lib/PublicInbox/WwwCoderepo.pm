@@ -18,6 +18,7 @@ use PublicInbox::Hval qw(ascii_html);
 use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
+use PublicInbox::RepoTree;
 
 my $EACH_REF = "git for-each-ref --sort=-creatordate --format='%(HEAD)%00".
 	join('%00', map { "%($_)" }
@@ -225,6 +226,11 @@ sub srv { # endpoint called by PublicInbox::WWW
 	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/\z! and
 			($ctx->{git} = $cr->{$1}) and
 		return PublicInbox::ViewVCS::show($ctx, $2);
+
+	if ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
+			($ctx->{git} = $cr->{$1})) {
+		return PublicInbox::RepoTree::srv_tree($ctx, $2) // r(404);
+	}
 
 	# snapshots:
 	if ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and

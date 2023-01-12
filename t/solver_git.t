@@ -381,6 +381,13 @@ EOF
 			$res = $cb->(GET('/public-inbox/atom/README.md'));
 			is($res->code, 404, '404 on non-existent file Atom feed');
 		}
+
+		$res = $cb->(GET('/public-inbox/tree/'));
+		is($res->code, 302, 'got redirect');
+		$res = $cb->(GET('/public-inbox/tree/README'));
+		is($res->code, 302, 'got redirect for regular file');
+		$res = $cb->(GET('/public-inbox/tree/Documentation'));
+		is($res->code, 302, 'got redirect for directory');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };
