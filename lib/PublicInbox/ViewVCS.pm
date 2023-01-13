@@ -125,6 +125,17 @@ sub cmt_title { # git->cat_async callback
 		cmt_finalize($ctx);
 }
 
+sub do_cat_async {
+	my ($ctx, $cb, @oids) = @_;
+	# favor git(1) over Gcf2 (libgit2) for SHA-256 support
+	$ctx->{git}->cat_async($_, $cb, $ctx) for @oids;
+	if ($ctx->{env}->{'pi-httpd.async'}) {
+		PublicInbox::GitAsyncCat::watch_cat($ctx->{git});
+	} else { # synchronous, generic PSGI
+		$ctx->{git}->cat_async_wait;
+	}
+}
+
 sub show_commit_start { # ->psgi_qx callback
 	my ($bref, $ctx) = @_;
 	if (my $qsp_err = delete $ctx->{-qsp_err}) {
@@ -142,16 +153,7 @@ sub show_commit_start { # ->psgi_qx callback
 	return cmt_finalize($ctx) if !$P;
 	@{$ctx->{-cmt_P}} = split(/ /, $P);
 	@{$ctx->{-cmt_p}} = split(/ /, $p); # abbreviated
-	if ($ctx->{env}->{'pi-httpd.async'}) {
-		for (@{$ctx->{-cmt_P}}) {
-			ibx_async_cat($ctx, $_, \&cmt_title, $ctx);
-		}
-	} else { # synchronous
-		for (@{$ctx->{-cmt_P}}) {
-			$ctx->{git}->cat_async($_, \&cmt_title, $ctx);
-		}
-		$ctx->{git}->cat_async_wait;
-	}
+	do_cat_async($ctx, \&cmt_title, @{$ctx->{-cmt_P}});
 }
 
 sub ibx_url_for {
@@ -473,12 +475,7 @@ sub show_tag ($$) {
 	my ($ctx, $res) = @_;
 	my ($git, $oid) = @$res;
 	$ctx->{git} = $git;
-	if ($ctx->{env}->{'pi-httpd.async'}) {
-		ibx_async_cat($ctx, $oid, \&show_tag_result, $ctx);
-	} else { # synchronous (generic PSGI)
-		$git->cat_async($oid, \&show_tag_result, $ctx);
-		$git->cat_async_wait;
-	}
+	do_cat_async($ctx, \&show_tag_result, $oid);
 }
 
 # user_cb for SolverGit, called as: user_cb->($result_or_error, $uarg)
@@ -508,12 +505,7 @@ EOM
 	}
 	bless $ctx, 'PublicInbox::WwwStream'; # for DESTROY
 	$ctx->{git} = $git;
-	if ($ctx->{env}->{'pi-httpd.async'}) {
-		ibx_async_cat($ctx, $oid, \&show_blob, $ctx);
-	} else { # synchronous
-		$git->cat_async($oid, \&show_blob, $ctx);
-		$git->cat_async_wait;
-	}
+	do_cat_async($ctx, \&show_blob, $oid);
 }
 
 sub show_blob { # git->cat_async callback

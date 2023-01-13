@@ -11,8 +11,6 @@ use File::Temp 0.19 (); # newdir
 use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::GitHTTPBackend;
-use PublicInbox::Git;
-use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStream;
 use PublicInbox::Hval qw(ascii_html);
 use PublicInbox::ViewDiff qw(uri_escape_path);
@@ -199,12 +197,7 @@ sub summary {
 	$tip //= 'HEAD';
 	my @try = ("$tip:README", "$tip:README.md"); # TODO: configurable
 	$ctx->{-nr_readme_tries} = [ @try ];
-	$ctx->{git}->cat_async($_, \&set_readme, $ctx) for @try;
-	if ($ctx->{env}->{'pi-httpd.async'}) {
-		PublicInbox::GitAsyncCat::watch_cat($ctx->{git});
-	} else { # synchronous
-		$ctx->{git}->cat_async_wait;
-	}
+	PublicInbox::ViewVCS::do_cat_async($ctx, \&set_readme, @try);
 	sub { # $_[0] => PublicInbox::HTTP::{Identity,Chunked}
 		$ctx->{env}->{'qspawn.wcb'} = $_[0];
 		$qsp->psgi_qx($ctx->{env}, undef, \&capture_refs, $ctx);
