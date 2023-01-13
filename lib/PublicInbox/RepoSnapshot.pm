@@ -4,9 +4,8 @@
 # cgit-compatible /snapshot/ endpoint for WWW coderepos
 package PublicInbox::RepoSnapshot;
 use v5.12;
-use PublicInbox::Git;
 use PublicInbox::Qspawn;
-use PublicInbox::GitAsyncCat;
+use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
 
 # Not using standard mime types since the compressed tarballs are
@@ -42,31 +41,25 @@ sub archive_hdr { # parse_hdr for Qspawn
 		'ETag', qq("$ctx->{etag}") ] ];
 }
 
-sub archive_cb {
-	my ($ctx) = @_;
-	my @cfg;
-	if (my $cmd = $FMT_CFG{$ctx->{snap_fmt}}) {
-		@cfg = ('-c', "tar.$ctx->{snap_fmt}.command=$cmd");
-	}
-	my $qsp = PublicInbox::Qspawn->new(['git', @cfg,
-			"--git-dir=$ctx->{git}->{git_dir}", 'archive',
-			"--prefix=$ctx->{snap_pfx}/",
-			"--format=$ctx->{snap_fmt}", $ctx->{treeish}]);
-	$qsp->psgi_return($ctx->{env}, undef, \&archive_hdr, $ctx);
-}
-
 sub ver_check { # git->check_async callback
 	my ($oid, $type, $size, $ctx) = @_;
-	if ($type eq 'missing') { # try 'v' and 'V' prefixes
-		my $pfx = shift @{$ctx->{try_pfx}} or return
+	return if defined $ctx->{etag};
+	my $treeish = shift @{$ctx->{-try}} // die 'BUG: no {-try}';
+	if ($type eq 'missing') {
+		scalar(@{$ctx->{-try}}) or
 			delete($ctx->{env}->{'qspawn.wcb'})->(r(404));
-		my $v = $ctx->{treeish} = $pfx.$ctx->{snap_ver};
-		return $ctx->{env}->{'pi-httpd.async'} ?
-			async_check($ctx, $v, \&ver_check, $ctx) :
-			$ctx->{git}->check_async($v, \&ver_check, $ctx);
+	} else { # found, done:
+		$ctx->{etag} = $oid;
+		my @cfg;
+		if (my $cmd = $FMT_CFG{$ctx->{snap_fmt}}) {
+			@cfg = ('-c', "tar.$ctx->{snap_fmt}.command=$cmd");
+		}
+		my $qsp = PublicInbox::Qspawn->new(['git', @cfg,
+				"--git-dir=$ctx->{git}->{git_dir}", 'archive',
+				"--prefix=$ctx->{snap_pfx}/",
+				"--format=$ctx->{snap_fmt}", $treeish]);
+		$qsp->psgi_return($ctx->{env}, undef, \&archive_hdr, $ctx);
 	}
-	$ctx->{etag} = $oid;
-	archive_cb($ctx);
 }
 
 sub srv {
@@ -81,16 +74,12 @@ sub srv {
 	substr($fn, 0, length($pfx)) eq $pfx or return;
 	$ctx->{snap_pfx} = $fn;
 	my $v = $ctx->{snap_ver} = substr($fn, length($pfx), length($fn));
-	$ctx->{treeish} = $v; # try without [vV] prefix, first
-	@{$ctx->{try_pfx}} = qw(v V); # cf. cgit:ui-snapshot.c
+	# try without [vV] prefix, first
+	my @try = map { "$_$v" } ('', 'v', 'V'); # cf. cgit:ui-snapshot.c
+	@{$ctx->{-try}} = @try;
 	sub {
 		$ctx->{env}->{'qspawn.wcb'} = $_[0];
-		if ($ctx->{env}->{'pi-httpd.async'}) {
-			async_check($ctx, $v, \&ver_check, $ctx);
-		} else {
-			$ctx->{git}->check_async($v, \&ver_check, $ctx);
-			$ctx->{git}->check_async_wait;
-		}
+		PublicInbox::ViewVCS::do_check_async($ctx, \&ver_check, @try);
 	}
 }
 

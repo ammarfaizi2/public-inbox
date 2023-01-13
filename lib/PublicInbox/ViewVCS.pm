@@ -126,13 +126,23 @@ sub cmt_title { # git->cat_async callback
 }
 
 sub do_cat_async {
-	my ($ctx, $cb, @oids) = @_;
+	my ($ctx, $cb, @req) = @_;
 	# favor git(1) over Gcf2 (libgit2) for SHA-256 support
-	$ctx->{git}->cat_async($_, $cb, $ctx) for @oids;
+	$ctx->{git}->cat_async($_, $cb, $ctx) for @req;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
 		PublicInbox::GitAsyncCat::watch_cat($ctx->{git});
 	} else { # synchronous, generic PSGI
 		$ctx->{git}->cat_async_wait;
+	}
+}
+
+sub do_check_async {
+	my ($ctx, $cb, @req) = @_;
+	if ($ctx->{env}->{'pi-httpd.async'}) {
+		async_check($ctx, $_, $cb, $ctx) for @req;
+	} else { # synchronous, generic PSGI
+		$ctx->{git}->check_async($_, $cb, $ctx) for @req;
+		$ctx->{git}->check_async_wait;
 	}
 }
 

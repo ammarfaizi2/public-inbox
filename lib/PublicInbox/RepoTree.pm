@@ -5,7 +5,6 @@
 package PublicInbox::RepoTree;
 use v5.12;
 use PublicInbox::ViewDiff qw(uri_escape_path);
-use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::Qspawn;
 use PublicInbox::WwwStream qw(html_oneshot);
@@ -78,12 +77,7 @@ sub srv_tree {
 	return if index($obj, "\n") >= 0;
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP::{Chunked,Identity}
-		if ($ctx->{env}->{'pi-httpd.async'}) {
-			async_check($ctx, $obj, \&tree_show, $ctx);
-		} else {
-			$ctx->{git}->check_async($obj, \&tree_show, $ctx);
-			$ctx->{git}->async_wait_all;
-		}
+		PublicInbox::ViewVCS::do_check_async($ctx, \&tree_show, $obj);
 	};
 }
 
