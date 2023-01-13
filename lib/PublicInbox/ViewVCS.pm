@@ -49,7 +49,7 @@ my %GIT_MODE = (
 sub html_page ($$;@) {
 	my ($ctx, $code) = @_[0, 1];
 	my $wcb = delete $ctx->{-wcb};
-	$ctx->{-upfx} = '../../'; # from "/$INBOX/$OID/s/"
+	$ctx->{-upfx} //= '../../'; # from "/$INBOX/$OID/s/"
 	my $res = html_oneshot($ctx, $code, @_[2..$#_]);
 	$wcb ? $wcb->($res) : $res;
 }
@@ -65,6 +65,7 @@ sub dbg_log ($) {
 		warn "readline(log): $!";
 		return '<pre>debug log read error</pre>';
 	};
+	return '' if $log eq '';
 	$ctx->{-linkify} //= PublicInbox::Linkify->new;
 	"<hr><pre>debug log:\n\n".
 		$ctx->{-linkify}->to_html($log).'</pre>';
@@ -369,10 +370,18 @@ sub show_tree_result ($$) {
 	my @ent = split(/\0/, $$bref);
 	my $qp = delete $ctx->{qp};
 	my $l = $ctx->{-linkify} //= PublicInbox::Linkify->new;
-	my $pfx = $qp->{b};
+	my $pfx = $ctx->{-path} // $qp->{b}; # {-path} is from RepoTree
 	$$bref = "<pre><a href=#tree>tree</a> $ctx->{tree_oid}";
+	# $REPO/tree/$path already sets {-upfx}
+	my $upfx = $ctx->{-upfx} //= '../../';
 	if (defined $pfx) {
-		if ($pfx eq '') {
+		$pfx =~ s!/+\z!!s;
+		if (my $t = $ctx->{-obj}) {
+			my $t = ascii_html($t);
+			$$bref .= <<EOM
+\n\$ git ls-tree -l $t	# shows similar output on the CLI
+EOM
+		} elsif ($pfx eq '') {
 			$$bref .= "  (root)\n";
 		} else {
 			my $x = ascii_html($pfx);
@@ -400,7 +409,7 @@ sub show_tree_result ($$) {
 		if ($m eq 'd') { $n .= '/' }
 		elsif ($m eq 'x') { $n = "<b>$n</b>" }
 		elsif ($m eq 'l') { $n = "<i>$n</i>" }
-		$$bref .= qq(\n$m\t$sz\t<a\nhref="../../$oid/s/?$q">$n</a>);
+		$$bref .= qq(\n$m\t$sz\t<a\nhref="$upfx$oid/s/?$q">$n</a>);
 	}
 	$$bref .= dbg_log($ctx);
 	$$bref .= <<EOM;
@@ -423,7 +432,7 @@ EOM
 	html_page($ctx, 200, $$bref);
 }
 
-sub show_tree ($$) {
+sub show_tree ($$) { # also used by RepoTree
 	my ($ctx, $res) = @_;
 	my ($git, $oid, undef, $size) = @$res;
 	$size > $MAX_SIZE and return html_page($ctx, 200,
@@ -484,16 +493,19 @@ sub solve_result {
 	return show_tree($ctx, $res) if $type eq 'tree';
 	return show_tag($ctx, $res) if $type eq 'tag';
 	return show_other($ctx, $res) if $type ne 'blob';
-	my $path = to_filename($di->{path_b} // $hints->{path_b} // 'blob');
-	my $raw_link = "(<a\nhref=$path>raw</a>)";
+	my $paths = $ctx->{-paths} //= do {
+		my $path = to_filename($di->{path_b}//$hints->{path_b}//'blob');
+		my $raw_more = qq[(<a\nhref="$path">raw</a>)];
+		[ $path, $raw_more ];
+	};
+
 	if ($size > $MAX_SIZE) {
 		return stream_large_blob($ctx, $res) if defined $ctx->{fn};
 		return html_page($ctx, 200, <<EOM . dbg_log($ctx));
 <pre><b>Too big to show, download available</b>
-blob $oid $size bytes $raw_link</pre>
+blob $oid $size bytes $paths->[1]</pre>
 EOM
 	}
-	@{$ctx->{-paths}} = ($path, $raw_link);
 	bless $ctx, 'PublicInbox::WwwStream'; # for DESTROY
 	$ctx->{git} = $git;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
@@ -519,10 +531,10 @@ sub show_blob { # git->cat_async callback
 		return delete($ctx->{-wcb})->([200, $h, [ $$blob ]]);
 	}
 
-	my ($path, $raw_link) = @{delete $ctx->{-paths}};
+	my ($path, $raw_more) = @{delete $ctx->{-paths}};
 	$bin and return html_page($ctx, 200,
 				"<pre>blob $oid $size bytes (binary)" .
-				" $raw_link</pre>".dbg_log($ctx));
+				" $raw_more</pre>".dbg_log($ctx));
 
 	# TODO: detect + convert to ensure validity
 	utf8::decode($$blob);
@@ -538,7 +550,7 @@ sub show_blob { # git->cat_async callback
 	}
 
 	# using some of the same CSS class names and ids as cgit
-	my $x = "<pre>blob $oid $size bytes $raw_link</pre>" .
+	my $x = "<pre>blob $oid $size bytes $raw_more</pre>" .
 		"<hr /><table\nclass=blob>".
 		"<tr><td\nclass=linenumbers><pre>";
 	# scratchpad in this loop is faster here than `printf $zfh':

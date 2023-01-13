@@ -383,11 +383,19 @@ EOF
 		}
 
 		$res = $cb->(GET('/public-inbox/tree/'));
-		is($res->code, 302, 'got redirect');
+		is($res->code, 200, 'got 200 for root listing');
+		$got = $res->content;
+		like($got, qr/\bgit ls-tree\b/, 'ls-tree help shown');
+
 		$res = $cb->(GET('/public-inbox/tree/README'));
-		is($res->code, 302, 'got redirect for regular file');
+		is($res->code, 200, 'got 200 for regular file');
+		$got = $res->content;
+		like($got, qr/\bgit show\b/, 'git show help shown');
+
 		$res = $cb->(GET('/public-inbox/tree/Documentation'));
-		is($res->code, 302, 'got redirect for directory');
+		is($res->code, 200, 'got 200 for a directory');
+		$got = $res->content;
+		like($got, qr/\bgit ls-tree\b/, 'ls-tree help shown');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

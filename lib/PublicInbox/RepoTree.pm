@@ -48,15 +48,20 @@ sub find_missing {
 	$qsp->psgi_qx($ctx->{env}, undef, \&rd_404_log, $ctx);
 }
 
-sub tree_30x { # git check_async callback
+sub tree_show { # git check_async callback
 	my ($oid, $type, $size, $ctx) = @_;
 	return find_missing($ctx) if $type eq 'missing';
-	my $wcb = delete $ctx->{-wcb};
-	my $u = $ctx->{git}->base_url($ctx->{env});
-	my $path = uri_escape_path(delete $ctx->{-path});
-	$u .= "$oid/s/?b=$path";
-	$wcb->([ 302, [ Location => $u, 'Content-Type' => 'text/plain' ],
-		[ "Redirecting to $u\n" ] ])
+
+	open $ctx->{lh}, '<', \(my $dbg_log = '') or die "open(scalar): $!";
+	my $res = [ $ctx->{git}, $oid, $type, $size ];
+	my ($bn) = ($ctx->{-path} =~ m!/?([^/]+)\z!);
+	if ($type eq 'blob') {
+		my $obj = ascii_html($ctx->{-obj});
+		$ctx->{-paths} = [ $bn, qq[(<a
+href="$ctx->{-upfx}$oid/s/$bn">raw</a>)
+\$ git show $obj\t# shows this blob on the CLI] ];
+	}
+	PublicInbox::ViewVCS::solve_result($res, $ctx);
 }
 
 sub srv_tree {
@@ -74,9 +79,9 @@ sub srv_tree {
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP::{Chunked,Identity}
 		if ($ctx->{env}->{'pi-httpd.async'}) {
-			async_check($ctx, $obj, \&tree_30x, $ctx);
+			async_check($ctx, $obj, \&tree_show, $ctx);
 		} else {
-			$ctx->{git}->check_async($obj, \&tree_30x, $ctx);
+			$ctx->{git}->check_async($obj, \&tree_show, $ctx);
 			$ctx->{git}->async_wait_all;
 		}
 	};

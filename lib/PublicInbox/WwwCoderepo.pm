@@ -223,9 +223,9 @@ sub srv { # endpoint called by PublicInbox::WWW
 	}
 	$path_info =~ m!\A/(.+?)/\z! and
 		($ctx->{git} = $cr->{$1}) and return summary($self, $ctx);
-	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/\z! and
+	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
 			($ctx->{git} = $cr->{$1}) and
-		return PublicInbox::ViewVCS::show($ctx, $2);
+		return PublicInbox::ViewVCS::show($ctx, $2, $3);
 
 	if ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
