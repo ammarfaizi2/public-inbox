@@ -28,6 +28,7 @@ package PublicInbox::Qspawn;
 use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::GzipFilter;
+use Scalar::Util qw(blessed);
 
 # n.b.: we get EAGAIN with public-inbox-httpd, and EINTR on other PSGI servers
 use Errno qw(EAGAIN EINTR);
@@ -234,8 +235,9 @@ sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	my $r = rd_hdr($self) or return;
 	my $env = $self->{psgi_env};
 	my $filter;
-	if (ref($r) eq 'ARRAY' && Scalar::Util::blessed($r->[2]) &&
-			$r->[2]->can('attach')) {
+
+	# this is for RepoAtom since that can fire after parse_cgi_headers
+	if (ref($r) eq 'ARRAY' && blessed($r->[2]) && $r->[2]->can('attach')) {
 		$filter = pop @$r;
 	}
 	$filter //= delete($env->{'qspawn.filter'}) // (ref($r) eq 'ARRAY' ?
