@@ -293,7 +293,7 @@ EOF
 		is($res->code, 404, 'failure with null OID');
 
 		$res = $cb->(GET("/$name/$non_existent/s/"));
-		is($res->code, 404, 'failure with null OID');
+		is($res->code, 404, 'failure with non-existent OID');
 
 		$res = $cb->(GET("/$name/$v1_0_0_tag/s/"));
 		is($res->code, 200, 'shows commit (unabbreviated)');
