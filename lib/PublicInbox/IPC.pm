@@ -150,7 +150,6 @@ sub ipc_worker_reap { # dwaitpid callback
 sub wq_wait_async {
 	my ($self, $cb, @uargs) = @_;
 	local $PublicInbox::DS::in_loop = 1;
-	$self->{-reap_async} = 1;
 	$self->{-reap_do} = $cb;
 	my @pids = keys %{$self->{-wq_workers}};
 	dwaitpid($_, \&ipc_worker_reap, [ $self, @uargs ]) for @pids;
@@ -350,7 +349,7 @@ sub wq_do {
 
 sub prepare_nonblock {
 	($_[0]->{-wq_s1} // die 'BUG: no {-wq_s1}')->blocking(0);
-	$_[0]->{-reap_async} or die 'BUG: {-reap_async} needed for nonblock';
+	$_[0]->{-reap_do} or die 'BUG: {-reap_do} needed for nonblock';
 	require PublicInbox::WQBlocked;
 }
 
@@ -424,11 +423,11 @@ sub wq_workers_start {
 sub wq_close {
 	my ($self) = @_;
 	if (my $wqb = delete $self->{wqb}) {
-		$self->{-reap_async} or die 'BUG: {-reap_async} unset';
+		$self->{-reap_do} or die 'BUG: {-reap_do} unset';
 		$wqb->enq_close;
 	}
 	delete @$self{qw(-wq_s1 -wq_s2)} or return;
-	return if $self->{-reap_async};
+	return if $self->{-reap_do};
 	my @pids = keys %{$self->{-wq_workers}};
 	dwaitpid($_, \&ipc_worker_reap, [ $self ]) for @pids;
 }
