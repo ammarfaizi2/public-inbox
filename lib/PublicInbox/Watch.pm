@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # ref: https://cr.yp.to/proto/maildir.html
@@ -12,10 +12,9 @@ use PublicInbox::MdirReader;
 use PublicInbox::NetReader;
 use PublicInbox::Filter::Base qw(REJECT);
 use PublicInbox::Spamcheck;
-use PublicInbox::DS qw(now add_timer);
+use PublicInbox::DS qw(now add_timer awaitpid);
 use PublicInbox::MID qw(mids);
 use PublicInbox::ContentHash qw(content_hash);
-use PublicInbox::EOFpipe;
 use POSIX qw(_exit WNOHANG);
 
 sub compile_watchheaders ($) {
@@ -244,14 +243,13 @@ sub quit_done ($) {
 	return unless $self->{quit};
 
 	# don't have reliable wakeups, keep signalling
-	my $done = 1;
+	my $live = 0;
 	for (qw(idle_pids poll_pids)) {
 		my $pids = $self->{$_} or next;
-		for (keys %$pids) {
-			$done = undef if kill('QUIT', $_);
-		}
+		$live += grep { kill('QUIT', $_) } keys %$pids;
 	}
-	$done;
+	add_timer(0.01, \&quit_done, $self) if $live;
+	$live == 0;
 }
 
 sub quit {
@@ -400,8 +398,8 @@ sub imap_idle_requeue { # DS::add_timer callback
 	event_step($self);
 }
 
-sub imap_idle_reap { # PublicInbox::DS::dwaitpid callback
-	my ($self, $pid) = @_;
+sub imap_idle_reap { # awaitpid callback
+	my ($pid, $self) = @_;
 	my $uri_intvl = delete $self->{idle_pids}->{$pid} or
 		die "BUG: PID=$pid (unknown) reaped: \$?=$?\n";
 
@@ -411,33 +409,21 @@ sub imap_idle_reap { # PublicInbox::DS::dwaitpid callback
 	add_timer(60, \&imap_idle_requeue, $self, $uri_intvl);
 }
 
-sub reap { # callback for EOFpipe
-	my ($pid, $cb, $self) = @{$_[0]};
-	my $ret = waitpid($pid, 0);
-	if ($ret == $pid) {
-		$cb->($self, $pid); # poll_fetch_reap || imap_idle_reap
-	} else {
-		warn "W: waitpid($pid) => ", $ret // "($!)", "\n";
-	}
-}
-
 sub imap_idle_fork ($$) {
 	my ($self, $uri_intvl) = @_;
+	return if $self->{quit};
 	my ($uri, $intvl) = @$uri_intvl;
-	pipe(my ($r, $w)) or die "pipe: $!";
 	my $seed = rand(0xffffffff);
 	my $pid = fork // die "fork: $!";
 	if ($pid == 0) {
 		srand($seed);
 		eval { Net::SSLeay::randomize() };
-		close $r;
 		watch_atfork_child($self);
 		watch_imap_idle_1($self, $uri, $intvl);
-		close $w;
 		_exit(0);
 	}
 	$self->{idle_pids}->{$pid} = $uri_intvl;
-	PublicInbox::EOFpipe->new($r, \&reap, [$pid, \&imap_idle_reap, $self]);
+	awaitpid($pid, \&imap_idle_reap, $self);
 }
 
 sub event_step {
@@ -486,30 +472,26 @@ sub watch_nntp_fetch_all ($$) {
 sub poll_fetch_fork { # DS::add_timer callback
 	my ($self, $intvl, $uris) = @_;
 	return if $self->{quit};
-	pipe(my ($r, $w)) or die "pipe: $!";
 	watch_atfork_parent($self);
 	my $seed = rand(0xffffffff);
-	my $pid = fork;
-	if (defined($pid) && $pid == 0) {
+	my $pid = fork // die "fork: $!";
+	if ($pid == 0) {
 		srand($seed);
 		eval { Net::SSLeay::randomize() };
-		close $r;
 		watch_atfork_child($self);
 		if ($uris->[0]->scheme =~ m!\Aimaps?!i) {
 			watch_imap_fetch_all($self, $uris);
 		} else {
 			watch_nntp_fetch_all($self, $uris);
 		}
-		close $w;
 		_exit(0);
 	}
-	die "fork: $!"  unless defined $pid;
 	$self->{poll_pids}->{$pid} = [ $intvl, $uris ];
-	PublicInbox::EOFpipe->new($r, \&reap, [$pid, \&poll_fetch_reap, $self]);
+	awaitpid($pid, \&poll_fetch_reap, $self);
 }
 
-sub poll_fetch_reap {
-	my ($self, $pid) = @_;
+sub poll_fetch_reap { # awaitpid callback
+	my ($pid, $self) = @_;
 	my $intvl_uris = delete $self->{poll_pids}->{$pid} or
 		die "BUG: PID=$pid (unknown) reaped: \$?=$?\n";
 	return if $self->{quit};
