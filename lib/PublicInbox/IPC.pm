@@ -169,7 +169,7 @@ sub ipc_atfork_child {
 
 # idempotent, can be called regardless of whether worker is active or not
 sub ipc_worker_stop {
-	my ($self, $args) = @_;
+	my ($self) = @_;
 	my ($pid, $ppid) = delete(@$self{qw(-ipc_pid -ipc_ppid)});
 	my ($w_req, $r_res) = delete(@$self{qw(-ipc_req -ipc_res)});
 	if (!$w_req && !$r_res) {
@@ -180,7 +180,7 @@ sub ipc_worker_stop {
 	$w_req = $r_res = undef;
 
 	return if $$ != $ppid;
-	dwaitpid($pid, \&ipc_worker_reap, [$self, $args]);
+	dwaitpid($pid, \&ipc_worker_reap, [$self]);
 }
 
 # use this if we have multiple readers reading curl or "pigz -dc"
