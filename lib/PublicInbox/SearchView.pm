@@ -34,7 +34,7 @@ sub sres_top_html {
 		return PublicInbox::WWW::need($ctx, 'Search');
 	my $q = PublicInbox::SearchQuery->new($ctx->{qp});
 	my $x = $q->{x};
-	my $o = $q->{o};
+	my $o = $q->{o} // 0;
 	my $asc;
 	if ($o < 0) {
 		$asc = 1;
