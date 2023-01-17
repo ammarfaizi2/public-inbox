@@ -464,17 +464,18 @@ sub poll_fetch_fork { # DS::add_timer callback
 	my ($self, $intvl, $uris) = @_;
 	return if $self->{quit};
 	watch_atfork_parent($self);
+	my @nntp;
+	my @imap = grep { # push() always returns > 0
+		$_->scheme =~ m!\Aimaps?!i ? 1 : (push(@nntp, $_) < 0)
+	} @$uris;
 	my $seed = rand(0xffffffff);
 	my $pid = fork // die "fork: $!";
 	if ($pid == 0) {
 		srand($seed);
 		eval { Net::SSLeay::randomize() };
 		watch_atfork_child($self);
-		if ($uris->[0]->scheme =~ m!\Aimaps?!i) {
-			watch_imap_fetch_all($self, $uris);
-		} else {
-			watch_nntp_fetch_all($self, $uris);
-		}
+		watch_imap_fetch_all($self, \@imap) if @imap;
+		watch_nntp_fetch_all($self, \@nntp) if @nntp;
 		_exit(0);
 	}
 	$self->{pids}->{$pid} = undef;
