@@ -150,8 +150,8 @@ sub git_to_mail { # git->cat_async callback
 	$self->{lei}->fail("$@ (oid=$oid)") if $@;
 }
 
-sub reap_compress { # dwaitpid callback
-	my ($lei, $pid) = @_;
+sub reap_compress { # awaitpid callback
+	my ($pid, $lei) = @_;
 	my $cmd = delete $lei->{"pid.$pid"};
 	return if $? == 0;
 	$lei->fail("@$cmd failed", $? >> 8);

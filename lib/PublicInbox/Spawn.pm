@@ -365,9 +365,9 @@ sub popen_rd {
 	$opt->{1} = fileno($w);
 	my $pid = spawn($cmd, $env, $opt);
 	return ($r, $pid) if wantarray;
-	my $ret = gensym;
-	tie *$ret, 'PublicInbox::ProcessPipe', $pid, $r, @$opt{qw(cb arg)};
-	$ret;
+	my $s = gensym;
+	tie *$s, 'PublicInbox::ProcessPipe', $pid, $r, @{$opt->{cb_arg} // []};
+	$s;
 }
 
 sub run_die ($;$$) {

@@ -1,16 +1,25 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # a tied handle for auto reaping of children tied to a pipe, see perltie(1)
 package PublicInbox::ProcessPipe;
-use strict;
-use v5.10.1;
+use v5.12;
 use Carp qw(carp);
+use PublicInbox::DS qw(awaitpid);
+
+sub waitcb { # awaitpid callback
+	my ($pid, $err_ref, $cb, @args) = @_;
+	$$err_ref = $?; # sets >{pp_chld_err} for _close
+	$cb->($pid, @args) if $cb;
+}
 
 sub TIEHANDLE {
-	my ($class, $pid, $fh, $cb, $arg) = @_;
-	bless { pid => $pid, fh => $fh, ppid => $$, cb => $cb, arg => $arg },
-		$class;
+	my ($cls, $pid, $fh, @cb_arg) = @_;
+	my $self = bless { pid => $pid, fh => $fh, ppid => $$ }, $cls;
+	# we share $err (and not $self) with awaitpid to avoid a ref cycle
+	$self->{pp_chld_err} = \(my $err);
+	awaitpid($pid, \&waitcb, \$err, @cb_arg);
+	$self;
 }
 
 sub BINMODE { binmode(shift->{fh}) } # for IO::Uncompress::Gunzip
@@ -33,24 +42,15 @@ sub FILENO { fileno($_[0]->{fh}) }
 
 sub _close ($;$) {
 	my ($self, $wait) = @_;
-	my $fh = delete $self->{fh};
+	my ($fh, $pid) = delete(@$self{qw(fh pid)});
 	my $ret = defined($fh) ? close($fh) : '';
-	my ($pid, $cb, $arg) = delete @$self{qw(pid cb arg)};
 	return $ret unless defined($pid) && $self->{ppid} == $$;
 	if ($wait) { # caller cares about the exit status:
-		my $wp = waitpid($pid, 0);
-		if ($wp == $pid) {
-			$ret = '' if $?;
-			if ($cb) {
-				eval { $cb->($arg, $pid) };
-				carp "E: cb(arg, $pid): $@" if $@;
-			}
-		} else {
-			carp "waitpid($pid, 0) = $wp, \$!=$!, \$?=$?";
-		}
-	} else { # caller just undef-ed it, let event loop deal with it
-		require PublicInbox::DS;
-		PublicInbox::DS::dwaitpid($pid, $cb, $arg);
+		# synchronous wait via defined(wantarray) on awaitpid:
+		defined(${$self->{pp_chld_err}}) or $wait = awaitpid($pid);
+		($? = ${$self->{pp_chld_err}}) and $ret = '';
+	} else {
+		awaitpid($pid); # depends on $in_loop or not
 	}
 	$ret;
 }

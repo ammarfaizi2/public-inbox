@@ -28,6 +28,7 @@ package PublicInbox::Qspawn;
 use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::GzipFilter;
+use PublicInbox::DS qw(awaitpid);
 use Scalar::Util qw(blessed);
 
 # n.b.: we get EAGAIN with public-inbox-httpd, and EINTR on other PSGI servers
@@ -57,35 +58,21 @@ sub _do_spawn {
 		}
 	}
 	$self->{cmd} = $o{quiet} ? undef : $cmd;
+	$o{cb_arg} = [ \&waitpid_err, $self ];
 	eval {
 		# popen_rd may die on EMFILE, ENFILE
-		$self->{rpipe} = popen_rd($cmd, $cmd_env, \%o);
-
-		die "E: $!" unless defined($self->{rpipe});
-
+		$self->{rpipe} = popen_rd($cmd, $cmd_env, \%o) // die "E: $!";
 		$limiter->{running}++;
 		$start_cb->($self); # EPOLL_CTL_ADD may ENOSPC/ENOMEM
 	};
 	finish($self, $@) if $@;
 }
 
-sub child_err ($) {
-	my ($child_error) = @_; # typically $?
-	my $exitstatus = ($child_error >> 8) or return;
-	my $sig = $child_error & 127;
-	my $msg = "exit status=$exitstatus";
-	$msg .= " signal=$sig" if $sig;
-	$msg;
-}
+sub finalize ($) {
+	my ($self) = @_;
 
-sub finalize ($$) {
-	my ($self, $err) = @_;
-
-	my ($env, $qx_cb, $qx_arg, $qx_buf) =
-		delete @$self{qw(psgi_env qx_cb qx_arg qx_buf)};
-
-	# done, spawn whatever's in the queue
-	my $limiter = $self->{limiter};
+	# process is done, spawn whatever's in the queue
+	my $limiter = delete $self->{limiter} or return;
 	my $running = --$limiter->{running};
 
 	if ($running < $limiter->{max}) {
@@ -93,14 +80,16 @@ sub finalize ($$) {
 			_do_spawn(@$next, $limiter);
 		}
 	}
-
-	if ($err) {
+	if (my $err = $self->{_err}) { # set by finish or waitpid_err
 		utf8::decode($err);
 		if (my $dst = $self->{qsp_err}) {
 			$$dst .= $$dst ? " $err" : "; $err";
 		}
 		warn "@{$self->{cmd}}: $err" if $self->{cmd};
 	}
+
+	my ($env, $qx_cb, $qx_arg, $qx_buf) =
+		delete @$self{qw(psgi_env qx_cb qx_arg qx_buf)};
 	if ($qx_cb) {
 		eval { $qx_cb->($qx_buf, $qx_arg) };
 		return unless $@;
@@ -115,14 +104,28 @@ sub finalize ($$) {
 	}
 }
 
-# callback for dwaitpid or ProcessPipe
-sub waitpid_err { finalize($_[0], child_err($?)) }
+sub waitpid_err { # callback for awaitpid
+	my (undef, $self) = @_; # $_[0]: pid
+	$self->{_err} = ''; # for defined check in ->finish
+	if ($?) {
+		my $status = $? >> 8;
+		my $sig = $? & 127;
+		$self->{_err} .= "exit status=$status";
+		$self->{_err} .= " signal=$sig" if $sig;
+	}
+	finalize($self) if !$self->{rpipe};
+}
 
 sub finish ($;$) {
 	my ($self, $err) = @_;
-	my $tied_pp = delete($self->{rpipe}) or return finalize($self, $err);
-	my PublicInbox::ProcessPipe $pp = tied *$tied_pp;
-	@$pp{qw(cb arg)} = (\&waitpid_err, $self); # for ->DESTROY
+	$self->{_err} //= $err; # only for $@
+
+	# we can safely finalize if pipe was closed before, or if
+	# {_err} is defined by waitpid_err.  Deleting {rpipe} will
+	# trigger PublicInbox::ProcessPipe::DESTROY -> waitpid_err,
+	# but it may not fire right away if inside the event loop.
+	my $closed_before = !delete($self->{rpipe});
+	finalize($self) if $closed_before || defined($self->{_err});
 }
 
 sub start ($$$) {
@@ -247,10 +250,9 @@ sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	if (ref($r) ne 'ARRAY' || scalar(@$r) == 3) { # error
 		if ($async) { # calls rpipe->close && ->event_step
 			$async->close; # PublicInbox::HTTPD::Async::close
-		} else { # generic PSGI:
+		} else { # generic PSGI, use PublicInbox::ProcessPipe::CLOSE
 			delete($self->{rpipe})->close;
 			event_step($self);
-			waitpid_err($self);
 		}
 		if (ref($r) eq 'ARRAY') { # error
 			$wcb->($r)
