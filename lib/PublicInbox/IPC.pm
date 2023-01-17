@@ -12,7 +12,7 @@ use strict;
 use v5.10.1;
 use parent qw(Exporter);
 use Carp qw(croak);
-use PublicInbox::DS qw(dwaitpid);
+use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
 use PublicInbox::OnDestroy;
 use PublicInbox::WQWorker;
@@ -133,26 +133,26 @@ sub ipc_worker_spawn {
 	$self->{-ipc_req} = $w_req;
 	$self->{-ipc_res} = $r_res;
 	$self->{-ipc_ppid} = $$;
+	awaitpid($pid, \&ipc_worker_reap, $self);
 	$self->{-ipc_pid} = $pid;
 }
 
-sub ipc_worker_reap { # dwaitpid callback
-	my ($args, $pid) = @_;
-	my ($self, @uargs) = @$args;
+sub ipc_worker_reap { # awaitpid callback
+	my ($pid, $self) = @_;
 	delete $self->{-wq_workers}->{$pid};
-	return $self->{-reap_do}->($args, $pid) if $self->{-reap_do};
+	if (my $cb_args = $self->{-reap_do}) {
+		return $cb_args->[0]->($pid, $self, @$cb_args[1..$#$cb_args]);
+	}
 	return if !$?;
 	my $s = $? & 127;
 	# TERM(15) is our default exit signal, PIPE(13) is likely w/ pager
 	warn "$self->{-wq_ident} PID:$pid died \$?=$?\n" if $s != 15 && $s != 13
 }
 
-sub wq_wait_async {
-	my ($self, $cb, @uargs) = @_;
-	local $PublicInbox::DS::in_loop = 1;
-	$self->{-reap_do} = $cb;
-	my @pids = keys %{$self->{-wq_workers}};
-	dwaitpid($_, \&ipc_worker_reap, [ $self, @uargs ]) for @pids;
+# register wait workers
+sub awaitpid_init {
+	my ($self, @cb_args) = @_;
+	$self->{-reap_do} = \@cb_args;
 }
 
 # for base class, override in sub classes
@@ -178,9 +178,7 @@ sub ipc_worker_stop {
 	}
 	die 'no PID with IPC pipes' unless $pid;
 	$w_req = $r_res = undef;
-
-	return if $$ != $ppid;
-	dwaitpid($pid, \&ipc_worker_reap, [$self]);
+	awaitpid($pid) if $$ == $ppid; # for non-event loop
 }
 
 # use this if we have multiple readers reading curl or "pigz -dc"
@@ -397,6 +395,7 @@ sub _wq_worker_start ($$$$) {
 		undef $end; # trigger exit
 	} else {
 		$self->{-wq_workers}->{$pid} = $bcast1;
+		awaitpid($pid, \&ipc_worker_reap, $self);
 	}
 }
 
@@ -428,8 +427,7 @@ sub wq_close {
 	}
 	delete @$self{qw(-wq_s1 -wq_s2)} or return;
 	return if $self->{-reap_do};
-	my @pids = keys %{$self->{-wq_workers}};
-	dwaitpid($_, \&ipc_worker_reap, [ $self ]) for @pids;
+	awaitpid($_) for keys %{$self->{-wq_workers}};
 }
 
 sub wq_kill {

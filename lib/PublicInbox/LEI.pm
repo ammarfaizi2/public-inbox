@@ -18,7 +18,6 @@ use IO::Handle ();
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Config;
 use PublicInbox::Syscall qw(EPOLLIN);
-use PublicInbox::DS qw(dwaitpid);
 use PublicInbox::Spawn qw(spawn popen_rd);
 use PublicInbox::Lock;
 use PublicInbox::Eml;
@@ -644,12 +643,12 @@ sub workers_start {
 	my $end = $lei->pkt_op_pair;
 	my $ident = $wq->{-wq_ident} // "lei-$lei->{cmd} worker";
 	$flds->{lei} = $lei;
+	$wq->awaitpid_init($wq->can('_wq_done_wait') // \&wq_done_wait, $lei);
 	$wq->wq_workers_start($ident, $jobs, $lei->oldset, $flds);
 	delete $lei->{pkt_op_p};
 	my $op_c = delete $lei->{pkt_op_c};
 	@$end = ();
 	$lei->event_step_init;
-	$wq->wq_wait_async($wq->can('_wq_done_wait') // \&wq_done_wait, $lei);
 	($op_c, $ops);
 }
 
@@ -1391,9 +1390,8 @@ sub DESTROY {
 	# preserve $? for ->fail or ->x_it code
 }
 
-sub wq_done_wait { # dwaitpid callback
-	my ($arg, $pid) = @_;
-	my ($wq, $lei) = @$arg;
+sub wq_done_wait { # awaitpid cb (via wq_eof / IPC->awaitpid_init)
+	my ($pid, $wq, $lei) = @_;
 	local $current_lei = $lei;
 	my $err_type = $lei->{-err_type};
 	$? and $lei->child_error($?,

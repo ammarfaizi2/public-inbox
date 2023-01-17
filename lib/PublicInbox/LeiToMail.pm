@@ -652,9 +652,8 @@ sub _do_augment_mbox {
 	$dedupe->pause_dedupe if $dedupe;
 }
 
-sub v2w_done_wait { # dwaitpid callback
-	my ($arg, $pid) = @_;
-	my ($v2w, $lei) = @$arg;
+sub v2w_done_wait { # awaitpid cb (via awaitpid_init)
+	my ($pid, $v2w, $lei) = @_;
 	$lei->child_error($?, "error for $v2w->{ibx}->{inboxdir}") if $?;
 }
 
@@ -680,8 +679,8 @@ sub _pre_augment_v2 {
 	PublicInbox::InboxWritable->new($ibx, @creat);
 	$ibx->init_inbox if @creat;
 	my $v2w = $ibx->importer;
+	$v2w->awaitpid_init(\&v2w_done_wait, $lei);
 	$v2w->wq_workers_start("lei/v2w $dir", 1, $lei->oldset, {lei => $lei});
-	$v2w->wq_wait_async(\&v2w_done_wait, $lei);
 	$lei->{v2w} = $v2w;
 	return if !$lei->{opt}->{shared};
 	my $d = "$lei->{ale}->{git}->{git_dir}/objects";

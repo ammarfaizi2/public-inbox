@@ -604,9 +604,8 @@ sub recv_and_run {
 	$self->SUPER::recv_and_run(@args);
 }
 
-sub _sto_atexit { # dwaitpid callback
-	my ($args, $pid) = @_;
-	my $self = $args->[0];
+sub _sto_atexit { # awaitpid cb (via awaitpid_init)
+	my ($pid, $sto) = @_;
 	warn "lei/store PID:$pid died \$?=$?\n" if $?;
 }
 
@@ -621,12 +620,12 @@ sub write_prepare {
 		# Mail we import into lei are private, so headers filtered out
 		# by -mda for public mail are not appropriate
 		local @PublicInbox::MDA::BAD_HEADERS = ();
+		$self->awaitpid_init(\&_sto_atexit); # outlives $lei
 		$self->wq_workers_start("lei/store $dir", 1, $lei->oldset, {
 					lei => $lei,
 					-err_wr => $w,
 					to_close => [ $r ],
 				});
-		$self->wq_wait_async(\&_sto_atexit); # outlives $lei
 		require PublicInbox::LeiStoreErr;
 		PublicInbox::LeiStoreErr->new($r, $lei);
 	}

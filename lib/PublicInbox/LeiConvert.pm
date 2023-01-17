@@ -30,7 +30,7 @@ sub input_maildir_cb {
 
 sub process_inputs { # via wq_do
 	my ($self) = @_;
-	local $PublicInbox::DS::in_loop = 0; # force synchronous dwaitpid
+	local $PublicInbox::DS::in_loop = 0; # force synchronous awaitpid
 	$self->SUPER::process_inputs;
 	my $lei = $self->{lei};
 	delete $lei->{1};

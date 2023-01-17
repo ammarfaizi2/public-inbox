@@ -177,7 +177,7 @@ sub input_path_url {
 			$mbl->{fh} =
 			     PublicInbox::MboxReader::zsfxcat($in, $zsfx, $lei);
 		}
-		local $PublicInbox::DS::in_loop = 0 if $zsfx; # dwaitpid
+		local $PublicInbox::DS::in_loop = 0 if $zsfx; # awaitpid
 		$self->input_fh($ifmt, $mbl->{fh}, $input, @args);
 	} elsif (-d _ && (-d "$input/cur" || -d "$input/new")) {
 		return $lei->fail(<<EOM) if $ifmt && $ifmt ne 'maildir';

@@ -31,9 +31,8 @@ sub keep_going ($) {
 		$_[0]->{lei}->{opt}->{'keep-going'});
 }
 
-sub _wq_done_wait { # dwaitpid callback (via wq_eof)
-	my ($arg, $pid) = @_;
-	my ($mrr, $lei) = @$arg;
+sub _wq_done_wait { # awaitpid cb (via wq_eof / IPC->awaitpid_init)
+	my ($pid, $mrr, $lei) = @_;
 	if ($?) {
 		$lei->child_error($?);
 	} elsif (!$lei->{child_error}) {
@@ -236,7 +235,7 @@ sub index_cloned_inbox {
 			my ($k) = ($sw =~ /\A([\w-]+)/);
 			$opt->{$k} = $lei->{opt}->{$k};
 		}
-		# force synchronous dwaitpid for v2:
+		# force synchronous awaitpid for v2:
 		local $PublicInbox::DS::in_loop = 0;
 		my $cfg = PublicInbox::Config->new(undef, $lei->{2});
 		my $env = PublicInbox::Admin::index_prepare($opt, $cfg);

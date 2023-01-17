@@ -62,5 +62,5 @@ my $mrr = bless {
 
 $? = 0;
 $mrr->do_mirror;
-$mrr->can('_wq_done_wait')->([$mrr, $lei], $$);
+$mrr->can('_wq_done_wait')->($$, $mrr, $lei);
 exit(($lei->{child_error} // 0) >> 8);
