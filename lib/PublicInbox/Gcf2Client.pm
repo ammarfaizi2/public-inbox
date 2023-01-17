@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # connects public-inbox processes to PublicInbox::Gcf2::loop()
@@ -10,6 +10,7 @@ use PublicInbox::Gcf2; # fails if Inline::C or libgit2-dev isn't available
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
+use PublicInbox::DS qw(awaitpid);
 # fields:
 #	sock => socket to Gcf2::loop
 # The rest of these fields are compatible with what PublicInbox::Git
@@ -30,7 +31,7 @@ sub new  {
 	$rdr->{0} = $rdr->{1} = $s2;
 	my $cmd = [$^X, qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
 	$self->{'pid.owner'} = $$;
-	$self->{pid} = spawn($cmd, $env, $rdr);
+	awaitpid($self->{pid} = spawn($cmd, $env, $rdr), undef);
 	$s1->blocking(0);
 	$self->{inflight} = [];
 	$self->{in} = $s1;

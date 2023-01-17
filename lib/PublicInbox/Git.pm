@@ -21,7 +21,7 @@ use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
 use Digest::SHA ();
-use PublicInbox::DS qw(dwaitpid);
+use PublicInbox::DS qw(awaitpid);
 our @EXPORT_OK = qw(git_unquote git_quote);
 our $PIPE_BUFSIZ = 65536; # Linux default
 our $in_cleanup;
@@ -138,7 +138,7 @@ sub _bidi_pipe {
 		$rdr->{2} = $fh;
 	}
 	my ($in_r, $p) = popen_rd(\@cmd, undef, $rdr);
-	$self->{$pid} = $p;
+	awaitpid($self->{$pid} = $p, undef);
 	$self->{"$pid.owner"} = $$;
 	$out_w->autoflush(1);
 	if ($^O eq 'linux') { # 1031: F_SETPIPE_SZ
@@ -357,9 +357,9 @@ sub _destroy {
 	delete @$self{($rbuf, $in, $out)};
 	delete $self->{$err} if $err; # `err_c'
 
-	# GitAsyncCat::event_step may delete {pid}
-	my $p = delete $self->{$pid} or return;
-	dwaitpid($p) if $$ == $self->{"$pid.owner"};
+	# GitAsyncCat::event_step may delete {$pid}
+	my $p = delete($self->{$pid}) // return;
+	awaitpid($p) if $$ == $self->{"$pid.owner"};
 }
 
 sub async_abort ($) {
