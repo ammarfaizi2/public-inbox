@@ -81,7 +81,7 @@ New features
 
 * IO::Socket::SSL support (for NNTPS, STARTTLS+NNTP, HTTPS)
 
-* dwaitpid (waitpid wrapper) support for reaping dead children
+* awaitpid (waitpid wrapper) support for reaping dead children
 
 * reliable signal wakeups are supported via signalfd on Linux,
   EVFILT_SIGNAL on *BSDs via IO::KQueue.

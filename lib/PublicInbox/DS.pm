@@ -32,11 +32,10 @@ use PublicInbox::Syscall qw(:epoll);
 use PublicInbox::Tmpfile;
 use Errno qw(EAGAIN EINVAL);
 use Carp qw(carp croak);
-our @EXPORT_OK = qw(now msg_more dwaitpid awaitpid add_timer add_uniq_timer);
+our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
 my %Stack;
 my $nextq; # queue for next_tick
-my $wait_pids; # list of [ pid, callback, callback_arg ]
 my $AWAIT_PIDS; # pid => [ $callback, @args ]
 my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
@@ -75,11 +74,11 @@ sub Reset {
 		# we may be iterating inside one of these on our stack
 		my @q = delete @Stack{keys %Stack};
 		for my $q (@q) { @$q = () }
-		$AWAIT_PIDS = $wait_pids = $nextq = $ToClose = undef;
+		$AWAIT_PIDS = $nextq = $ToClose = undef;
 		$ep_io = undef; # closes real $Epoll FD
 		$Epoll = undef; # may call DSKQXS::DESTROY
-	} while (@Timers || keys(%Stack) || $nextq || $wait_pids ||
-		$ToClose || keys(%DescriptorMap) || $AWAIT_PIDS ||
+	} while (@Timers || keys(%Stack) || $nextq || $AWAIT_PIDS ||
+		$ToClose || keys(%DescriptorMap) ||
 		$PostLoopCallback || keys(%UniqTimer));
 
 	$reap_armed = undef;
@@ -209,43 +208,23 @@ sub await_cb ($;@) {
 	warn "E: awaitpid($pid): $@" if $@;
 }
 
-# We can't use waitpid(-1) safely here since it can hit ``, system(),
-# and other things.  So we scan the $wait_pids list, which is hopefully
-# not too big.  We keep $wait_pids small by not calling dwaitpid()
-# until we've hit EOF when reading the stdout of the child.
-
+# This relies on our Perl process is single-threaded, or at least
+# no threads are spawning and waiting on processes (``, system(), etc...)
+# Threads are officially discouraged by the Perl5 team, and I expect
+# that to remain the case.
 sub reap_pids {
 	$reap_armed = undef;
-	my $tmp = $wait_pids // [];
-	$wait_pids = undef;
-	$Stack{reap_runq} = $tmp;
 	my $oldset = block_signals();
-
-	# old API
-	foreach my $ary (@$tmp) {
-		my ($pid, $cb, $arg) = @$ary;
-		my $ret = waitpid($pid, WNOHANG);
-		if ($ret == 0) {
-			push @$wait_pids, $ary; # autovivifies @$wait_pids
-		} elsif ($ret == $pid) {
-			if ($cb) {
-				eval { $cb->($arg, $pid) };
-				warn "E: dwaitpid($pid) in_loop: $@" if $@;
-			}
+	while (1) {
+		my $pid = waitpid(-1, WNOHANG) // last;
+		last if $pid <= 0;
+		if (defined(my $cb_args = delete $AWAIT_PIDS->{$pid})) {
+			await_cb($pid, @$cb_args) if $cb_args;
 		} else {
-			warn "waitpid($pid, WNOHANG) = $ret, \$!=$!, \$?=$?";
+			warn "W: reaped unknown PID=$pid: \$?=$?\n";
 		}
 	}
-
-	# new API TODO: convert to waitpid(-1) in the future as long
-	# as we don't use threads
-	for my $pid (keys %$AWAIT_PIDS) {
-		my $wpid = waitpid($pid, WNOHANG) // next;
-		my $cb_args = delete $AWAIT_PIDS->{$wpid} or next;
-		await_cb($pid, @$cb_args);
-	}
 	sig_setmask($oldset);
-	delete $Stack{reap_runq};
 }
 
 # reentrant SIGCHLD handler (since reap_pids is not reentrant)
@@ -717,25 +696,6 @@ sub long_response ($$;@) {
 	$self->{long_cb} = [ fileno($sock), $cb, now(), @args ];
 	long_step($self); # kick off!
 	undef;
-}
-
-sub dwaitpid ($;$$) {
-	my ($pid, $cb, $arg) = @_;
-	if ($in_loop) {
-		push @$wait_pids, [ $pid, $cb, $arg ];
-		# We could've just missed our SIGCHLD, cover it, here:
-		enqueue_reap();
-	} else {
-		my $ret = waitpid($pid, 0);
-		if ($ret == $pid) {
-			if ($cb) {
-				eval { $cb->($arg, $pid) };
-				carp "E: dwaitpid($pid) !in_loop: $@" if $@;
-			}
-		} else {
-			carp "waitpid($pid, 0) = $ret, \$!=$!, \$?=$?";
-		}
-	}
 }
 
 sub awaitpid {
