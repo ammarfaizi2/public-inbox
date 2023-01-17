@@ -243,11 +243,7 @@ sub quit_done ($) {
 	return unless $self->{quit};
 
 	# don't have reliable wakeups, keep signalling
-	my $live = 0;
-	for (qw(idle_pids poll_pids)) {
-		my $pids = $self->{$_} or next;
-		$live += grep { kill('QUIT', $_) } keys %$pids;
-	}
+	my $live = grep { kill('QUIT', $_) } keys %{$self->{pids}};
 	add_timer(0.01, \&quit_done, $self) if $live;
 	$live == 0;
 }
@@ -379,8 +375,7 @@ sub watch_imap_idle_1 ($$$) {
 
 sub watch_atfork_child ($) {
 	my ($self) = @_;
-	delete $self->{idle_pids};
-	delete $self->{poll_pids};
+	delete $self->{pids};
 	delete $self->{opendirs};
 	PublicInbox::DS->Reset;
 	my $sig = delete $self->{sig};
@@ -392,27 +387,23 @@ sub watch_atfork_child ($) {
 sub watch_atfork_parent ($) { _done_for_now($_[0]) }
 
 sub imap_idle_requeue { # DS::add_timer callback
-	my ($self, $uri_intvl) = @_;
+	my ($self, $uri, $intvl) = @_;
 	return if $self->{quit};
-	push @{$self->{idle_todo}}, $uri_intvl;
+	push @{$self->{idle_todo}}, $uri, $intvl;
 	event_step($self);
 }
 
 sub imap_idle_reap { # awaitpid callback
-	my ($pid, $self) = @_;
-	my $uri_intvl = delete $self->{idle_pids}->{$pid} or
-		die "BUG: PID=$pid (unknown) reaped: \$?=$?\n";
-
-	my ($uri, $intvl) = @$uri_intvl;
+	my ($pid, $self, $uri, $intvl) = @_;
+	delete $self->{pids}->{$pid};
 	return if $self->{quit};
 	warn "W: PID=$pid on $uri died: \$?=$?\n" if $?;
-	add_timer(60, \&imap_idle_requeue, $self, $uri_intvl);
+	add_timer(60, \&imap_idle_requeue, $self, $uri, $intvl);
 }
 
-sub imap_idle_fork ($$) {
-	my ($self, $uri_intvl) = @_;
+sub imap_idle_fork {
+	my ($self, $uri, $intvl) = @_;
 	return if $self->{quit};
-	my ($uri, $intvl) = @$uri_intvl;
 	my $seed = rand(0xffffffff);
 	my $pid = fork // die "fork: $!";
 	if ($pid == 0) {
@@ -422,8 +413,8 @@ sub imap_idle_fork ($$) {
 		watch_imap_idle_1($self, $uri, $intvl);
 		_exit(0);
 	}
-	$self->{idle_pids}->{$pid} = $uri_intvl;
-	awaitpid($pid, \&imap_idle_reap, $self);
+	$self->{pids}->{$pid} = undef;
+	awaitpid($pid, \&imap_idle_reap, $self, $uri, $intvl);
 }
 
 sub event_step {
@@ -433,8 +424,8 @@ sub event_step {
 	if ($idle_todo && @$idle_todo) {
 		watch_atfork_parent($self);
 		eval {
-			while (my $uri_intvl = shift(@$idle_todo)) {
-				imap_idle_fork($self, $uri_intvl);
+			while (my ($uri, $intvl) = splice(@$idle_todo, 0, 2)) {
+				imap_idle_fork($self, $uri, $intvl);
 			}
 		};
 		die $@ if $@;
@@ -486,16 +477,14 @@ sub poll_fetch_fork { # DS::add_timer callback
 		}
 		_exit(0);
 	}
-	$self->{poll_pids}->{$pid} = [ $intvl, $uris ];
-	awaitpid($pid, \&poll_fetch_reap, $self);
+	$self->{pids}->{$pid} = undef;
+	awaitpid($pid, \&poll_fetch_reap, $self, $intvl, $uris);
 }
 
 sub poll_fetch_reap { # awaitpid callback
-	my ($pid, $self) = @_;
-	my $intvl_uris = delete $self->{poll_pids}->{$pid} or
-		die "BUG: PID=$pid (unknown) reaped: \$?=$?\n";
+	my ($pid, $self, $intvl, $uris) = @_;
+	delete $self->{pids}->{$pid};
 	return if $self->{quit};
-	my ($intvl, $uris) = @$intvl_uris;
 	if ($?) {
 		warn "W: PID=$pid died: \$?=$?\n", map { "$_\n" } @$uris;
 	}
@@ -506,14 +495,14 @@ sub poll_fetch_reap { # awaitpid callback
 sub watch_imap_init ($$) {
 	my ($self, $poll) = @_;
 	my $mics = PublicInbox::NetReader::imap_common_init($self);
-	my $idle = []; # [ [ uri1, intvl1 ], [uri2, intvl2] ]
+	my $idle = []; # [ uri1, intvl1, uri2, intvl2 ]
 	for my $uri (@{$self->{imap_order}}) {
 		my $sec = uri_section($uri);
 		my $mic = $mics->{$sec};
 		my $intvl = $self->{cfg_opt}->{$sec}->{pollInterval};
 		if ($mic->has_capability('IDLE') && !$intvl) {
 			$intvl = $self->{cfg_opt}->{$sec}->{idleInterval};
-			push @$idle, [ $uri, $intvl // () ];
+			push @$idle, $uri, $intvl;
 		} else {
 			push @{$poll->{$intvl || 120}}, $uri;
 		}
