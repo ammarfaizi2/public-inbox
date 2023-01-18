@@ -104,6 +104,8 @@ sub finalize ($) {
 	}
 }
 
+sub DESTROY { finalize($_[0]) } # ->finalize is idempotent
+
 sub waitpid_err { # callback for awaitpid
 	my (undef, $self) = @_; # $_[0]: pid
 	$self->{_err} = ''; # for defined check in ->finish
