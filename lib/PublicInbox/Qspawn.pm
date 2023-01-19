@@ -28,7 +28,6 @@ package PublicInbox::Qspawn;
 use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::GzipFilter;
-use PublicInbox::DS qw(awaitpid);
 use Scalar::Util qw(blessed);
 
 # n.b.: we get EAGAIN with public-inbox-httpd, and EINTR on other PSGI servers
