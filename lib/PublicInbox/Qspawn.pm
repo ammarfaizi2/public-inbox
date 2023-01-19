@@ -57,7 +57,8 @@ sub _do_spawn {
 			$o{$k} = $rlimit;
 		}
 	}
-	$self->{cmd} = $o{quiet} ? undef : $cmd;
+	$self->{cmd} = $cmd;
+	$self->{-quiet} = 1 if $o{quiet};
 	$o{cb_arg} = [ \&waitpid_err, $self ];
 	eval {
 		# popen_rd may die on EMFILE, ENFILE
@@ -85,7 +86,7 @@ sub finalize ($) {
 		if (my $dst = $self->{qsp_err}) {
 			$$dst .= $$dst ? " $err" : "; $err";
 		}
-		warn "@{$self->{cmd}}: $err" if $self->{cmd};
+		warn "@{$self->{cmd}}: $err" if !$self->{-quiet};
 	}
 
 	my ($env, $qx_cb, $qx_arg, $qx_buf) =
@@ -216,9 +217,8 @@ sub rd_hdr ($) {
 				warn "parse_hdr: $@";
 				$ret = [ 500, [], [ "Internal error\n" ] ];
 			} elsif (!defined($ret) && !$r) {
-				my $cmd = $self->{cmd} // [ '(?)' ];
 				warn <<EOM;
-EOF parsing headers from @$cmd ($self->{psgi_env}->{REQUEST_URI})
+EOF parsing headers from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
 EOM
 				$ret = [ 500, [], [ "Internal error\n" ] ];
 			}
