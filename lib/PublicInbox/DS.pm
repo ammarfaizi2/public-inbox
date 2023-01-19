@@ -30,7 +30,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use Scalar::Util qw(blessed);
 use PublicInbox::Syscall qw(:epoll);
 use PublicInbox::Tmpfile;
-use Errno qw(EAGAIN EINVAL);
+use Errno qw(EAGAIN EINVAL ECHILD EINTR);
 use Carp qw(carp croak);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
@@ -703,13 +703,19 @@ sub awaitpid {
 	$AWAIT_PIDS->{$pid} //= @cb_args ? \@cb_args : 0;
 	# provide synchronous API
 	if (defined(wantarray) || (!$in_loop && !@cb_args)) {
-		my $ret = waitpid($pid, 0) // -2;
+		my $ret;
+again:
+		$ret = waitpid($pid, 0) // -2;
 		if ($ret == $pid) {
 			my $cb_args = delete $AWAIT_PIDS->{$pid};
 			@cb_args = @$cb_args if !@cb_args && $cb_args;
 			await_cb($pid, @cb_args);
-			return $ret;
+		} else {
+			goto again if $! == EINTR;
+			carp "waitpid($pid): $!";
+			delete $AWAIT_PIDS->{$pid};
 		}
+		return $ret;
 	}
 	# We could've just missed our SIGCHLD, cover it, here:
 	enqueue_reap() if $in_loop;
