@@ -142,20 +142,20 @@ sub start ($$$) {
 
 sub psgi_qx_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	my ($self) = @_;
-	my $async = delete $self->{async}; # PublicInbox::HTTPD::Async
 	my ($r, $buf);
-	my $qx_fh = $self->{qx_fh};
 reread:
 	$r = sysread($self->{rpipe}, $buf, 65536);
-	if ($async) {
-		$async->async_pass($self->{psgi_env}->{'psgix.io'},
-					$qx_fh, \$buf);
-	} elsif (defined $r) {
-		$r ? (print $qx_fh $buf) : event_step($self, undef);
-	} else {
+	if (!defined($r)) {
 		return if $! == EAGAIN; # try again when notified
 		goto reread if $! == EINTR;
 		event_step($self, $!);
+	} elsif (my $as = delete $self->{async}) { # PublicInbox::HTTPD::Async
+		$as->async_pass($self->{psgi_env}->{'psgix.io'},
+				$self->{qx_fh}, \$buf);
+	} elsif ($r) { # generic PSGI:
+		print { $self->{qx_fh} } $buf;
+	} else { # EOF
+		event_step($self, undef);
 	}
 }
 
