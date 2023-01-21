@@ -699,8 +699,8 @@ sub long_response ($$;@) {
 }
 
 sub awaitpid {
-	my ($pid, @cb_args) = @_;
-	$AWAIT_PIDS->{$pid} //= @cb_args ? \@cb_args : 0;
+	my ($pid, @cb_args) = @_; # @cb_args = ($cb, @args), $cb may be undef
+	$AWAIT_PIDS->{$pid} = \@cb_args if @cb_args;
 	# provide synchronous API
 	if (defined(wantarray) || (!$in_loop && !@cb_args)) {
 		my $ret;
@@ -716,9 +716,9 @@ again:
 			delete $AWAIT_PIDS->{$pid};
 		}
 		return $ret;
+	} elsif ($in_loop) { # We could've just missed our SIGCHLD, cover it, here:
+		enqueue_reap();
 	}
-	# We could've just missed our SIGCHLD, cover it, here:
-	enqueue_reap() if $in_loop;
 }
 
 1;
