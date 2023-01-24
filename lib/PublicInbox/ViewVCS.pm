@@ -501,8 +501,13 @@ sub solve_result {
 	return show_tag($ctx, $res) if $type eq 'tag';
 	return show_other($ctx, $res) if $type ne 'blob';
 	my $paths = $ctx->{-paths} //= do {
-		my $path = to_filename($di->{path_b}//$hints->{path_b}//'blob');
+		my $fn = $di->{path_b} // $hints->{path_b};
+		my $path = to_filename($fn // 'blob');
 		my $raw_more = qq[(<a\nhref="$path">raw</a>)];
+
+		# XXX not sure if this is the correct wording
+		defined($fn) and $raw_more .=
+"\nname: ${\ascii_html($fn)} \t # note: path name is non-authoritative";
 		[ $path, $raw_more ];
 	};
 
