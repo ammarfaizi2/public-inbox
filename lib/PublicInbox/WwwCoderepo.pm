@@ -220,38 +220,27 @@ sub srv { # endpoint called by PublicInbox::WWW
 	my $git;
 	# handle clone requests
 	my $cr = $self->{pi_cfg}->{-code_repos};
-	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!x) {
-		$git = $cr->{$1} and return
+	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!x and
+		($git = $cr->{$1})) {
 			PublicInbox::GitHTTPBackend::serve($ctx->{env},$git,$2);
-	}
-	$path_info =~ m!\A/(.+?)/\z! and
-		($ctx->{git} = $cr->{$1}) and return summary($self, $ctx);
-	if ($path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
+	} elsif ($path_info =~ m!\A/(.+?)/\z! and ($ctx->{git} = $cr->{$1})) {
+		summary($self, $ctx)
+	} elsif ($path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
 			($ctx->{git} = $cr->{$1})) {
 		$ctx->{lh} = $self->{log_fh};
-		return PublicInbox::ViewVCS::show($ctx, $2, $3);
-	}
-
-	if ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
+		PublicInbox::ViewVCS::show($ctx, $2, $3);
+	} elsif ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
 		$ctx->{lh} = $self->{log_fh};
-		return PublicInbox::RepoTree::srv_tree($ctx, $2) // r(404);
-	}
-
-	# snapshots:
-	if ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
+		PublicInbox::RepoTree::srv_tree($ctx, $2) // r(404);
+	} elsif ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
 			($ctx->{git} = $cr->{$1})) {
 		$ctx->{wcr} = $self;
-		return PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
-	}
-
-	if ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
+		PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
+	} elsif ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
-		return PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
-	}
-
-	# enforce trailing slash:
-	if ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
+		PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
+	} elsif ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
 		$url .= "?$qs" if $qs ne '';
