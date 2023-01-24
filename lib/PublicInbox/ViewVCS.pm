@@ -497,8 +497,9 @@ sub show_tag ($$) {
 sub solve_result {
 	my ($res, $ctx) = @_;
 	my $hints = delete $ctx->{hints};
-	$res or return html_page($ctx, 404, dbg_log($ctx));
-	ref($res) eq 'ARRAY' or return html_page($ctx, 500, dbg_log($ctx));
+	$res or return html_page($ctx, 404, 'Not found', dbg_log($ctx));
+	ref($res) eq 'ARRAY' or
+		return html_page($ctx, 500, 'Internal error', dbg_log($ctx));
 
 	my ($git, $oid, $type, $size, $di) = @$res;
 	return show_commit($ctx, $res) if $type eq 'commit';
