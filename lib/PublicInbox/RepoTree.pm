@@ -51,7 +51,6 @@ sub tree_show { # git check_async callback
 	my ($oid, $type, $size, $ctx) = @_;
 	return find_missing($ctx) if $type eq 'missing';
 
-	open $ctx->{lh}, '<', \(my $dbg_log = '') or die "open(scalar): $!";
 	my $res = [ $ctx->{git}, $oid, $type, $size ];
 	my ($bn) = ($ctx->{-path} =~ m!/?([^/]+)\z!);
 	if ($type eq 'blob') {

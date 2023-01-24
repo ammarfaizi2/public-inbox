@@ -62,8 +62,11 @@ sub dbg_log ($) {
 		return '<pre>debug log seek error</pre>';
 	}
 	$log = do { local $/; <$log> } // do {
-		warn "readline(log): $!";
-		return '<pre>debug log read error</pre>';
+		if (!eof($log)) {
+			warn "readline(log): $!";
+			return '<pre>debug log read error</pre>';
+		}
+		'';
 	};
 	return '' if $log eq '';
 	$ctx->{-linkify} //= PublicInbox::Linkify->new;
@@ -586,7 +589,10 @@ sub show ($$;$) {
 	}
 	$ctx->{fn} = $fn;
 	$ctx->{-tmp} = File::Temp->newdir("solver.$oid_b-XXXX", TMPDIR => 1);
-	open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log" or die "open: $!";
+	unless ($ctx->{lh}) {
+		open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log" or
+			die "open: $!";
+	}
 	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
 						\&solve_result, $ctx);
 	$solver->{gits} //= [ $ctx->{git} ];

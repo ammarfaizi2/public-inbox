@@ -8,6 +8,7 @@
 package PublicInbox::WwwCoderepo;
 use v5.12;
 use File::Temp 0.19 (); # newdir
+use POSIX qw(O_RDWR F_GETFL);
 use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::GitHTTPBackend;
@@ -60,6 +61,15 @@ sub new {
 	};
 	$self->{$_} = 10 for qw(summary_branches summary_tags);
 	$self->{$_} = 10 for qw(summary_log);
+
+	# try reuse STDIN if it's already /dev/null
+	open $self->{log_fh}, '+>', '/dev/null' or die "open: $!";
+	my @l = stat($self->{log_fh}) or die "stat: $!";
+	my @s = stat(STDIN) or die "stat(STDIN): $!";
+	if ("@l[0, 1]" eq "@s[0, 1]") {
+		my $f = fcntl(STDIN, F_GETFL, 0) // die "F_GETFL: $!";
+		$self->{log_fh} = *STDIN{IO} if $f & O_RDWR;
+	}
 	$self;
 }
 
@@ -216,12 +226,15 @@ sub srv { # endpoint called by PublicInbox::WWW
 	}
 	$path_info =~ m!\A/(.+?)/\z! and
 		($ctx->{git} = $cr->{$1}) and return summary($self, $ctx);
-	$path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
-			($ctx->{git} = $cr->{$1}) and
+	if ($path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
+			($ctx->{git} = $cr->{$1})) {
+		$ctx->{lh} = $self->{log_fh};
 		return PublicInbox::ViewVCS::show($ctx, $2, $3);
+	}
 
 	if ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
+		$ctx->{lh} = $self->{log_fh};
 		return PublicInbox::RepoTree::srv_tree($ctx, $2) // r(404);
 	}
 
