@@ -409,7 +409,7 @@ EOM
 		$pfx = '';
 		$$bref .= qq[  (<a href=#path>path</a> unknown)\n];
 	}
-	my ($x, $m, $t, $oid, $sz, $f, $n);
+	my ($x, $m, $t, $oid, $sz, $f, $n, $gitlink);
 	$$bref .= "\n	size	name";
 	for (@ent) {
 		($x, $f) = split(/\t/, $_, 2);
@@ -420,6 +420,7 @@ EOM
 		$n = ascii_html($f);
 		if ($m eq 'g') { # gitlink submodule commit
 			$$bref .= "\ng\t\t$n @ <a\nhref=#g>commit</a>$oid";
+			$gitlink = 1;
 			next;
 		}
 		my $q = 'b='.ascii_html(uri_escape_path($pfx.$f));
@@ -430,17 +431,20 @@ EOM
 	}
 	$$bref .= dbg_log($ctx);
 	$$bref .= <<EOM;
-<pre>glossary
+<hr><pre>glossary
 --------
 <dfn
 id=tree>Tree</dfn> objects belong to commits or other tree objects.  Trees may
-reference blobs, sub-trees, or commits of submodules.
+reference blobs, sub-trees, or (rarely) commits of submodules.
 
 <dfn
 id=path>Path</dfn> names are stored in tree objects, but trees do not know
 their own path name.  A tree's path name comes from their parent tree,
 or it is the root tree referenced by a commit object.  Thus, this web UI
 relies on the `b=' URI parameter as a hint to display the path name.
+EOM
+
+	$$bref .= <<EOM if $gitlink;
 
 <dfn title="submodule commit"
 id=g>Commit</dfn> objects may be stored in trees to reference submodules.</pre>
