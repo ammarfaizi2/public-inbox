@@ -43,7 +43,13 @@ use Errno qw(EAGAIN);
 our $MAX_REQUEST_BUFFER = $ENV{GIT_HTTP_MAX_REQUEST_BUFFER} ||
 			(10 * 1024 * 1024);
 
-open(my $null_io, '<', '/dev/null') or die "failed to open /dev/null: $!";
+open(my $null_io, '<', '/dev/null') or die "open /dev/null: $!";
+{
+	my @n = stat($null_io) or die "stat(/dev/null): $!";
+	my @i = stat(STDIN) or die "stat(STDIN): $!";
+	$null_io = *STDIN{IO} if "@n[0, 1]" eq "@i[0, 1]";
+}
+
 my $http_date;
 my $prev = 0;
 sub http_date () {
