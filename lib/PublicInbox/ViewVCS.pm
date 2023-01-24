@@ -208,13 +208,15 @@ sub cmt_finalize {
 		$au =~ s/>/>$x/;
 	}
 	$_ = ascii_html($_) for ($au, $co);
+	my $ibx_url = ibx_url_for($ctx) // $upfx;
 	$au =~ s!(&gt; +)([0-9]{4,}-\S+ \S+)!
 		my ($gt, $t) = ($1, $2);
 		$t =~ tr/ :-//d;
 		qq($gt<a
-href="$upfx?t=$t"
+href="$ibx_url?t=$t"
 title="list contemporary emails">$2</a>)
 		!e;
+
 	$ctx->{-title_html} = $s = $ctx->{-linkify}->to_html($s);
 	my ($P, $p, $pt) = delete @$ctx{qw(-cmt_P -cmt_p -cmt_pt)};
 	$_ = qq(<a href="$upfx$_/s/">).shift(@$p).'</a> '.shift(@$pt) for @$P;
