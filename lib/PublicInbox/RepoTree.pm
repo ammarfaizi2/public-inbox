@@ -56,6 +56,8 @@ sub tree_show { # git check_async callback
 	my ($bn) = ($ctx->{-path} =~ m!/?([^/]+)\z!);
 	if ($type eq 'blob') {
 		my $obj = ascii_html($ctx->{-obj});
+		$ctx->{-q_value_html} = 'dfn:'.ascii_html($ctx->{-path}) .
+			' dfpost:'.substr($oid, 0, 7);
 		$ctx->{-paths} = [ $bn, qq[(<a
 href="$ctx->{-upfx}$oid/s/$bn">raw</a>)
 \$ git show $obj\t# shows this blob on the CLI] ];

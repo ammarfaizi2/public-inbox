@@ -500,8 +500,8 @@ sub solve_result {
 	return show_tree($ctx, $res) if $type eq 'tree';
 	return show_tag($ctx, $res) if $type eq 'tag';
 	return show_other($ctx, $res) if $type ne 'blob';
+	my $fn = $di->{path_b} // $hints->{path_b};
 	my $paths = $ctx->{-paths} //= do {
-		my $fn = $di->{path_b} // $hints->{path_b};
 		my $path = to_filename($fn // 'blob');
 		my $raw_more = qq[(<a\nhref="$path">raw</a>)];
 
@@ -509,6 +509,10 @@ sub solve_result {
 		defined($fn) and $raw_more .=
 "\nname: ${\ascii_html($fn)} \t # note: path name is non-authoritative";
 		[ $path, $raw_more ];
+	};
+	$ctx->{-q_value_html} //= do {
+		my $s = defined($fn) ? 'dfn:'.ascii_html($fn).' ' : '';
+		$s.'dfpost:'.substr($oid, 0, 7);
 	};
 
 	if ($size > $MAX_SIZE) {
