@@ -82,7 +82,7 @@ sub solve_existing ($$) {
 	my ($oid_full, $type, $size) = $git->check($oid_b);
 
 	if ($oid_b eq ($oid_full // '') || (defined($type) &&
--				(!$self->{have_hints} || $type eq 'blob'))) {
+				(!$self->{have_hints} || $type eq 'blob'))) {
 		delete $want->{try_gits};
 		return [ $git, $oid_full, $type, int($size) ]; # done, success
 	}
