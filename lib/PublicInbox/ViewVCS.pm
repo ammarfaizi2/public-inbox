@@ -509,11 +509,19 @@ sub solve_result {
 	my $paths = $ctx->{-paths} //= do {
 		my $path = to_filename($fn // 'blob');
 		my $raw_more = qq[(<a\nhref="$path">raw</a>)];
+		my @def;
 
 		# XXX not sure if this is the correct wording
-		defined($fn) and $raw_more .=
-"\nname: ${\ascii_html($fn)} \t # note: path name is non-authoritative";
-		[ $path, $raw_more ];
+		if (defined($fn)) {
+			$raw_more .= qq(
+name: ${\ascii_html($fn)} \t # note: path name is non-authoritative<a
+href="#pathdef" id=top>(*)</a>);
+			$def[0] = "<hr><pre\nid=pathdef>" .
+'(*) Git path names are given by the tree(s) the blob belongs to.
+    Blobs themselves have no identifier aside from the hash of its contents.'.
+qq(<a\nhref="#top">^</a></pre>);
+		}
+		[ $path, $raw_more, @def ];
 	};
 	$ctx->{-q_value_html} //= do {
 		my $s = defined($fn) ? 'dfn:'.ascii_html($fn).' ' : '';
@@ -547,7 +555,7 @@ sub show_blob { # git->cat_async callback
 		return delete($ctx->{-wcb})->([200, $h, [ $$blob ]]);
 	}
 
-	my ($path, $raw_more) = @{delete $ctx->{-paths}};
+	my ($path, $raw_more, @def) = @{delete $ctx->{-paths}};
 	$bin and return html_page($ctx, 200,
 				"<pre>blob $oid $size bytes (binary)" .
 				" $raw_more</pre>".dbg_log($ctx));
@@ -574,7 +582,7 @@ sub show_blob { # git->cat_async callback
 	$x .= '</pre></td><td><pre> </pre></td>'. # pad for non-CSS users
 		"<td\nclass=lines><pre\nstyle='white-space:pre'><code>";
 	html_page($ctx, 200, $x, $ctx->{-linkify}->linkify_2($$blob),
-		'</code></pre></td></tr></table>'.dbg_log($ctx));
+		'</code></pre></td></tr></table>'.dbg_log($ctx), @def);
 }
 
 # GET /$INBOX/$GIT_OBJECT_ID/s/
