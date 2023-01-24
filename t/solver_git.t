@@ -336,7 +336,7 @@ EOF
 			open $fh, '>', "$tmpdir/stderr.log" or xbail $!;
 			ok($s =~ s/^fatal: your current branch.*?\n//sm,
 				'got current branch warning');
-			ok($s =~ s/^.*? exit status=[1-9]+ .*?\n//sm,
+			ok($s =~ s/^.*? exit status=[1-9]+\n\z//sm,
 				'got exit status warning');
 			is($s, '', 'no unexpected warnings on empty coderepo');
 		}

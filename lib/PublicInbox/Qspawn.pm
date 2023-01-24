@@ -85,7 +85,7 @@ sub finalize ($) {
 		if (my $dst = $self->{qsp_err}) {
 			$$dst .= $$dst ? " $err" : "; $err";
 		}
-		warn "@{$self->{cmd}}: $err" if !$self->{-quiet};
+		warn "@{$self->{cmd}}: $err\n" if !$self->{-quiet};
 	}
 
 	my ($env, $qx_cb, $qx_arg, $qx_buf) =
