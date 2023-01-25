@@ -16,7 +16,7 @@ use Errno qw(EINTR EAGAIN ENOENT);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use Time::HiRes qw(stat);
-use PublicInbox::Spawn qw(popen_rd spawn);
+use PublicInbox::Spawn qw(popen_rd which);
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
@@ -45,7 +45,6 @@ my %GIT_ESC = (
 	'\\' => '\\',
 );
 my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
-
 
 # unquote pathnames used by git, see quote.c::unquote_c_style.c in git.git
 sub git_unquote ($) {
@@ -122,6 +121,26 @@ sub _bidi_pipe {
 		}
 		return;
 	}
+
+	state $EXE_ST = ''; # pack('dd', st_ctime, st_size);
+	my $exe = which('git') // die "git not found in $ENV{PATH}";
+	my @st = stat($exe) or die "stat: $!";
+	my $st = pack('dd', $st[10], $st[7]);
+	state $VER;
+	if ($st ne $EXE_ST) {
+		my $rd = popen_rd([ $exe, '--version' ]);
+		my $v = readline($rd);
+		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
+			"$exe --version output: $v # unparseable";
+		my @v = split(/\./, $1, 3);
+		$VER = ($v[0] << 24) | ($v[1] << 16) | $v[2];
+		$EXE_ST = $st;
+	}
+
+	# git 2.31.0+ supports -c core.abbrev=no, don't bother with
+	# core.abbrev=64 since not many releases had SHA-256 prior to 2.31
+	my $abbr = $VER < (2 << 24 | 31 << 16) ? 40 : 'no';
+
 	pipe(my ($out_r, $out_w)) or $self->fail("pipe failed: $!");
 	my $rdr = { 0 => $out_r, pgid => 0 };
 	my $gd = $self->{git_dir};
@@ -129,8 +148,8 @@ sub _bidi_pipe {
 		$rdr->{-C} = $gd;
 		$gd = $1;
 	}
-	my @cmd = (qw(git), "--git-dir=$gd",
-			qw(-c core.abbrev=40 cat-file), $batch);
+	my @cmd = ($exe, "--git-dir=$gd", '-c', "core.abbrev=$abbr",
+			'cat-file', $batch);
 	if ($err) {
 		my $id = "git.$self->{git_dir}$batch.err";
 		my $fh = tmpfile($id) or $self->fail("tmpfile($id): $!");
