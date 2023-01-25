@@ -156,6 +156,7 @@ sub _bidi_pipe {
 		$self->{$err} = $fh;
 		$rdr->{2} = $fh;
 	}
+	# see lib/PublicInbox/ProcessPipe.pm for why we don't use that here
 	my ($in_r, $p) = popen_rd(\@cmd, undef, $rdr);
 	awaitpid($self->{$pid} = $p, undef);
 	$self->{"$pid.owner"} = $$;
