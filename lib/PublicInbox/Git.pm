@@ -12,7 +12,7 @@ use v5.10.1;
 use parent qw(Exporter);
 use POSIX ();
 use IO::Handle; # ->autoflush
-use Errno qw(EINTR EAGAIN ENOENT);
+use Errno qw(EINTR EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use Time::HiRes qw(stat);
