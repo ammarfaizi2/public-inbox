@@ -373,13 +373,11 @@ sub check {
 }
 
 sub _destroy {
-	my ($self, $rbuf, $in, $out, $pid, $err) = @_;
-	delete @$self{($rbuf, $in, $out)};
-	delete $self->{$err} if $err; # `err_c'
+	my ($self, $pid, @rest) = @_; # rest = rbuf, in, out, err
+	my ($p) = delete @$self{($pid, @rest)};
 
 	# GitAsyncCat::event_step may delete {$pid}
-	my $p = delete($self->{$pid}) // return;
-	awaitpid($p) if $$ == $self->{"$pid.owner"};
+	awaitpid($p) if defined($p) && $$ == $self->{"$pid.owner"};
 }
 
 sub async_abort ($) {
@@ -468,8 +466,8 @@ sub cleanup {
 	async_wait_all($self);
 	delete $self->{inflight};
 	delete $self->{inflight_c};
-	_destroy($self, qw(rbuf in out pid));
-	_destroy($self, qw(rbuf_c in_c out_c pid_c err_c));
+	_destroy($self, qw(pid rbuf in out));
+	_destroy($self, qw(pid_c rbuf_c in_c out_c err_c));
 	undef;
 }
 
