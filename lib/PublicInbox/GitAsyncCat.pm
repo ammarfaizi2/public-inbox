@@ -78,6 +78,7 @@ sub async_check ($$$$) {
 	my ($ibx, $oidish, $cb, $arg) = @_; # $ibx may be $ctx
 	my $git = $ibx->{git} // $ibx->git;
 	$git->check_async($oidish, $cb, $arg);
+	return watch_cat($git) if $git->{-bc}; # --batch-command
 	$git->{async_chk} //= do {
 		my $self = bless { git => $git }, 'PublicInbox::GitAsyncCheck';
 		$git->{in_c}->blocking(0);
@@ -97,12 +98,8 @@ sub ibx_async_prefetch {
 			$oid .= " $git->{git_dir}\n";
 			return $GCF2C->gcf2_async(\$oid, $cb, $arg); # true
 		}
-	} elsif ($git->{async_cat} && (my $inflight = $git->{inflight})) {
-		if (!@$inflight) {
-			print { $git->{out} } $oid, "\n" or
-						$git->fail("write error: $!");
-			return push(@$inflight, $oid, $cb, $arg);
-		}
+	} elsif ($git->{async_cat}) {
+		return $git->async_prefetch($oid, $cb, $arg);
 	}
 	undef;
 }

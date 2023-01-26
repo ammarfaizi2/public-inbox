@@ -365,7 +365,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 		($^O =~ /\A(?:linux)\z/) or
 			skip "lsof /(deleted)/ check untested on $^O", 1;
 		my @lsof = xqx([$lsof, '-p', $td->{pid}], undef, $noerr);
-		my $d = [ grep(/\(deleted\)/, @lsof) ];
+		my $d = [ grep(/\(deleted\)/, grep(!/batch-command\.err/, @lsof)) ];
 		is_deeply($d, [], 'no deleted files') or diag explain($d);
 	};
 	SKIP: { test_watch($tmpdir, $host_port, $group) };

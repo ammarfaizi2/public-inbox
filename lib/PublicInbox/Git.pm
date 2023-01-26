@@ -31,7 +31,10 @@ our $async_warn; # true in read-only daemons
 # 512: POSIX PIPE_BUF minimum (see pipe(7))
 # 3: @$inflight is flattened [ $OID, $cb, $arg ]
 # 65: SHA-256 hex size + "\n" in preparation for git using non-SHA1
-use constant MAX_INFLIGHT => 512 * 3 / 65;
+use constant {
+	MAX_INFLIGHT => 512 * 3 / (65 + length('contents ')),
+	BATCH_CMD_VER => (2 << 24 | 36 << 16), # git 2.36+
+};
 
 my %GIT_ESC = (
 	a => "\a",
@@ -45,6 +48,24 @@ my %GIT_ESC = (
 	'\\' => '\\',
 );
 my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
+
+my $EXE_ST = ''; # pack('dd', st_ctime, st_size);
+my ($GIT_EXE, $GIT_VER);
+
+sub check_git_exe () {
+	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
+	my @st = stat($GIT_EXE) or die "stat: $!";
+	my $st = pack('dd', $st[10], $st[7]);
+	if ($st ne $EXE_ST) {
+		my $rd = popen_rd([ $GIT_EXE, '--version' ]);
+		my $v = readline($rd);
+		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
+			"$GIT_EXE --version output: $v # unparseable";
+		my @v = split(/\./, $1, 3);
+		$GIT_VER = ($v[0] << 24) | ($v[1] << 16) | $v[2];
+		$EXE_ST = $st;
+	}
+}
 
 # unquote pathnames used by git, see quote.c::unquote_c_style.c in git.git
 sub git_unquote ($) {
@@ -122,25 +143,6 @@ sub _bidi_pipe {
 		return;
 	}
 
-	state $EXE_ST = ''; # pack('dd', st_ctime, st_size);
-	my $exe = which('git') // die "git not found in $ENV{PATH}";
-	my @st = stat($exe) or die "stat: $!";
-	my $st = pack('dd', $st[10], $st[7]);
-	state $VER;
-	if ($st ne $EXE_ST) {
-		my $rd = popen_rd([ $exe, '--version' ]);
-		my $v = readline($rd);
-		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
-			"$exe --version output: $v # unparseable";
-		my @v = split(/\./, $1, 3);
-		$VER = ($v[0] << 24) | ($v[1] << 16) | $v[2];
-		$EXE_ST = $st;
-	}
-
-	# git 2.31.0+ supports -c core.abbrev=no, don't bother with
-	# core.abbrev=64 since not many releases had SHA-256 prior to 2.31
-	my $abbr = $VER < (2 << 24 | 31 << 16) ? 40 : 'no';
-
 	pipe(my ($out_r, $out_w)) or $self->fail("pipe failed: $!");
 	my $rdr = { 0 => $out_r, pgid => 0 };
 	my $gd = $self->{git_dir};
@@ -148,10 +150,14 @@ sub _bidi_pipe {
 		$rdr->{-C} = $gd;
 		$gd = $1;
 	}
-	my @cmd = ($exe, "--git-dir=$gd", '-c', "core.abbrev=$abbr",
-			'cat-file', $batch);
+
+	# git 2.31.0+ supports -c core.abbrev=no, don't bother with
+	# core.abbrev=64 since not many releases had SHA-256 prior to 2.31
+	my $abbr = $GIT_VER < (2 << 24 | 31 << 16) ? 40 : 'no';
+	my @cmd = ($GIT_EXE, "--git-dir=$gd", '-c', "core.abbrev=$abbr",
+			'cat-file', "--$batch");
 	if ($err) {
-		my $id = "git.$self->{git_dir}$batch.err";
+		my $id = "git.$self->{git_dir}.$batch.err";
 		my $fh = tmpfile($id) or $self->fail("tmpfile($id): $!");
 		$self->{$err} = $fh;
 		$rdr->{2} = $fh;
@@ -163,7 +169,7 @@ sub _bidi_pipe {
 	$out_w->autoflush(1);
 	if ($^O eq 'linux') { # 1031: F_SETPIPE_SZ
 		fcntl($out_w, 1031, 4096);
-		fcntl($in_r, 1031, 4096) if $batch eq '--batch-check';
+		fcntl($in_r, 1031, 4096) if $batch eq 'batch-check';
 	}
 	$out_w->blocking(0);
 	$self->{$out} = $out_w;
@@ -233,6 +239,16 @@ sub cat_async_retry ($$) {
 	cat_async_step($self, $inflight); # take one step
 }
 
+# returns true if prefetch is successful
+sub async_prefetch {
+	my ($self, $oid, $cb, $arg) = @_;
+	my $inflight = $self->{inflight} or return;
+	return if @$inflight;
+	substr($oid, 0, 0) = 'contents ' if $self->{-bc};
+	write_all($self, $self->{out}, "$oid\n", \&cat_async_step, $inflight);
+	push(@$inflight, $oid, $cb, $arg);
+}
+
 sub cat_async_step ($$) {
 	my ($self, $inflight) = @_;
 	die 'BUG: inflight empty or odd' if scalar(@$inflight) < 3;
@@ -240,12 +256,22 @@ sub cat_async_step ($$) {
 	my $rbuf = delete($self->{rbuf}) // \(my $new = '');
 	my ($bref, $oid, $type, $size);
 	my $head = my_readline($self->{in}, $rbuf);
+	my $cmd = ref($req) ? $$req : $req;
 	# ->fail may be called via Gcf2Client.pm
+	my $bc = $self->{-bc};
 	if ($head =~ /^([0-9a-f]{40,}) (\S+) ([0-9]+)$/) {
 		($oid, $type, $size) = ($1, $2, $3 + 0);
-		$bref = my_read($self->{in}, $rbuf, $size + 1) or
-			$self->fail(defined($bref) ? 'read EOF' : "read: $!");
-		chop($$bref) eq "\n" or $self->fail('LF missing after blob');
+		unless ($bc && $cmd =~ /\Ainfo /) { # --batch-command
+			$bref = my_read($self->{in}, $rbuf, $size + 1) or
+				$self->fail(defined($bref) ?
+						'read EOF' : "read: $!");
+			chop($$bref) eq "\n" or
+					$self->fail('LF missing after blob');
+		}
+	} elsif ($bc && $cmd =~ /\Ainfo / &&
+			$head =~ / (missing|ambiguous)\n/) {
+		$type = $1;
+		$oid = substr($cmd, 5);
 	} elsif ($head =~ s/ missing\n//s) {
 		$oid = $head;
 		# ref($req) indicates it's already been retried
@@ -254,15 +280,23 @@ sub cat_async_step ($$) {
 			return cat_async_retry($self, $inflight);
 		}
 		$type = 'missing';
-		$oid = ref($req) ? $$req : $req if $oid eq '';
+		if ($oid eq '') {
+			$oid = $cmd;
+			$oid =~ s/\A(?:contents|info) // if $bc;
+		}
 	} else {
 		my $err = $! ? " ($!)" : '';
 		$self->fail("bad result from async cat-file: $head$err");
 	}
 	$self->{rbuf} = $rbuf if $$rbuf ne '';
 	splice(@$inflight, 0, 3); # don't retry $cb on ->fail
-	eval { $cb->($bref, $oid, $type, $size, $arg) };
-	async_err($self, $req, $oid, $@, 'cat') if $@;
+	if ($bc && $cmd =~ /\Ainfo /) {
+		eval { $cb->($oid, $type, $size, $arg, $self) };
+		async_err($self, $req, $oid, $@, 'check') if $@;
+	} else {
+		eval { $cb->($bref, $oid, $type, $size, $arg) };
+		async_err($self, $req, $oid, $@, 'cat') if $@;
+	}
 }
 
 sub cat_async_wait ($) {
@@ -274,7 +308,15 @@ sub cat_async_wait ($) {
 }
 
 sub batch_prepare ($) {
-	_bidi_pipe($_[0], qw(--batch in out pid));
+	my ($self) = @_;
+	check_git_exe();
+	if ($GIT_VER >= BATCH_CMD_VER) {
+		_bidi_pipe($self, qw(batch-command in out pid err_c));
+		$self->{-bc} = 1;
+	} else {
+		_bidi_pipe($self, qw(batch in out pid));
+	}
+	$self->{inflight} = [];
 }
 
 sub _cat_file_cb {
@@ -314,18 +356,24 @@ sub check_async_step ($$) {
 
 sub check_async_wait ($) {
 	my ($self) = @_;
+	return cat_async_wait($self) if $self->{-bc};
 	my $inflight_c = $self->{inflight_c} or return;
-	while (scalar(@$inflight_c)) {
-		check_async_step($self, $inflight_c);
-	}
+	check_async_step($self, $inflight_c) while (scalar(@$inflight_c));
 }
 
 sub check_async_begin ($) {
 	my ($self) = @_;
-	cleanup($self) if alternates_changed($self);
-	_bidi_pipe($self, qw(--batch-check in_c out_c pid_c err_c));
 	die 'BUG: already in async check' if $self->{inflight_c};
-	$self->{inflight_c} = [];
+	cleanup($self) if alternates_changed($self);
+	check_git_exe();
+	if ($GIT_VER >= BATCH_CMD_VER) {
+		_bidi_pipe($self, qw(batch-command in out pid err_c));
+		$self->{-bc} = 1;
+		$self->{inflight} = [];
+	} else {
+		_bidi_pipe($self, qw(batch-check in_c out_c pid_c err_c));
+		$self->{inflight_c} = [];
+	}
 }
 
 sub write_all {
@@ -345,10 +393,18 @@ sub write_all {
 
 sub check_async ($$$$) {
 	my ($self, $oid, $cb, $arg) = @_;
-	my $inflight_c = $self->{inflight_c} // check_async_begin($self);
-	write_all($self, $self->{out_c}, $oid."\n",
-		\&check_async_step, $inflight_c);
-	push(@$inflight_c, $oid, $cb, $arg);
+	my $inflight = $self->{-bc} ?
+			($self->{inflight} // cat_async_begin($self)) :
+			($self->{inflight_c} // check_async_begin($self));
+	if ($self->{-bc}) {
+		substr($oid, 0, 0) = 'info ';
+		write_all($self, $self->{out}, "$oid\n",
+				\&cat_async_step, $inflight);
+	} else {
+		write_all($self, $self->{out_c}, "$oid\n",
+				\&check_async_step, $inflight);
+	}
+	push(@$inflight, $oid, $cb, $arg);
 }
 
 sub _check_cb { # check_async callback
@@ -389,6 +445,8 @@ sub async_abort ($) {
 			while (@$q) {
 				my ($req, $cb, $arg) = splice(@$q, 0, 3);
 				$req = $$req if ref($req);
+				$self->{-bc} and
+					$req =~ s/\A(?:contents|info) //;
 				$req =~ s/ .*//; # drop git_dir for Gcf2Client
 				eval { $cb->(undef, $req, undef, undef, $arg) };
 				warn "E: (in abort) $req: $@" if $@;
@@ -461,12 +519,10 @@ sub cleanup {
 	return 1 if $lazy && (scalar(@{$self->{inflight_c} // []}) ||
 				scalar(@{$self->{inflight} // []}));
 	local $in_cleanup = 1;
-	delete $self->{async_cat};
-	delete $self->{async_chk};
+	delete @$self{qw(async_cat async_chk)};
 	async_wait_all($self);
-	delete $self->{inflight};
-	delete $self->{inflight_c};
-	_destroy($self, qw(pid rbuf in out));
+	delete @$self{qw(inflight inflight_c -bc)};
+	_destroy($self, qw(pid rbuf in out err_c));
 	_destroy($self, qw(pid_c rbuf_c in_c out_c err_c));
 	undef;
 }
@@ -524,14 +580,14 @@ sub pub_urls {
 sub cat_async_begin {
 	my ($self) = @_;
 	cleanup($self) if $self->alternates_changed;
-	$self->batch_prepare;
 	die 'BUG: already in async' if $self->{inflight};
-	$self->{inflight} = [];
+	batch_prepare($self);
 }
 
 sub cat_async ($$$;$) {
 	my ($self, $oid, $cb, $arg) = @_;
 	my $inflight = $self->{inflight} // cat_async_begin($self);
+	substr($oid, 0, 0) = 'contents ' if $self->{-bc};
 	write_all($self, $self->{out}, $oid."\n", \&cat_async_step, $inflight);
 	push(@$inflight, $oid, $cb, $arg);
 }
