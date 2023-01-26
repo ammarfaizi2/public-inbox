@@ -340,11 +340,9 @@ sub check_async_step ($$) {
 	chomp(my $line = my_readline($self->{in_c}, $rbuf));
 	my ($hex, $type, $size) = split(/ /, $line);
 
-	# Future versions of git.git may have type=ambiguous, but for now,
-	# we must handle 'dangling' below (and maybe some other oddball
-	# stuff):
+	# git <2.21 would show `dangling' (2.21+ shows `ambiguous')
 	# https://public-inbox.org/git/20190118033845.s2vlrb3wd3m2jfzu@dcvr/T/
-	if ($hex eq 'dangling' || $hex eq 'notdir' || $hex eq 'loop') {
+	if ($hex eq 'dangling') {
 		my $ret = my_read($self->{in_c}, $rbuf, $type + 1);
 		$self->fail(defined($ret) ? 'read EOF' : "read: $!") if !$ret;
 	}
@@ -419,12 +417,9 @@ sub check {
 	check_async_wait($self);
 	my ($hex, $type, $size) = @$result;
 
-	# Future versions of git.git may show 'ambiguous', but for now,
-	# we must handle 'dangling' below (and maybe some other oddball
-	# stuff):
+	# git <2.21 would show `dangling' (2.21+ shows `ambiguous')
 	# https://public-inbox.org/git/20190118033845.s2vlrb3wd3m2jfzu@dcvr/T/
-	return if $type eq 'missing' || $type eq 'ambiguous';
-	return if $hex eq 'dangling' || $hex eq 'notdir' || $hex eq 'loop';
+	return if $type =~ /\A(?:missing|ambiguous)\z/ || $hex eq 'dangling';
 	($hex, $type, $size);
 }
 
