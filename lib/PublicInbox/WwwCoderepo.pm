@@ -124,7 +124,6 @@ EOM
 	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_branches};
 	for (@r) {
 		my ($pfx, $oid, $ref, $s, $cd) = split(/\0/);
-		utf8::decode($_) for ($ref, $s);
 		chomp $cd;
 		my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
 		print $zfh "$pfx <a\nhref=./$oid/s/>", ascii_html($ref),
@@ -148,7 +147,6 @@ EOM
 	}
 	for (@r) {
 		my (undef, $oid, $ref, $s, $cd) = split(/\0/);
-		utf8::decode($_) for ($ref, $s);
 		chomp $cd;
 		my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
 		print $zfh "<a\nhref=./$oid/s/>", ascii_html($ref),
@@ -169,6 +167,7 @@ EOM
 sub capture_refs ($$) { # psgi_qx callback to capture git-for-each-ref + git-log
 	my ($bref, $ctx) = @_;
 	my $qsp_err = delete $ctx->{-qsp_err};
+	utf8::decode($$bref);
 	$ctx->{-each_refs} = $$bref;
 	summary_finish($ctx) if $ctx->{-readme};
 }
