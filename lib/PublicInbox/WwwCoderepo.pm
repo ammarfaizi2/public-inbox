@@ -142,9 +142,9 @@ EOM
 	my $n;
 	if (@s) {
 		$n = $ctx->{git}->local_nick // die "BUG: $ctx->{git_dir} nick";
-		$n =~ s/\.git\z/-/;
-		($n) = ($n =~ m!([^/]+)\z!);
-		$n = ascii_html($n);
+		$n =~ s!\.git/*\z!!;
+		($n) = ($n =~ m!([^/]+)/*\z!);
+		$n = ascii_html($n).'-';
 	}
 	for (@r) {
 		my (undef, $oid, $ref, $s, $cd) = split(/\0/);
