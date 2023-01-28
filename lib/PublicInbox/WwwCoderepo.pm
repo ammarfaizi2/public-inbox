@@ -129,7 +129,7 @@ sub summary_finish {
 
 	# git log
 	my @r = split(/\n/s, pop(@x) // '');
-	my $last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_log};
+	my $last = scalar(@r) > $ctx->{wcr}->{summary_log} ? pop(@r) : undef;
 	my $tip_html = '';
 	if (defined(my $tip = $ctx->{qp}->{h})) {
 		$tip_html .= ' '.ascii_html($tip).' --';
@@ -165,14 +165,14 @@ EOM
 	# refs/heads
 	print $zfh '<a id=heads>', $HEADS_CMD , '</a>';
 	@r = split(/^/sm, shift(@x) // '');
-	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_branches};
+	$last = scalar(@r) > $ctx->{wcr}->{summary_branches} ? pop(@r) : undef;
 	chomp(@r);
 	for (@r) { print $zfh _refs_heads_link($_, './') }
 	print $zfh $NO_HEADS if !@r;
 	print $zfh qq(<a href="refs/heads/">...</a>\n) if $last;
 	print $zfh "\n<a id=tags>", $TAGS_CMD, '</a>';
 	@r = split(/^/sm, shift(@x) // '');
-	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_tags};
+	$last = scalar(@r) > $ctx->{wcr}->{summary_tags} ? pop(@r) : undef;
 	my ($snap_pfx, @snap_fmt) = _snapshot_link_prep($ctx);
 	chomp @r;
 	for (@r) { print $zfh _refs_tags_link($_, './', $snap_pfx, @snap_fmt) }
