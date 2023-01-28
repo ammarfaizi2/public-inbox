@@ -396,6 +396,13 @@ EOF
 		is($res->code, 200, 'got 200 for a directory');
 		$got = $res->content;
 		like($got, qr/\bgit ls-tree\b/, 'ls-tree help shown');
+
+		$res = $cb->(GET('/public-inbox/tree/?h=no-branch'));
+		is($res->code, 404, 'got 404 for non-existent ref root');
+		$res = $cb->(GET('/public-inbox/tree/README?h=no-file'));
+		is($res->code, 404, 'got 404 for non-existent ref README');
+		$res = $cb->(GET('/public-inbox/tree/Documentation?h=no-dir'));
+		is($res->code, 404, 'got 404 for non-existent ref directory');
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };
