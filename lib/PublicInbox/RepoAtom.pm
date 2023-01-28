@@ -46,7 +46,7 @@ sub translate {
 	my $rec = $_[0] // return $self->zflush; # getline
 	my @out;
 	my $lbuf = delete($self->{lbuf}) // shift;
-	$lbuf .= shift if @_;
+	$lbuf .= shift while @_;
 	my $is_tag = $self->{-is_tag};
 	my ($H, $ct, $an, $ae, $at, $s, $bdy);
 	while ($lbuf =~ s/\A([^\0]+)\0\n//s) {
