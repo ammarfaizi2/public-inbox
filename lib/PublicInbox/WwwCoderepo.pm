@@ -7,6 +7,7 @@
 # cloning + command-line usage.
 package PublicInbox::WwwCoderepo;
 use v5.12;
+use parent qw(PublicInbox::WwwStream);
 use File::Temp 0.19 (); # newdir
 use POSIX qw(O_RDWR F_GETFL);
 use PublicInbox::ViewVCS;
@@ -19,9 +20,22 @@ use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
 use PublicInbox::RepoTree;
 
-my $EACH_REF = "git for-each-ref --sort=-creatordate --format='%(HEAD)%00".
-	join('%00', map { "%($_)" }
-	qw(objectname refname:short subject creatordate:short))."'";
+my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
+		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
+		qw(objectname refname:short subject creatordate:short)));
+my $EACH_REF = "@EACH_REF[0..2] '$EACH_REF[3]'";
+my $HEADS_CMD = <<'';
+# heads (aka `branches'):
+$ git for-each-ref --sort=-creatordate refs/heads \
+	--format='%(HEAD) %(refname:short) %(subject) (%(creatordate:short))'
+
+my $TAGS_CMD = <<'';
+# tags:
+$ git for-each-ref --sort=-creatordate refs/tags \
+	--format='%(refname:short) %(subject) (%(creatordate:short))'
+
+my $NO_HEADS = "# no heads (branches), yet...\n";
+my $NO_TAGS = "# no tags, yet...\n";
 
 # shared with PublicInbox::Cgit
 sub prepare_coderepos {
@@ -73,6 +87,39 @@ sub new {
 	$self;
 }
 
+sub _snapshot_link_prep {
+	my ($ctx) = @_;
+	my @s = sort keys %{$ctx->{wcr}->{snapshots}} or return ();
+	my $n = $ctx->{git}->local_nick // die "BUG: $ctx->{git_dir} nick";
+	$n =~ s!\.git/*\z!!;
+	($n) = ($n =~ m!([^/]+)/*\z!);
+	(ascii_html($n).'-', @s);
+}
+
+sub _refs_heads_link {
+	my ($line, $upfx) = @_;
+	my ($pfx, $oid, $ref, $s, $cd) = split(/\0/, $line);
+	my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
+	("$pfx <a\nhref=$upfx$oid/s/>", ascii_html($ref),
+		"</a>$align ", ascii_html($s), " ($cd)\n")
+}
+
+sub _refs_tags_link {
+	my ($line, $upfx, $snap_pfx, @snap_fmt) = @_;
+	my (undef, $oid, $ref, $s, $cd) = split(/\0/, $line);
+	my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
+	if (@snap_fmt) {
+		my $v = $ref;
+		$v =~ s/\A[vV]//;
+		@snap_fmt = map {
+			qq{ <a href="${upfx}snapshot/$snap_pfx$v.$_">$_</a>}
+		} @snap_fmt;
+		substr($snap_fmt[0], 0, 1) = "\t";
+	}
+	("<a\nhref=$upfx$oid/s/>", ascii_html($ref),
+		"</a>$align ", ascii_html($s), " ($cd)", @snap_fmt, "\n");
+}
+
 sub summary_finish {
 	my ($ctx) = @_;
 	my $wcb = delete($ctx->{env}->{'qspawn.wcb'}) or return; # already done
@@ -116,51 +163,21 @@ EOM
 	}
 
 	# refs/heads
-	print $zfh "<a id=heads># heads (aka `branches'):</a>\n\$ " .
-		"git for-each-ref --sort=-creatordate refs/heads" .
-		" \\\n\t--format='%(HEAD) ". # no space for %(align:) hint
-		"%(refname:short) %(subject) (%(creatordate:short))'\n";
+	print $zfh '<a id=heads>', $HEADS_CMD , '</a>';
 	@r = split(/^/sm, shift(@x) // '');
 	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_branches};
-	for (@r) {
-		my ($pfx, $oid, $ref, $s, $cd) = split(/\0/);
-		chomp $cd;
-		my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
-		print $zfh "$pfx <a\nhref=./$oid/s/>", ascii_html($ref),
-			"</a>$align ", ascii_html($s), " ($cd)\n";
-	}
-	print $zfh "# no heads (branches) yet...\n" if !@r;
-	print $zfh "...\n" if $last;
-	print $zfh "\n<a id=tags># tags:</a>\n\$ " .
-		"git for-each-ref --sort=-creatordate refs/tags" .
-		" \\\n\t--format='". # no space for %(align:) hint
-		"%(refname:short) %(subject) (%(creatordate:short))'\n";
+	chomp(@r);
+	for (@r) { print $zfh _refs_heads_link($_, './') }
+	print $zfh $NO_HEADS if !@r;
+	print $zfh qq(<a href="refs/heads/">...</a>\n) if $last;
+	print $zfh "\n<a id=tags>", $TAGS_CMD, '</a>';
 	@r = split(/^/sm, shift(@x) // '');
 	$last = pop(@r) if scalar(@r) > $ctx->{wcr}->{summary_tags};
-	my @s = sort keys %{$ctx->{wcr}->{snapshots}};
-	my $n;
-	if (@s) {
-		$n = $ctx->{git}->local_nick // die "BUG: $ctx->{git_dir} nick";
-		$n =~ s!\.git/*\z!!;
-		($n) = ($n =~ m!([^/]+)/*\z!);
-		$n = ascii_html($n).'-';
-	}
-	for (@r) {
-		my (undef, $oid, $ref, $s, $cd) = split(/\0/);
-		chomp $cd;
-		my $align = length($ref) < 12 ? ' ' x (12 - length($ref)) : '';
-		print $zfh "<a\nhref=./$oid/s/>", ascii_html($ref),
-			"</a>$align ", ascii_html($s), " ($cd)";
-		if (@s) {
-			my $v = $ref;
-			$v =~ s/\A[vV]//;
-			print $zfh "\t",  join(' ', map {
-				qq{<a href="snapshot/$n$v.$_">$_</a>} } @s);
-		}
-		print $zfh "\n";
-	}
-	print $zfh "# no tags yet...\n" if !@r;
-	print $zfh "...\n" if $last;
+	my ($snap_pfx, @snap_fmt) = _snapshot_link_prep($ctx);
+	chomp @r;
+	for (@r) { print $zfh _refs_tags_link($_, './', $snap_pfx, @snap_fmt) }
+	print $zfh $NO_TAGS if !@r;
+	print $zfh qq(<a href="refs/tags/">...</a>\n) if $last;
 	$wcb->($ctx->html_done('</pre>'));
 }
 
@@ -213,6 +230,59 @@ sub summary {
 	}
 }
 
+# called by GzipFilter->close after translate
+sub zflush { $_[0]->SUPER::zflush('</pre>', $_[0]->_html_end) }
+
+# called by GzipFilter->write or GetlineBody->getline
+sub translate {
+	my $ctx = shift;
+	my $rec = $_[0] // return zflush($ctx); # getline
+	my @out;
+	my $fbuf = delete($ctx->{fbuf}) // shift;
+	$fbuf .= shift while @_;
+	if ($ctx->{-heads}) {
+		while ($fbuf =~ s/\A([^\n]+)\n//s) {
+			utf8::decode(my $x = $1);
+			push @out, _refs_heads_link($x, '../../');
+		}
+	} else {
+		my ($snap_pfx, @snap_fmt) = _snapshot_link_prep($ctx);
+		while ($fbuf =~ s/\A([^\n]+)\n//s) {
+			utf8::decode(my $x = $1);
+			push @out, _refs_tags_link($x, '../../',
+						$snap_pfx, @snap_fmt);
+		}
+	}
+	$ctx->{fbuf} = $fbuf;
+	$ctx->SUPER::translate(@out);
+}
+
+sub _refs_parse_hdr { # {parse_hdr} for Qspawn
+	my ($r, $bref, $ctx) = @_;
+	my ($code, $top);
+	if ($r == 0) {
+		$code = 404;
+		$top = $ctx->{-heads} ? $NO_HEADS : $NO_TAGS;
+	} else {
+		$code = 200;
+		$top = $ctx->{-heads} ? $HEADS_CMD : $TAGS_CMD;
+	}
+	PublicInbox::WwwStream::html_init($ctx);
+	bless $ctx, __PACKAGE__; # re-bless for ->translate
+	print { $ctx->{zfh} } '<pre>', $top;
+	[ $code, delete($ctx->{-res_hdr}), $ctx ]; # [2] is qspawn.filter
+}
+
+sub refs_foo { # /$REPO/refs/{heads,tags} endpoints
+	my ($self, $ctx, $pfx) = @_;
+	$ctx->{wcr} = $self;
+	$ctx->{-upfx} = '../../';
+	$ctx->{-heads} = 1 if $pfx eq 'refs/heads';
+	my $qsp = PublicInbox::Qspawn->new([@EACH_REF, $pfx ],
+					{ GIT_DIR => $ctx->{git}->{git_dir} });
+	$qsp->psgi_return($ctx->{env}, undef, \&_refs_parse_hdr, $ctx);
+}
+
 sub srv { # endpoint called by PublicInbox::WWW
 	my ($self, $ctx) = @_;
 	my $path_info = $ctx->{env}->{PATH_INFO};
@@ -242,6 +312,9 @@ sub srv { # endpoint called by PublicInbox::WWW
 	} elsif ($path_info =~ m!\A/(.+?)/tags\.atom\z! and
 			($ctx->{git} = $cr->{$1})) {
 		PublicInbox::RepoAtom::srv_tags_atom($ctx);
+	} elsif ($path_info =~ m!\A/(.+?)/(refs/(?:heads|tags))/\z! and
+			($ctx->{git} = $cr->{$1})) {
+		refs_foo($self, $ctx, $2);
 	} elsif ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
