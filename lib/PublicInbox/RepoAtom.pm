@@ -10,10 +10,15 @@ use URI::Escape qw(uri_escape);
 use Scalar::Util ();
 use PublicInbox::Hval qw(ascii_html);
 
+# git for-each-ref and log use different format fields :<
 my $ATOM_FMT = '--pretty=tformat:'.join('%n',
 				map { "%$_" } qw(H ct an ae at s b)).'%x00';
 
-sub log2atom_ok { # parse_hdr for qspawn
+my $EACH_REF_FMT = '--format='.join(';', map { "\$r{'$_'}=%($_)" } qw(
+	objectname refname:short creator contents:subject contents:body
+	*subject *body)).'%00';
+
+sub atom_ok { # parse_hdr for qspawn
 	my ($r, $bref, $ctx) = @_;
 	return [ 404, [], [ "Not Found\n"] ] if $r == 0;
 	bless $ctx, __PACKAGE__;
@@ -42,26 +47,60 @@ sub translate {
 	my @out;
 	my $lbuf = delete($self->{lbuf}) // shift;
 	$lbuf .= shift if @_;
+	my $is_tag = $self->{-is_tag};
+	my ($H, $ct, $an, $ae, $at, $s, $bdy);
 	while ($lbuf =~ s/\A([^\0]+)\0\n//s) {
-		my $ent = $1;
-		utf8::decode($ent);
-		$ent = ascii_html($ent);
-		my ($H, $ct, $an, $ae, $at, $s, $bdy) = split(/\n/, $ent, 7);
-		undef $ent;
+		utf8::decode($bdy = $1);
+		if ($is_tag) {
+			my %r;
+			eval "$bdy";
+			for (qw(contents:subject contents:body)) {
+				$r{$_} =~ /\S/ or delete($r{$_})
+			}
+			$H = $r{objectname};
+			$s = $r{'contents:subject'} // $r{'*subject'};
+			$bdy = $r{'contents:body'} // $r{'*body'};
+			$s .= " ($r{'refname:short'})";
+			$_ = ascii_html($_) for ($s, $bdy, $r{creator});
+			($an, $ae, $at) = split(/\s*&[gl]t;\s*/, $r{creator});
+			$at =~ s/ .*\z//; # no TZ
+			$ct = $at = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($at));
+		} else {
+			$bdy = ascii_html($bdy);
+			($H, $ct, $an, $ae, $at, $s, $bdy) =
+							split(/\n/, $bdy, 7);
+			$at = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($at));
+			$ct = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($ct));
+		}
 		$bdy //= '';
-		$_ = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($_)) for ($ct, $at);
-
-		push @out, <<"", $bdy, '</pre></div></content></entry>'
+		push @out, <<"";
 <entry><title>$s</title><updated>$ct</updated><author><name>$an</name>
 <email>$ae</email></author><published>$at</published><link
 rel="alternate" type="text/html" href="$self->{-base_url}$H/s/"
-/><id>$H</id><content type="xhtml"><div
+/><id>$H</id>
+
+		push @out, <<'', $bdy, '</pre></div></content>' if $bdy ne '';
+<content type="xhtml"><div
 xmlns="http://www.w3.org/1999/xhtml"><pre style="white-space:pre-wrap">
 
+		push @out, '</entry>';
 	}
 	$self->{lbuf} = $lbuf;
 	chomp @out;
 	$self->SUPER::translate(@out);
+}
+
+# $REPO/tags.atom endpoint
+sub srv_tags_atom {
+	my ($ctx) = @_;
+	my $max = 50; # TODO configurable
+	my @cmd = ('git', "--git-dir=$ctx->{git}->{git_dir}",
+			qw(for-each-ref --sort=-creatordate), "--count=$max",
+			'--perl', $EACH_REF_FMT, 'refs/tags');
+	$ctx->{-feed_title} = "$ctx->{git}->{nick} tags";
+	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	$ctx->{-is_tag} = 1;
+	$qsp->psgi_return($ctx->{env}, undef, \&atom_ok, $ctx);
 }
 
 sub srv_atom {
@@ -73,6 +112,7 @@ sub srv_atom {
 			$ATOM_FMT, "-$max");
 	my $tip = $ctx->{qp}->{h}; # same as cgit
 	$ctx->{-feed_title} = $ctx->{git}->{nick};
+	$ctx->{-feed_title} .= " $path" if $path ne '';
 	if (defined($tip)) {
 		push @cmd, $tip;
 		$ctx->{-feed_title} .= ", $tip";
@@ -81,7 +121,7 @@ sub srv_atom {
 	push @cmd, '--';
 	push @cmd, $path if $path ne '';
 	my $qsp = PublicInbox::Qspawn->new(\@cmd);
-	$qsp->psgi_return($ctx->{env}, undef, \&log2atom_ok, $ctx);
+	$qsp->psgi_return($ctx->{env}, undef, \&atom_ok, $ctx);
 }
 
 1;

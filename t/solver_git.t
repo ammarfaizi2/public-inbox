@@ -403,6 +403,14 @@ EOF
 		is($res->code, 404, 'got 404 for non-existent ref README');
 		$res = $cb->(GET('/public-inbox/tree/Documentation?h=no-dir'));
 		is($res->code, 404, 'got 404 for non-existent ref directory');
+
+		$res = $cb->(GET('/public-inbox/tags.atom'));
+		is($res->code, 200, 'Atom feed');
+		SKIP: {
+			require_mods('XML::TreePP', 1);
+			my $t = XML::TreePP->new->parse($res->content);
+			ok(scalar @{$t->{feed}->{entry}}, 'got tag entries');
+		}
 	};
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };

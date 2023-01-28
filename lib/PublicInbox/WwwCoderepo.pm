@@ -240,6 +240,9 @@ sub srv { # endpoint called by PublicInbox::WWW
 	} elsif ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
 		PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
+	} elsif ($path_info =~ m!\A/(.+?)/tags\.atom\z! and
+			($ctx->{git} = $cr->{$1})) {
+		PublicInbox::RepoAtom::srv_tags_atom($ctx);
 	} elsif ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
