@@ -4,8 +4,6 @@ package PublicInbox::MailDiff;
 use v5.12;
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use PublicInbox::ContentHash qw(content_digest);
-use PublicInbox::ContentDigestDbg;
-use Data::Dumper ();
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff qw(flush_diff);
 use PublicInbox::GitAsyncCat;
@@ -34,12 +32,11 @@ sub dump_eml ($$$) {
 	$eml->each_part(\&write_part, $self);
 
 	return if $self->{ctx}; # don't need content_digest noise in WWW UI
+	require PublicInbox::ContentDigestDbg;
 
 	# XXX is this even useful?  perhaps hide it behind a CLI switch
 	open my $fh, '>', "$dir/content_digest" or die "open: $!";
 	my $dig = PublicInbox::ContentDigestDbg->new($fh);
-	local $Data::Dumper::Useqq = 1;
-	local $Data::Dumper::Terse = 1;
 	content_digest($eml, $dig);
 	print $fh "\n", $dig->hexdigest, "\n" or die "print $!";
 	close $fh or die "close: $!";
