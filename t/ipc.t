@@ -1,19 +1,19 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
 use Test::More;
 use PublicInbox::TestCommon;
 use Fcntl qw(SEEK_SET);
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 require_mods(qw(Storable||Sereal));
 require_ok 'PublicInbox::IPC';
 my ($tmpdir, $for_destroy) = tmpdir();
 state $once = eval <<'';
 package PublicInbox::IPC;
 use strict;
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 sub test_array { qw(test array) }
 sub test_scalar { 'scalar' }
 sub test_scalarref { \'scalarref' }

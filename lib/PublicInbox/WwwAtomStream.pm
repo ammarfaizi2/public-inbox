@@ -8,7 +8,7 @@ use strict;
 use parent 'PublicInbox::GzipFilter';
 
 use POSIX qw(strftime);
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 use PublicInbox::Address;
 use PublicInbox::Hval qw(ascii_html mid_href);
 use PublicInbox::MsgTime qw(msg_timestamp);

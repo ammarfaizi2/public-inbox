@@ -4,7 +4,7 @@
 # Usage: plackup [OPTIONS] /path/to/this/file
 use v5.12;
 use Plack::Builder;
-require Digest::SHA;
+require PublicInbox::SHA;
 if (defined(my $f = $ENV{TEST_OPEN_FIFO})) {
 	open my $fh, '>', $f or die "open($f): $!";
 	say $fh 'hi';
@@ -29,7 +29,7 @@ my $app = sub {
 	my $h = [ 'Content-Type' => 'text/plain' ];
 	my $body = [];
 	if ($path eq '/sha1') {
-		my $sha1 = Digest::SHA->new('SHA-1');
+		my $sha1 = PublicInbox::SHA->new(1);
 		my $buf;
 		while (1) {
 			my $r = $in->read($buf, 4096);

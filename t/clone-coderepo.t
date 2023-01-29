@@ -6,7 +6,7 @@ use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use File::Temp;
 use File::Path qw(remove_tree);
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 require_mods(qw(json Plack::Builder HTTP::Date HTTP::Status));
 require_git '1.8.5';
 require_ok 'PublicInbox::LeiMirror';

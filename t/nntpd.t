@@ -7,7 +7,7 @@ use PublicInbox::Eml;
 use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Sys::Hostname;
 use POSIX qw(_exit);
-use Digest::SHA;
+use PublicInbox::SHA;
 
 # t/nntpd-v2.t wraps this for v2
 my $version = $ENV{PI_TEST_VERSION} || 1;
@@ -304,7 +304,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 			my %sums;
 			for (1..$nart) {
 				<$s> =~ /\A220 / or _exit(4);
-				my $dig = Digest::SHA->new(1);
+				my $dig = PublicInbox::SHA->new(1);
 				while (my $l = <$s>) {
 					last if $l eq ".\r\n";
 					$dig->add($l);

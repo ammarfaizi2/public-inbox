@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # pretends to be like LeiDedupe and also PublicInbox::Inbox
@@ -13,7 +13,7 @@ use PublicInbox::Config;
 use PublicInbox::Spawn qw(run_die);
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::MID qw(mids_for_index);
-use Digest::SHA qw(sha256_hex);
+use PublicInbox::SHA qw(sha256_hex);
 our $LOCAL_PFX = qr!\A(?:maildir|mh|mbox.+|mmdf|v2):!i; # TODO: put in LeiToMail?
 
 # move this to PublicInbox::Config if other things use it:

@@ -1,15 +1,15 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Various Message-ID-related functions.
 package PublicInbox::MID;
 use strict;
-use warnings;
-use base qw/Exporter/;
+use v5.10.1; # TODO: check unicode_strings compat for v5.12
+use parent qw(Exporter);
 our @EXPORT_OK = qw(mid_clean id_compress mid2path mid_escape MID_ESC
 	mids references mids_for_index mids_in $MID_EXTRACT);
 use URI::Escape qw(uri_escape_utf8);
-use Digest::SHA qw/sha1_hex/;
+use PublicInbox::SHA qw(sha1_hex);
 require PublicInbox::Address;
 use constant {
 	ID_MAX => 40, # SHA-1 hex length for HTML id anchors

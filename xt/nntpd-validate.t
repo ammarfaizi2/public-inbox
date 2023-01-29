@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Integration test to validate compression.
@@ -9,6 +9,7 @@ use Symbol qw(gensym);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use POSIX qw(_exit);
 use PublicInbox::TestCommon;
+use PublicInbox::SHA;
 my $inbox_dir = $ENV{GIANT_INBOX_DIR};
 plan skip_all => "GIANT_INBOX_DIR not defined for $0" unless $inbox_dir;
 my $mid = $ENV{TEST_MID};
@@ -55,7 +56,7 @@ sub do_get_all {
 	my ($methods) = @_;
 	my $desc = join(',', @$methods);
 	my $t0 = clock_gettime(CLOCK_MONOTONIC);
-	my $dig = Digest::SHA->new(1);
+	my $dig = PublicInbox::SHA->new(1);
 	my $digfh = gensym;
 	my $tmpfh;
 	if ($File::Temp::KEEP_ALL) {

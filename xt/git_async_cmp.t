@@ -1,10 +1,10 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use Test::More;
 use Benchmark qw(:all);
-use Digest::SHA;
+use PublicInbox::SHA;
 use PublicInbox::TestCommon;
 my $git_dir = $ENV{GIANT_GIT_DIR};
 plan 'skip_all' => "GIANT_GIT_DIR not defined for $0" unless defined($git_dir);
@@ -20,7 +20,7 @@ my @dig;
 my $nr = $ENV{NR} || 1;
 diag "NR=$nr";
 my $async = timeit($nr, sub {
-	my $dig = Digest::SHA->new(1);
+	my $dig = PublicInbox::SHA->new(1);
 	my $cb = sub {
 		my ($bref) = @_;
 		$dig->add($$bref);
@@ -37,7 +37,7 @@ my $async = timeit($nr, sub {
 });
 
 my $sync = timeit($nr, sub {
-	my $dig = Digest::SHA->new(1);
+	my $dig = PublicInbox::SHA->new(1);
 	my $cat = $git->popen(@cat);
 	while (<$cat>) {
 		my ($oid, undef, undef) = split(/ /);
@@ -51,7 +51,7 @@ my $sync = timeit($nr, sub {
 ok(scalar(@dig) >= 2, 'got some digests');
 my $ref = shift @dig;
 my $exp = $ref->[1];
-isnt($exp, Digest::SHA->new(1)->hexdigest, 'not empty');
+isnt($exp, PublicInbox::SHA->new(1)->hexdigest, 'not empty');
 foreach (@dig) {
 	is($_->[1], $exp, "digest matches $_->[0] <=> $ref->[0]");
 }

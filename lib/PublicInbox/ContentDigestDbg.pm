@@ -3,9 +3,9 @@
 package PublicInbox::ContentDigestDbg; # cf. PublicInbox::ContentDigest
 use v5.12;
 use Data::Dumper;
-use Digest::SHA;
+use PublicInbox::SHA;
 
-sub new { bless { dig => Digest::SHA->new(256), fh => $_[1] }, __PACKAGE__ }
+sub new { bless { dig => PublicInbox::SHA->new(256), fh => $_[1] }, __PACKAGE__ }
 
 sub add {
 	$_[0]->{dig}->add($_[1]);

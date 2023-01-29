@@ -92,9 +92,9 @@ sub do_manifest ($$$) {
 
 sub get_fingerprint2 {
 	my ($git_dir) = @_;
-	require Digest::SHA;
+	require PublicInbox::SHA;
 	my $rd = popen_rd([qw(git show-ref)], undef, { -C => $git_dir });
-	Digest::SHA::sha256(do { local $/; <$rd> });
+	PublicInbox::SHA::sha256(do { local $/; <$rd> });
 }
 
 sub writable_dir ($) {

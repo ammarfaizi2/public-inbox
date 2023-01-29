@@ -18,7 +18,7 @@ use PublicInbox::Config;
 use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
-use Digest::SHA qw(sha256_hex sha1_hex);
+use PublicInbox::SHA qw(sha256_hex sha1_hex);
 use POSIX qw(strftime);
 
 our $LIVE; # pid => callback

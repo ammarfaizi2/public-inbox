@@ -5,7 +5,7 @@
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use IO::Uncompress::Gunzip qw(gunzip);
-require_mods(qw(json URI::Escape Plack::Builder Digest::SHA HTTP::Tiny));
+require_mods(qw(json URI::Escape Plack::Builder HTTP::Tiny));
 require PublicInbox::WwwListing;
 require PublicInbox::ManifestJsGz;
 use PublicInbox::Config;

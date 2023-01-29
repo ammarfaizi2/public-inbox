@@ -1,11 +1,12 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Expensive test to validate compression and TLS.
 use strict;
 use v5.10.1;
 use Symbol qw(gensym);
 use PublicInbox::DS qw(now);
+use PublicInbox::SHA;
 use POSIX qw(_exit);
 use PublicInbox::TestCommon;
 my $inbox_dir = $ENV{GIANT_INBOX_DIR};
@@ -64,7 +65,7 @@ my $do_get_all = sub {
 	my ($desc, $opt) = @_;
 	local $SIG{__DIE__} = sub { print STDERR $desc, ': ', @_; _exit(1) };
 	my $t0 = now();
-	my $dig = Digest::SHA->new(1);
+	my $dig = PublicInbox::SHA->new(1);
 	my $mic = $imap_client->new(%$opt);
 	$mic->examine($mailbox) or die "examine: $!";
 	my $uid_base = 1;

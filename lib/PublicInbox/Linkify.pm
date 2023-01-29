@@ -12,7 +12,7 @@
 package PublicInbox::Linkify;
 use strict;
 use v5.10.1;
-use Digest::SHA qw/sha1_hex/;
+use PublicInbox::SHA qw(sha1_hex);
 use PublicInbox::Hval qw(ascii_html mid_href);
 use PublicInbox::MID qw($MID_EXTRACT);
 

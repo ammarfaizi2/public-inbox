@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Undocumented hidden command somebody might discover if they're
@@ -7,7 +7,7 @@
 package PublicInbox::LeiSucks;
 use strict;
 use v5.10.1;
-use Digest::SHA ();
+use PublicInbox::SHA qw(sha1_hex);
 use Config;
 use POSIX ();
 use PublicInbox::Config;
@@ -54,13 +54,13 @@ sub lei_sucks {
 	} else {
 		push @out, "Xapian not available: $@\n";
 	}
-	my $dig = Digest::SHA->new(1);
 	push @out, "public-inbox blob OIDs of loaded features:\n";
 	for my $m (grep(m{^PublicInbox/}, sort keys %INC)) {
 		my $f = $INC{$m} // next; # lazy require failed (missing dep)
-		$dig->add('blob '.(-s $f)."\0");
-		$dig->addfile($f);
-		push @out, '  '.$dig->hexdigest.' '.$m."\n";
+		open my $fh, '<', $f or do { warn "open($f): $!"; next };
+		my $hex = sha1_hex('blob '.(-s $fh)."\0".
+				(do { local $/; <$fh> } // die("read: $!")));
+		push @out, '  '.$hex.' '.$m."\n";
 	}
 	push @out, <<'EOM';
 Let us know how it sucks!  Please include the above and any other

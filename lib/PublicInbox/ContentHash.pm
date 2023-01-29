@@ -15,7 +15,8 @@ use PublicInbox::MID qw(mids references);
 use PublicInbox::MsgIter;
 
 # not sure if less-widely supported hash families are worth bothering with
-use Digest::SHA;
+use PublicInbox::SHA; # faster, but no ->clone
+use Digest::SHA; # we still need this for ->clone
 
 sub digest_addr ($$$) {
 	my ($dig, $h, $v) = @_;
@@ -93,15 +94,15 @@ sub content_digest ($;$) {
 }
 
 sub content_hash ($) {
-	content_digest($_[0])->digest;
+	content_digest($_[0], PublicInbox::SHA->new(256))->digest;
 }
 
+# don't clone the result of this
 sub git_sha ($$) {
 	my ($n, $eml) = @_;
-	my $dig = Digest::SHA->new($n);
+	my $dig = PublicInbox::SHA->new($n);
 	my $bref = ref($eml) eq 'SCALAR' ? $eml : \($eml->as_string);
-	$dig->add('blob '.length($$bref)."\0");
-	$dig->add($$bref);
+	$dig->add('blob '.length($$bref)."\0", $$bref);
 	$dig;
 }
 

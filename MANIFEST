@@ -312,6 +312,7 @@ lib/PublicInbox/Reply.pm
 lib/PublicInbox/RepoAtom.pm
 lib/PublicInbox/RepoSnapshot.pm
 lib/PublicInbox/RepoTree.pm
+lib/PublicInbox/SHA.pm
 lib/PublicInbox/SaPlugin/ListMirror.pm
 lib/PublicInbox/SaPlugin/ListMirror.pod
 lib/PublicInbox/Search.pm
@@ -559,6 +560,7 @@ t/run.perl
 t/search-amsg.eml
 t/search-thr-index.t
 t/search.t
+t/sha.t
 t/shared_kv.t
 t/sigfd.t
 t/solve/0001-simple-mod.patch

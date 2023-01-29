@@ -15,7 +15,7 @@ use PublicInbox::MID qw(mid_escape $MID_EXTRACT);
 use PublicInbox::Eml;
 use POSIX qw(strftime);
 use PublicInbox::DS qw(now);
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 use Time::Local qw(timegm timelocal);
 use PublicInbox::GitAsyncCat;
 use PublicInbox::Address;

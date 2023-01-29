@@ -20,7 +20,7 @@ use PublicInbox::Spawn qw(popen_rd which);
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
-use Digest::SHA ();
+use PublicInbox::SHA ();
 use PublicInbox::DS qw(awaitpid);
 our @EXPORT_OK = qw(git_unquote git_quote);
 our $PIPE_BUFSIZ = 65536; # Linux default
@@ -630,7 +630,7 @@ sub cloneurl {
 sub manifest_entry {
 	my ($self, $epoch, $default_desc) = @_;
 	my $fh = $self->popen('show-ref');
-	my $dig = Digest::SHA->new(1);
+	my $dig = PublicInbox::SHA->new(1);
 	while (read($fh, my $buf, 65536)) {
 		$dig->add($buf);
 	}

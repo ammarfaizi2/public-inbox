@@ -7,7 +7,7 @@ use strict; use v5.10.1; use PublicInbox::TestCommon;
 use Time::HiRes qw(gettimeofday tv_interval);
 use PublicInbox::Spawn qw(spawn popen_rd);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
-use Digest::SHA qw(sha1_hex);
+use PublicInbox::SHA qw(sha1_hex);
 use IO::Handle ();
 use IO::Socket::UNIX;
 use Fcntl qw(:seek);
