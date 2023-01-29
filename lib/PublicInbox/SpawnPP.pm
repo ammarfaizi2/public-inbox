@@ -3,9 +3,11 @@
 
 # Pure-Perl implementation of "spawn".  This can't take advantage
 # of vfork, so no speedups under Linux for spawning from large processes.
+# Do not require this directly, only use from PublicInbox::Spawn
 package PublicInbox::SpawnPP;
 use v5.12;
 use POSIX qw(dup2 _exit setpgid :signal_h);
+use PublicInbox::Spawn qw(which);
 
 # Pure Perl implementation for folks that do not use Inline::C
 sub pi_fork_exec ($$$$$$$) {
@@ -46,7 +48,8 @@ sub pi_fork_exec ($$$$$$$) {
 		sigprocmask(SIG_SETMASK, $old) or die "SIG_SETMASK ~CHLD: $!";
 		$cmd->[0] = $f;
 		if ($ENV{MOD_PERL}) {
-			@$cmd = (which('env'), '-i', @$env, @$cmd);
+			$f = which('env');
+			@$cmd = ('env', '-i', @$env, @$cmd);
 		} else {
 			%ENV = map { split(/=/, $_, 2) } @$env;
 		}

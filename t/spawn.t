@@ -1,10 +1,11 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
+use v5.12;
 use Test::More;
 use PublicInbox::Spawn qw(which spawn popen_rd);
-use PublicInbox::Sigfd;
+require PublicInbox::Sigfd;
+require PublicInbox::DS;
 
 {
 	my $true = which('true');
@@ -38,9 +39,8 @@ SKIP: {
 	$pid = eval { spawn(['true'], undef, { pgid => $wrong_pgid, 2 => $w }) };
 	close $w;
 	my $err = do { local $/; <$r> };
-	# diag "$err ($@)";
 	if (defined $pid) {
-		waitpid($pid, 0) if defined $pid;
+		waitpid($pid, 0);
 		isnt($?, 0, 'child error (pure-Perl)');
 	} else {
 		ok($@, 'exception raised');
@@ -65,7 +65,7 @@ EOF
 	my $rd = popen_rd([$^X, '-e', $script]);
 	diag 'waiting for child to reap grandchild...';
 	chomp(my $line = readline($rd));
-	my ($rdy, $pid) = split(' ', $line);
+	my ($rdy, $pid) = split(/ /, $line);
 	is($rdy, 'RDY', 'got ready signal, waitpid(-1) works in child');
 	ok(kill('CHLD', $pid), 'sent SIGCHLD to child');
 	is(readline($rd), "HI\n", '$SIG{CHLD} works in child');
@@ -199,6 +199,30 @@ SKIP: {
 	isnt($?, 0, 'non-zero exit status');
 }
 
-done_testing();
+SKIP: {
+	require PublicInbox::SpawnPP;
+	require File::Temp;
+	my $tmp = File::Temp->newdir('spawnpp-XXXX', TMPDIR => 1);
+	my $cmd = [ qw(/bin/sh -c), 'echo $HI >foo' ];
+	my $env = [ 'HI=hihi' ];
+	my $rlim = [];
+	my $pgid = -1;
+	my $pid = PublicInbox::SpawnPP::pi_fork_exec([], '/bin/sh', $cmd, $env,
+						$rlim, "$tmp", $pgid);
+	is(waitpid($pid, 0), $pid, 'spawned process exited');
+	is($?, 0, 'no error');
+	open my $fh, '<', "$tmp/foo" or die "open: $!";
+	is(readline($fh), "hihi\n", 'env+chdir worked for SpawnPP');
+	close $fh;
+	unlink("$tmp/foo") or die "unlink: $!";
+	{
+		local $ENV{MOD_PERL} = 1;
+		$pid = PublicInbox::SpawnPP::pi_fork_exec([],
+				'/bin/sh', $cmd, $env, $rlim, "$tmp", $pgid);
+	}
+	is(waitpid($pid, 0), $pid, 'spawned process exited');
+	open $fh, '<', "$tmp/foo" or die "open: $!";
+	is(readline($fh), "hihi\n", 'env+chdir SpawnPP under (faked) MOD_PERL');
+}
 
-1;
+done_testing();
