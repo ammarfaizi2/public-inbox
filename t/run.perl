@@ -85,6 +85,10 @@ if ($shuffle) {
 	@tests = sort {
 		($t->{$b}->{elapsed} // 0) <=> ($t->{$a}->{elapsed} // 0)
 	} @tests;
+	say "# top 10 longest tests (`make check' regenerates)";
+	for (@tests[0..9]) {
+		printf "# %0.6f %s\n", $t->{$_}->{elapsed}, $_;
+	}
 }
 
 our $tb = Test::More->builder;

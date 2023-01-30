@@ -1,0 +1,7 @@
+eval 'exec perl -wS $0 ${1+"$@"}' # this script is too short to copyright
+if 0; # running under some shell
+use v5.12; use autodie; use YAML::XS qw(Load);
+open(my $fh, '<', shift // '.prove');
+my $t = Load(do { local $/; <$fh> })->{tests};
+my @t = sort { $t->{$b}->{elapsed} <=> $t->{$a}->{elapsed} } keys %$t;
+printf "%0.6f %s\n", $t->{$_}->{elapsed}, $_ for @t;

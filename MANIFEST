@@ -121,6 +121,7 @@ contrib/css/README
 contrib/selinux/el7/publicinbox.fc
 contrib/selinux/el7/publicinbox.te
 devel/README
+devel/longest-tests
 devel/syscall-list
 examples/README
 examples/README.unsubscribe
