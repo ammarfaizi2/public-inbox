@@ -1,9 +1,8 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
-use Test::More;
 use PublicInbox::TestCommon;
 use PublicInbox::Config;
 use PublicInbox::Admin;
@@ -74,7 +73,7 @@ my $smsg;
 	is($res->[0]->{ds}, $smsg->{ds}, 'Xapian search on datestamp');
 }
 SKIP: {
-	require_git(2.6, 1) or skip('git 2.6+ required for v2', 10);
+	require_git(2.6, 10);
 	my $v2dir = "$tmpdir/v2";
 	run_script(['-convert', $v1dir, $v2dir]) or die 'v2 conversion failed';
 

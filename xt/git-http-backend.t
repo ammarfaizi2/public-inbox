@@ -1,14 +1,13 @@
+#!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Ensure buffering behavior in -httpd doesn't cause runaway memory use
 # or data corruption
 use strict;
-use warnings;
-use Test::More;
+use v5.10.1;
 use POSIX qw(setsid);
 use PublicInbox::TestCommon;
-use PublicInbox::Spawn qw(which);
 
 my $git_dir = $ENV{GIANT_GIT_DIR};
 plan 'skip_all' => 'GIANT_GIT_DIR not defined' unless $git_dir;
@@ -77,8 +76,7 @@ SKIP: { # make sure Last-Modified + If-Modified-Since works with curl
 	my $nr = 6;
 	skip 'no description', $nr unless -f "$git_dir/description";
 	my $mtime = (stat(_))[9];
-	my $curl = which('curl');
-	skip 'curl(1) not found', $nr unless $curl;
+	my $curl = require_cmd('curl', 1) or skip 'curl(1) not found', $nr;
 	my $url = "http://$host:$port/description";
 	my $dst = "$tmpdir/desc";
 	is(xsys($curl, qw(-RsSf), '-o', $dst, $url), 0, 'curl -R');

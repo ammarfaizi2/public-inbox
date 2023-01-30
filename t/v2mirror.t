@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -330,7 +330,7 @@ SKIP: {
 	require_mods('Email::MIME', 1); # for legacy revision
 	# using plackup to test old PublicInbox::WWW since -httpd from
 	# back then relied on some packages we no longer depend on
-	my $plackup = which('plackup') or skip('no plackup in path', 1);
+	my $plackup = require_cmd('plackup', 1) or skip('no plackup in path', 1);
 	require PublicInbox::Lock;
 	chomp $oldrev;
 	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);

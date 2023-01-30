@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -13,7 +13,7 @@ my ($res, $err, $v);
 my $v2ibx;
 SKIP: {
 	require_mods(qw(DBD::SQLite), 5);
-	require_git(2.6, 1) or skip 5, 'git too old';
+	require_git(2.6, 5);
 	$v2ibx = create_inbox 'v2', indexlevel => 'basic', version => 2,
 				-no_gc => 1, sub {
 		my ($v2w, $ibx) = @_;

@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -8,8 +8,7 @@ use PublicInbox::TestCommon;
 use PublicInbox::Import;
 require_git(2.6);
 require_mods(qw(DBD::SQLite Search::Xapian));
-have_xapian_compact or
-	plan skip_all => 'xapian-compact missing for '.__FILE__;
+have_xapian_compact;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $ibx = create_inbox 'v1', indexlevel => 'medium', tmpdir => "$tmpdir/v1",
 		pre_cb => sub {

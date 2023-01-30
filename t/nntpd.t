@@ -413,7 +413,7 @@ sub test_watch {
 	use_ok 'PublicInbox::Watch';
 	use_ok 'PublicInbox::InboxIdle';
 	use_ok 'PublicInbox::Config';
-	require_git('1.8.5', 1) or skip('git 1.8.5+ needed for --urlmatch', 4);
+	require_git('1.8.5', 4);
 	my $old_env = { HOME => $ENV{HOME} };
 	my $home = "$tmpdir/watch_home";
 	mkdir $home or BAIL_OUT $!;

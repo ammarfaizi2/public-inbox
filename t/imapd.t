@@ -3,7 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # end-to-end IMAP tests, see unit tests in t/imap.t, too
 use strict;
-use Test::More;
+use v5.10.1;
 use Time::HiRes ();
 use PublicInbox::TestCommon;
 use PublicInbox::Config;
@@ -438,8 +438,7 @@ ok($mic->logout, 'logged out');
 
 SKIP: {
 	use_ok 'PublicInbox::InboxIdle';
-	require_git('1.8.5', 1) or
-		skip('git 1.8.5+ needed for --urlmatch', 4);
+	require_git '1.8.5', 4;
 	my $old_env = { HOME => $ENV{HOME} };
 	my $home = "$tmpdir/watch_home";
 	mkdir $home or BAIL_OUT $!;

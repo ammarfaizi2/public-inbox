@@ -1,8 +1,8 @@
+#!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+use v5.10.1;
 use strict;
-use warnings;
-use Test::More;
 use PublicInbox::Eml;
 use PublicInbox::Smsg;
 use PublicInbox::Git;
@@ -26,10 +26,11 @@ hello world
 EOF
 
 my $v2 = require_git(2.6, 1);
-my $smsg = bless {}, 'PublicInbox::Smsg' if $v2;
+my $smsg = $v2 ? bless({}, 'PublicInbox::Smsg') : undef;
 like($im->add($mime, undef, $smsg), qr/\A:[0-9]+\z/, 'added one message');
 
-if ($v2) {
+SKIP: {
+	skip 'git 2.6+ required', 3 if !$v2;
 	like($smsg->{blob}, qr/\A[a-f0-9]{40,64}\z/, 'got last object_id');
 	my @cmd = ('git', "--git-dir=$git->{git_dir}", qw(hash-object --stdin));
 	open my $in, '+<', undef or BAIL_OUT "open(+<): $!";

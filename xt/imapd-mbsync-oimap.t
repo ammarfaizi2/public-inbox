@@ -1,12 +1,12 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # ensure mbsync and offlineimap compatibility
 use strict;
 use v5.10.1;
 use File::Path qw(mkpath);
 use PublicInbox::TestCommon;
-use PublicInbox::Spawn qw(which spawn);
+use PublicInbox::Spawn qw(spawn);
 require_mods(qw(-imapd));
 my $inboxdir = $ENV{GIANT_INBOX_DIR};
 (defined($inboxdir) && -d $inboxdir) or
@@ -42,7 +42,8 @@ my %pids;
 
 SKIP: {
 	mkpath([map { "$tmpdir/oimapdir/$_" } qw(cur new tmp)]);
-	my $oimap = which('offlineimap') or skip 'no offlineimap(1)', 1;
+	my $oimap = require_cmd('offlineimap', 1) or
+		skip 'no offlineimap(1)', 1;
 	open my $fh, '>', "$tmpdir/.offlineimaprc" or BAIL_OUT "open: $!";
 	print $fh <<EOF or BAIL_OUT "print: $!";
 [general]
@@ -78,7 +79,7 @@ EOF
 
 SKIP: {
 	mkpath([map { "$tmpdir/mbsyncdir/test/$_" } qw(cur new tmp)]);
-	my $mbsync = which('mbsync') or skip 'no mbsync(1)', 1;
+	my $mbsync = require_cmd('mbsync', 1) or skip 'no mbsync(1)', 1;
 	open my $fh, '>', "$tmpdir/.mbsyncrc" or BAIL_OUT "open: $!";
 	print $fh <<EOF or BAIL_OUT "print: $!";
 Create Slave

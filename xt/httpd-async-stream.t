@@ -1,17 +1,17 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Expensive test to validate compression and TLS.
 use strict;
-use Test::More;
+use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::DS qw(now);
-use PublicInbox::Spawn qw(which popen_rd);
+use PublicInbox::Spawn qw(popen_rd);
 use Digest::MD5;
 use POSIX qw(_exit);
 my $inboxdir = $ENV{GIANT_INBOX_DIR};
 plan skip_all => "GIANT_INBOX_DIR not defined for $0" unless $inboxdir;
-my $curl = which('curl') or plan skip_all => "curl(1) missing for $0";
+my $curl = require_cmd('curl');
 my ($tmpdir, $for_destroy) = tmpdir();
 require_mods(qw(DBD::SQLite));
 my $JOBS = $ENV{TEST_JOBS} // 4;

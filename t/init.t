@@ -1,8 +1,8 @@
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
-use warnings;
-use Test::More;
+use v5.10.1;
 use PublicInbox::Config;
 use PublicInbox::TestCommon;
 use PublicInbox::Admin;
@@ -117,7 +117,7 @@ sub quiet_fail {
 
 SKIP: {
 	require_mods(qw(DBD::SQLite Search::Xapian), 2);
-	require_git(2.6, 1) or skip "git 2.6+ required", 2;
+	require_git(2.6, 2);
 	use_ok 'PublicInbox::Msgmap';
 	local $ENV{PI_DIR} = "$tmpdir/.public-inbox/";
 	local $ENV{PI_EMERGENCY} = "$tmpdir/.public-inbox/emergency";

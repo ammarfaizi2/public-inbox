@@ -5,12 +5,13 @@
 use v5.12;
 use File::Path qw(make_path);
 use PublicInbox::TestCommon;
-use PublicInbox::Spawn qw(which spawn);
+use PublicInbox::Spawn qw(spawn);
 my $inboxdir = $ENV{GIANT_INBOX_DIR};
 (defined($inboxdir) && -d $inboxdir) or
 	plan skip_all => "GIANT_INBOX_DIR not defined for $0";
 plan skip_all => "bad characters in $inboxdir" if $inboxdir =~ m![^\w\.\-/]!;
-my $uuidgen = which('uuidgen') or plan skip_all => 'uuidgen(1) missing';
+my $uuidgen = require_cmd('uuidgen');
+my $mpop = require_cmd('mpop');
 require_mods(qw(DBD::SQLite));
 require_git('2.6'); # for v2
 require_mods(qw(File::FcntlLock)) if $^O !~ /\A(?:linux|freebsd)\z/;
@@ -41,8 +42,7 @@ chomp(my $uuid = xqx([$uuidgen]));
 make_path("$tmpdir/home/.config/mpop",
 	map { "$tmpdir/md/$_" } qw(new cur tmp));
 
-SKIP: {
-	my $mpop = which('mpop') or skip('mpop(1) missing', 1);
+{
 	open my $fh, '>', "$tmpdir/home/.config/mpop/config"
 		or xbail "open $!";
 	chmod 0600, $fh;

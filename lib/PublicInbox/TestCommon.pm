@@ -93,31 +93,35 @@ sub tcp_connect {
 }
 
 sub require_cmd ($;$) {
-	my ($cmd, $maybe) = @_;
+	my ($cmd, $nr) = @_;
 	require PublicInbox::Spawn;
-	my $bin = PublicInbox::Spawn::which($cmd);
+	state %CACHE;
+	my $bin = $CACHE{$cmd} //= PublicInbox::Spawn::which($cmd);
 	return $bin if $bin;
-	$maybe ? 0 : plan(skip_all => "$cmd missing from PATH for $0");
+	return plan(skip_all => "$cmd missing from PATH for $0") if !$nr;
+	defined(wantarray) ? undef : skip("$cmd missing, skipping $nr tests")
 }
 
-sub have_xapian_compact () {
-	require_cmd($ENV{XAPIAN_COMPACT} || 'xapian-compact', 1);
+sub have_xapian_compact (;$) {
+	require_cmd($ENV{XAPIAN_COMPACT} || 'xapian-compact', @_ ? $_[0] : ());
 }
 
 sub require_git ($;$) {
-	my ($req, $maybe) = @_;
-	my ($req_maj, $req_min, $req_sub) = split(/\./, $req);
-	my ($cur_maj, $cur_min, $cur_sub) = (xqx([qw(git --version)])
-			=~ /version (\d+)\.(\d+)(?:\.(\d+))?/);
+	my ($req, $nr) = @_;
+	state ($cur_int, $cur_ver);
+	$cur_int //= do {
+		chomp($cur_ver = xqx([qw(git --version)]));
+		my @v = ($cur_ver =~ /version (\d+)\.(\d+)(?:\.(\d+))?/);
+		($v[0] << 24) | ($v[1] << 16) | ($v[2] // 0);
+	};
 
+	my ($req_maj, $req_min, $req_sub) = split(/\./, $req);
 	my $req_int = ($req_maj << 24) | ($req_min << 16) | ($req_sub // 0);
-	my $cur_int = ($cur_maj << 24) | ($cur_min << 16) | ($cur_sub // 0);
-	if ($cur_int < $req_int) {
-		return 0 if $maybe;
-		plan skip_all =>
-			"git $req+ required, have $cur_maj.$cur_min.$cur_sub";
-	}
-	1;
+
+	return 1 if $cur_int >= $req_int;
+	return plan skip_all => "git $req+ required, have $cur_ver" if !$nr;
+	defined(wantarray) ? undef :
+		skip("git $req+ required (have $cur_ver), skipping $nr tests")
 }
 
 my %IPv6_VERSION = (
@@ -570,7 +574,7 @@ SKIP: {
 	my $test_opt = shift // {};
 	local $lei_cwdfh;
 	opendir $lei_cwdfh, '.' or xbail "opendir .: $!";
-	require_git(2.6, 1) or skip('git 2.6+ required for lei test', 2);
+	require_git(2.6, 1);
 	my $mods = $test_opt->{mods} // [ 'lei' ];
 	require_mods(@$mods, 2);
 

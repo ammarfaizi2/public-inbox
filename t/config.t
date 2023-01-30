@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -245,8 +245,7 @@ EOF
 
 SKIP: {
 	# XXX wildcard match requires git 2.26+
-	require_git('1.8.5', 2) or
-		skip 'git 1.8.5+ required for --url-match', 2;
+	require_git('1.8.5', 2);
 	my $f = "$tmpdir/urlmatch";
 	open my $fh, '>', $f or BAIL_OUT $!;
 	print $fh <<EOF or BAIL_OUT $!;

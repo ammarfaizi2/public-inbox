@@ -1,7 +1,8 @@
+#!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
-use Test::More;
+use v5.10.1;
 use PublicInbox::TestCommon;
 my ($dir, $for_destroy) = tmpdir();
 use PublicInbox::Import;
@@ -134,7 +135,7 @@ if (1) {
 }
 
 SKIP: {
-	require_git(2.6, 7) or skip('need git 2.6+ for --batch-all-objects', 7);
+	require_git(2.6, 7);
 	my ($alt, $alt_obj) = tmpdir();
 	my $hash_obj = [ 'git', "--git-dir=$alt", qw(hash-object -w --stdin) ];
 	PublicInbox::Import::init_bare($alt);
