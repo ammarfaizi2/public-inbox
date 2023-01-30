@@ -31,7 +31,7 @@ sub keep_going ($) {
 		$_[0]->{lei}->{opt}->{'keep-going'});
 }
 
-sub _wq_done_wait { # awaitpid cb (via wq_eof / IPC->awaitpid_init)
+sub _wq_done_wait { # awaitpid cb (via wq_eof)
 	my ($pid, $mrr, $lei) = @_;
 	if ($?) {
 		$lei->child_error($?);

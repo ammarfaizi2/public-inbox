@@ -400,7 +400,7 @@ sub query_remote_mboxrd {
 
 sub git { $_[0]->{git} // die 'BUG: git uninitialized' }
 
-sub xsearch_done_wait { # awaitpid cb (via awaitpid_init)
+sub xsearch_done_wait { # awaitpid cb
 	my ($pid, $wq, $lei) = @_;
 	return if !$?;
 	my $s = $? & 127;
@@ -572,16 +572,16 @@ sub do_query {
 			fcntl($b_r, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 			$l2m->{au_peers} = [ $a_r, $a_w, $b_r, $b_w ];
 		}
-		$l2m->awaitpid_init(\&xsearch_done_wait, $lei);
 		$l2m->wq_workers_start('lei2mail', undef,
-					$lei->oldset, { lei => $lei });
+					$lei->oldset, { lei => $lei },
+					\&xsearch_done_wait, $lei);
 		pipe($lei->{startq}, $lei->{au_done}) or die "pipe: $!";
 		fcntl($lei->{startq}, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 		delete $l2m->{au_peers};
 	}
-	$self->awaitpid_init(\&xsearch_done_wait, $lei);
 	$self->wq_workers_start('lei_xsearch', undef,
-				$lei->oldset, { lei => $lei });
+				$lei->oldset, { lei => $lei },
+				\&xsearch_done_wait, $lei);
 	my $op_c = delete $lei->{pkt_op_c};
 	delete $lei->{pkt_op_p};
 	@$end = ();

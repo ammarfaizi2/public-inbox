@@ -165,7 +165,7 @@ sub _complete_up { # lei__complete hook
 	map { $match_cb->($_) } PublicInbox::LeiSavedSearch::list($lei);
 }
 
-sub _wq_done_wait { # awaitpid cb (via awaitpid_init)
+sub _wq_done_wait { # awaitpid cb
 	my ($pid, $wq, $lei) = @_;
 	$lei->child_error($?, 'auth failure') if $?
 }

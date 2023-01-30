@@ -643,8 +643,8 @@ sub workers_start {
 	my $end = $lei->pkt_op_pair;
 	my $ident = $wq->{-wq_ident} // "lei-$lei->{cmd} worker";
 	$flds->{lei} = $lei;
-	$wq->awaitpid_init($wq->can('_wq_done_wait') // \&wq_done_wait, $lei);
-	$wq->wq_workers_start($ident, $jobs, $lei->oldset, $flds);
+	$wq->wq_workers_start($ident, $jobs, $lei->oldset, $flds,
+		$wq->can('_wq_done_wait') // \&wq_done_wait, $lei);
 	delete $lei->{pkt_op_p};
 	my $op_c = delete $lei->{pkt_op_c};
 	@$end = ();
@@ -1390,7 +1390,7 @@ sub DESTROY {
 	# preserve $? for ->fail or ->x_it code
 }
 
-sub wq_done_wait { # awaitpid cb (via wq_eof / IPC->awaitpid_init)
+sub wq_done_wait { # awaitpid cb (via wq_eof)
 	my ($pid, $wq, $lei) = @_;
 	local $current_lei = $lei;
 	my $err_type = $lei->{-err_type};
