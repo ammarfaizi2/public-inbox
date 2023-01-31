@@ -13,6 +13,36 @@ require_mods(qw(DBD::SQLite Search::Xapian HTTP::Request::Common Plack::Test
 use_ok($_) for (qw(HTTP::Request::Common Plack::Test));
 use_ok 'PublicInbox::WWW';
 my ($tmpdir, $for_destroy) = tmpdir();
+my $enc_dup = 'ref-20150309094050.GO3427@x1.example';
+
+my $dibx = create_inbox 'v2-dup', version => 2, indexlevel => 'medium',
+			tmpdir => "$tmpdir/dup", sub {
+	my ($im, $ibx) = @_;
+	my $common = <<"";
+Date: Mon, 9 Mar 2015 09:40:50 +0000
+From: x\@example.com
+To: y\@example.com
+Subject: re
+Message-ID: <$enc_dup>
+MIME-Version: 1.0
+
+	$im->add(PublicInbox::Eml->new($common.<<EOM)) or BAIL_OUT;
+Content-Type: text/plain; charset=utf-8
+Content-Disposition: inline
+Content-Transfer-Encoding: 8bit
+
+cr_mismatch
+pipe \x{e2}\x{94}\x{82} or not
+EOM
+	$im->add(PublicInbox::Eml->new($common.<<EOM)) or BAIL_OUT;
+Content-Type: text/plain; charset="windows-1252"
+Content-Transfer-Encoding: quoted-printable
+
+cr_mismatch\r
+pipe =E2=94=82 or not
+EOM
+};
+
 my $eml = PublicInbox::Eml->new(<<'EOF');
 From oldbug-pre-a0c07cba0e5d8b6a Fri Oct  2 00:00:00 1993
 From: a@example.com
@@ -53,6 +83,9 @@ my $cfgpath = "$ibx->{inboxdir}/pi_config";
 [publicinbox "v2test"]
 	inboxdir = $ibx->{inboxdir}
 	address = $ibx->{-primary_address}
+[publicinbox "dup"]
+	inboxdir = $dibx->{inboxdir}
+	address = $dibx->{-primary_address}
 EOF
 	close $fh or BAIL_OUT;
 }
@@ -221,8 +254,13 @@ my $client1 = sub {
 	}
 	like($raw, qr/\b3\+ messages\b/, 'thread overview shown');
 
-	$res = $cb->(GET('/v2test/a-mid@b/d/'));
+	$res = $cb->(GET("/dup/$enc_dup/d/"));
 	is($res->code, 200, '/d/ (diff) endpoint works');
+	$raw = $res->content;
+	like($raw, qr!</span> cr_mismatch\n!s,
+		'cr_mismatch is only diff context');
+	like($raw, qr!>\-pipe !s, 'pipe diff del line');
+	like($raw, qr!>\+pipe !s, 'pipe diff ins line');
 };
 
 test_psgi(sub { $www->call(@_) }, $client1);

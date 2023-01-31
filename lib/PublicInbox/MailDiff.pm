@@ -19,8 +19,10 @@ sub write_part { # Eml->each_part callback
 	my $ct = $part->content_type || 'text/plain';
 	my ($s, $err) = msg_part_text($part, $ct);
 	my $sfx = defined($s) ? 'txt' : 'bin';
-	open my $fh, '>', "$self->{curdir}/$idx.$sfx" or die "open: $!";
-	print $fh ($s // $part->body) or die "print $!";
+	$s //= $part->body;
+	$s =~ s/\r+\n/\n/sg;
+	open my $fh, '>:utf8', "$self->{curdir}/$idx.$sfx" or die "open: $!";
+	print $fh $s or die "print $!";
 	close $fh or die "close $!";
 }
 
@@ -66,9 +68,9 @@ sub next_smsg ($) {
 sub emit_msg_diff {
 	my ($bref, $self) = @_; # bref is `git diff' output
 	# will be escaped to `&#8226;' in HTML
+	utf8::decode($$bref);
 	$self->{ctx}->{ibx}->{obfuscate} and
 		obfuscate_addrs($self->{ctx}->{ibx}, $$bref, "\x{2022}");
-	$$bref =~ s/\r+\n/\n/sg;
 	print { $self->{ctx}->{zfh} } '</pre><hr><pre>' if $self->{nr} > 1;
 	flush_diff($self->{ctx}, $bref);
 	next_smsg($self);
