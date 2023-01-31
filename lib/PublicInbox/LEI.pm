@@ -561,17 +561,17 @@ sub note_sigpipe { # triggers sigpipe_handler
 sub _lei_atfork_child {
 	my ($self, $persist) = @_;
 	# we need to explicitly close things which are on stack
+	my $cfg = $self->{cfg};
 	if ($persist) {
 		open $self->{3}, '<', '/' or die "open(/) $!";
 		fchdir($self);
 		close($_) for (grep(defined, delete @$self{qw(0 1 2 sock)}));
-		if (my $cfg = $self->{cfg}) {
-			delete @$cfg{qw(-lei_store -watches -lei_note_event)};
-		}
+		delete @$cfg{qw(-lei_store -watches -lei_note_event)};
 	} else { # worker, Net::NNTP (Net::Cmd) uses STDERR directly
 		open STDERR, '+>&='.fileno($self->{2}) or warn "open $!";
 		STDERR->autoflush(1);
 		POSIX::setpgid(0, $$) // die "setpgid(0, $$): $!";
+		delete @$cfg{qw(-watches -lei_note_event)};
 	}
 	close($_) for (grep(defined, delete @$self{qw(old_1 au_done)}));
 	delete $self->{-socks};
