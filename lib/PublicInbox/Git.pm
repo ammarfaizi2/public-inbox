@@ -52,6 +52,11 @@ my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
 my $EXE_ST = ''; # pack('dd', st_ctime, st_size);
 my ($GIT_EXE, $GIT_VER);
 
+sub version {
+	check_git_exe();
+	$GIT_VER;
+}
+
 sub check_git_exe () {
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
 	my @st = stat($GIT_EXE) or die "stat: $!";
