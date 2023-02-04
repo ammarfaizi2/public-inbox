@@ -1019,6 +1019,8 @@ sub _skel_ghost {
 	1;
 }
 
+# note: we favor Date: here because git-send-email increments it
+# to preserve [PATCH $N/$M] ordering in series (it can't control Received:)
 sub sort_ds {
 	@{$_[0]} = sort {
 		(eval { $a->topmost->{ds} } || 0) <=>
@@ -1040,9 +1042,10 @@ sub acc_topic { # walk_thread callback
 	if ($has_blob) {
 		my $subj = subject_normalized($smsg->{subject});
 		$subj = '(no subject)' if $subj eq '';
+		my $ts = $smsg->{ts};
 		my $ds = $smsg->{ds};
 		if ($level == 0) { # new, top-level topic
-			my $topic = [ $ds, 1, { $subj => $mid }, $subj ];
+			my $topic = [ $ts, $ds, 1, { $subj => $mid }, $subj ];
 			$ctx->{-cur_topic} = $topic;
 			push @{$ctx->{order}}, $topic;
 			return 1;
@@ -1050,10 +1053,11 @@ sub acc_topic { # walk_thread callback
 
 		# continue existing topic
 		my $topic = $ctx->{-cur_topic}; # should never be undef
-		$topic->[0] = $ds if $ds > $topic->[0];
-		$topic->[1]++; # bump N+ message counter
-		my $seen = $topic->[2];
-		if (scalar(@$topic) == 3) { # parent was a ghost
+		$topic->[0] = $ts if $ts > $topic->[0];
+		$topic->[1] = $ds if $ds > $topic->[1];
+		$topic->[2]++; # bump N+ message counter
+		my $seen = $topic->[3];
+		if (scalar(@$topic) == 4) { # parent was a ghost
 			push @$topic, $subj;
 		} elsif (!defined($seen->{$subj})) {
 			push @$topic, $level, $subj; # @extra messages
@@ -1061,7 +1065,7 @@ sub acc_topic { # walk_thread callback
 		$seen->{$subj} = $mid; # latest for subject
 	} else { # ghost message
 		return 1 if $level != 0; # ignore child ghosts
-		my $topic = $ctx->{-cur_topic} = [ -666, 0, {} ];
+		my $topic = $ctx->{-cur_topic} = [ -666, -666, 0, {} ];
 		push @{$ctx->{order}}, $topic;
 	}
 	1;
@@ -1082,7 +1086,7 @@ sub dump_topics {
 	}
 	# sort by recency, this allows new posts to "bump" old topics...
 	foreach my $topic (sort { $b->[0] <=> $a->[0] } @$order) {
-		my ($ds, $n, $seen, $top_subj, @extra) = @$topic;
+		my ($ts, $ds, $n, $seen, $top_subj, @extra) = @$topic;
 		@$topic = ();
 		next unless defined $top_subj;  # ghost topic
 		my $mid = delete $seen->{$top_subj};
