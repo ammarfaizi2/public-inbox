@@ -507,12 +507,9 @@ sub resume_fetch {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my @git = ('git', "--git-dir=$dst");
 	my $opt = { 2 => $self->{lei}->{2} };
-	my $rn = 'origin'; # configurable?
+	my $rn = 'random'.int(rand(1 << 30));
 	for ("url=$uri", "fetch=+refs/*:refs/*", 'mirror=true') {
-		my @kv = split(/=/, $_, 2);
-		$kv[0] = "remote.$rn.$kv[0]";
-		next if $self->{dry_run};
-		run_die([@git, 'config', @kv], undef, $opt);
+		push @git, '-c', "remote.$rn.$_";
 	}
 	my $cmd = [ @{$self->{-torsocks}}, @git,
 			fetch_args($self->{lei}, $opt), $rn ];
