@@ -259,7 +259,8 @@ sub run_reap {
 sub start_cmd {
 	my ($self, $cmd, $opt, $fini) = @_;
 	do_reap($self);
-	$self->{lei}->qerr("# @$cmd");
+	utf8::decode(my $msg = "# @$cmd");
+	$self->{lei}->qerr($msg);
 	return if $self->{dry_run};
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd, $fini ]
 }
