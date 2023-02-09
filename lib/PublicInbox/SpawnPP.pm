@@ -7,7 +7,7 @@
 package PublicInbox::SpawnPP;
 use v5.12;
 use POSIX qw(dup2 _exit setpgid :signal_h);
-use PublicInbox::Spawn qw(which);
+# this is loaded by PublicInbox::Spawn, so we can't use/require it, here
 
 # Pure Perl implementation for folks that do not use Inline::C
 sub pi_fork_exec ($$$$$$$) {
@@ -48,7 +48,7 @@ sub pi_fork_exec ($$$$$$$) {
 		sigprocmask(SIG_SETMASK, $old) or die "SIG_SETMASK ~CHLD: $!";
 		$cmd->[0] = $f;
 		if ($ENV{MOD_PERL}) {
-			$f = which('env');
+			$f = PublicInbox::Spawn::which('env');
 			@$cmd = ('env', '-i', @$env, @$cmd);
 		} else {
 			%ENV = map { split(/=/, $_, 2) } @$env;
