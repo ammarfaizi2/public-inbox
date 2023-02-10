@@ -6,6 +6,7 @@
 package PublicInbox::GitAsyncCat;
 use v5.12;
 use parent qw(PublicInbox::DS Exporter);
+use PublicInbox::DS qw(awaitpid);
 use POSIX qw(WNOHANG);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
 our @EXPORT = qw(ibx_async_cat ibx_async_prefetch async_check);
@@ -20,6 +21,8 @@ sub close {
 	}
 	$self->SUPER::close; # PublicInbox::DS::close
 }
+
+sub aclose { $_[1]->close } # ignore PID ($_[0])
 
 sub event_step {
 	my ($self) = @_;
@@ -36,12 +39,6 @@ sub event_step {
 			# ok, more to do, requeue for fairness
 			$self->requeue;
 		}
-	} elsif ((my $pid = waitpid($git->{pid}, WNOHANG)) > 0) {
-		# May happen if the child process is killed by a BOFH
-		# (or segfaults)
-		delete $git->{pid};
-		warn "E: git $pid exited with \$?=$?\n";
-		$self->close;
 	}
 }
 
@@ -51,6 +48,7 @@ sub watch_cat {
 		my $self = bless { git => $git }, __PACKAGE__;
 		$git->{in}->blocking(0);
 		$self->SUPER::new($git->{in}, EPOLLIN|EPOLLET);
+		awaitpid($git->{pid}, \&aclose, $self);
 		\undef; # this is a true ref()
 	};
 }
@@ -83,6 +81,7 @@ sub async_check ($$$$) {
 		my $self = bless { git => $git }, 'PublicInbox::GitAsyncCheck';
 		$git->{in_c}->blocking(0);
 		$self->SUPER::new($git->{in_c}, EPOLLIN|EPOLLET);
+		awaitpid($git->{pid_c}, \&aclose, $self);
 		\undef; # this is a true ref()
 	};
 }
@@ -126,12 +125,6 @@ sub event_step {
 			# ok, more to do, requeue for fairness
 			$self->requeue;
 		}
-	} elsif ((my $pid = waitpid($git->{pid_c}, WNOHANG)) > 0) {
-		# May happen if the child process is killed by a BOFH
-		# (or segfaults)
-		delete $git->{pid_c};
-		warn "E: git $pid exited with \$?=$?\n";
-		$self->close;
 	}
 }
 
