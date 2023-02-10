@@ -288,6 +288,19 @@ sub upr { # feed `git update-ref --stdin -z' verbosely
 	print $w "$op ", join("\0", @rest, '') or die "print(w): $!";
 }
 
+sub start_update_ref {
+	my ($fgrp) = @_;
+	pipe(my ($r, $w)) or die "pipe: $!";
+	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
+		qw(update-ref --stdin -z) ];
+	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
+	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $fgrp->{lei}->{2} }, $pack);
+	close $r or die "close(r): $!";
+	$fgrp->{dry_run} ? undef : $w;
+}
+
+sub upref_warn { warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n" }
+
 sub fgrp_update {
 	my ($fgrp) = @_;
 	return if !keep_going($fgrp);
@@ -299,14 +312,9 @@ sub fgrp_update {
 	close $srcfh;
 	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
 	close $dstfh;
-	pipe(my ($r, $w)) or die "pipe: $!";
-	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
-		qw(update-ref --stdin -z) ];
+	my $w = start_update_ref($fgrp) or return;
 	my $lei = $fgrp->{lei};
-	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
-	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $lei->{2} }, $pack);
-	close $r or die "close(r): $!";
-	return if $fgrp->{dry_run};
+	my $ndel;
 	for my $ref (keys %dst) {
 		my $new = delete $src{$ref};
 		my $old = $dst{$ref};
@@ -315,18 +323,33 @@ sub fgrp_update {
 				upr($lei, $w, 'update', $ref, $new, $old);
 		} else {
 			upr($lei, $w, 'delete', $ref, $old);
+			++$ndel;
 		}
 	}
-	while (my ($ref, $oid) = each %src) {
-		upr($lei, $w, 'create', $ref, $oid);
+	# git's ref files backend doesn't allow directory/file conflicts
+	# between `delete' and `create' ops:
+	if ($ndel && scalar(keys %src)) {
+		$fgrp->{-create_refs} = \%src;
+	} else {
+		while (my ($ref, $oid) = each %src) {
+			upr($lei, $w, 'create', $ref, $oid);
+		}
 	}
-	close($w) or warn "E: close(update-ref --stdin): $! (need git 1.8.5+)\n";
+	close($w) or upref_warn();
 }
 
 sub satellite_done {
 	my ($fgrp) = @_;
-	pack_refs($fgrp, $fgrp->{cur_dst});
-	run_puh($fgrp);
+	if (my $create = delete $fgrp->{-create_refs}) {
+		my $w = start_update_ref($fgrp) or return;
+		while (my ($ref, $oid) = each %$create) {
+			upr($fgrp->{lei}, $w, 'create', $ref, $oid);
+		}
+		close($w) or upref_warn();
+	} else {
+		pack_refs($fgrp, $fgrp->{cur_dst});
+		run_puh($fgrp);
+	}
 }
 
 sub pack_refs {
