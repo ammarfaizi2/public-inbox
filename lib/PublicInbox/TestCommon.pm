@@ -480,6 +480,9 @@ sub start_script {
 	my $pid = fork // die "fork: $!\n";
 	if ($pid == 0) {
 		eval { PublicInbox::DS->Reset };
+		for (@{delete($opt->{-CLOFORK}) // []}) {
+			close($_) or die "close $!";
+		}
 		# pretend to be systemd (cf. sd_listen_fds(3))
 		# 3 == SD_LISTEN_FDS_START
 		my $fd;

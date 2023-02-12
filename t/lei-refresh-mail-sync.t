@@ -5,17 +5,20 @@ use strict; use v5.10.1; use PublicInbox::TestCommon;
 require_mods(qw(lei));
 use File::Path qw(remove_tree);
 require Socket;
+use Fcntl qw(F_SETFD);
+
+pipe(my ($stop_r, $stop_w)) or xbail "pipe: $!";
+fcntl($stop_w, F_SETFD, 0) or xbail "F_SETFD: $!";
 
 my $stop_daemon = sub { # needed since we don't have inotify
+	close $stop_w or xbail "close \$stop_w: $!";
 	lei_ok qw(daemon-pid);
 	chomp(my $pid = $lei_out);
 	$pid > 0 or xbail "bad pid: $pid";
 	kill('TERM', $pid) or xbail "kill: $!";
-	for (0..10) {
-		tick;
-		kill(0, $pid) or last;
-	}
-	kill(0, $pid) and xbail "daemon still running (PID:$pid)";
+	is(sysread($stop_r, my $buf, 1), 0, 'daemon stop pipe read EOF');
+	pipe($stop_r, $stop_w) or xbail "pipe: $!";
+	fcntl($stop_w, F_SETFD, 0) or xbail "F_SETFD: $!";
 };
 
 test_lei({ daemon_only => 1 }, sub {
@@ -88,7 +91,8 @@ SKIP: {
 		$sock_cls //= ref($s);
 		my $cmd = [ "-$x", '-W0', "--stdout=$home/$x.out",
 			"--stderr=$home/$x.err" ];
-		my $td = start_script($cmd, $env, { 3 => $s }) or xbail("-$x");
+		my $opt = { 3 => $s, -CLOFORK => [ $stop_w ] };
+		my $td = start_script($cmd, $env, $opt) or xbail("-$x");
 		my $addr = tcp_host_port($s);
 		$srv->{$x} = { addr => $addr, td => $td, cmd => $cmd, s => $s };
 	}
@@ -139,8 +143,8 @@ SKIP: {
 	my $cmd = $srv->{imapd}->{cmd};
 	my $s = $srv->{imapd}->{s};
 	$s->blocking(0);
-	$srv->{imapd}->{td} = start_script($cmd, $env, { 3 => $s }) or
-		xbail "@$cmd";
+	my $opt = { 3 => $s, -CLOFORK => [ $stop_w ] };
+	$srv->{imapd}->{td} = start_script($cmd, $env, $opt) or xbail "@$cmd";
 	lei_ok 'refresh-mail-sync', '--all';
 	lei_ok 'inspect', "blob:$oid";
 	is($lei_out, $before, 'no changes when server was down');
