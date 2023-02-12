@@ -23,7 +23,7 @@ use PublicInbox::SHA qw(sha256_hex sha1_hex);
 use POSIX qw(strftime);
 
 our $LIVE; # pid => callback
-our $FGRP_TODO; # objstore -> [ fgrp mirror objects ]
+our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
 our $TODO; # reference => [ non-fgrp mirror objects ]
 our @PUH; # post-update hooks
 
@@ -404,9 +404,12 @@ sub fgrp_fetch_all {
 		(fetch_args($self->{lei}, $opt), qw(--no-tags --multiple));
 	};
 	push(@fetch, "-j$j") if $j;
-	while (my ($osdir, $fgrpv) = each %$todo) {
+	while (my ($osdir, $fgrp_old_new) = each %$todo) {
 		my $f = "$osdir/config";
 		return if !keep_going($self);
+		my ($fgrpv, $new) = @$fgrp_old_new;
+		@$fgrpv = sort { $b->{-sort} <=> $a->{-sort} } @$fgrpv;
+		push @$fgrpv, @$new; # $new is ordered by references
 
 		my $cmd = ['git', "--git-dir=$osdir", qw(config -f), $f ];
 		# clobber group from previous run atomically
@@ -568,7 +571,8 @@ sub fgrp_enqueue {
 	my ($fgrp, $end) = @_; # $end calls fgrp_fetch_all
 	return if !keep_going($fgrp);
 	++$fgrp->{chg}->{nr_chg};
-	push @{$FGRP_TODO->{$fgrp->{-osdir}}}, $fgrp;
+	my $dst = $FGRP_TODO->{$fgrp->{-osdir}} //= [ [], [] ]; # [ old, new ]
+	push @{$dst->[defined($fgrp->{-sort} ? 0 : 1)]}, $fgrp;
 }
 
 sub clone_v1 {
@@ -586,8 +590,12 @@ sub clone_v1 {
 	my $resume = -d $dst;
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
-		$resume ? cmp_fp_do($fgrp, \&fgrp_enqueue, $end)
-			: fgrp_enqueue($fgrp, $end);
+		if ($resume) {
+			$fgrp->{-sort} = $fgrp->{-ent}->{modified};
+			cmp_fp_do($fgrp, \&fgrp_enqueue, $end);
+		} else { # new repo, save for last
+			fgrp_enqueue($fgrp, $end);
+		}
 	} elsif ($resume) {
 		cmp_fp_do($self, \&resume_fetch, $uri, $fini);
 	} else { # normal clone
