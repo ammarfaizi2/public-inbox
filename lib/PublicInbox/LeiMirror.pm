@@ -401,23 +401,42 @@ sub fgrp_fetch_all {
 	my $opt = {};
 	my @fetch = do {
 		local $self->{lei}->{opt}->{jobs} = 1;
-		(fetch_args($self->{lei}, $opt),
-			qw(--no-tags --multiple));
+		(fetch_args($self->{lei}, $opt), qw(--no-tags --multiple));
 	};
 	push(@fetch, "-j$j") if $j;
 	while (my ($osdir, $fgrpv) = each %$todo) {
 		my $f = "$osdir/config";
 		return if !keep_going($self);
 
+		my $cmd = ['git', "--git-dir=$osdir", qw(config -f), $f ];
 		# clobber group from previous run atomically
-		my $cmd = ['git', "--git-dir=$osdir", qw(config -f),
-				$f, '--unset-all', "remotes.$grp"];
-		$self->{lei}->qerr("# @$cmd");
-		if (!$self->{dry_run}) {
-			my $pid = spawn($cmd, undef, { 2 => $self->{lei}->{2} });
+		for ("remotes.$grp") { # TODO: hideRefs
+			my $c = [ @$cmd, '--unset-all', $_ ];
+			$self->{lei}->qerr("# @$c");
+			next if $self->{dry_run};
+			my $pid = spawn($c, undef, $opt);
 			waitpid($pid, 0) // die "waitpid: $!";
-			die "E: @$cmd: \$?=$?" if ($? && ($? >> 8) != 5);
+			die "E: @$c \$?=$?" if ($? && ($? >> 8) != 5);
+		}
 
+		# permanent configs:
+		my $cfg = PublicInbox::Config->git_config_dump($f);
+		for my $fgrp (@$fgrpv) {
+			my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
+			my $rn = $fgrp->{-remote} // die 'BUG: no {-remote}';
+			for ("url=$u", "fetch=+refs/*:refs/remotes/$rn/*",
+					'tagopt=--no-tags') {
+				my ($k, $v) = split(/=/, $_, 2);
+				$k = "remote.$rn.$k";
+				next if ($cfg->{$k} // '') eq $v;
+				my $c = [@$cmd, $k, $v];
+				$fgrp->{lei}->qerr("# @$c");
+				next if $fgrp->{dry_run};
+				run_die($c, undef, $opt);
+			}
+		}
+
+		if (!$self->{dry_run}) {
 			# update the config atomically via O_APPEND while
 			# respecting git-config locking
 			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY)
@@ -430,7 +449,6 @@ sub fgrp_fetch_all {
 			close $fh or die "close($f): $!";
 			unlink("$f.lock") or die "unlink($f.lock): $!";
 		}
-
 		$cmd = [ @git, "--git-dir=$osdir", @fetch, $grp ];
 		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $fgrpv);
 		start_cmd($self, $cmd, $opt, $end);
@@ -446,12 +464,15 @@ sub forkgroup_prep {
 	my $dir = "$os/$fg.git";
 	if (!-d $dir && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($dir);
-		my @cmd = ('git', "--git-dir=$dir", 'config');
-		my $opt = { 2 => $self->{lei}->{2} };
-		for ('repack.useDeltaIslands=true',
-				'pack.island=refs/remotes/([^/]+)/') {
-			run_die([@cmd, split(/=/, $_, 2)], undef, $opt);
-		}
+		my $f = "$dir/config";
+		open my $fh, '+>>', $f or die "open:($f): $!";
+		print $fh <<EOM or die "print($f): $!";
+[repack]
+	useDeltaIslands = true
+[pack]
+	island = refs/remotes/([^/]+)/
+EOM
+		close $fh or die "close($f): $!";
 	}
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my $rn = substr(sha256_hex($key), 0, 16);
@@ -546,17 +567,6 @@ sub resume_fetch {
 sub fgrp_enqueue {
 	my ($fgrp, $end) = @_; # $end calls fgrp_fetch_all
 	return if !keep_going($fgrp);
-	my $opt = { 2 => $fgrp->{lei}->{2} };
-	# --no-tags is required to avoid conflicts
-	my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
-	my $rn = $fgrp->{-remote} // die 'BUG: no {-remote}';
-	my @cmd = ('git', "--git-dir=$fgrp->{-osdir}", 'config');
-	for ("url=$u", "fetch=+refs/*:refs/remotes/$rn/*", 'tagopt=--no-tags') {
-		my @kv = split(/=/, $_, 2);
-		$kv[0] = "remote.$rn.$kv[0]";
-		$fgrp->{dry_run} ? $fgrp->{lei}->qerr("# @cmd @kv") :
-				run_die([@cmd, @kv], undef, $opt);
-	}
 	++$fgrp->{chg}->{nr_chg};
 	push @{$FGRP_TODO->{$fgrp->{-osdir}}}, $fgrp;
 }
