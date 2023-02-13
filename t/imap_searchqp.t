@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -29,10 +29,10 @@ is($q->{xap}, 'f:"b"', 'charset handled');
 $q = $parse->(qq{CHARSET WTF-8 From b});
 like($q, qr/\ANO \[/, 'bad charset rejected');
 {
-	# TODO: squelch errors by default? clients could flood logs
-	open my $fh, '>:scalar', \(my $buf) or die;
+	open my $fh, '>:scalar', \(my $buf = '') or die;
 	local *STDERR = $fh;
 	$q = $parse->(qq{CHARSET});
+	is($buf, '', 'nothing spewed to STDERR on bad query');
 }
 like($q, qr/\ABAD /, 'bad charset rejected');
 

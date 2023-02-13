@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # IMAP search query parser.  cf RFC 3501
 
@@ -279,6 +279,8 @@ sub parse {
 	my $sql = '';
 	%$q = (sql => \$sql, imap => $imap); # imap = PublicInbox::IMAP obj
 	# $::RD_TRACE = 1;
+	local $::RD_ERRORS = undef;
+	local $::RD_WARN = undef;
 	my $res = eval { $prd->search_key(uc($query)) };
 	return $@ if $@ && $@ =~ /\A(?:BAD|NO) /;
 	return 'BAD unexpected result' if !$res || $res != $q;
