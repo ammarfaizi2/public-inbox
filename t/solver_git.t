@@ -330,18 +330,16 @@ EOF
 		defined($ENV{PLACK_TEST_EXTERNALSERVER_URI}) or
 			open STDERR, '>&', $olderr or xbail "open: $!";
 		is($res->code, 200, 'coderepo summary (binfoo)');
-		if (ok(-s "$tmpdir/stderr.log")) {
-			open my $fh, '<', "$tmpdir/stderr.log" or xbail $!;
-			my $s = do { local $/; <$fh> };
-			open $fh, '>', "$tmpdir/stderr.log" or xbail $!;
-			ok($s =~ s/^fatal: your current branch.*?\n//sm,
-				'got current branch warning');
-			ok($s =~ s/^.*? exit status=[1-9]+\n\z//sm,
-				'got exit status warning');
-			is($s, '', 'no unexpected warnings on empty coderepo');
-		}
+		ok(!-s "$tmpdir/stderr.log");
 		$res = $cb->(GET('/public-inbox/'));
 		is($res->code, 200, 'coderepo summary (public-inbox)');
+
+		my $tip = 'invalid-'.int(rand(0xdeadbeef));
+		$res = $cb->(GET('/public-inbox/?h='.$tip));
+		is($res->code, 200, 'coderepo summary on dead branch');
+		like($res->content, qr/no commits in `\Q$tip\E', yet/,
+			'lack of commits noted');
+
 		$res = $cb->(GET('/public-inbox'));
 		is($res->code, 301, 'redirected');
 

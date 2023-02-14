@@ -123,17 +123,16 @@ sub _refs_tags_link {
 sub summary_finish {
 	my ($ctx) = @_;
 	my $wcb = delete($ctx->{env}->{'qspawn.wcb'}) or return; # already done
-	my @x = split(/\n\n/sm, delete($ctx->{-each_refs}));
+	my @x = split(/\n\n/sm, delete($ctx->{-each_refs}), 3);
 	PublicInbox::WwwStream::html_init($ctx);
 	my $zfh = $ctx->zfh;
 
 	# git log
-	my @r = split(/\n/s, pop(@x) // '');
+	my @r = split(/\n/s, pop(@x));
 	my $last = scalar(@r) > $ctx->{wcr}->{summary_log} ? pop(@r) : undef;
 	my $tip_html = '';
-	if (defined(my $tip = $ctx->{qp}->{h})) {
-		$tip_html .= ' '.ascii_html($tip).' --';
-	}
+	my $tip = $ctx->{qp}->{h};
+	$tip_html .= ' '.ascii_html($tip).' --' if defined $tip;
 	print $zfh <<EOM;
 <pre><a id=log>\$</a> git log --pretty=format:'%h %s (%cs)%d'$tip_html
 EOM
@@ -146,7 +145,7 @@ EOM
 			" (", $cs, ")\n";
 		print $zfh "\t(", ascii_html($d), ")\n" if $d;
 	}
-	print $zfh "# no commits, yet\n" if !@r;
+	print $zfh '# no commits in `', ($tip//'HEAD'),"', yet\n\n" if !@r;
 	print $zfh "...\n" if $last;
 
 	# README
@@ -216,9 +215,10 @@ sub summary {
 		"$EACH_REF --count=$nb refs/heads; echo && " .
 		"$EACH_REF --count=$nt refs/tags; echo && " .
 		qq(git log -$nl --pretty=format:'%d %H %h %cs %s' "\$@" --));
-	push @cmd, '--', $tip if defined($tip);
+	push @cmd, 'git', $tip if defined($tip);
 	my $qsp = PublicInbox::Qspawn->new(\@cmd,
-		{ GIT_DIR => $ctx->{git}->{git_dir} });
+		{ GIT_DIR => $ctx->{git}->{git_dir} },
+		{ quiet => 1, 2 => $self->{log_fh} });
 	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
 	$tip //= 'HEAD';
 	my @try = ("$tip:README", "$tip:README.md"); # TODO: configurable
