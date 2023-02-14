@@ -120,7 +120,8 @@ sub srv_atom {
 	# else: let git decide based on HEAD if $tip isn't defined
 	push @cmd, '--';
 	push @cmd, $path if $path ne '';
-	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	my $qsp = PublicInbox::Qspawn->new(\@cmd, undef,
+					{ quiet => 1, 2 => $ctx->{lh} });
 	$qsp->psgi_return($ctx->{env}, undef, \&atom_ok, $ctx);
 }
 

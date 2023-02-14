@@ -379,7 +379,10 @@ EOF
 			ok($t->{feed}->{entry}, 'got entry');
 
 			$res = $cb->(GET('/public-inbox/atom/README.md'));
-			is($res->code, 404, '404 on non-existent file Atom feed');
+			is($res->code, 404, '404 on missing file Atom feed');
+
+			$res = $cb->(GET('/public-inbox/atom/?h=gone'));
+			is($res->code, 404, '404 on missing Atom feed branch');
 		}
 
 		$res = $cb->(GET('/public-inbox/tree/'));

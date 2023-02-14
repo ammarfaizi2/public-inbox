@@ -308,6 +308,7 @@ sub srv { # endpoint called by PublicInbox::WWW
 		PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
 			($ctx->{git} = $cr->{$1})) {
+		$ctx->{lh} = $self->{log_fh};
 		PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/tags\.atom\z! and
 			($ctx->{git} = $cr->{$1})) {
