@@ -460,8 +460,9 @@ sub _enquire_once { # retry_reopen callback
 		$enquire->set_sort_by_relevance_then_value(TS, !$opts->{asc});
 	}
 
-	# `mairix -t / --threads' or JMAP collapseThreads
-	if ($opts->{threads} && has_threadid($self)) {
+	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse
+	# on `-tt' ({threads} > 1) which sets the Flagged|Important keyword
+	if (($opts->{threads} // 0) == 1 && has_threadid($self)) {
 		$enquire->set_collapse_key(THREADID);
 	}
 	$enquire->get_mset($opts->{offset} || 0, $opts->{limit} || 50);
