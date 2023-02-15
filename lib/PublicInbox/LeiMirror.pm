@@ -407,13 +407,13 @@ sub fgrp_fetch_all {
 	while (my ($osdir, $fgrp_old_new) = each %$todo) {
 		my $f = "$osdir/config";
 		return if !keep_going($self);
-		my ($fgrpv, $new) = @$fgrp_old_new;
-		@$fgrpv = sort { $b->{-sort} <=> $a->{-sort} } @$fgrpv;
-		push @$fgrpv, @$new; # $new is ordered by references
-
+		my ($old, $new) = @$fgrp_old_new;
+		@$old = sort { $b->{-sort} <=> $a->{-sort} } @$old;
+		# $new is ordered by {references}
 		my $cmd = ['git', "--git-dir=$osdir", qw(config -f), $f ];
-		# clobber group from previous run atomically
-		for ("remotes.$grp") { # TODO: hideRefs
+
+		# clobber settings from previous run atomically
+		for ("remotes.$grp", 'fetch.hideRefs') {
 			my $c = [ @$cmd, '--unset-all', $_ ];
 			$self->{lei}->qerr("# @$c");
 			next if $self->{dry_run};
@@ -424,7 +424,7 @@ sub fgrp_fetch_all {
 
 		# permanent configs:
 		my $cfg = PublicInbox::Config->git_config_dump($f);
-		for my $fgrp (@$fgrpv) {
+		for my $fgrp (@$old, @$new) {
 			my $u = $fgrp->{-uri} // die 'BUG: no {-uri}';
 			my $rn = $fgrp->{-remote} // die 'BUG: no {-remote}';
 			for ("url=$u", "fetch=+refs/*:refs/remotes/$rn/*",
@@ -446,14 +446,24 @@ sub fgrp_fetch_all {
 				or die "open($f.lock): $!";
 			open my $fh, '>>', $f or die "open(>>$f): $!";
 			$fh->autoflush(1);
-			my $buf = join('', "[remotes]\n",
-				map { "\t$grp = $_->{-remote}\n" } @$fgrpv);
+			my $buf = '';
+			if (@$old) {
+				$buf = "[fetch]\n\thideRefs = refs\n";
+				$buf .= join('', map {
+					"\thideRefs = !refs/remotes/" .
+						"$_->{-remote}/\n";
+				} @$old);
+			}
+			$buf .= join('', "[remotes]\n",
+				(map { "\t$grp = $_->{-remote}\n" } @$old),
+				(map { "\t$grp = $_->{-remote}\n" } @$new));
 			print $fh $buf or die "print($f): $!";
 			close $fh or die "close($f): $!";
 			unlink("$f.lock") or die "unlink($f.lock): $!";
 		}
-		$cmd = [ @git, "--git-dir=$osdir", @fetch, $grp ];
-		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $fgrpv);
+		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
+		push @$old, @$new;
+		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $old);
 		start_cmd($self, $cmd, $opt, $end);
 	}
 }
