@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 all::
 
@@ -67,13 +67,16 @@ Documentation/standards.txt : Documentation/standards.perl
 
 # flow.txt is checked into git since Graph::Easy isn't in many distros
 Documentation/flow.txt : Documentation/flow.ge
-	(sed -ne '1,/^$$/p' <Documentation/flow.ge; \
-		$(GRAPH_EASY) Documentation/flow.ge || \
-			cat Documentation/flow.txt; \
+
+%.txt : %.ge
+	(sed -ne '1,/^$$/p' <$<; \
+		$(GRAPH_EASY) $< || grep -v '^#' $@; \
 		echo; \
-		sed -ne '/^# Copyright/,$$p' <Documentation/flow.ge \
+		sed -ne '/^# Copyright/,$$p' <$< \
 		) >$@+
-	touch -r Documentation/flow.ge $@+
+	echo >>$@+ \
+	  '# This file was generated from $(@F) using Graph::Easy'
+	touch -r $< $@+
 	mv $@+ $@
 
 Documentation/lei-q.pod : lib/PublicInbox/Search.pm Documentation/common.perl
