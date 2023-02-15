@@ -77,9 +77,9 @@ L<public-inbox-extindex-format(5)>
 
 =head1 CONFIGURATION
 
-public-inbox-extindex does not currently write to the
-L<public-inbox-config(5)> file, configuration may be entered
-manually.  The extindex name of C<all> is a special case which
+public-inbox-extindex does not write to the L<public-inbox-config(5)>
+file, it must be entered manually.
+The extindex name of C<all> is a special case which
 corresponds to indexing C<--all> inboxes.  An example for
 C<--all> is as follows:
 
@@ -88,6 +88,10 @@ C<--all> is as follows:
 		url = all
 		coderepo = foo
 		coderepo = bar
+
+Putting an C<extindex> entry in the config allows L<PublicInbox::WWW>.
+You can have any number of C<extentry.$NAME> sections where C<$NAME>
+is something other than C<all> to display a union of several inboxes.
 
 See L<public-inbox-config(5)> for more details.
 
