@@ -20,13 +20,14 @@ The PSGI web interface for public-inbox.
 
 Using this directly is not needed unless you wish to customize
 your public-inbox PSGI deployment or are using a PSGI server
-other than L<public-inbox-httpd(1)>.
+other than L<public-inbox-netd(1)> (C<-netd>) /
+L<public-inbox-httpd(1)> (C<-httpd>)
 
-While this PSGI application works with all PSGI/Plack web
+While this PSGI application should work with all PSGI/Plack web
 servers such as L<starman(1)>, L<starlet(1)> or L<twiggy(1)>;
-PublicInbox::WWW takes advantage of currently-undocumented APIs
-of L<public-inbox-httpd(1)> to improve fairness when serving
-large responses for thread views and git clones.
+PublicInbox::WWW takes advantage of internal APIs of C<-netd>
+and C<-httpd> to improve fairness when serving large responses
+for thread views, mbox downloads, and git clones.
 
 =head1 ENVIRONMENT
 
@@ -47,10 +48,11 @@ and L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta
 
 =head1 COPYRIGHT
 
-Copyright (C) 2016-2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright (C) all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<http://www.gnu.org/licenses/agpl-3.0.txt>
 
 =head1 SEE ALSO
 
-L<http://plackperl.org/>, L<Plack>, L<public-inbox-httpd(1)>
+L<http://plackperl.org/>, L<Plack>, L<public-inbox-netd(1)>,
+L<public-inbox-httpd(1)>
