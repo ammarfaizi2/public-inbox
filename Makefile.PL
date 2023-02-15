@@ -261,11 +261,5 @@ symlink-install : lib/PublicInbox.pm
 pure_all :: lib/PublicInbox.pm
 lib/PublicInbox.pm : FORCE
 	VERSION=\$(VERSION) \$(PERL) -w ./version-gen.perl
-
-update-copyrights :
-	\@case '\$(GNULIB_PATH)' in '') echo >&2 GNULIB_PATH unset; false;; esac
-	git ls-files | UPDATE_COPYRIGHT_HOLDER='all contributors' \\
-		UPDATE_COPYRIGHT_USE_INTERVALS=2 \\
-		xargs \$(GNULIB_PATH)/build-aux/update-copyright
 EOF
 }
