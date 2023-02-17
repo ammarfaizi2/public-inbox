@@ -17,6 +17,11 @@ web servers lack the scheduling fairness of L<public-inbox-netd(1)>
 and L<public-inbox-httpd(1)> for handling git clones and
 streaming large mbox downloads.
 
+=head1 COMPATIBILITY NOTE
+
+When using the CGI with Apache, make sure to set AllowEncodedSlashes to On, as
+public-inbox makes heavy use of encoded slashes.
+
 =head1 CONTACT
 
 Feedback welcome via plain-text mail to L<mailto:meta@public-inbox.org>
