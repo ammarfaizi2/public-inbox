@@ -75,6 +75,9 @@ all need to be considered for everything we introduce)
 * use REQUEST_URI properly for CGI / mod_perl2 compatibility
   with Message-IDs which include '%' (done?)
 
+* handle unencoded slashes from user-generated URLs properly
+  https://public-inbox.org/meta/20230217085255.xcsaoozloz2yuxil@pengutronix.de/
+
 * better test cases, make faster by reusing more setup
   code across tests
 
