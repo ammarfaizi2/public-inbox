@@ -390,11 +390,43 @@ sub query_approxidate {
 
 # read-only
 sub mset {
-	my ($self, $query_string, $opts) = @_;
-	$opts ||= {};
+	my ($self, $query_string, $opt) = @_;
+	$opt ||= {};
 	my $qp = $self->{qp} //= $self->qparse_new;
 	my $query = $qp->parse_query($query_string, $self->{qp_flags});
-	_do_enquire($self, $query, $opts);
+	if (defined(my $eidx_key = $opt->{eidx_key})) {
+		$query = $X{Query}->new(OP_FILTER(), $query, 'O'.$eidx_key);
+	}
+	if (defined(my $uid_range = $opt->{uid_range})) {
+		my $range = $X{Query}->new(OP_VALUE_RANGE(), UID,
+					sortable_serialise($uid_range->[0]),
+					sortable_serialise($uid_range->[1]));
+		$query = $X{Query}->new(OP_FILTER(), $query, $range);
+	}
+	my $xdb = xdb($self);
+	my $enq = $X{Enquire}->new($xdb);
+	$enq->set_query($query);
+	$opt ||= {};
+	my $rel = $opt->{relevance} // 0;
+	if ($rel == -2) { # ORDER BY docid/UID (highest first)
+		$enq->set_weighting_scheme($X{BoolWeight}->new);
+		$enq->set_docid_order($ENQ_DESCENDING);
+	} elsif ($rel == -1) { # ORDER BY docid/UID (lowest first)
+		$enq->set_weighting_scheme($X{BoolWeight}->new);
+		$enq->set_docid_order($ENQ_ASCENDING);
+	} elsif ($rel == 0) {
+		$enq->set_sort_by_value_then_relevance(TS, !$opt->{asc});
+	} else { # rel > 0
+		$enq->set_sort_by_relevance_then_value(TS, !$opt->{asc});
+	}
+
+	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse
+	# on `-tt' ({threads} > 1) which sets the Flagged|Important keyword
+	if (($opt->{threads} // 0) == 1 && has_threadid($self)) {
+		$enq->set_collapse_key(THREADID);
+	}
+	retry_reopen($self, \&enquire_once, $enq,
+			$opt->{offset} || 0, $opt->{limit} || 50);
 }
 
 sub retry_reopen {
@@ -421,51 +453,15 @@ sub retry_reopen {
 	Carp::croak("Too many Xapian database modifications in progress\n");
 }
 
-sub _do_enquire {
-	my ($self, $query, $opts) = @_;
-	retry_reopen($self, \&_enquire_once, $query, $opts);
-}
-
 # returns true if all docs have the THREADID value
 sub has_threadid ($) {
 	my ($self) = @_;
 	(xdb($self)->get_metadata('has_threadid') // '') eq '1';
 }
 
-sub _enquire_once { # retry_reopen callback
-	my ($self, $query, $opts) = @_;
-	my $xdb = xdb($self);
-	if (defined(my $eidx_key = $opts->{eidx_key})) {
-		$query = $X{Query}->new(OP_FILTER(), $query, 'O'.$eidx_key);
-	}
-	if (defined(my $uid_range = $opts->{uid_range})) {
-		my $range = $X{Query}->new(OP_VALUE_RANGE(), UID,
-					sortable_serialise($uid_range->[0]),
-					sortable_serialise($uid_range->[1]));
-		$query = $X{Query}->new(OP_FILTER(), $query, $range);
-	}
-	my $enquire = $X{Enquire}->new($xdb);
-	$enquire->set_query($query);
-	$opts ||= {};
-	my $rel = $opts->{relevance} // 0;
-	if ($rel == -2) { # ORDER BY docid/UID (highest first)
-		$enquire->set_weighting_scheme($X{BoolWeight}->new);
-		$enquire->set_docid_order($ENQ_DESCENDING);
-	} elsif ($rel == -1) { # ORDER BY docid/UID (lowest first)
-		$enquire->set_weighting_scheme($X{BoolWeight}->new);
-		$enquire->set_docid_order($ENQ_ASCENDING);
-	} elsif ($rel == 0) {
-		$enquire->set_sort_by_value_then_relevance(TS, !$opts->{asc});
-	} else { # rel > 0
-		$enquire->set_sort_by_relevance_then_value(TS, !$opts->{asc});
-	}
-
-	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse
-	# on `-tt' ({threads} > 1) which sets the Flagged|Important keyword
-	if (($opts->{threads} // 0) == 1 && has_threadid($self)) {
-		$enquire->set_collapse_key(THREADID);
-	}
-	$enquire->get_mset($opts->{offset} || 0, $opts->{limit} || 50);
+sub enquire_once { # retry_reopen callback
+	my (undef, $enq, $offset, $limit) = @_;
+	$enq->get_mset($offset, $limit);
 }
 
 sub mset_to_smsg {
