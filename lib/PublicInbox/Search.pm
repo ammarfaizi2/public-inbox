@@ -277,42 +277,18 @@ sub date_parse_prepare {
 	my $end = $range =~ s/([\)\s]*)\z// ? $1 : '';
 	my @r = split(/\.\./, $range, 2);
 
-	# expand "d:20101002" => "d:20101002..20101003" and like
+	# expand "dt:2010-10-02" => "dt:2010-10-02..2010-10-03" and like
 	# n.b. git doesn't do YYYYMMDD w/o '-', it needs YYYY-MM-DD
-	# We upgrade "d:" to "dt:" to iff using approxidate
+	# We upgrade "d:" to "dt:" unconditionally
 	if ($pfx eq 'd') {
-		my $fmt = "\0%Y%m%d";
-		if (!defined($r[1])) {
-			if ($r[0] =~ /\A([0-9]{4})([0-9]{2})([0-9]{2})\z/) {
-				push @$to_parse, "$1-$2-$3";
-				# we could've handled as-is, but we need
-				# to parse anyways for "d+" below
-			} else {
-				push @$to_parse, $r[0];
-				if ($r[0] !~ /\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z/) {
-					$pfx = 'dt';
-					$fmt = "\0%Y%m%d%H%M%S";
-				}
-			}
-			$r[0] = "$fmt+$#$to_parse\0";
-			$r[1] = "$fmt+\0";
-		} else {
-			for my $x (@r) {
-				next if $x eq '' || $x =~ /\A[0-9]{8}\z/;
-				push @$to_parse, $x;
-				if ($x !~ /\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z/) {
-					$pfx = 'dt';
-				}
-				$x = "$fmt$#$to_parse\0";
-			}
-			if ($pfx eq 'dt') {
-				for (@r) {
-					s/\0%Y%m%d/\0%Y%m%d%H%M%S/;
-					s/\A([0-9]{8})\z/${1}000000/;
-				}
-			}
-		}
-	} elsif ($pfx eq 'dt') {
+		$pfx = 'dt';
+		# upgrade YYYYMMDD to YYYYMMDDHHMMSS
+		$_ .= ' 00:00:00' for (grep(m!\A[0-9]{4}[^[:alnum:]]
+					[0-9]{2}[^[:alnum:]]
+					[0-9]{2}\z!x, @r));
+		$_ .= '000000' for (grep(m!\A[0-9]{8}\z!, @r));
+	}
+	if ($pfx eq 'dt') {
 		if (!defined($r[1])) { # git needs gaps and not /\d{14}/
 			if ($r[0] =~ /\A([0-9]{4})([0-9]{2})([0-9]{2})
 					([0-9]{2})([0-9]{2})([0-9]{2})\z/x) {

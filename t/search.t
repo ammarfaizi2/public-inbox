@@ -1,8 +1,8 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
-use warnings;
-use Test::More;
+use v5.10;
 use PublicInbox::TestCommon;
 require_mods(qw(DBD::SQLite Search::Xapian));
 require PublicInbox::SearchIdx;
@@ -565,10 +565,13 @@ SKIP: {
 		skip 'too close to midnight, time is tricky', 6;
 	}
 	$q = $s->query_argv_to_string($g, [qw(d:20101002 blah)]);
-	is($q, 'd:20101002..20101003 blah', 'YYYYMMDD expanded to range');
+	is($q, 'dt:20101002000000..20101003000000 blah',
+		'YYYYMMDD expanded to range');
 	$q = $s->query_argv_to_string($g, [qw(d:2010-10-02)]);
-	is($q, 'd:20101002..20101003', 'YYYY-MM-DD expanded to range');
+	is($q, 'dt:20101002000000..20101003000000',
+		'YYYY-MM-DD expanded to range');
 	$q = $s->query_argv_to_string($g, [qw(rt:2010-10-02.. yy)]);
+	diag "q=$q";
 	$q =~ /\Art:(\d+)\.\. yy/ or fail("rt: expansion failed: $q");
 	is(strftime('%Y-%m-%d', gmtime($1//0)), '2010-10-02', 'rt: beg expand');
 	$q = $s->query_argv_to_string($g, [qw(rt:..2010-10-02 zz)]);
@@ -615,7 +618,7 @@ SKIP: {
 
 	$orig = $qs = qq[f:bob "hello world" d:1993-10-02..2010-10-02];
 	$s->query_approxidate($g, $qs);
-	is($qs, qq[f:bob "hello world" d:19931002..20101002],
+	is($qs, qq[f:bob "hello world" dt:19931002000000..20101002000000],
 		'post-phrase date corrected');
 
 	# Xapian uses "" to escape " inside phrases, we don't explictly
@@ -627,7 +630,7 @@ SKIP: {
 		is($qs, $orig, 'phrases unchanged \x'.ord($x).'-\x'.ord($y));
 
 		$s->query_approxidate($g, my $tmp = "$qs d:..2010-10-02");
-		is($tmp, "$orig d:..20101002",
+		is($tmp, "$orig dt:..20101002000000",
 			'two phrases did not throw off date parsing');
 
 		$orig = $qs = qq[${x}hello d:1993-10-02..$y$x world$y];
@@ -635,7 +638,7 @@ SKIP: {
 		is($qs, $orig, 'phrases unchanged \x'.ord($x).'-\x'.ord($y));
 
 		$s->query_approxidate($g, $tmp = "$qs d:..2010-10-02");
-		is($tmp, "$orig d:..20101002",
+		is($tmp, "$orig dt:..20101002000000",
 			'two phrases did not throw off date parsing');
 	}
 
@@ -654,7 +657,7 @@ SKIP: {
 		skip 'TEST_EXPENSIVE not set for argv overflow check', 1;
 	my @w;
 	local $SIG{__WARN__} = sub { push @w, @_ }; # for pure Perl version
-	my @fail = map { 'd:1993-10-02..2010-10-02' } (1..(4096 * 32));
+	my @fail = map { 'dt:1993-10-02..2010-10-02' } (1..(4096 * 32));
 	eval { $s->query_argv_to_string($g, \@fail) };
 	ok($@, 'exception raised');
 }
