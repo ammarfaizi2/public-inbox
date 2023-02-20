@@ -5,7 +5,7 @@
 package PublicInbox::MultiGit;
 use strict;
 use v5.10.1;
-use PublicInbox::Spawn qw(run_die);
+use PublicInbox::Spawn qw(run_die popen_rd);
 use PublicInbox::Import;
 use File::Temp 0.19;
 use List::Util qw(max);
@@ -108,8 +108,14 @@ sub fill_alternates {
 
 sub epoch_cfg_set {
 	my ($self, $epoch_nr) = @_;
-	run_die([qw(git config -f), epoch_dir($self)."/$epoch_nr.git/config",
-		'include.path', "../../$self->{all}/config" ]);
+	my $f = epoch_dir($self)."/$epoch_nr.git/config";
+	my $v = "../../$self->{all}/config";
+	if (-r $f) {
+		my $rd = popen_rd([qw(git config -f), $f, 'include.path']);
+		chomp(my $have = <$rd> // '');
+		return if $have eq $v;
+	}
+	run_die([qw(git config -f), $f, 'include.path', $v ]);
 }
 
 sub add_epoch {
