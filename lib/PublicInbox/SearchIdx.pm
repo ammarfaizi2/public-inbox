@@ -37,7 +37,7 @@ our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# typical 32-bit system:
 	(($Config{ptrsize} >= 8 ? 8192 : 1024) * 1024);
 use constant DEBUG => !!$ENV{DEBUG};
-my $BASE85 = qr/\A[a-zA-Z0-9\!\#\$\%\&\(\)\*\+\-;<=>\?\@\^_`\{\|\}\~]+\z/;
+my $BASE85 = qr/[a-zA-Z0-9\!\#\$\%\&\(\)\*\+\-;<=>\?\@\^_`\{\|\}\~]+/;
 my $xapianlevels = qr/\A(?:full|medium)\z/;
 my $hex = '[a-f0-9]';
 my $OID = $hex .'{40,}';
@@ -270,7 +270,7 @@ sub index_diff ($$$) {
 				push @$xnq, shift(@l);
 
 				# skip base85 and empty lines
-				while (@l && ($l[0] =~ /$BASE85/o ||
+				while (@l && ($l[0] =~ /\A$BASE85\h*\z/o ||
 						$l[0] !~ /\S/)) {
 					shift @l;
 				}
@@ -389,6 +389,12 @@ sub index_xapian { # msg_iter callback
 	undef $s; # free memory
 	for my $txt (@sections) {
 		if ($txt =~ /\A>/) {
+			if ($txt =~ /^[>\t ]+GIT binary patch\r?/sm) {
+				# get rid of Base-85 noise
+				$txt =~ s/^([>\h]+(?:literal|delta)
+						\x20[0-9]+\r?\n)
+					(?:[>\h]+$BASE85\h*\r?\n)+/$1/gsmx;
+			}
 			index_text($self, $txt, 0, 'XQUOT');
 		} else {
 			# does it look like a diff?

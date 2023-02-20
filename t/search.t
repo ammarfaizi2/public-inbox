@@ -534,7 +534,15 @@ $ibx->with_umask(sub {
 		'20200418222508.GA13918@dcvr',
 		'Subject search reaches inside message/rfc822');
 
-	$doc_id = $rw->add_message(eml_load('t/data/binary.patch'));
+	my $eml = eml_load('t/data/binary.patch');
+	my $body = $eml->body;
+	$rw->add_message($eml);
+
+	$body =~ s/^/> /gsm;
+	$eml = PublicInbox::Eml->new($eml->header_obj->as_string."\n".$body);
+	$eml->header_set('Message-ID', '<binary-patch-reply@example>');
+	$rw->add_message($eml);
+
 	$rw->commit_txn_lazy;
 	$ibx->search->reopen;
 	my $res = $query->('HcmV');
@@ -542,8 +550,9 @@ $ibx->with_umask(sub {
 	$res = $query->('IcmZPo000310RR91');
 	is_deeply($res, [], 'no results against 1-byte binary patch');
 	$res = $query->('"GIT binary patch"');
-	is(scalar(@$res), 1, 'got binary result from "GIT binary patch"');
+	is(scalar(@$res), 2, 'got binary results from "GIT binary patch"');
 	is($res->[0]->{mid}, 'binary-patch-test@example', 'msgid for binary');
+	is($res->[1]->{mid}, 'binary-patch-reply@example', 'msgid for reply');
 	my $s = $query->('"literal 1"');
 	is_deeply($s, $res, 'got binary result from exact literal size');
 	$s = $query->('"literal 2"');
