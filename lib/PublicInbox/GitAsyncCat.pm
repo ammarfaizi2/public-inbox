@@ -14,6 +14,12 @@ use PublicInbox::Git ();
 
 our $GCF2C; # singleton PublicInbox::Gcf2Client
 
+# close w/o aborting another git process
+sub vanish {
+	delete $_[0]->{git};
+	$_[0]->close;
+}
+
 sub close {
 	my ($self) = @_;
 	if (my $git = delete $self->{git}) {
@@ -22,19 +28,25 @@ sub close {
 	$self->SUPER::close; # PublicInbox::DS::close
 }
 
-sub aclose { $_[1]->close } # ignore PID ($_[0])
+sub aclose {
+	my (undef, $self, $f) = @_; # ignore PID ($_[0])
+	if (my $g = $self->{git}) {
+		return vanish($self) if ($g->{$f} // 0) != ($self->{sock} // 1);
+	}
+	$self->close;
+}
 
 sub event_step {
 	my ($self) = @_;
 	my $git = $self->{git} or return;
-	return $self->close if ($git->{in} // 0) != ($self->{sock} // 1);
+	return vanish($self) if ($git->{in} // 0) != ($self->{sock} // 1);
 	my $inflight = $git->{inflight};
 	if ($inflight && @$inflight) {
 		$git->cat_async_step($inflight);
 
 		# child death?
 		if (($git->{in} // 0) != ($self->{sock} // 1)) {
-			$self->close;
+			vanish($self);
 		} elsif (@$inflight || exists $git->{rbuf}) {
 			# ok, more to do, requeue for fairness
 			$self->requeue;
@@ -48,7 +60,7 @@ sub watch_cat {
 		my $self = bless { git => $git }, __PACKAGE__;
 		$git->{in}->blocking(0);
 		$self->SUPER::new($git->{in}, EPOLLIN|EPOLLET);
-		awaitpid($git->{pid}, \&aclose, $self);
+		awaitpid($git->{pid}, \&aclose, $self, 'in');
 		\undef; # this is a true ref()
 	};
 }
@@ -81,7 +93,7 @@ sub async_check ($$$$) {
 		my $self = bless { git => $git }, 'PublicInbox::GitAsyncCheck';
 		$git->{in_c}->blocking(0);
 		$self->SUPER::new($git->{in_c}, EPOLLIN|EPOLLET);
-		awaitpid($git->{pid_c}, \&aclose, $self);
+		awaitpid($git->{pid_c}, \&aclose, $self, 'in_c');
 		\undef; # this is a true ref()
 	};
 }
@@ -113,14 +125,14 @@ use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
 sub event_step {
 	my ($self) = @_;
 	my $git = $self->{git} or return;
-	return $self->close if ($git->{in_c} // 0) != ($self->{sock} // 1);
+	return $self->vanish if ($git->{in_c} // 0) != ($self->{sock} // 1);
 	my $inflight = $git->{inflight_c};
 	if ($inflight && @$inflight) {
 		$git->check_async_step($inflight);
 
 		# child death?
 		if (($git->{in_c} // 0) != ($self->{sock} // 1)) {
-			$self->close;
+			$self->vanish;
 		} elsif (@$inflight || exists $git->{rbuf_c}) {
 			# ok, more to do, requeue for fairness
 			$self->requeue;
