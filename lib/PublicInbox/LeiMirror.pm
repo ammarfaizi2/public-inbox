@@ -1110,7 +1110,13 @@ sub try_manifest {
 	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $path = $uri->path;
 	chop($path) eq '/' or die "BUG: $uri not canonicalized";
-	$uri->path($path . '/manifest.js.gz');
+	my $rmf = $lei->{opt}->{'remote-manifest'} // '/manifest.js.gz';
+	if ($rmf =~ m!\A[^/:]+://!) {
+		$uri = URI->new($rmf);
+	} else {
+		$rmf = "/$rmf" if index($rmf, '/') != 0;
+		$uri->path($path.$rmf);
+	}
 	my $manifest = $self->{-manifest} // "$self->{dst}/manifest.js.gz";
 	my %opt = (UNLINK => 1, SUFFIX => '.tmp', TMPDIR => 1);
 	if (!$self->{dry_run} && $manifest =~ m!\A(.+?)/[^/]+\z! and -d $1) {
