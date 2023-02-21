@@ -157,9 +157,11 @@ sub show_commit_start { # ->psgi_qx callback
 	}
 	my $patchid = (split(/ /, $$bref))[0]; # ignore commit
 	$ctx->{-q_value_html} = "patchid:$patchid" if defined $patchid;
-	open my $fh, '<:utf8', "$ctx->{-tmp}/h" or
+	open my $fh, '<', "$ctx->{-tmp}/h" or
 		die "open $ctx->{-tmp}/h: $!";
 	chop(my $buf = do { local $/ = "\0"; <$fh> });
+	utf8::decode($buf);
+	utf8::valid($buf) or utf8::encode($buf); # non-UTF-8 commits exist
 	chomp $buf;
 	my ($P, $p);
 	($P, $p, @{$ctx->{cmt_info}}) = split(/\n/, $buf, 9);

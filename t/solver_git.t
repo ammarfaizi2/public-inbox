@@ -218,14 +218,13 @@ SKIP: {
 	my %oid; # (small|big) => OID
 	my $lk = bless { lock_path => $l }, 'PublicInbox::Lock';
 	my $acq = $lk->lock_for_scope;
-	my $stamp = "$binfoo/stamp";
+	my $stamp = "$binfoo/stamp-";
 	if (open my $fh, '<', $stamp) {
 		%oid = map { chomp; split(/=/, $_) } (<$fh>);
 	} else {
 		PublicInbox::Import::init_bare($binfoo);
 		my $cmd = [ qw(git hash-object -w --stdin) ];
 		my $env = { GIT_DIR => $binfoo };
-		open my $fh, '>', "$stamp.$$" or BAIL_OUT;
 		while (my ($label, $size) = each %bin) {
 			pipe(my ($rin, $win)) or BAIL_OUT;
 			my $rout = popen_rd($cmd , $env, { 0 => $rin });
@@ -234,8 +233,32 @@ SKIP: {
 			close $win or BAIL_OUT;
 			chomp(my $x = <$rout>);
 			close $rout or BAIL_OUT "$?";
-			print $fh "$label=$x\n" or BAIL_OUT;
 			$oid{$label} = $x;
+		}
+
+		open my $null, '<', '/dev/null' or xbail "open /dev/null: $!";
+		my $t = xqx([qw(git mktree)], $env, { 0 => $null });
+		xbail "mktree: $?" if $?;
+		chomp($t);
+		my $non_utf8 = "K\x{e5}g";
+		$env->{GIT_AUTHOR_NAME} = $non_utf8;
+		$env->{GIT_AUTHOR_EMAIL} = 'e@example.com';
+		$env->{GIT_COMMITTER_NAME} = $env->{GIT_AUTHOR_NAME};
+		$env->{GIT_COMMITTER_EMAIL} = $env->{GIT_AUTHOR_EMAIL};
+		my $in = \"$non_utf8\n\nK\x{e5}g\n";
+		my $c = xqx([qw(git commit-tree), $t], $env, { 0 => $in });
+		xbail "commit-tree: $?" if $?;
+		chomp($c);
+		$oid{'iso-8859-1'} = $c;
+
+		$c = xqx([qw(git commit-tree -p), $c, $t], $env, { 0 => $in });
+		xbail "commit-tree: $?" if $?;
+		chomp($c);
+		$oid{'8859-parent'} = $c;
+
+		open my $fh, '>', "$stamp.$$" or BAIL_OUT;
+		while (my ($k, $v) = each %oid) {
+			print $fh "$k=$v\n" or xbail "print: $!";
 		}
 		close $fh or BAIL_OUT;
 		rename("$stamp.$$", $stamp) or BAIL_OUT;
@@ -331,6 +354,17 @@ EOF
 			open STDERR, '>&', $olderr or xbail "open: $!";
 		is($res->code, 200, 'coderepo summary (binfoo)');
 		ok(!-s "$tmpdir/stderr.log");
+
+		$res = $cb->(GET("/binfoo/$oid{'iso-8859-1'}/s/"));
+		is($res->code, 200, 'ISO-8859-1 commit');
+		like($res->content, qr/K&#229;g/, 'ISO-8859-1 commit message');
+		ok(!-s "$tmpdir/stderr.log", 'nothing in stderr');
+
+		$res = $cb->(GET("/binfoo/$oid{'8859-parent'}/s/"));
+		is($res->code, 200, 'commit w/ ISO-8859-parent');
+		like($res->content, qr/K&#229;g/, 'ISO-8859-1 commit message');
+		ok(!-s "$tmpdir/stderr.log", 'nothing in stderr');
+
 		$res = $cb->(GET('/public-inbox/'));
 		is($res->code, 200, 'coderepo summary (public-inbox)');
 
