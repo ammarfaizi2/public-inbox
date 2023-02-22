@@ -9,18 +9,11 @@ use Fcntl qw(:DEFAULT SEEK_SET);
 use Sys::Hostname qw(hostname);
 use IO::Handle; # ->flush
 use Errno qw(EEXIST);
+use File::Path ();
 
 sub new {
 	my ($class, $dir) = @_;
-
-	foreach (qw(new tmp cur)) {
-		my $d = "$dir/$_";
-		next if -d $d;
-		require File::Path;
-		if (!File::Path::mkpath($d) && !-d $d) {
-			die "failed to mkpath($d): $!\n";
-		}
-	}
+	File::Path::make_path(map { $dir.$_ } qw(/tmp /new /cur));
 	bless { dir => $dir, t => 0 }, $class;
 }
 

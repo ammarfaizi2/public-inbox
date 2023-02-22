@@ -11,7 +11,7 @@ use parent qw(PublicInbox::Lock);
 use File::Temp qw(tempdir);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::Spawn;
-use File::Path qw(rmtree make_path);
+use File::Path qw(rmtree);
 
 sub dbh {
 	my ($self, $lock) = @_;
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS kv (
 sub new {
 	my ($cls, $dir, $base, $opt) = @_;
 	my $self = bless { opt => $opt }, $cls;
-	make_path($dir) if defined($dir) && !-d $dir;
+	File::Path::mkpath($dir) if defined($dir);
 	$dir //= $self->{"tmp$$.$self"} = tempdir("skv.$$-XXXX", TMPDIR => 1);
 	$base //= '';
 	my $f = $self->{filename} = "$dir/$base.sqlite3";

@@ -607,7 +607,7 @@ SKIP: {
 	$lei_opt = { 1 => \$lei_out, 2 => \$lei_err };
 	my ($daemon_pid, $for_destroy, $daemon_xrd);
 	my $tmpdir = $test_opt->{tmpdir};
-	File::Path::mkpath($tmpdir) if (defined $tmpdir && !-d $tmpdir);
+	File::Path::mkpath($tmpdir) if defined $tmpdir;
 	($tmpdir, $for_destroy) = tmpdir unless $tmpdir;
 	state $persist_xrd = $ENV{TEST_LEI_DAEMON_PERSIST_DIR};
 	SKIP: {

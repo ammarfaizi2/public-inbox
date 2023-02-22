@@ -24,7 +24,7 @@ use PublicInbox::Eml;
 use PublicInbox::Import;
 use PublicInbox::ContentHash qw(git_sha);
 use Time::HiRes qw(stat); # ctime comparisons for config cache
-use File::Path qw(mkpath);
+use File::Path ();
 use File::Spec;
 use Sys::Syslog qw(openlog syslog closelog);
 our $quit = \&CORE::exit;
@@ -852,7 +852,7 @@ sub _lei_cfg ($;$) {
 			return bless {}, 'PublicInbox::Config';
 		}
 		my ($cfg_dir) = ($f =~ m!(.*?/)[^/]+\z!);
-		-d $cfg_dir or mkpath($cfg_dir) or die "mkpath($cfg_dir): $!\n";
+		File::Path::mkpath($cfg_dir);
 		open my $fh, '>>', $f or die "open($f): $!\n";
 		@st = stat($fh) or die "fstat($f): $!\n";
 		$cur_st = pack('dd', $st[10], $st[7]);

@@ -30,7 +30,7 @@ my $ibx = create_inbox 'v2', version => 2,
 	$im->add($patch2) or BAIL_OUT;
 };
 my $md = "$tmpdir/md";
-File::Path::mkpath([map { $md.$_ } (qw(/ /cur /new /tmp))]);
+File::Path::make_path(map { $md.$_ } (qw(/cur /new /tmp)));
 symlink(abs_path('t/solve/0001-simple-mod.patch'), "$md/cur/foo:2,") or
 	xbail "symlink: $!";
 

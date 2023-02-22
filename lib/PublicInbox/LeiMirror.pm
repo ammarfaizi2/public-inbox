@@ -913,7 +913,7 @@ failed to extract epoch number from $src
 	# filter out the epochs we skipped
 	$self->{chg}->{manifest} = 1 if $m && delete(@$m{@skip});
 
-	(!$self->{dry_run} && !-d $dst) and File::Path::mkpath($dst);
+	$self->{dry_run} or File::Path::mkpath($dst);
 
 	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
 		_get_txt_start($task, '_/text/config/raw', $fini);

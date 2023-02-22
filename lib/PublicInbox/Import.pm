@@ -464,7 +464,7 @@ sub init_bare {
 	my ($dir, $head) = @_; # or self
 	$dir = $dir->{git}->{git_dir} if ref($dir);
 	require File::Path;
-	File::Path::mkpath([ map { "$dir/$_" } qw(objects/info refs/heads) ]);
+	File::Path::make_path(map { $dir.$_ } qw(/objects/info /refs/heads));
 	$INIT_FILES[1] //= 'ref: '.default_branch."\n";
 	my @fn_contents = @INIT_FILES;
 	$fn_contents[1] = "ref: refs/heads/$head\n" if defined $head;

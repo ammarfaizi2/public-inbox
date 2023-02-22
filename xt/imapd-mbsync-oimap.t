@@ -4,7 +4,7 @@
 # ensure mbsync and offlineimap compatibility
 use strict;
 use v5.10.1;
-use File::Path qw(mkpath);
+use File::Path qw(make_path);
 use PublicInbox::TestCommon;
 use PublicInbox::Spawn qw(spawn);
 require_mods(qw(-imapd));
@@ -41,7 +41,7 @@ my ($host, $port) = ($sock->sockhost, $sock->sockport);
 my %pids;
 
 SKIP: {
-	mkpath([map { "$tmpdir/oimapdir/$_" } qw(cur new tmp)]);
+	make_path(map { "$tmpdir/oimapdir/$_" } qw(cur new tmp));
 	my $oimap = require_cmd('offlineimap', 1) or
 		skip 'no offlineimap(1)', 1;
 	open my $fh, '>', "$tmpdir/.offlineimaprc" or BAIL_OUT "open: $!";
@@ -78,7 +78,7 @@ EOF
 }
 
 SKIP: {
-	mkpath([map { "$tmpdir/mbsyncdir/test/$_" } qw(cur new tmp)]);
+	make_path(map { "$tmpdir/mbsyncdir/test/$_" } qw(cur new tmp));
 	my $mbsync = require_cmd('mbsync', 1) or skip 'no mbsync(1)', 1;
 	open my $fh, '>', "$tmpdir/.mbsyncrc" or BAIL_OUT "open: $!";
 	print $fh <<EOF or BAIL_OUT "print: $!";
