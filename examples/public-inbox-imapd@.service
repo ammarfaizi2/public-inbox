@@ -24,7 +24,6 @@ ExecStart = /usr/local/bin/public-inbox-imapd -W0 \
 -1 /var/log/public-inbox/imapd.out.log \
 --cert /etc/ssl/certs/news.example.com.pem \
 --key /etc/ssl/private/news.example.com.key
-StandardError = syslog
 
 # NonBlocking is REQUIRED to avoid a race condition if running
 # simultaneous services

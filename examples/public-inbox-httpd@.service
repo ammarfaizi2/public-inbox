@@ -25,7 +25,6 @@ LimitNOFILE = 30000
 ExecStartPre = /bin/mkdir -p -m 1777 /tmp/.pub-inline
 ExecStart = /usr/local/bin/public-inbox-httpd \
 -1 /var/log/public-inbox/httpd.out.log
-StandardError = syslog
 
 # NonBlocking is REQUIRED to avoid a race condition if running
 # simultaneous services
