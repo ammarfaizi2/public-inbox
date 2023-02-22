@@ -23,7 +23,7 @@ no warnings 'once';
 	} while (!defined($s) &&
 			($!{ENOBUFS} || $!{ENOMEM} || $!{ETOOMANYREFS}) &&
 			(++$try < 50) &&
-			warn "sleeping on sendmsg: $! (#$try)\n" &&
+			warn "# sleeping on sendmsg: $! (#$try)\n" &&
 			select(undef, undef, undef, 0.1) == 0);
 	$s;
 };

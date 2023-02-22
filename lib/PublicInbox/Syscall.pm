@@ -427,7 +427,7 @@ no warnings 'once';
 	} while ($sent < 0 &&
 			($!{ENOBUFS} || $!{ENOMEM} || $!{ETOOMANYREFS}) &&
 			(++$try < 50) &&
-			warn "sleeping on sendmsg: $! (#$try)\n" &&
+			warn "# sleeping on sendmsg: $! (#$try)\n" &&
 			select(undef, undef, undef, 0.1) == 0);
 	$sent >= 0 ? $sent : undef;
 };

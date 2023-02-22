@@ -171,7 +171,7 @@ static int sleep_wait(unsigned *tries, int err)
 	switch (err) {
 	case ENOBUFS: case ENOMEM: case ETOOMANYREFS:
 		if (++*tries < 50) {
-			fprintf(stderr, "sleeping on sendmsg: %s (#%u)\n",
+			fprintf(stderr, "# sleeping on sendmsg: %s (#%u)\n",
 				strerror(err), *tries);
 			nanosleep(&req, NULL);
 			return 1;
