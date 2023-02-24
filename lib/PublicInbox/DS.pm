@@ -541,7 +541,8 @@ sub write {
             push @$wbuf, $bref;
         } else {
             my $tmpio = $wbuf->[-1];
-            if ($tmpio && !defined($tmpio->[2])) { # append to tmp file buffer
+            if (ref($tmpio) eq 'ARRAY' && !defined($tmpio->[2])) {
+                # append to tmp file buffer
                 $tmpio->[0]->print($$bref) or return drop($self, "print: $!");
             } else {
                 my $tmpio = tmpio($self, $bref, 0) or return 0;
