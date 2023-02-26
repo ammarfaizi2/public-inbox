@@ -124,6 +124,9 @@ of the same thread.
 TODO: Warning: this flag may become persistent and saved in
 lei/store unless an MUA unflags it!  (Behavior undecided)
 
+Caveat: C<-tt> only works on locally-indexed messages at the
+moment, and not on remote (HTTP(S)) endpoints.
+
 =item --jobs=QUERY_WORKERS[,WRITE_WORKERS]
 =item --jobs=,WRITE_WORKERS
 
