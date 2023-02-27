@@ -67,6 +67,8 @@ there are no updates:
 
 Pass the C<--prune> and C<--prune-tags> flags to L<git-fetch(1)> calls.
 
+This is a new option in public-inbox 2.0+
+
 =item -v
 
 =item --verbose
