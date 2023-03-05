@@ -6,21 +6,25 @@ use v5.12;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 my $opt = {};
 my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
-usage: public-inbox-clone INBOX_URL [DESTINATION]
+usage: public-inbox-clone [OPTIONS] INBOX_URL [INBOX_DIR]
+       public-inbox-clone [OPTIONS] ROOT_URL [DESTINATION]
 
-  clone remote public-inboxes
+  clone remote public-inboxes or grokmirror manifests
 
 options:
 
   --epoch=RANGE       range of v2 epochs to clone (e.g `2..5', `~0', `~1..')
-  --objstore=DIR      share storage for coderepos
   --torsocks VAL      whether or not to wrap git and curl commands with
                       torsocks (default: `auto')
                       Must be one of: `auto', `no' or `yes'
   --dry-run | -n      show what would be cloned without cloning
   --verbose | -v      increase verbosity (may be repeated)
-    --quiet | -q      increase verbosity (may be repeated)
+    --quiet | -q      disable progress reporting
     -C DIR            chdir to specified directory
+
+See public-inbox-clone(1) man page for --manifest, --remote-manifest,
+--objstore, --project-list, --post-update-hook, --include, --exclude,
+--prune, --keep-going, --jobs, --inbox-config
 EOF
 
 # cgit calls it `project-list', grokmirror calls it `projectslist',

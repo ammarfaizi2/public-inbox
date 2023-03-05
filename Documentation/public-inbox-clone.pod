@@ -15,14 +15,16 @@ making the initial clone of a remote HTTP(S) public-inbox.  It
 allows cloning multi-epoch v2 inboxes with a single command and
 zero configuration.
 
-In public-inbox 2.0+, public-inbox-clone can also mirror multiple
-inboxes or code repositories using manifest.js.gz files like
-L<grok-pull(1)> from grokmirror.
+In public-inbox 2.0+, public-inbox-clone can create and maintain
+a mirror of multiple inboxes or code repositories using manifest.js.gz
+files like L<grok-pull(1)> from grokmirror.  L<public-inbox-fetch(1)> is
+NOT required when using this mode.
 
 It does not run L<public-inbox-init(1)> nor
 L<public-inbox-index(1)>.  Those commands must be run separately
 if serving/searching the mirror is required.  As-is,
-public-inbox-clone is suitable for creating a git-only backup.
+public-inbox-clone is suitable for creating a git-only backup
+without Xapian and SQLite indices.
 
 When cloning a single inbox, public-inbox-clone creates a Makefile
 with handy targets to update the inbox once indexed.
@@ -31,11 +33,12 @@ not be rewritten by L<public-inbox-fetch(1)> unless it is removed
 completely.
 
 public-inbox-clone does not use nor require any extra
-configuration files (not even C<~/.public-inbox/config>).
+configuration files (not even C<~/.public-inbox/config>),
+but it can download snippets suitable for adding to any
+L<public-inbox-config(5)> file.
 
 L<public-inbox-fetch(1)> may be used to keep a single C<INBOX_DIR>
-up-to-date.  When using manifest.js.gz, public-inbox-clone is used
-to maintain the multi-repository mirror.
+up-to-date.
 
 For v2 inboxes, it will create a C<$INBOX_DIR/manifest.js.gz>
 file to speed up subsequent L<public-inbox-fetch(1)>.
@@ -63,17 +66,17 @@ Default: C<0..~0> or C<0..> or C<..~0>
 
 =item --include=PATTERN
 
-When cloning a top-level with multiple inboxes, only clone inboxes and
-repositories matching a given wildcard pattern (using C<*?> and C<[]> is
-supported).
+When cloning a top-level with multiple inboxes via manifest,
+only clone inboxes and repositories matching a given wildcard pattern
+(using C<*?> and C<[]> is supported).
 
 This is a new option in public-inbox 2.0+
 
 =item --exclude=PATTERN
 
-When cloning a top-level with multiple inboxes, ignore inboxes and
-repositories matching the given wildcard pattern.  Supports the same
-wildcards as L</--include>
+When cloning a top-level with multiple inboxes via manifest,
+ignore inboxes and repositories matching the given wildcard pattern.
+Supports the same wildcards as L</--include>
 
 This is a new option in public-inbox 2.0+
 
@@ -203,6 +206,39 @@ Increases verbosity, also passed to L<git-fetch(1)>.
 Whether to wrap L<git(1)> and L<curl(1)> commands with L<torsocks(1)>.
 
 Default: C<auto>
+
+=item -j JOBS
+=item --jobs=JOBS
+
+The number of parallel processes to spawn at once for various network
+operations using L<git(1)> and/or L<curl(1)>.
+
+=back
+
+=head1 EXAMPLES
+
+=for comment
+Sticking to smaller projects in examples to minimize load on servers
+
+=over
+
+=item To mirror the most recent epochs of dwarves and LTTng inboxes:
+
+  public-inbox-clone --epoch=~0 \
+	--include='*lttng*' --include='*dwarves' \
+	https://80x24.org/lore/ /path/to/inbox-mirror
+
+C<https://lore.kernel.org/> may be used instead of C<https://80x24.org/lore/>
+
+=item To mirror all code repos of the sparse project:
+
+  public-inbox-clone --objstore= --project-list= --prune \
+	--include='*sparse*' --inbox-config=never \
+	--remote-manifest=https://80x24.org/lore/pub/manifest.js.gz \
+	https://80x24.org/lore/ /path/to/code-mirror
+
+C<https://git.kernel.org/> may be used instead of C<https://80x24.org/lore/>
+and the C<--remote-manifest> option can be omitted.
 
 =back
 
