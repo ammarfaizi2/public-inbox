@@ -20,8 +20,8 @@ BEGIN {
 	unless (eval(<<'EOM')) {
 use Net::SSLeay 1.43;
 my %SHA = (
-	1 => Net::SSLeay::EVP_get_digestbyname('sha1'),
-	256 => Net::SSLeay::EVP_get_digestbyname('sha256'),
+	1 => Net::SSLeay::EVP_sha1(),
+	256 => Net::SSLeay::EVP_sha256(),
 );
 
 sub new {
