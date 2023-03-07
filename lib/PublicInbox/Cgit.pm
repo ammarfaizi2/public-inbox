@@ -91,7 +91,7 @@ sub call {
 	# handle requests without spawning cgit iff possible:
 	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!ox) {
 		my ($nick, $path) = ($1, $2);
-		if (my PublicInbox::Git $git = $self->{"\0$nick"}) {
+		if (my $git = $self->{pi_cfg}->{-code_repos}->{$nick}) {
 			return serve($env, $git, $path);
 		}
 	} elsif ($path_info =~ m!$self->{static}! &&
