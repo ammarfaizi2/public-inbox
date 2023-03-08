@@ -358,11 +358,18 @@ sub pack_refs {
 	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
 }
 
+sub unlink_fetch_head ($) {
+	my ($git_dir) = @_;
+	return if unlink("$git_dir/FETCH_HEAD") || $!{ENOENT};
+	warn "W: unlink($git_dir/FETCH_HEAD): $!";
+}
+
 sub fgrpv_done {
 	my ($fgrpv) = @_;
 	return if !$LIVE;
 	my $first = $fgrpv->[0] // die 'BUG: no fgrpv->[0]';
 	return if !keep_going($first);
+	unlink_fetch_head($first->{-osdir}) if !$first->{dry_run};
 	pack_refs($first, $first->{-osdir}); # objstore refs always packed
 	for my $fgrp (@$fgrpv) {
 		my $rn = $fgrp->{-remote};
@@ -817,6 +824,7 @@ sub v1_done { # called via OnDestroy
 	return if $self->{dry_run} || !keep_going($self);
 	_write_inbox_config($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
+	unlink_fetch_head($dst);
 	update_ent($self) if $self->{-ent};
 	my $o = "$dst/objects";
 	if (open(my $fh, '<', my $fn = "$o/info/alternates")) {;
