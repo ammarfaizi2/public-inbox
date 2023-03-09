@@ -4,8 +4,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
 Content-Disposition: inline
 
-This release is mainly to fix a regression for -nntpd affecting
-neomutt and possibly other NNTP clients.
+This release includes several new features and fixes.
 
 There is also ongoing work to integrate coderepo handling into
 the codebase and the idea of `lei p2q' is integrated into the
@@ -25,6 +24,8 @@ treewide
 
   * standardize on `#' prefix for stderr diagnostics (previously `I:')
 
+  * avoid O(n) behavior for reaping dead processes in daemons
+
 PublicInbox::WWW
 
   * support `+' in inbox names
@@ -40,6 +41,11 @@ PublicInbox::WWW
 
   * fix footer in listing of >200 inboxes
 
+  * support dumb HTTP clones of SHA-256 git repos
+
+  * add /$INBOX/$MSGID/d/ endpoint to show diffs in reused Message-IDs
+    (`lei mail-diff' for the web)
+
 lei
 
   * use http.proxy / http.<remote>.proxy from system-wide git-config if
@@ -51,6 +57,9 @@ lei
 
   * compatibility with SQLite <3.8.3 on CentOS 7.x
 
+  * fix `lei q -tt' on locally-indexed messages (still broken for remotes:
+    https://public-inbox.org/meta/20230226170931.M947721@dcvr/ )
+
 solver (used by lei (rediff|blob), and PublicInbox::WWW)
 
   * handle copies in patches properly
@@ -60,6 +69,11 @@ portability
   * SIGWINCH is handled properly on less common architectures and OSes
 
   * fix EINTR handling for kqueue users
+
+  * various fixes for CentOS 7.x
+
+  * fix excessive pipelining to `git cat-file' on systems with small
+    getdelim(3) buffers (mainly affects musl)
 
 public-inbox-nntpd
 
@@ -73,13 +87,21 @@ public-inbox-clone:
 
   * parallel mirroring of multiple inboxes/coderepos via manifest
 
-  * new flags to support this include:
+  * new flags to support manifest mirroring include:
     --dry-run, --inbox-config=, --project-list=, --prune,
     --keep-going, --jobs, --include=, --exclude=, --objstore=, ...
+    See public-inbox-clone(1) man page for more details.
 
 PublicInbox::SaPlugin::ListMirror
 
   * List-ID handling special-cased according to RFC 2919 rules
+
+Search improvements (lei and PublicInbox::WWW)
+
+  * quoted text inside base-85 binary patches are no longer indexed
+
+Thanks to all the bug reporters and users who made this release
+possible.
 
 Please report bugs via plain-text mail to: meta@public-inbox.org
 
