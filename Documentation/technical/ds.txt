@@ -1,9 +1,14 @@
 PublicInbox::DS - event loop and async I/O base class
 
-Our PublicInbox::DS event loop which powers public-inbox-nntpd
-and public-inbox-httpd diverges significantly from the
-unmaintained Danga::Socket package we forked from.  In fact,
-it's probably different from most other event loops out there.
+Our PublicInbox::DS event loop which powers most of our long-lived
+processes(*) diverges significantly from the unmaintained Danga::Socket
+package we forked from.  In fact, it's probably different from most
+other event loops out there.
+
+Most notably, it uses one-shot, level-trigger, and edge-trigger mode
+modes of kqueue|epoll depending on the situation.
+
+(*) public-inbox-netd,(-httpd,-imapd,-nntpd,-pop3d,-watch) + lei-daemon
 
 Most notably:
 
