@@ -86,7 +86,12 @@ Default: C<auto>
 
 Use the specified proxy (e.g., C<socks5h://0:9050>).
 
+Consider L<imap.proxy> and L<nntp.proxy> which can be persistently
+configured on a per-host basis in L<lei-config(1)>.
+
 =back
+
+See L<lei-config(1)> for various C<imap.*> and C<nntp.*> options.
 
 =head1 CONTACT
 
@@ -103,4 +108,4 @@ License: AGPL-3.0+ L<https://www.gnu.org/licenses/agpl-3.0.txt>
 
 =head1 SEE ALSO
 
-L<lei-index(1)>, L<lei-store-format(5)>
+L<lei-config(1)>, L<lei-index(1)>, L<lei-store-format(5)>
