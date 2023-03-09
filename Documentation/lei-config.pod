@@ -4,7 +4,11 @@ lei-config - git-config wrapper for lei configuration file
 
 =head1 SYNOPSIS
 
-lei config [OPTIONS]
+lei config <name> [[<value>] [<value-pattern>]]
+
+lei config -l | --list
+
+lei config -e | --edit
 
 =head1 DESCRIPTION
 
@@ -97,6 +101,27 @@ C<frag>, C<func>, and C<context>.
 
 =back
 
+=head1 OPTIONS
+
+Most L<git-config(1)> command-line switches are accepted by C<lei config>
+as-is.  The most-frequently-used options are expected to be:
+
+=over 4
+
+=item -e
+
+=item --edit
+
+Opens an editor to edit the lei config file
+
+=item -l
+
+=item --list
+
+List all variables set in config file, along with their values.
+
+=back
+
 =head1 CONTACT
 
 Feedback welcome via plain-text mail to L<mailto:meta@public-inbox.org>
@@ -106,6 +131,6 @@ L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta/>
 
 =head1 COPYRIGHT
 
-Copyright 2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<https://www.gnu.org/licenses/agpl-3.0.txt>
