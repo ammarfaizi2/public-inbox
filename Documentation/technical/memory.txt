@@ -48,3 +48,9 @@ In the future, our internal data model will be further
 flattened and simplified to reduce the overhead imposed by
 small objects.  Large allocations may also be avoided by
 optionally using Inline::C.
+
+Finally, the mwrap-perl LD_PRELOAD wrapper was ported to Perl 5
+and enhanced to provide live memory usage tracking on 64-bit systems
+with minimal performance impact on production traffic:
+
+	git clone https://80x24.org/mwrap-perl.git
