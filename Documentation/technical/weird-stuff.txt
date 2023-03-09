@@ -1,0 +1,22 @@
+There's a lot of weird code in public-inbox which may be daunting
+to new hackers.
+
+* The event loop (PublicInbox::DS) is an evolution of a fairly standard
+  C10K event loop.  See ds.txt in this directory for more.
+
+Things got weirder in 2021:
+
+* The lei command-line tool is backed by a daemon.  This was done to
+  improve startup time for shell completion and manage git/SQLite/Xapian
+  single-writer during long, parallel imports.  It may eventually become
+  a read-write IMAP/JMAP server.
+
+* SOCK_SEQPACKET is used extensively in lei, and will likely make its
+  way into more places, still.
+
+And even more so in 2022:
+
+* public-inbox-clone / PublicInbox::LeiMirror relies on ->DESTROY
+  for make-like dependency management while providing parallelism.
+
+More to come, lei will expose Maildirs via FUSE 3...

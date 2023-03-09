@@ -99,6 +99,7 @@ Documentation/standards.perl
 Documentation/technical/data_structures.txt
 Documentation/technical/ds.txt
 Documentation/technical/memory.txt
+Documentation/technical/weird-stuff.txt
 Documentation/technical/whyperl.txt
 Documentation/txt2pre
 HACKING
