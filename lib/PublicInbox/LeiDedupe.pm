@@ -1,10 +1,9 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::LeiDedupe;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::ContentHash qw(content_hash git_sha);
-use PublicInbox::SHA ();
+use PublicInbox::SHA qw(sha256);
 
 # n.b. mutt sets most of these headers not sure about Bytes
 our @OID_IGNORE = qw(Status X-Status Content-Length Lines Bytes);
@@ -30,11 +29,9 @@ sub _oidbin ($) { defined($_[0]) ? pack('H*', $_[0]) : undef }
 
 sub smsg_hash ($) {
 	my ($smsg) = @_;
-	my $dig = PublicInbox::SHA->new(256);
 	my $x = join("\0", @$smsg{qw(from to cc ds subject references mid)});
 	utf8::encode($x);
-	$dig->add($x);
-	$dig->digest;
+	sha256($x);
 }
 
 # the paranoid option
