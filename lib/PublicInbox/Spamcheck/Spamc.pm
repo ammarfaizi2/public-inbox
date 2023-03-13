@@ -1,10 +1,9 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Default spam filter class for wrapping spamc(1)
 package PublicInbox::Spamcheck::Spamc;
-use strict;
-use warnings;
+use v5.12;
 use PublicInbox::Spawn qw(popen_rd spawn);
 use IO::Handle;
 use Fcntl qw(SEEK_SET);
