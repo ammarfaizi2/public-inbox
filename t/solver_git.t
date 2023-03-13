@@ -253,12 +253,13 @@ SKIP: {
 		$env->{GIT_COMMITTER_NAME} = $env->{GIT_AUTHOR_NAME};
 		$env->{GIT_COMMITTER_EMAIL} = $env->{GIT_AUTHOR_EMAIL};
 		my $in = \"$non_utf8\n\nK\x{e5}g\n";
-		my $c = xqx([qw(git commit-tree), $t], $env, { 0 => $in });
+		my @ct = qw(git -c i18n.commitEncoding=iso-8859-1 commit-tree);
+		my $c = xqx([@ct, $t], $env, { 0 => $in });
 		xbail "commit-tree: $?" if $?;
 		chomp($c);
 		$oid{'iso-8859-1'} = $c;
 
-		$c = xqx([qw(git commit-tree -p), $c, $t], $env, { 0 => $in });
+		$c = xqx([@ct, '-p', $c, $t], $env, { 0 => $in });
 		xbail "commit-tree: $?" if $?;
 		chomp($c);
 		$oid{'8859-parent'} = $c;
