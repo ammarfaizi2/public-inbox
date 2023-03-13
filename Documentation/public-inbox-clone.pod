@@ -129,6 +129,17 @@ is specified where C<FILE> is an empty string (C<"">), then C<manifest.js.gz>
 
 This is a new option in public-inbox 2.0+
 
+=item --remote-manifest=URL|RELATIVE_PATH
+
+Use an alternate location for the remote manifest.js.gz file.
+This mah be specified as a full absolute URL (e.g
+C<--remote-manifest=https://80x24.org/lore/pub/manifest.js.gz>),
+or a pathname relative to the ROOT_URL (e.g
+C<--remote-manifest=pub/manifest.js.gz> when ROOT_URL is
+C<https://80x24.org/lore/>
+
+This is a new option in public-inbox 2.0+
+
 =item --project-list=FILE
 
 When cloning code repos from a manifest, generate a cgit-compatible
