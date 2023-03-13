@@ -620,7 +620,8 @@ sub clone_v1 {
 						\&run_puh, $self, $fini));
 	}
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
-				/\A(?:always|v1)\z/s) {
+				/\A(?:always|v1)\z/s &&
+			!-f "$dst/inbox.config.example") {
 		_get_txt_start($self, '_/text/config/raw', $fini);
 	}
 
@@ -923,8 +924,10 @@ failed to extract epoch number from $src
 
 	$self->{dry_run} or File::Path::mkpath($dst);
 
-	$lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s and
+	if ($lei->{opt}->{'inbox-config'} =~ /\A(?:always|v2)\z/s &&
+			!-f "$dst/inbox.config.example") {
 		_get_txt_start($task, '_/text/config/raw', $fini);
+	}
 
 	defined($desc) ? ($task->{'txt.description'} = $desc) :
 		_get_txt_start($task, 'description', $fini);
