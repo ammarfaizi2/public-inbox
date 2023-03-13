@@ -194,7 +194,7 @@ sub _write_inbox_config {
 		die "open($f): $!";
 	}
 	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
-	my $ibx = $self->{ibx} = {};
+	my $ibx = $self->{ibx} = {}; # for indexing
 	for my $sec (grep(/\Apublicinbox\./, @{$cfg->{-section_order}})) {
 		for (qw(address newsgroup nntpmirror)) {
 			$ibx->{$_} = $cfg->{"$sec.$_"};
