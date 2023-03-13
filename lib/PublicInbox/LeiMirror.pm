@@ -259,8 +259,7 @@ sub run_reap {
 sub start_cmd {
 	my ($self, $cmd, $opt, $fini) = @_;
 	do_reap($self);
-	utf8::decode(my $msg = "# @$cmd");
-	$self->{lei}->qerr($msg);
+	$self->{lei}->qerr("# @$cmd");
 	return if $self->{dry_run};
 	$LIVE->{spawn($cmd, undef, $opt)} = [ \&reap_cmd, $self, $cmd, $fini ]
 }
@@ -633,7 +632,7 @@ sub clone_v1 {
 	}
 
 	my $d = $self->{-ent} ? $self->{-ent}->{description} : undef;
-	$self->{'txt.description'} = $d if defined $d;
+	utf8::encode($self->{'txt.description'} = $d) if defined $d;
 	(!defined($d) && !$end) and
 		_get_txt_start($self, 'description', $fini);
 
@@ -823,6 +822,7 @@ sub update_ent {
 	$new = $self->{-ent}->{owner} // return;
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
+	utf8::encode($new); # to octets
 	my $cmd = [ qw(git config -f), "$dst/config", 'gitweb.owner', $new ];
 	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
 }

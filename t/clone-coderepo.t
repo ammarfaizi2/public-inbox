@@ -63,11 +63,13 @@ EOM
 	my $env = { TEST_DOCROOT => "$tmpdir/src", PI_CONFIG => $pi_config };
 	$td = start_script($cmd, $env, { 3 => $tcp });
 	my $fp = sha1_hex(my $refs = xqx([@git, 'show-ref']));
+	my $alice = "\x{100}lice";
 	$m = {
 		'/a.git' => {
 			fingerprint => $fp,
 			modified => 1,
-			owner => 'Alice',
+			owner => $alice,
+			description => "${alice}'s repo",
 		},
 		'/b.git' => {
 			fingerprint => $fp,
@@ -89,9 +91,11 @@ my $cmd = [qw(-clone --inbox-config=never --manifest= --project-list=
 	--objstore= -p -q), $url, "$tmpdir/dst", '--exit-code'];
 ok(run_script($cmd), 'clone');
 is(xqx([qw(git config gitweb.owner)], { GIT_DIR => "$tmpdir/dst/a.git" }),
-	"Alice\n", 'a.git gitweb.owner set');
+	"\xc4\x80lice\n", 'a.git gitweb.owner set');
 is(xqx([qw(git config gitweb.owner)], { GIT_DIR => "$tmpdir/dst/b.git" }),
 	"Bob\n", 'b.git gitweb.owner set');
+my $desc = PublicInbox::Git::try_cat("$tmpdir/dst/a.git/description");
+is($desc, "\xc4\x80lice's repo\n", 'description set');
 
 my $dst_pl = "$tmpdir/dst/projects.list";
 my $dst_mf = "$tmpdir/dst/manifest.js.gz";
