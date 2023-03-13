@@ -593,8 +593,15 @@ sub clone_v1 {
 		die "$uri is a v1 inbox, --epoch is not supported\n";
 	$self->{-torsocks} //= $curl->torsocks($lei, $uri) or return;
 	my $dst = $self->{cur_dst} // $self->{dst};
-	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
 	my $resume = -d $dst;
+	if ($resume) { # respect read-only cloned w/ --epoch=
+		my @st = stat(_); # for root
+		if (!-w _ || !($st[2] & 0222)) {
+			warn "# skipping $dst, not writable\n";
+			return;
+		}
+	}
+	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
 		if ($resume) {
