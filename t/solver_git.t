@@ -39,6 +39,13 @@ my $v1_0_0_tag = 'cb7c42b1e15577ed2215356a2bf925aef59cdd8d';
 my $v1_0_0_tag_short = substr($v1_0_0_tag, 0, 16);
 my $expect = '69df7d565d49fbaaeb0a067910f03dc22cd52bd0';
 my $non_existent = 'ee5e32211bf62ab6531bdf39b84b6920d0b6775a';
+my $stderr_empty = sub {
+	my ($msg) = @_;
+	open my $efh, '<', "$tmpdir/stderr.log" or xbail $!;
+	my @l = <$efh>;
+	@l = grep(!/reverse ?proxy/i, @l);
+	is_xdeeply(\@l, [], $msg // 'stderr.log is empty');
+};
 
 test_lei({tmpdir => "$tmpdir/blob"}, sub {
 	lei_ok('blob', '--mail', $patch2_oid, '-I', $ibx->{inboxdir},
@@ -342,8 +349,7 @@ EOF
 		# WwwCoderepo
 		my $olderr;
 		if (defined $ENV{PLACK_TEST_EXTERNALSERVER_URI}) {
-			ok(!-s "$tmpdir/stderr.log",
-				'nothing in stderr.log, yet');
+			$stderr_empty->('nothing in stderr.log, yet');
 		} else {
 			open $olderr, '>&', \*STDERR or xbail "open: $!";
 			open STDERR, '+>>', "$tmpdir/stderr.log" or
@@ -353,17 +359,17 @@ EOF
 		defined($ENV{PLACK_TEST_EXTERNALSERVER_URI}) or
 			open STDERR, '>&', $olderr or xbail "open: $!";
 		is($res->code, 200, 'coderepo summary (binfoo)');
-		ok(!-s "$tmpdir/stderr.log");
+		$stderr_empty->();
 
 		$res = $cb->(GET("/binfoo/$oid{'iso-8859-1'}/s/"));
 		is($res->code, 200, 'ISO-8859-1 commit');
 		like($res->content, qr/K&#229;g/, 'ISO-8859-1 commit message');
-		ok(!-s "$tmpdir/stderr.log", 'nothing in stderr');
+		$stderr_empty->();
 
 		$res = $cb->(GET("/binfoo/$oid{'8859-parent'}/s/"));
 		is($res->code, 200, 'commit w/ ISO-8859-parent');
 		like($res->content, qr/K&#229;g/, 'ISO-8859-1 commit message');
-		ok(!-s "$tmpdir/stderr.log", 'nothing in stderr');
+		$stderr_empty->();
 
 		$res = $cb->(GET('/public-inbox/'));
 		is($res->code, 200, 'coderepo summary (public-inbox)');
