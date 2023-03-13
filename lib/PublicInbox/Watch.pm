@@ -312,7 +312,7 @@ sub imap_fetch_all ($$) {
 	local $SIG{__WARN__} = sub {
 		my $pfx = ($_[0] // '') =~ /^([A-Z]: |# )/g ? $1 : '';
 		my $uid = $self->{cur_uid};
-		$warn_cb->("$pfx$uri", $uid ? ("UID:$uid") : (), "\n", @_);
+		$warn_cb->("$pfx$uri", $uid ? (" UID:$uid") : (), "\n", @_);
 	};
 	PublicInbox::NetReader::imap_each($self, $uri, \&net_cb, $self,
 					$self->{imap}->{$$uri});
@@ -451,7 +451,7 @@ sub watch_nntp_fetch_all ($$) {
 	local $SIG{__WARN__} = sub {
 		my $pfx = ($_[0] // '') =~ /^([A-Z]: |# )/g ? $1 : '';
 		my $art = $self->{cur_uid};
-		$warn_cb->("$pfx$uri", $art ? ("ARTICLE $art") : (), "\n", @_);
+		$warn_cb->("$pfx$uri", $art ? (" ARTICLE $art") : (), "\n", @_);
 	};
 	for $uri (@$uris) {
 		PublicInbox::NetReader::nntp_each($self, $uri, \&net_cb, $self,
