@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # cf. RFC 5092, which the `URI' package doesn't support
 #
@@ -11,8 +11,7 @@
 #
 # RFC 2192 also describes ";TYPE=<list_type>"
 package PublicInbox::URIimap;
-use strict;
-use v5.10.1;
+use v5.12;
 use URI::Split qw(uri_split uri_join); # part of URI
 use URI::Escape qw(uri_unescape uri_escape);
 use overload '""' => \&as_string;

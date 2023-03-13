@@ -1,10 +1,9 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # common writer code for IMAP (and later, JMAP)
 package PublicInbox::NetWriter;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::NetReader);
 use PublicInbox::Smsg;
 use PublicInbox::MsgTime qw(msg_timestamp);

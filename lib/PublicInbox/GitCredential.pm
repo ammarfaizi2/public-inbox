@@ -1,7 +1,9 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+
+# git-credential wrapper with built-in .netrc fallback
 package PublicInbox::GitCredential;
-use strict;
+use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 
 sub run ($$;$) {
@@ -19,7 +21,7 @@ sub run ($$;$) {
 
 	my $out = '';
 	for my $k (qw(url protocol host username password)) {
-		defined(my $v = $self->{$k}) or next;
+		my $v = $self->{$k} // next;
 		die "`$k' contains `\\n' or `\\0'\n" if $v =~ /[\n\0]/;
 		$out .= "$k=$v\n";
 	}

@@ -3,8 +3,7 @@
 
 # common reader code for IMAP and NNTP (and maybe JMAP)
 package PublicInbox::NetReader;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(Exporter PublicInbox::IPC);
 use PublicInbox::Eml;
 use PublicInbox::Config;

@@ -1,10 +1,9 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # wrap Net::NNTP client with SOCKS support
 package PublicInbox::NetNNTPSocks;
-use strict;
-use v5.10.1;
+use v5.12;
 use Net::NNTP;
 our %OPT;
 our @ISA = qw(IO::Socket::Socks);
