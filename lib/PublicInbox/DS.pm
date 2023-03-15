@@ -214,7 +214,6 @@ sub await_cb ($;@) {
 # that to remain the case.
 sub reap_pids {
 	$reap_armed = undef;
-	my $oldset = block_signals();
 	while (1) {
 		my $pid = waitpid(-1, WNOHANG) // last;
 		last if $pid <= 0;
@@ -224,7 +223,6 @@ sub reap_pids {
 			warn "W: reaped unknown PID=$pid: \$?=$?\n";
 		}
 	}
-	sig_setmask($oldset);
 }
 
 # reentrant SIGCHLD handler (since reap_pids is not reentrant)
