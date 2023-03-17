@@ -580,6 +580,7 @@ sub squote_maybe ($) {
 }
 
 my %re_map = ( '*' => '[^/]*?', '?' => '[^/]',
+		'/**' => '/.*', '**/' => '.*/', '/**/' => '/.*?',
 		'[' => '[', ']' => ']', ',' => ',' );
 
 sub glob2re ($) {
@@ -593,7 +594,7 @@ sub glob2re ($) {
 	if ($re =~ s!\A([a-z0-9\+]+://\[[a-f0-9\:]+\](?::[0-9]+)?/)!!i) {
 		$schema_host_port = quotemeta $1; # "http://[::1]:1234"
 	}
-	my $changes = ($re =~ s!(.)!
+	my $changes = ($re =~ s!(/\*\*/|\A\*\*/|/\*\*\z|.)!
 		$re_map{$p eq '\\' ? '' : do {
 			if ($1 eq '[') { ++$in_bracket }
 			elsif ($1 eq ']') { --$in_bracket }
