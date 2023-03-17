@@ -5,6 +5,7 @@
 package PublicInbox::LeiLsExternal;
 use strict;
 use v5.10.1;
+use PublicInbox::Config qw(glob2re);
 
 # TODO: does this need JSON output?
 sub lei_ls_external {
@@ -12,7 +13,7 @@ sub lei_ls_external {
 	my $do_glob = !$lei->{opt}->{globoff}; # glob by default
 	my ($OFS, $ORS) = $lei->{opt}->{z} ? ("\0", "\0\0") : (" ", "\n");
 	$filter //= '*';
-	my $re = $do_glob ? $lei->glob2re($filter) : undef;
+	my $re = $do_glob ? glob2re($filter) : undef;
 	$re .= '/?\\z' if defined $re;
 	$re //= index($filter, '/') < 0 ?
 			qr!/\Q$filter\E/?\z! : # exact basename match

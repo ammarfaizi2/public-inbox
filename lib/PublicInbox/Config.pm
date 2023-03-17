@@ -10,6 +10,8 @@
 package PublicInbox::Config;
 use strict;
 use v5.10.1;
+use parent qw(Exporter);
+our @EXPORT_OK = qw(glob2re);
 use PublicInbox::Inbox;
 use PublicInbox::Spawn qw(popen_rd);
 our $LD_PRELOAD = $ENV{LD_PRELOAD}; # only valid at startup
@@ -575,6 +577,38 @@ sub squote_maybe ($) {
 		return "'$val'";
 	}
 	$val;
+}
+
+my %re_map = ( '*' => '[^/]*?', '?' => '[^/]',
+		'[' => '[', ']' => ']', ',' => ',' );
+
+sub glob2re ($) {
+	my ($re) = @_;
+	my $p = '';
+	my $in_bracket = 0;
+	my $qm = 0;
+	my $schema_host_port = '';
+
+	# don't glob URL-looking things that look like IPv6
+	if ($re =~ s!\A([a-z0-9\+]+://\[[a-f0-9\:]+\](?::[0-9]+)?/)!!i) {
+		$schema_host_port = quotemeta $1; # "http://[::1]:1234"
+	}
+	my $changes = ($re =~ s!(.)!
+		$re_map{$p eq '\\' ? '' : do {
+			if ($1 eq '[') { ++$in_bracket }
+			elsif ($1 eq ']') { --$in_bracket }
+			elsif ($1 eq ',') { ++$qm } # no change
+			$p = $1;
+		}} // do {
+			$p = $1;
+			($p eq '-' && $in_bracket) ? $p : (++$qm, "\Q$p")
+		}!sge);
+	# bashism (also supported by curl): {a,b,c} => (a|b|c)
+	$changes += ($re =~ s/([^\\]*)\\\{([^,]*,[^\\]*)\\\}/
+			(my $in_braces = $2) =~ tr!,!|!;
+			$1."($in_braces)";
+			/sge);
+	($changes - $qm) ? $schema_host_port.$re : undef;
 }
 
 1;

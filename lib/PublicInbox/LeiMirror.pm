@@ -14,7 +14,7 @@ use File::Spec ();
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
 use Carp qw(croak);
 use URI;
-use PublicInbox::Config;
+use PublicInbox::Config qw(glob2re);
 use PublicInbox::Inbox;
 use PublicInbox::Git;
 use PublicInbox::LeiCurl;
@@ -983,7 +983,7 @@ sub multi_inbox ($$$) {
 	my @orig = defined($incl // $excl) ? (keys %$v2, @v1) : ();
 	if (defined $incl) {
 		my $re = '(?:'.join('\\z|', map {
-				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
+				glob2re($_) // qr/\A\Q$_\E/
 			} @$incl).'\\z)';
 		my @gone = delete @$v2{grep(!/$re/, keys %$v2)};
 		delete @$m{map { @$_ } @gone} and $self->{chg}->{manifest} = 1;
@@ -992,7 +992,7 @@ sub multi_inbox ($$$) {
 	}
 	if (defined $excl) {
 		my $re = '(?:'.join('\\z|', map {
-				$self->{lei}->glob2re($_) // qr/\A\Q$_\E/
+				glob2re($_) // qr/\A\Q$_\E/
 			} @$excl).'\\z)';
 		my @gone = delete @$v2{grep(/$re/, keys %$v2)};
 		delete @$m{map { @$_ } @gone} and $self->{chg}->{manifest} = 1;

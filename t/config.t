@@ -1,7 +1,6 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use_ok 'PublicInbox';
@@ -260,5 +259,20 @@ EOF
 	is($cfg->urlmatch('imap.idleInterval', $url), undef, 'urlmatch miss');
 };
 
+my $glob2re = PublicInbox::Config->can('glob2re');
+is($glob2re->('http://[::1]:1234/foo/'), undef, 'IPv6 URL not globbed');
+is($glob2re->('foo'), undef, 'plain string unchanged');
+is_deeply($glob2re->('[f-o]'), '[f-o]' , 'range accepted');
+is_deeply($glob2re->('*'), '[^/]*?' , 'wildcard accepted');
+is_deeply($glob2re->('{a,b,c}'), '(a|b|c)' , 'braces');
+is_deeply($glob2re->('{,b,c}'), '(|b|c)' , 'brace with empty @ start');
+is_deeply($glob2re->('{a,b,}'), '(a|b|)' , 'brace with empty @ end');
+is_deeply($glob2re->('{a}'), undef, 'ungrouped brace');
+is_deeply($glob2re->('{a'), undef, 'open left brace');
+is_deeply($glob2re->('a}'), undef, 'open right brace');
+is_deeply($glob2re->('*.[ch]'), '[^/]*?\\.[ch]', 'suffix glob');
+is_deeply($glob2re->('{[a-z],9,}'), '([a-z]|9|)' , 'brace with range');
+is_deeply($glob2re->('\\{a,b\\}'), undef, 'escaped brace');
+is_deeply($glob2re->('\\\\{a,b}'), '\\\\\\\\(a|b)', 'fake escape brace');
 
 done_testing();

@@ -6,12 +6,13 @@ package PublicInbox::LeiLsMailSync;
 use strict;
 use v5.10.1;
 use PublicInbox::LeiMailSync;
+use PublicInbox::Config qw(glob2re);
 
 sub lei_ls_mail_sync {
 	my ($lei, $filter) = @_;
 	my $lms = $lei->lms or return;
 	my $opt = $lei->{opt};
-	my $re = $opt->{globoff} ? undef : $lei->glob2re($filter // '*');
+	my $re = $opt->{globoff} ? undef : glob2re($filter // '*');
 	$re .= '/?\\z' if defined $re;
 	$re //= index($filter, '/') < 0 ?
 			qr!/\Q$filter\E/?\z! : # exact basename match
