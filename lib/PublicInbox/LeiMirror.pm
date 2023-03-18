@@ -1089,8 +1089,8 @@ sub dump_manifest ($$) {
 
 sub dump_project_list ($$) {
 	my ($self, $m) = @_;
-	my $f = $self->{'-project-list'} // return;
-	my $old = PublicInbox::Git::try_cat($f);
+	my $f = $self->{'-project-list'};
+	my $old = defined($f) ? PublicInbox::Git::try_cat($f) : '';
 	my %new;
 
 	open my $dh, '<', '.' or die "open(.): $!";
@@ -1108,13 +1108,15 @@ sub dump_project_list ($$) {
 The following local repositories are ignored/gone from $self->{src}:
 EOM
 	warn "\t", $_, "\n" for @remote;
-	warn <<EOM if @local;
+	if (defined($f) && @local) {
+		warn <<EOM;
 The following repos in $f no longer exist on the filesystem:
 EOM
-	warn "\t", $_, "\n" for @local;
-
-	my (undef, $dn, $bn) = File::Spec->splitpath($f);
+		warn "\t", $_, "\n" for @local;
+	}
 	$self->{chg}->{nr_chg} += scalar(@remote) + scalar(@local);
+	$f // return;
+	my (undef, $dn, $bn) = File::Spec->splitpath($f);
 	my $new = join("\n", @list, '');
 	atomic_write($dn, $bn, $new) if $new ne $old;
 }
