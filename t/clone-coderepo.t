@@ -131,6 +131,27 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	like($err, qr/no longer exist.*\bgone\.git\b/s, 'gone.git noted');
 }
 
+{ # --purge
+	open my $fh, '>>', $dst_pl or xbail $!;
+	print $fh "gone-rdonly.git\n" or xbail $!;
+	close $fh or xbail $!;
+	my $ro = "$tmpdir/dst/gone-rdonly.git";
+	PublicInbox::Import::init_bare($ro);
+	ok(-d $ro, 'gone-rdonly.git created');
+	my @st = stat($ro) or xbail "stat($ro): $!";
+	chmod($st[2] & 0555, $ro) or xbail "chmod($ro): $!";
+
+	utime($t0, $t0, $dst_mf) or xbail "utime: $!";
+	my $rdr = { 2 => \(my $err = '') };
+	my $xcmd = [ @$cmd, '--purge' ];
+	ok(run_script($xcmd, undef, $rdr), 'clone again for expired gone.git');
+	is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
+		'project list cleaned');
+	like($err, qr!ignored/gone.*?\bgone-rdonly\.git\b!s,
+		'gone-rdonly.git noted');
+	ok(!-d $ro, 'gone-rdonly.git dir gone from --purge');
+}
+
 my $test_puh = sub {
 	my (@clone_arg) = @_;
 	my $x = [qw(-clone --inbox-config=never --manifest= --project-list=

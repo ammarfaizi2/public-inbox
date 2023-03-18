@@ -176,6 +176,15 @@ calls on incremental clones.
 
 This is a new option in public-inbox 2.0+
 
+=item --purge
+
+Deletes entire repos which no longer exist in the remote manifest,
+or are filtered out by C<--include=> or C<--exclude=>.
+
+This is only useful when using C<--manifest>
+
+This is a new option in public-inbox 2.0+
+
 =item --exit-code
 
 Exit with C<127> if no updates are done when relying on a manifest.

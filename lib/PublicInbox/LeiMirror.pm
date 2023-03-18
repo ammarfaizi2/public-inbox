@@ -1094,7 +1094,9 @@ sub dump_project_list ($$) {
 	my %new;
 
 	open my $dh, '<', '.' or die "open(.): $!";
-	chdir($self->{dst}) or die "chdir($self->{dst}): $!";
+	if (!$self->{dry_run} || -d $self->{dst}) {
+		chdir($self->{dst}) or die "chdir($self->{dst}): $!";
+	}
 	my @local = grep { -e $_ ? ($new{$_} = undef) : 1 } split(/\n/s, $old);
 	chdir($dh) or die "chdir(restore): $!";
 
@@ -1104,10 +1106,22 @@ sub dump_project_list ($$) {
 	my %lnk = map { substr($_, 1) => undef } @{$self->{-new_symlinks}};
 	@remote = grep { !exists($lnk{$_}) } @remote;
 
-	warn <<EOM if @remote;
+	if (@remote) {
+		warn <<EOM;
 The following local repositories are ignored/gone from $self->{src}:
 EOM
-	warn "\t", $_, "\n" for @remote;
+		warn "\t", $_, "\n" for @remote;
+
+		if ($self->{lei}->{opt}->{purge} && !$self->{dry_run}) {
+			my $o = {};
+			$o->{verbose} = 1 if $self->{lei}->{opt}->{verbose};
+			my $dst = $self->{dst};
+			File::Path::remove_tree(map { "$dst/$_" } @remote, $o);
+			my %rm = map { $_ => undef } @remote;
+			@list = grep { !exists($rm{$_}) } @list;
+			$self->{lei}->qerr('# purged ');
+		}
+	}
 	if (defined($f) && @local) {
 		warn <<EOM;
 The following repos in $f no longer exist on the filesystem:
@@ -1115,7 +1129,7 @@ EOM
 		warn "\t", $_, "\n" for @local;
 	}
 	$self->{chg}->{nr_chg} += scalar(@remote) + scalar(@local);
-	$f // return;
+	return if !defined($f) || $self->{dry_run};
 	my (undef, $dn, $bn) = File::Spec->splitpath($f);
 	my $new = join("\n", @list, '');
 	atomic_write($dn, $bn, $new) if $new ne $old;
@@ -1222,7 +1236,7 @@ EOM
 	}
 	delete local $lei->{opt}->{epoch} if defined($v2);
 	clone_all($self, $m);
-	return if $self->{dry_run} || !keep_going($self);
+	return if !keep_going($self);
 
 	# set by clone_v2_prep/-I/--exclude
 	my $mis = delete $self->{chg}->{fp_mismatch};
@@ -1239,13 +1253,15 @@ EOM
 W: The above fingerprints may never match without --prune
 EOM
 	}
-	dump_manifest($m => $ft) if delete($self->{chg}->{manifest}) || $mis;
+	if ((delete($self->{chg}->{manifest}) || $mis) && !$self->{dry_run}) {
+		dump_manifest($m => $ft);
+	}
 	my $bad = delete $self->{chg}->{badlink};
 	warn(<<EOM, map { ("\t", $_, "\n") } @$bad) if $bad;
 W: The following exist and have not been converted to symlinks
 EOM
 	dump_project_list($self, $m);
-	ft_rename($ft, $manifest, 0666);
+	ft_rename($ft, $manifest, 0666) if !$self->{dry_run};
 	!$self->{chg}->{nr_chg} && $lei->{opt}->{'exit-code'} and
 		$lei->child_error(127 << 8);
 }
