@@ -138,6 +138,8 @@ or a pathname relative to the ROOT_URL (e.g
 C<--remote-manifest=pub/manifest.js.gz> when ROOT_URL is
 C<https://80x24.org/lore/>
 
+By default, C<ROOT_URL/manifest.js.gz> is used.
+
 This is a new option in public-inbox 2.0+
 
 =item --project-list=FILE
