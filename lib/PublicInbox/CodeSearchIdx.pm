@@ -151,6 +151,14 @@ sub store_repo { # wq_do - returns docid
 	}
 }
 
+sub cidx_ckpoint ($$) {
+	my ($self, $msg) = @_;
+	progress($self, $msg);
+	return if $PublicInbox::Search::X{CLOEXEC_UNSET};
+	$self->{xdb}->commit_transaction;
+	$self->{xdb}->begin_transaction;
+}
+
 # sharded reader for `git log --pretty=format: --stdin'
 sub shard_index { # via wq_io_do
 	my ($self, $git, $n, $roots) = @_;
@@ -184,16 +192,18 @@ sub shard_index { # via wq_io_do
 			next;
 		}
 		$TXN_BYTES -= length($buf);
+		if ($TXN_BYTES <= 0) {
+			cidx_ckpoint($self, "[$n] $nr");
+			$TXN_BYTES = $batch_bytes - length($buf);
+		}
 		@$cmt{@FMT} = split(/\n/, $buf, scalar(@FMT));
 		$/ = "\n";
 		add_commit($self, $cmt);
 		last if $DO_QUIT;
 		++$nr;
-		if ($TXN_BYTES <= 0 && !$PublicInbox::Search::X{CLOEXEC_UNSET}) {
-			progress($self, "[$n] $nr");
-			$self->{xdb}->commit_transaction;
+		if ($TXN_BYTES <= 0) {
+			cidx_ckpoint($self, "[$n] $nr");
 			$TXN_BYTES = $batch_bytes;
-			$self->{xdb}->begin_transaction;
 		}
 		$/ = $FS;
 	}
