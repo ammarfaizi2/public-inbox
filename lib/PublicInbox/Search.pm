@@ -553,4 +553,18 @@ sub num2docid ($$) {
 	($num - 1) * $nshard + $num % $nshard + 1;
 }
 
+sub all_terms {
+	my ($self, $pfx) = @_;
+	my $cur = xdb($self)->allterms_begin($pfx);
+	my $end = $self->{xdb}->allterms_end($pfx);
+	my %ret;
+	for (; $cur != $end; $cur++) {
+		my $tn = $cur->get_termname;
+		index($tn, $pfx) == 0 and
+			$ret{substr($tn, length($pfx))} = undef;
+	}
+	wantarray ? (sort keys %ret) : \%ret;
+}
+
+
 1;
