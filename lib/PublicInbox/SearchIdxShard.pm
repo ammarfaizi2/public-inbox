@@ -1,11 +1,10 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Internal interface for a single Xapian shard in V2 inboxes.
 # See L<public-inbox-v2-format(5)> for more info on how we shard Xapian
 package PublicInbox::SearchIdxShard;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::SearchIdx PublicInbox::IPC);
 use PublicInbox::OnDestroy;
 
@@ -47,7 +46,7 @@ sub ipc_atfork_child { # called automatically before ipc_worker_loop
 	$v2w->atfork_child; # calls ipc_sibling_atfork_child on our siblings
 	$v2w->{current_info} = "[$self->{shard}]"; # for $SIG{__WARN__}
 	$self->begin_txn_lazy;
-	# caller must capture this:
+	# caller (ipc_worker_spawn) must capture this:
 	PublicInbox::OnDestroy->new($$, \&_worker_done, $self);
 }
 
