@@ -16,6 +16,7 @@ usage: public-inbox-cindex [options] --project-list=FILE PROJECT_ROOT
   --update | -u       update previously-indexed code repos with `-d'
   --jobs=NUM          set or disable parallelization (NUM=0)
   --batch-size=BYTES  flush changes to OS after a given number of bytes
+  --max-size=BYTES    do not index commit diffs larger than the given size
   --prune             prune old repos and commits
   --reindex           reindex previously indexed repos
   --verbose | -v      increase verbosity (may be repeated)
@@ -25,7 +26,8 @@ See public-inbox-cindex(1) man page for full documentation.
 EOF
 my $opt = { fsync => 1, scan => 1 }; # --no-scan is hidden
 GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
-		indexlevel|index-level|L=s batch_size|batch-size=s
+		indexlevel|index-level|L=s
+		batch_size|batch-size=s max_size|max-size=s
 		project-list=s exclude=s@
 		d=s update|u scan! prune dry-run|n C=s@ help|h))
 	or die $help;

@@ -161,6 +161,7 @@ sub shard_index { # via wq_io_do
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
 	my $batch_bytes = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
+	my $max_size = $self->{-opt}->{max_size};
 	# local-ized in parent before fork
 	$TXN_BYTES = $batch_bytes;
 	local $self->{git} = $git; # for patchid
@@ -177,6 +178,11 @@ sub shard_index { # via wq_io_do
 	$self->begin_txn_lazy;
 	while (defined($buf = <$rd>)) {
 		chomp($buf);
+		if ($max_size && length($buf) >= $max_size) {
+			my ($H, undef) = split(/\n/, $buf, 2);
+			warn "W: skipping $H (", length($buf)," >= $max_size)\n";
+			next;
+		}
 		$TXN_BYTES -= length($buf);
 		@$cmt{@FMT} = split(/\n/, $buf, scalar(@FMT));
 		$/ = "\n";
