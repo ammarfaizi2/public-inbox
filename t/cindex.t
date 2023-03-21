@@ -93,6 +93,10 @@ EOM
 	ok(run_script([qw(-cindex -qu -d), "$tmp/ext"]), '-cindex -u');
 	$mset = $csrch->reopen->mset('dfn:for-update');
 	is(scalar($mset->items), 1, 'got updated result');
+
+	ok(run_script([qw(-cindex -qu --reindex -d), "$tmp/ext"]), 'reindex');
+	$mset = $csrch->reopen->mset('dfn:for-update');
+	is(scalar($mset->items), 1, 'same result after reindex');
 }
 
 if ('--prune') {

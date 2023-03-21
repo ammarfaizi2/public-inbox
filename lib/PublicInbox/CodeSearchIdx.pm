@@ -43,7 +43,8 @@ our (
 	@RDONLY_SHARDS, # Xapian::Database
 	@IDX_SHARDS, # clones of self
 	$MAX_SIZE,
-	$TMP_GIT, # PublicInbox::Git object for --reindex and --prune
+	$TMP_GIT, # PublicInbox::Git object for --prune
+	$REINDEX, # PublicInbox::SharedKV
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -89,12 +90,13 @@ sub new {
 # TODO: may be used for reshard/compact
 sub count_shards { scalar($_[0]->xdb_shards_flat) }
 
-sub add_commit ($$) {
+sub update_commit ($$) {
 	my ($self, $cmt) = @_; # fields from @FMT
 	my $x = 'Q'.$cmt->{H};
-	for (docids_by_postlist($self, $x)) {
-		$self->{xdb}->delete_document($_)
-	}
+	my ($docid, @extra) = sort { $a <=> $b } docids_by_postlist($self, $x);
+	@extra and warn "W: $cmt->{H} indexed multiple times, pruning ",
+			join(', ', map { "#$_" } @extra), "\n";
+	$self->{xdb}->delete_document($_) for @extra;
 	my $doc = $PublicInbox::Search::X{Document}->new;
 	$doc->add_boolean_term($x);
 	$doc->add_boolean_term('G'.$_) for @{$self->{roots}};
@@ -119,7 +121,8 @@ sub add_commit ($$) {
 
 	$x = delete $cmt->{b};
 	$self->index_body_text($doc, \$x) if $x =~ /\S/s;
-	$self->{xdb}->add_document($doc);
+	defined($docid) ? $self->{xdb}->replace_document($docid, $doc) :
+			$self->{xdb}->add_document($doc);
 }
 
 sub progress {
@@ -235,7 +238,7 @@ sub shard_index { # via wq_io_do
 			cidx_ckpoint($self, "[$n] $nr");
 			$TXN_BYTES = $batch_bytes - $len;
 		}
-		add_commit($self, $cmt);
+		update_commit($self, $cmt);
 		++$nr;
 		if ($TXN_BYTES <= 0) {
 			cidx_ckpoint($self, "[$n] $nr");
@@ -398,7 +401,7 @@ sub check_existing { # retry_reopen callback
 	my $docid = shift(@docids) // return get_roots($self, $git);
 	my $doc = $shard->{xdb}->get_document($docid) //
 			die "BUG: no #$docid ($git->{git_dir})";
-	my $old_fp = $doc->get_data;
+	my $old_fp = $REINDEX ? "\0invalid" : $doc->get_data;
 	if ($old_fp eq $git->{-repo}->{fp}) { # no change
 		delete $git->{-repo};
 		return;
@@ -426,7 +429,10 @@ sub partition_refs ($$$) {
 	while (defined(my $cmt = <$rfh>)) {
 		chomp $cmt;
 		my $n = hex(substr($cmt, 0, 8)) % scalar(@RDONLY_SHARDS);
-		if (seen($RDONLY_SHARDS[$n], 'Q'.$cmt)) {
+		if ($REINDEX && $REINDEX->set_maybe(pack('H*', $cmt), '')) {
+			say { $shard_in[$n] } $cmt or die "say: $!";
+			++$nchange;
+		} elsif (seen($RDONLY_SHARDS[$n], 'Q'.$cmt)) {
 			last if ++$seen > $SEEN_MAX;
 		} else {
 			say { $shard_in[$n] } $cmt or die "say: $!";
@@ -687,7 +693,7 @@ sub parent_quit {
 
 sub init_tmp_git_dir ($) {
 	my ($self) = @_;
-	return unless ($self->{-opt}->{prune} || $self->{-opt}->{reindex});
+	return unless $self->{-opt}->{prune};
 	require File::Temp;
 	require PublicInbox::Import;
 	my $tmp = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
@@ -729,6 +735,13 @@ sub cidx_run { # main entry point
 		$cb->($m, @_);
 	};
 	load_existing($self);
+	local $REINDEX;
+	if ($self->{-opt}->{reindex}) {
+		require PublicInbox::SharedKV;
+		$REINDEX = PublicInbox::SharedKV->new;
+		delete $REINDEX->{lock_path};
+		$REINDEX->dbh;
+	}
 	my @nc = grep { File::Spec->canonpath($_) ne $_ } @{$self->{git_dirs}};
 	if (@nc) {
 		warn "E: BUG? paths in $self->{cidx_dir} not canonicalized:\n";
