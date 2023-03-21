@@ -546,7 +546,7 @@ sub shards_active { # post_loop_do
 sub kill_shards { $_->wq_kill(@_) for @IDX_SHARDS }
 
 sub parent_quit {
-	$DO_QUIT = $_[0];
+	$DO_QUIT = POSIX->can("SIG$_[0]")->();
 	kill_shards(@_);
 	warn "# SIG$_[0] received, quitting...\n";
 }

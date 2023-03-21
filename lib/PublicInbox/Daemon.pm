@@ -510,7 +510,7 @@ sub upgrade_aborted ($) {
 	warn $@, "\n" if $@;
 }
 
-sub reap_children { # $_[0] = 'CHLD' or POSIX::SIGCHLD()
+sub reap_children { # $_[0] = 'CHLD'
 	while (1) {
 		my $p = waitpid(-1, WNOHANG) or return;
 		if (defined $reexec_pid && $p == $reexec_pid) {
