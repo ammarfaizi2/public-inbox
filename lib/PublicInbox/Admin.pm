@@ -82,7 +82,9 @@ sub resolve_git_dir {
 	my $dir = do { local $/; <$fh> };
 	close $fh or die "error in @$cmd (cwd:${\($cd // '.')}): $?\n";
 	chomp $dir;
-	rel2abs_collapsed($dir eq '.' ? ($cd // $dir) : $dir);
+	# --absolute-git-dir requires git v2.13.0+
+	$dir = rel2abs_collapsed($dir, $cd) if $dir !~ m!\A/!;
+	$dir;
 }
 
 # for unconfigured inboxes
