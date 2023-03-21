@@ -30,6 +30,7 @@ use PublicInbox::Spawn qw(spawn);
 use PublicInbox::OnDestroy;
 our $LIVE; # pid => callback
 our $LIVE_JOBS;
+our @XDB_SHARDS_FLAT;
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
 # branches don't diverge by more than this number of commits...
@@ -273,9 +274,9 @@ sub prep_repo ($$) {
 	my $n = git_dir_hash($git_dir) % $self->{nshard};
 	my $shard = $repo->{shard} = bless { %$self, shard => $n }, ref($self);
 	delete @$shard{qw(lockfh lock_path)};
-	local $shard->{xdb};
-	my $xdb = $shard->idx_acquire;
-	my @docids = docids_by_postlist($shard, 'P'.$git_dir);
+	my $xdb = $XDB_SHARDS_FLAT[$n] // die "BUG: shard[$n] undef";
+	$xdb->reopen;
+	my @docids = docids_by_postlist({ xdb => $xdb }, 'P'.$git_dir);
 	my $docid = shift(@docids) // return get_roots($self, $git);
 	if (@docids) {
 		warn "BUG: $git_dir indexed multiple times, culling\n";
@@ -298,19 +299,19 @@ sub partition_refs ($$$) {
 	sysseek($refs, 0, SEEK_SET) or die "seek: $!"; # for rev-list --stdin
 	my $fh = $git->popen(qw(rev-list --stdin), undef, { 0 => $refs });
 	close $refs or die "close: $!";
-	local $self->{xdb};
-	my $xdb = $self->{-opt}->{reindex} ? undef : $self->xdb;
-	my ($seen, $nchange, $nshard) = (0, 0, $self->{nshard});
-	my @shard_in;
-	for (0..($nshard - 1)) {
-		open $shard_in[$_], '+>', undef or die "open: $!";
-	}
+	my ($seen, $nchange) = (0, 0);
+	my @shard_in = map {
+		$_->reopen;
+		open my $fh, '+>', undef or die "open: $!";
+		$fh;
+	} @XDB_SHARDS_FLAT;
+
 	while (defined(my $cmt = <$fh>)) {
 		chomp $cmt;
-		if ($xdb && seen($xdb, 'Q'.$cmt)) {
+		my $n = hex(substr($cmt, 0, 8)) % scalar(@XDB_SHARDS_FLAT);
+		if (seen($XDB_SHARDS_FLAT[$n], 'Q'.$cmt)) {
 			last if ++$seen > $SEEN_MAX;
 		} else {
-			my $n = hex(substr($cmt, 0, 8)) % $nshard;
 			say { $shard_in[$n] } $cmt or die "say: $!";
 			++$nchange;
 			$seen = 0;
@@ -450,6 +451,7 @@ sub scan_git_dirs ($) {
 	local $LIVE_JOBS = $self->{-opt}->{jobs} //
 			PublicInbox::IPC::detect_nproc() // 2;
 	local $LIVE = {};
+	local @XDB_SHARDS_FLAT = $self->xdb_shards_flat;
 	for (@{$self->{git_dirs}}) {
 		my $git = PublicInbox::Git->new($_);
 		my $prep_repo = PublicInbox::OnDestroy->new($$, \&prep_repo,
