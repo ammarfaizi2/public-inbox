@@ -36,7 +36,8 @@ die "--jobs must be >= 0\n" if defined $opt->{jobs} && $opt->{jobs} < 0;
 require IO::Handle;
 STDOUT->autoflush(1);
 STDERR->autoflush(1);
-local $SIG{USR1} = 'IGNORE'; # to be overridden in cidx_sync
+$SIG{USR1} = 'IGNORE'; # to be overridden in cidx_sync
+$SIG{PIPE} = 'IGNORE';
 # require lazily to speed up --help
 require PublicInbox::Admin;
 PublicInbox::Admin::do_chdir(delete $opt->{C});
