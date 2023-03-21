@@ -348,7 +348,6 @@ sub check_existing { # retry_reopen callback
 			die "BUG: no #$docid ($git->{git_dir})";
 	my $old_fp = $doc->get_data;
 	if ($old_fp eq $git->{-repo}->{fp}) { # no change
-		progress($self, "$git->{git_dir} unchanged");
 		delete $git->{-repo};
 		return;
 	}
