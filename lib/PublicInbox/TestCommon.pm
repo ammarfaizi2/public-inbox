@@ -709,9 +709,9 @@ sub create_inbox ($$;@) {
 	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
 	my $dir = "t/data-gen/$base.$ident-$db";
 	my $new = !-d $dir;
-	if ($new) {
-		mkdir $dir; # may race
-		-d $dir or BAIL_OUT "$dir could not be created: $!";
+	if ($new && !mkdir($dir)) {
+		my $err = $!;
+		-d $dir or xbail "mkdir($dir): $err";
 	}
 	my $lk = bless { lock_path => "$dir/creat.lock" }, 'PublicInbox::Lock';
 	$opt{inboxdir} = File::Spec->rel2abs($dir);
