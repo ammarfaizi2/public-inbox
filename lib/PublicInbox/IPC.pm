@@ -19,7 +19,7 @@ use PublicInbox::WQWorker;
 use Socket qw(AF_UNIX MSG_EOR SOCK_STREAM);
 my $MY_MAX_ARG_STRLEN = 4096 * 33; # extra 4K for serialization
 my $SEQPACKET = eval { Socket::SOCK_SEQPACKET() }; # portable enough?
-our @EXPORT_OK = qw(ipc_freeze ipc_thaw);
+our @EXPORT_OK = qw(ipc_freeze ipc_thaw nproc_shards);
 my ($enc, $dec);
 # ->imports at BEGIN turns sereal_*_with_object into custom ops on 5.14+
 # and eliminate method call overhead
@@ -452,6 +452,30 @@ sub detect_nproc () {
 	# should we bother with `sysctl hw.ncpu`?  Those only give
 	# us total processor count, not online processor count.
 	undef
+}
+
+# SATA storage lags behind what CPUs are capable of, so relying on
+# nproc(1) can be misleading and having extra Xapian shards is a
+# waste of FDs and space.  It can also lead to excessive IO latency
+# and slow things down.  Users on NVME or other fast storage can
+# use the NPROC env or switches in our script/public-inbox-* programs
+# to increase Xapian shards
+our $NPROC_MAX_DEFAULT = 4;
+
+sub nproc_shards ($) {
+	my ($creat_opt) = @_;
+	my $n = $creat_opt->{nproc} if ref($creat_opt) eq 'HASH';
+	$n //= $ENV{NPROC};
+	if (!$n) {
+		# assume 2 cores if not detectable or zero
+		state $NPROC_DETECTED = PublicInbox::IPC::detect_nproc() || 2;
+		$n = $NPROC_DETECTED;
+		$n = $NPROC_MAX_DEFAULT if $n > $NPROC_MAX_DEFAULT;
+	}
+
+	# subtract for the main process and git-fast-import
+	$n -= 1;
+	$n < 1 ? 1 : $n;
 }
 
 1;
