@@ -37,7 +37,7 @@ sub pi_fork_exec ($$$$$$$) {
 		}
 		$SIG{$_} = 'DEFAULT' for grep(!/\A__/, keys %SIG);
 		if ($cd ne '') {
-			chdir $cd or die "chdir $cd: $!";
+			chdir $cd or die "cd $cd: $!";
 		}
 		while (@$rlim) {
 			my ($r, $soft, $hard) = splice(@$rlim, 0, 3);
