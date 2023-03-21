@@ -26,7 +26,7 @@ EOF
 my $opt = { fsync => 1, scan => 1 }; # --no-scan is hidden
 GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
 		indexlevel|index-level|L=s batch_size|batch-size=s
-		project-list=s
+		project-list=s exclude=s@
 		d=s update|u scan! prune dry-run|n C=s@ help|h))
 	or die $help;
 if ($opt->{help}) { print $help; exit 0 };

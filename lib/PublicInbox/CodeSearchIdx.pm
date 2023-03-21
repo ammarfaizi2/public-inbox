@@ -27,7 +27,7 @@ use File::Spec ();
 use PublicInbox::SHA qw(sha256_hex);
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::SearchIdx qw(add_val);
-use PublicInbox::Config;
+use PublicInbox::Config qw(glob2re);
 use PublicInbox::Spawn qw(spawn popen_rd);
 use PublicInbox::OnDestroy;
 use Socket qw(MSG_EOR);
@@ -565,6 +565,14 @@ sub cidx_run { # main entry point
 			$d = $c;
 		}
 		warn "E: canonicalized and attempting to continue\n";
+	}
+	if (defined(my $excl = $self->{-opt}->{exclude})) {
+		my $re = '(?:'.join('\\z|', map {
+				glob2re($_) // qr/\A\Q$_\E/
+			} @$excl).'\\z)';
+		@{$self->{git_dirs}} = grep {
+			$_ =~ /$re/ ? (warn("# excluding $_\n"), 0) : 1;
+		} @{$self->{git_dirs}};
 	}
 	local $self->{nchange} = 0;
 	local $LIVE_JOBS = $self->{-opt}->{jobs} ||
