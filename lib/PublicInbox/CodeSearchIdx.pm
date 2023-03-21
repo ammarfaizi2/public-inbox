@@ -186,7 +186,7 @@ sub shard_index { # via wq_io_do
 		last if $quit; # likely SIGPIPE
 		++$nr;
 		if ($max <= 0 && !$PublicInbox::Search::X{CLOEXEC_UNSET}) {
-			progress($self, $nr);
+			progress($self, "[$n] $nr");
 			$self->{xdb}->commit_transaction;
 			$max = $batch_bytes;
 			$self->{xdb}->begin_transaction;
