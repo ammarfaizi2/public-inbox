@@ -161,6 +161,8 @@ lib/PublicInbox/AltId.pm
 lib/PublicInbox/AutoReap.pm
 lib/PublicInbox/Cgit.pm
 lib/PublicInbox/CmdIPC4.pm
+lib/PublicInbox/CodeSearch.pm
+lib/PublicInbox/CodeSearchIdx.pm
 lib/PublicInbox/CompressNoop.pm
 lib/PublicInbox/Config.pm
 lib/PublicInbox/ConfigIter.pm
@@ -363,6 +365,7 @@ sa_config/README
 sa_config/root/etc/spamassassin/public-inbox.pre
 sa_config/user/.spamassassin/user_prefs
 script/lei
+script/public-inbox-cindex
 script/public-inbox-clone
 script/public-inbox-compact
 script/public-inbox-convert
@@ -402,6 +405,7 @@ t/altid.t
 t/altid_v2.t
 t/cgi.t
 t/check-www-inbox.perl
+t/cindex.t
 t/clone-coderepo-puh1.sh
 t/clone-coderepo-puh2.sh
 t/clone-coderepo.psgi

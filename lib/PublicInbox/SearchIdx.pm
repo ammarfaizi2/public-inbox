@@ -134,6 +134,7 @@ sub idx_acquire {
 		load_xapian_writable();
 		$flag = $self->{creat} ? $DB_CREATE_OR_OPEN : $DB_OPEN;
 	}
+	my $owner = $self->{ibx} // $self->{eidx} // $self;
 	if ($self->{creat}) {
 		require File::Path;
 		$self->lock_acquire;
@@ -145,14 +146,13 @@ sub idx_acquire {
 			File::Path::mkpath($dir);
 			require PublicInbox::Syscall;
 			PublicInbox::Syscall::nodatacow_dir($dir);
-			$self->{-set_has_threadid_once} = 1;
-			if (($self->{ibx} // $self->{eidx})->{-dangerous}) {
-				$flag |= $DB_DANGEROUS;
-			}
+			# owner == self for CodeSearchIdx
+			$self->{-set_has_threadid_once} = 1 if $owner != $self;
+			$flag |= $DB_DANGEROUS if $owner->{-dangerous};
 		}
 	}
 	return unless defined $flag;
-	$flag |= $DB_NO_SYNC if ($self->{ibx} // $self->{eidx})->{-no_fsync};
+	$flag |= $DB_NO_SYNC if $owner->{-no_fsync};
 	my $xdb = eval { ($X->{WritableDatabase})->new($dir, $flag) };
 	croak "Failed opening $dir: $@" if $@;
 	$self->{xdb} = $xdb;
@@ -350,6 +350,50 @@ sub index_diff ($$$) {
 	index_text($self, join("\n", @$xnq), 1, 'XNQ');
 }
 
+sub patch_id {
+	my ($self) = @_; # $_[1] is the diff (may be huge)
+	open(my $fh, '+>:utf8', undef) or die "open: $!";
+	open(my $eh, '+>', undef) or die "open: $!";
+	$fh->autoflush(1);
+	print $fh $_[1] or die "print: $!";
+	sysseek($fh, 0, SEEK_SET) or die "sysseek: $!";
+	my $id = ($self->{ibx} // $self->{eidx} // $self)->git->qx(
+			[qw(patch-id --stable)], {}, { 0 => $fh, 2 => $eh });
+	seek($eh, 0, SEEK_SET) or die "seek: $!";
+	while (<$eh>) { warn $_ }
+	$id =~ /\A([a-f0-9]{40,})/ ? $1 : undef;
+}
+
+sub index_body_text {
+	my ($self, $doc, $sref) = @_;
+	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms) {
+		my $id = patch_id($self, $$sref);
+		$doc->add_term('XDFID'.$id) if defined($id);
+	}
+
+	# split off quoted and unquoted blocks:
+	my @sections = PublicInbox::MsgIter::split_quotes($$sref);
+	undef $$sref; # free memory
+	for my $txt (@sections) {
+		if ($txt =~ /\A>/) {
+			if ($txt =~ /^[>\t ]+GIT binary patch\r?/sm) {
+				# get rid of Base-85 noise
+				$txt =~ s/^([>\h]+(?:literal|delta)
+						\x20[0-9]+\r?\n)
+					(?:[>\h]+$BASE85\h*\r?\n)+/$1/gsmx;
+			}
+			index_text($self, $txt, 0, 'XQUOT');
+		} else { # does it look like a diff?
+			if ($txt =~ /^(?:diff|---|\+\+\+) /ms) {
+				index_diff($self, \$txt, $doc);
+			} else {
+				index_text($self, $txt, 1, 'XNQ');
+			}
+		}
+		undef $txt; # free memory
+	}
+}
+
 sub index_xapian { # msg_iter callback
 	my $part = $_[0]->[0]; # ignore $depth and $idx
 	my ($self, $doc) = @{$_[1]};
@@ -369,43 +413,7 @@ sub index_xapian { # msg_iter callback
 	my ($s, undef) = msg_part_text($part, $ct);
 	defined $s or return;
 	$_[0]->[0] = $part = undef; # free memory
-
-	if ($s =~ /^(?:diff|---|\+\+\+) /ms) {
-		open(my $fh, '+>:utf8', undef) or die "open: $!";
-		open(my $eh, '+>', undef) or die "open: $!";
-		$fh->autoflush(1);
-		print $fh $s or die "print: $!";
-		sysseek($fh, 0, SEEK_SET) or die "sysseek: $!";
-		my $id = ($self->{ibx} // $self->{eidx})->git->qx(
-						[qw(patch-id --stable)],
-						{}, { 0 => $fh, 2 => $eh });
-		$id =~ /\A([a-f0-9]{40,})/ and $doc->add_term('XDFID'.$1);
-		seek($eh, 0, SEEK_SET) or die "seek: $!";
-		while (<$eh>) { warn $_ }
-	}
-
-	# split off quoted and unquoted blocks:
-	my @sections = PublicInbox::MsgIter::split_quotes($s);
-	undef $s; # free memory
-	for my $txt (@sections) {
-		if ($txt =~ /\A>/) {
-			if ($txt =~ /^[>\t ]+GIT binary patch\r?/sm) {
-				# get rid of Base-85 noise
-				$txt =~ s/^([>\h]+(?:literal|delta)
-						\x20[0-9]+\r?\n)
-					(?:[>\h]+$BASE85\h*\r?\n)+/$1/gsmx;
-			}
-			index_text($self, $txt, 0, 'XQUOT');
-		} else {
-			# does it look like a diff?
-			if ($txt =~ /^(?:diff|---|\+\+\+) /ms) {
-				index_diff($self, \$txt, $doc);
-			} else {
-				index_text($self, $txt, 1, 'XNQ');
-			}
-		}
-		undef $txt; # free memory
-	}
+	index_body_text($self, $doc, \$s);
 }
 
 sub index_list_id ($$$) {

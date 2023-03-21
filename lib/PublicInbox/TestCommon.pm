@@ -21,6 +21,7 @@ BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
+		create_coderepo
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing);
@@ -325,7 +326,7 @@ sub run_script ($;$$) {
 		}
 	}
 	my $tail = @tail_paths ? tail_f(@tail_paths) : undef;
-	if ($key =~ /-(index|convert|extindex|convert|xcpdb)\z/) {
+	if ($key =~ /-(index|cindex|extindex|convert|xcpdb)\z/) {
 		unshift @argv, '--no-fsync';
 	}
 	if ($run_mode == 0) {
@@ -696,6 +697,44 @@ sub setup_public_inboxes () {
 	$seen or BAIL_OUT 'no imports';
 	open my $fh, '>', $stamp or BAIL_OUT "open $stamp: $!";
 	@ret;
+}
+
+our %COMMIT_ENV = (
+	GIT_AUTHOR_NAME => 'A U Thor',
+	GIT_COMMITTER_NAME => 'C O Mitter',
+	GIT_AUTHOR_EMAIL => 'a@example.com',
+	GIT_COMMITTER_EMAIL => 'c@example.com',
+);
+
+sub create_coderepo ($$;@) {
+	my $ident = shift;
+	my $cb = pop;
+	my %opt = @_;
+	require PublicInbox::Lock;
+	require PublicInbox::Import;
+	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
+	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
+	my $dir = "t/data-gen/$base.$ident-$db";
+	my $new = !-d $dir;
+	if ($new && !mkdir($dir)) {
+		my $err = $!;
+		-d $dir or xbail "mkdir($dir): $err";
+	}
+	my $lk = bless { lock_path => "$dir/creat.lock" }, 'PublicInbox::Lock';
+	my $scope = $lk->lock_for_scope;
+	my $tmpdir = delete $opt{tmpdir};
+	if (!-f "$dir/creat.stamp") {
+		opendir(my $dfh, '.') or xbail "opendir .: $!";
+		chdir($dir) or xbail "chdir($dir): $!";
+		local %ENV = (%ENV, %COMMIT_ENV);
+		$cb->($dir);
+		chdir($dfh) or xbail "cd -: $!";
+		open my $s, '>', "$dir/creat.stamp" or
+			BAIL_OUT "error creating $dir/creat.stamp: $!";
+	}
+	return $dir if !defined($tmpdir);
+	xsys_e([qw(/bin/cp -Rp), $dir, $tmpdir]);
+	$tmpdir;
 }
 
 sub create_inbox ($$;@) {
