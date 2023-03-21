@@ -734,7 +734,7 @@ sub cidx_run { # main entry point
 			$m =~ s/\A(#?\s*)/$1$self->{current_info}: /;
 		$cb->($m, @_);
 	};
-	load_existing($self);
+	load_existing($self) unless $self->{-internal};
 	local $REINDEX;
 	if ($self->{-opt}->{reindex}) {
 		require PublicInbox::SharedKV;
