@@ -52,8 +52,12 @@ our $SEEN_MAX = 100000;
 
 # TODO: do we care about committer name + email? or tree OID?
 my @FMT = qw(H P ct an ae at s b); # (b)ody must be last
+
+# git log --stdin buffers all commits before emitting, thus --reverse
+# doesn't incur extra overhead.  We use --reverse to keep Xapian docids
+# increasing so we may be able to avoid sorting results in some cases
 my @LOG_STDIN = (qw(log --no-decorate --no-color --no-notes -p --stat -M
-	--stdin --no-walk=unsorted), '--pretty=format:%n%x00'.
+	--reverse --stdin --no-walk=unsorted), '--pretty=format:%n%x00'.
 	join('%n', map { "%$_" } @FMT));
 
 sub new {
