@@ -246,12 +246,18 @@ sub run_todo ($) {
 	$n;
 }
 
+sub need_reap { # post_loop_do
+	my (undef, $jobs) = @_;
+	scalar(keys(%$LIVE)) > $jobs;
+}
+
 sub cidx_reap ($$) {
 	my ($self, $jobs) = @_;
 	while (run_todo($self)) {}
-	my $cb = sub { keys(%$LIVE) > $jobs };
-	PublicInbox::DS->SetPostLoopCallback($cb);
-	PublicInbox::DS::event_loop($MY_SIG, $SIGSET) while $cb->();
+	local @PublicInbox::DS::post_loop_do = \(&need_reap, $jobs);
+	while (need_reap(undef, $jobs)) {
+		PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
+	}
 	while (!$jobs && run_todo($self)) {}
 }
 
@@ -397,6 +403,11 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $n", MSG_EOR);
 }
 
+sub consumers_open { # post_loop_do
+	my (undef, $consumers) = @_;
+	scalar(grep { $_->{sock} } values %$consumers);
+}
+
 sub commit_used_shards ($$$) {
 	my ($self, $git, $consumers) = @_;
 	local $self->{-shard_ok} = {};
@@ -406,9 +417,7 @@ sub commit_used_shards ($$$) {
 		$IDX_SHARDS[$n]->wq_io_do('shard_commit', [ $p->{op_p} ], $n);
 		$consumers->{$n} = $c;
 	}
-	PublicInbox::DS->SetPostLoopCallback(sub {
-		scalar(grep { $_->{sock} } values %$consumers);
-	});
+	local @PublicInbox::DS::post_loop_do = (\&consumers_open, $consumers);
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
 	my $n = grep { ! $self->{-shard_ok}->{$_} } keys %$consumers;
 	die "E: $git->{git_dir} $n shards failed" if $n;
@@ -437,9 +446,7 @@ sub index_repo { # cidx_await cb
 		$CONSUMERS{$n} = $c;
 	}
 	@shard_in = ();
-	PublicInbox::DS->SetPostLoopCallback(sub {
-		scalar(grep { $_->{sock} } values %CONSUMERS);
-	});
+	local @PublicInbox::DS::post_loop_do = (\&consumers_open, \%CONSUMERS);
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
 	my $n = grep { ! $self->{-shard_ok}->{$_} } keys %CONSUMERS;
 	die "E: $git->{git_dir} $n shards failed" if $n;
@@ -523,7 +530,7 @@ sub scan_git_dirs ($) {
 	cidx_reap($self, 0);
 }
 
-sub shards_active { # PostLoopCallback
+sub shards_active { # post_loop_do
 	scalar(grep { $_->{-cidx_quit} } @IDX_SHARDS);
 }
 
@@ -572,7 +579,7 @@ sub cidx_run { # main entry point
 		$s->wq_close;
 	}
 
-	PublicInbox::DS->SetPostLoopCallback(\&shards_active);
+	local @PublicInbox::DS::post_loop_do = (\&shards_active);
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET) if shards_active();
 	$self->lock_release(!!$self->{nchange});
 }

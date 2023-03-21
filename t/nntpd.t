@@ -436,7 +436,7 @@ sub test_watch {
 	my $cfg = PublicInbox::Config->new;
 	PublicInbox::DS->Reset;
 	my $ii = PublicInbox::InboxIdle->new($cfg);
-	my $cb = sub { PublicInbox::DS->SetPostLoopCallback(sub {}) };
+	my $cb = sub { @PublicInbox::DS::post_loop_do = (sub {}) };
 	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
 	$cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
 	my $watcherr = "$tmpdir/watcherr";

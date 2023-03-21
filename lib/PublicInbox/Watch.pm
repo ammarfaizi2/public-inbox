@@ -536,7 +536,7 @@ sub watch { # main entry point
 		add_timer(0, \&poll_fetch_fork, $self, $intvl, $uris);
 	}
 	watch_fs_init($self) if $self->{mdre};
-	PublicInbox::DS->SetPostLoopCallback(sub { !$self->quit_done });
+	local @PublicInbox::DS::post_loop_do = (sub { !$self->quit_done });
 	PublicInbox::DS::event_loop($sig, $oldset); # calls ->event_step
 	_done_for_now($self);
 }

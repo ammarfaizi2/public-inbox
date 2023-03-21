@@ -245,11 +245,16 @@ sub recv_and_run {
 	$n;
 }
 
+sub sock_defined {
+	my (undef, $wqw) = @_;
+	defined($wqw->{sock});
+}
+
 sub wq_worker_loop ($$) {
 	my ($self, $bcast2) = @_;
 	my $wqw = PublicInbox::WQWorker->new($self, $self->{-wq_s2});
 	PublicInbox::WQWorker->new($self, $bcast2) if $bcast2;
-	PublicInbox::DS->SetPostLoopCallback(sub { $wqw->{sock} });
+	local @PublicInbox::DS::post_loop_do = (\&sock_defined, $wqw);
 	PublicInbox::DS::event_loop();
 	PublicInbox::DS->Reset;
 }

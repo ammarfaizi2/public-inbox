@@ -105,7 +105,7 @@ sub once { 0 }; # stops event loop
 # setup the event loop so that it exits at every step
 # while we're still doing connect(2)
 PublicInbox::DS->SetLoopTimeout(0);
-PublicInbox::DS->SetPostLoopCallback(\&once);
+local @PublicInbox::DS::post_loop_do = (\&once);
 
 foreach my $n (1..$nfd) {
 	my $io = tcp_connect($nntps, Blocking => 0);
@@ -120,14 +120,14 @@ foreach my $n (1..$nfd) {
 	if (!($n % 128) && $n != $DONE) {
 		diag("nr: ($n) $DONE/$nfd");
 		PublicInbox::DS->SetLoopTimeout(-1);
-		PublicInbox::DS->SetPostLoopCallback(sub { $DONE != $n });
+		@PublicInbox::DS::post_loop_do = (sub { $DONE != $n });
 
 		# clear the backlog:
 		PublicInbox::DS::event_loop();
 
 		# resume looping
 		PublicInbox::DS->SetLoopTimeout(0);
-		PublicInbox::DS->SetPostLoopCallback(\&once);
+		@PublicInbox::DS::post_loop_do = (\&once);
 	}
 }
 my $pid = $td->{pid};
@@ -141,7 +141,7 @@ $dump_rss->();
 # run the event loop normally, now:
 if ($DONE != $nfd) {
 	PublicInbox::DS->SetLoopTimeout(-1);
-	PublicInbox::DS->SetPostLoopCallback(sub {
+	@PublicInbox::DS::post_loop_do = (sub {
 		diag "done: ".time." $DONE";
 		$DONE != $nfd;
 	});

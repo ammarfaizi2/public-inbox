@@ -82,7 +82,7 @@ sub once { 0 }; # stops event loop
 # setup the event loop so that it exits at every step
 # while we're still doing connect(2)
 PublicInbox::DS->SetLoopTimeout(0);
-PublicInbox::DS->SetPostLoopCallback(\&once);
+local @PublicInbox::DS::post_loop_do = (\&once);
 my $pid = $td->{pid};
 if ($^O eq 'linux' && open(my $f, '<', "/proc/$pid/status")) {
 	diag(grep(/RssAnon/, <$f>));
@@ -101,14 +101,13 @@ foreach my $n (1..$nfd) {
 	if (!($n % 128) && $DONE != $n) {
 		diag("nr: ($n) $DONE/$nfd");
 		PublicInbox::DS->SetLoopTimeout(-1);
-		PublicInbox::DS->SetPostLoopCallback(sub { $DONE != $n });
+		local @PublicInbox::DS::post_loop_do = (sub { $DONE != $n });
 
 		# clear the backlog:
 		PublicInbox::DS::event_loop();
 
 		# resume looping
 		PublicInbox::DS->SetLoopTimeout(0);
-		PublicInbox::DS->SetPostLoopCallback(\&once);
 	}
 }
 
@@ -116,7 +115,7 @@ foreach my $n (1..$nfd) {
 diag "done?: @".time." $DONE/$nfd";
 if ($DONE != $nfd) {
 	PublicInbox::DS->SetLoopTimeout(-1);
-	PublicInbox::DS->SetPostLoopCallback(sub { $DONE != $nfd });
+	local @PublicInbox::DS::post_loop_do = (sub { $DONE != $nfd });
 	PublicInbox::DS::event_loop();
 }
 is($nfd, $DONE, "$nfd/$DONE done");

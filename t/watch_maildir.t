@@ -1,7 +1,7 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
+use v5.12;
 use PublicInbox::Eml;
 use Cwd;
 use PublicInbox::Config;
@@ -170,7 +170,7 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	my $ii = PublicInbox::InboxIdle->new($cfg);
 	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
 	$cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
-	PublicInbox::DS->SetPostLoopCallback(sub { $delivered == 0 });
+	local @PublicInbox::DS::post_loop_do = (sub { $delivered == 0 });
 
 	# wait for -watch to setup inotify watches
 	my $sleep = 1;
