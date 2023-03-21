@@ -41,7 +41,8 @@ our (
 	$TXN_BYTES, # number of bytes in current shard transaction
 	$DO_QUIT, # signal number
 	@RDONLY_SHARDS, # Xapian::Database
-	@IDX_SHARDS # clones of self
+	@IDX_SHARDS, # clones of self
+	$MAX_SIZE,
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -159,17 +160,45 @@ sub cidx_ckpoint ($$) {
 	$self->{xdb}->begin_transaction;
 }
 
+sub truncate_cmt ($$) {
+	my ($cmt) = @_; # _[1] is $buf (giant)
+	my ($orig_len, $len);
+	$len = $orig_len = length($_[1]);
+	@$cmt{@FMT} = split(/\n/, $_[1], scalar(@FMT));
+	undef $_[1];
+	$len -= length($cmt->{b});
+
+	# try to keep the commit message body.
+	# n.b. this diffstat split may be unreliable but it's not worth
+	# perfection for giant commits:
+	my ($bdy) = split(/^---\n/sm, delete($cmt->{b}), 2);
+	if (($len + length($bdy)) <= $MAX_SIZE) {
+		$len += length($bdy);
+		$cmt->{b} = $bdy;
+		warn <<EOM;
+W: $cmt->{H}: truncated body ($orig_len => $len bytes)
+W: to be under --max-size=$MAX_SIZE
+EOM
+	} else {
+		$cmt->{b} = '';
+		warn <<EOM;
+W: $cmt->{H}: deleted body ($orig_len => $len bytes)
+W: to be under --max-size=$MAX_SIZE
+EOM
+	}
+	$len;
+}
+
 # sharded reader for `git log --pretty=format: --stdin'
 sub shard_index { # via wq_io_do
 	my ($self, $git, $n, $roots) = @_;
 	local $self->{current_info} = "$git->{git_dir} [$n]";
-	my $cmt;
 	local $self->{roots} = $roots;
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
 	my $batch_bytes = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
-	my $max_size = $self->{-opt}->{max_size};
+	local $MAX_SIZE = $self->{-opt}->{max_size};
 	# local-ized in parent before fork
 	$TXN_BYTES = $batch_bytes;
 	local $self->{git} = $git; # for patchid
@@ -180,24 +209,26 @@ sub shard_index { # via wq_io_do
 	# a patch may have \0, see c4201214cbf10636e2c1ab9131573f735b42c8d4
 	# in linux.git, so we use $/ = "\n\0" to check end-of-patch
 	my $FS = "\n\0";
+	my $len;
+	my $cmt = {};
 	local $/ = $FS;
 	my $buf = <$rd> // return; # leading $FS
 	$buf eq $FS or die "BUG: not LF-NUL: $buf\n";
 	$self->begin_txn_lazy;
 	while (defined($buf = <$rd>)) {
 		chomp($buf);
-		if ($max_size && length($buf) >= $max_size) {
-			my ($H, undef) = split(/\n/, $buf, 2);
-			warn "W: skipping $H (", length($buf)," >= $max_size)\n";
-			next;
+		$/ = "\n";
+		$len = length($buf);
+		if (defined($MAX_SIZE) && $len > $MAX_SIZE) {
+			$len = truncate_cmt($cmt, $buf);
+		} else {
+			@$cmt{@FMT} = split(/\n/, $buf, scalar(@FMT));
 		}
-		$TXN_BYTES -= length($buf);
+		$TXN_BYTES -= $len;
 		if ($TXN_BYTES <= 0) {
 			cidx_ckpoint($self, "[$n] $nr");
-			$TXN_BYTES = $batch_bytes - length($buf);
+			$TXN_BYTES = $batch_bytes - $len;
 		}
-		@$cmt{@FMT} = split(/\n/, $buf, scalar(@FMT));
-		$/ = "\n";
 		add_commit($self, $cmt);
 		last if $DO_QUIT;
 		++$nr;
