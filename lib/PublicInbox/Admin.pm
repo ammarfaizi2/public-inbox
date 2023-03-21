@@ -1,10 +1,10 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # common stuff for administrative command-line tools
 # Unstable internal API
 package PublicInbox::Admin;
-use strict;
+use v5.12;
 use parent qw(Exporter);
 our @EXPORT_OK = qw(setup_signals);
 use PublicInbox::Config;
@@ -69,13 +69,19 @@ sub resolve_inboxdir {
 			die "`$try' is not a directory\n";
 		}
 	}
+	my $dir = resolve_git_dir($cd);
+	$$ver = 1 if $ver;
+	$dir;
+}
+
+sub resolve_git_dir {
+	my ($cd) = @_;
 	# try v1 bare git dirs
 	my $cmd = [ qw(git rev-parse --git-dir) ];
 	my $fh = popen_rd($cmd, undef, {-C => $cd});
 	my $dir = do { local $/; <$fh> };
-	close $fh or die "error in @$cmd (cwd:${\($cd // '.')}): $!\n";
+	close $fh or die "error in @$cmd (cwd:${\($cd // '.')}): $?\n";
 	chomp $dir;
-	$$ver = 1 if $ver;
 	rel2abs_collapsed($dir eq '.' ? ($cd // $dir) : $dir);
 }
 
