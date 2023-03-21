@@ -547,7 +547,19 @@ sub load_existing ($) { # for -u/--update
 		local $self->{xdb};
 		$self->xdb or
 			die "E: $self->{cidx_dir} non-existent for --update\n";
-		my @cur = $self->all_terms('P');
+		my @missing;
+		my @cur = grep {
+			if (-e $_) {
+				1;
+			} else {
+				push @missing, $_;
+				undef;
+			}
+		} $self->all_terms('P');
+		@missing and warn "W: the following repos no longer exist:\n",
+				(map { "W:\t$_\n" } @missing),
+				"W: use --prune to remove them from ",
+				$self->{cidx_dir}, "\n";
 		push @$dirs, @cur;
 	}
 	my %uniq; # List::Util::uniq requires Perl 5.26+
