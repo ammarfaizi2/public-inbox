@@ -43,6 +43,7 @@ our (
 	@RDONLY_SHARDS, # Xapian::Database
 	@IDX_SHARDS, # clones of self
 	$MAX_SIZE,
+	$TMP_GIT, # PublicInbox::Git object for --reindex and --prune
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -543,7 +544,7 @@ sub git { $_[0]->{git} }
 sub load_existing ($) { # for -u/--update
 	my ($self) = @_;
 	my $dirs = $self->{git_dirs} // [];
-	if ($self->{-opt}->{update}) {
+	if ($self->{-opt}->{update} || $self->{-opt}->{prune}) {
 		local $self->{xdb};
 		$self->xdb or
 			die "E: $self->{cidx_dir} non-existent for --update\n";
@@ -556,6 +557,7 @@ sub load_existing ($) { # for -u/--update
 				undef;
 			}
 		} $self->all_terms('P');
+		@missing = () if $self->{-opt}->{prune};
 		@missing and warn "W: the following repos no longer exist:\n",
 				(map { "W:\t$_\n" } @missing),
 				"W: use --prune to remove them from ",
@@ -612,6 +614,64 @@ sub scan_git_dirs ($) {
 	cidx_reap($self, 0);
 }
 
+sub prune_cb { # git->check_async callback
+	my ($hex, $type, undef, $self_id) = @_;
+	if ($type ne 'commit') {
+		my ($self, $id) = @$self_id;
+		progress($self, "$hex $type");
+		++$self->{pruned};
+		$self->{xdb}->delete_document($id);
+	}
+}
+
+sub shard_prune { # via wq_io_do
+	my ($self, $n, $git_dir) = @_;
+	my $op_p = delete($self->{0}) // die 'BUG: no {0} op_p';
+	my $git = PublicInbox::Git->new($git_dir); # TMP_GIT copy
+	$self->begin_txn_lazy;
+	my $xdb = $self->{xdb};
+	my $cur = $xdb->postlist_begin('Tc');
+	my $end = $xdb->postlist_end('Tc');
+	my ($id, @cmt, $oid);
+	local $self->{pruned} = 0;
+	for (; $cur != $end && !$DO_QUIT; $cur++) {
+		@cmt = xap_terms('Q', $xdb, $id = $cur->get_docid);
+		scalar(@cmt) == 1 or
+			warn "BUG? shard[$n] #$id has multiple commits: @cmt";
+		for $oid (@cmt) {
+			$git->check_async($oid, \&prune_cb, [ $self, $id ]);
+		}
+	}
+	$git->async_wait_all;
+	for my $d ($self->all_terms('P')) { # GIT_DIR paths
+		last if $DO_QUIT;
+		next if -d $d;
+		for $id (docids_by_postlist($self, 'P'.$d)) {
+			progress($self, "$d gone #$id");
+			$xdb->delete_document($id);
+		}
+	}
+	$self->commit_txn_lazy;
+	$self->{pruned} and
+		progress($self, "[$n] pruned $self->{pruned} commits");
+	send($op_p, "shard_done $n", MSG_EOR);
+}
+
+sub do_prune ($) {
+	my ($self) = @_;
+	my $consumers = {};
+	my $git_dir = $TMP_GIT->{git_dir};
+	my $n = 0;
+	local $self->{-shard_ok} = {};
+	for my $s (@IDX_SHARDS) {
+		my ($c, $p) = PublicInbox::PktOp->pair;
+		$c->{ops}->{shard_done} = [ $self ];
+		$s->wq_io_do('shard_prune', [ $p->{op_p} ], $n, $git_dir);
+		$consumers->{$n++} = $c;
+	}
+	wait_consumers($self, $TMP_GIT, $consumers);
+}
+
 sub shards_active { # post_loop_do
 	scalar(grep { $_->{-cidx_quit} } @IDX_SHARDS);
 }
@@ -625,6 +685,25 @@ sub parent_quit {
 	warn "# SIG$_[0] received, quitting...\n";
 }
 
+sub init_tmp_git_dir ($) {
+	my ($self) = @_;
+	return unless ($self->{-opt}->{prune} || $self->{-opt}->{reindex});
+	require File::Temp;
+	require PublicInbox::Import;
+	my $tmp = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
+	PublicInbox::Import::init_bare("$tmp", 'cidx-all');
+	my $f = "$tmp/objects/info/alternates";
+	open my $fh, '>', $f or die "open($f): $!";
+	my $o;
+	for (@{$self->{git_dirs}}) { # TODO: sha256 check?
+		$o = $_.'/objects';
+		say $fh $o if -d $o;
+	}
+	close $fh or die "close($f): $!";
+	$TMP_GIT = PublicInbox::Git->new("$tmp");
+	$TMP_GIT->{-tmp} = $tmp;
+}
+
 sub cidx_run { # main entry point
 	my ($self) = @_;
 	local $self->{todo} = [];
@@ -634,6 +713,7 @@ sub cidx_run { # main entry point
 		\&PublicInbox::DS::sig_setmask, $SIGSET);
 	local $LIVE = {};
 	local $DO_QUIT;
+	local $TMP_GIT;
 	local @IDX_SHARDS = cidx_init($self);
 	local $self->{current_info} = '';
 	local $MY_SIG = {
@@ -671,8 +751,8 @@ sub cidx_run { # main entry point
 	local $LIVE_JOBS = $self->{-opt}->{jobs} ||
 			PublicInbox::IPC::detect_nproc() || 2;
 	local @RDONLY_SHARDS = $self->xdb_shards_flat;
-
-	# do_prune($self) if $self->{-opt}->{prune}; TODO
+	init_tmp_git_dir($self);
+	do_prune($self) if $self->{-opt}->{prune};
 	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
 
 	for my $s (@IDX_SHARDS) {

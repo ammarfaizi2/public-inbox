@@ -95,4 +95,20 @@ EOM
 	is(scalar($mset->items), 1, 'got updated result');
 }
 
+if ('--prune') {
+	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
+	is(scalar($csrch->mset('s:hi')->items), 1, 'got hit');
+
+	rename("$tmp/wt0/.git", "$tmp/wt0/.giit") or xbail "rename $!";
+	ok(run_script([qw(-cindex -q --prune -d), "$tmp/ext"]), 'prune');
+	$csrch->reopen;
+	is(scalar($csrch->mset('s:hi')->items), 0, 'hit pruned');
+
+	rename("$tmp/wt0/.giit", "$tmp/wt0/.git") or xbail "rename $!";
+	ok(run_script([qw(-cindex -qu -d), "$tmp/ext"]), 'update');
+	$csrch->reopen;
+	is(scalar($csrch->mset('s:hi')->items), 0,
+		'hit stays pruned since GIT_DIR was previously pruned');
+}
+
 done_testing;
