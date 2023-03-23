@@ -115,18 +115,24 @@ sub lei_import { # the main "lei import" method
 
 sub _complete_import {
 	my ($lei, @argv) = @_;
-	my ($re, $cur, $match_cb) = $lei->complete_url_prepare(\@argv);
-	my @k = $lei->url_folder_cache->keys($argv[-1] // undef, 1);
+	my $has_arg = @argv;
+	my ($pfx, $cur, $match_cb) = $lei->complete_url_prepare(\@argv);
+	my @try = $has_arg ? ($pfx.$cur, $argv[-1]) : ($argv[-1]);
+	push(@try, undef) if defined $try[-1];
+	my (@f, @k);
+	for (@try) {
+		@k = $lei->url_folder_cache->keys($_, 1) and last;
+	}
 	my @L = eval { $lei->_lei_store->search->all_terms('L') };
 	push(@k, map { "+L:$_" } @L);
-	my @m = map { $match_cb->($_) } @k;
-	my %f = map { $_ => 1 } (@m ? @m : @k);
 	if (my $lms = $lei->lms) {
-		@k = $lms->folders($argv[-1] // undef, 1);
-		@m = map { $match_cb->($_) } @k;
-		if (@m) { @f{@m} = @m } else { @f{@k} = @k }
+		for (@try) {
+			@f = $lms->folders($_, 1) and last;
+		}
+		push @k, @f;
 	}
-	keys %f;
+	my @m = map { $match_cb->($_) } @k;
+	@m ? @m : @k;
 }
 
 no warnings 'once';

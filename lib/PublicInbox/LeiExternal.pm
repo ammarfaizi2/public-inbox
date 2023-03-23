@@ -86,39 +86,34 @@ sub canonicalize_excludes {
 # returns an anonymous sub which returns an array of potential results
 sub complete_url_prepare {
 	my $argv = $_[-1]; # $_[0] may be $lei
-	# Workaround bash word-splitting URLs to ['https', ':', '//' ...]
-	# Maybe there's a better way to go about this in
-	# contrib/completion/lei-completion.bash
-	my $re = '';
-	my $cur = pop(@$argv) // '';
+	# Workaround bash default COMP_WORDBREAKS splitting URLs to
+	# ['https', ':', '//', ...].  COMP_WORDBREAKS is global for all
+	# completions loaded, not just ours, so we can't change it.
+	# cf. contrib/completion/lei-completion.bash
+	my ($pfx, $cur)  = ('', pop(@$argv) // '');
 	if (@$argv) {
 		my @x = @$argv;
-		if ($cur eq ':' && @x) {
+		if ($cur =~ /\A[:;=]\z/) { # COMP_WORDBREAKS + URL union
 			push @x, $cur;
 			$cur = '';
 		}
-		while (@x > 2 && $x[0] !~ /\A(?:http|nntp|imap)s?\z/i &&
-				$x[1] ne ':') {
-			shift @x;
+		while (@x && $pfx !~ m!\A(?: (?:[\+\-]?(?:L|kw):) |
+				(?:(?:imap|nntp|http)s?:) |
+				(?:--\w?\z)|(?:-\w?\z) )!x) {
+			$pfx = pop(@x).$pfx;
 		}
-		if (@x >= 2) { # qw(https : hostname : 443) or qw(http :)
-			$re = join('', @x);
-		} else { # just filter out the flags and hope for the best
-			$re = join('', grep(!/^-/, @$argv));
-		}
-		$re = quotemeta($re);
 	}
+	my $re = qr!\A\Q$pfx\E(\Q$cur\E.*)!;
 	my $match_cb = sub {
 		# the "//;" here (for AUTH=ANONYMOUS) interacts badly with
 		# bash tab completion, strip it out for now since our commands
 		# work w/o it.  Not sure if there's a better solution...
 		$_[0] =~ s!//;AUTH=ANONYMOUS\@!//!i;
-		$_[0] =~ s!;!\\;!g;
 		# only return the part specified on the CLI
 		# don't duplicate if already 100% completed
-		$_[0] =~ /\A$re(\Q$cur\E.*)/ ? ($cur eq $1 ? () : $1) : ()
+		$_[0] =~ $re ? ($cur eq $1 ? () : $1) : ()
 	};
-	wantarray ? ($re, $cur, $match_cb) : $match_cb;
+	wantarray ? ($pfx, $cur, $match_cb) : $match_cb;
 }
 
 1;

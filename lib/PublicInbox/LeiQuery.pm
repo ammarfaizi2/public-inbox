@@ -173,6 +173,8 @@ no query allowed on command-line with --stdin
 # shell completion helper called by lei__complete
 sub _complete_q {
 	my ($self, @argv) = @_;
+	join('', @argv) =~ /\bL:\S*\z/ and
+		return eval { $self->_lei_store->search->all_terms('L') };
 	my @cur;
 	my $cb = $self->lazy_cb(qw(forget-external _complete_));
 	while (@argv) {

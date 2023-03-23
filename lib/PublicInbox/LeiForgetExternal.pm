@@ -32,14 +32,10 @@ sub lei_forget_external {
 sub _complete_forget_external {
 	my ($lei, @argv) = @_;
 	my $cfg = $lei->_lei_cfg or return ();
-	my ($cur, $re, $match_cb) = $lei->complete_url_prepare(\@argv);
-	# FIXME: bash completion off "http:" or "https:" when the last
-	# character is a colon doesn't work properly even if we're
-	# returning "//$HTTP_HOST/$PATH_INFO/", not sure why, could
-	# be a bash issue.
+	my ($pfx, $cur, $match_cb) = $lei->complete_url_prepare(\@argv);
 	map {
 		$match_cb->(substr($_, length('external.')));
-	} grep(/\Aexternal\.$re\Q$cur/, @{$cfg->{-section_order}});
+	} grep(/\Aexternal\.\Q$pfx$cur/, @{$cfg->{-section_order}});
 }
 
 1;
