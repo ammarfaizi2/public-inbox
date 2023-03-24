@@ -622,12 +622,21 @@ sub scan_git_dirs ($) {
 
 sub prune_cb { # git->check_async callback
 	my ($hex, $type, undef, $self_id) = @_;
-	if ($type ne 'commit') {
-		my ($self, $id) = @$self_id;
-		progress($self, "$hex $type");
-		++$self->{pruned};
-		$self->{xdb}->delete_document($id);
-	}
+	return if $type eq 'commit';
+	my ($self, $id) = @$self_id;
+	my $len = $self->{xdb}->get_doclength($id);
+	progress($self, "$hex $type (doclength=$len)");
+	++$self->{pruned};
+	$self->{xdb}->delete_document($id);
+
+	# all math around batch_bytes calculation is pretty fuzzy,
+	# but need a way to regularly flush output to avoid OOM,
+	# so assume the average term + position overhead is the
+	# answer to everything: 42
+	return if ($self->{batch_bytes} -= ($len * 42)) > 0;
+	cidx_ckpoint($self, "[$self->{shard}] $self->{pruned}");
+	$self->{batch_bytes} = $self->{-opt}->{batch_size} //
+			$PublicInbox::SearchIdx::BATCH_BYTES;
 }
 
 sub shard_prune { # via wq_io_do
@@ -639,6 +648,8 @@ sub shard_prune { # via wq_io_do
 	my $cur = $xdb->postlist_begin('Tc');
 	my $end = $xdb->postlist_end('Tc');
 	my ($id, @cmt, $oid);
+	local $self->{batch_bytes} = $self->{-opt}->{batch_size} //
+				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local $self->{pruned} = 0;
 	for (; $cur != $end && !$DO_QUIT; $cur++) {
 		@cmt = xap_terms('Q', $xdb, $id = $cur->get_docid);
