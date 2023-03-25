@@ -12,20 +12,19 @@ use Data::Dumper;
 $Data::Dumper::Useqq = 1; # should've been the Perl default :P
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::Spawn;
-my $recv_cmd;
+use PublicInbox::IPC;
 
 sub new {
 	my ($cls, $r) = @_;
 	my $self = bless { sock => $r }, $cls;
 	$r->blocking(0);
 	no warnings 'once';
-	$recv_cmd = $PublicInbox::LEI::recv_cmd;
 	$self->SUPER::new($r, EPOLLIN);
 }
 
 sub event_step {
 	my ($self) = @_;
-	my (@fds) = $recv_cmd->($self->{sock}, my $buf, 4096 * 33);
+	my @fds = PublicInbox::IPC::recv_cmd($self->{sock}, my $buf, 4096 * 33);
 	if (scalar(@fds) == 1 && !defined($fds[0])) {
 		return if $!{EAGAIN};
 		die "recvmsg: $!" unless $!{ECONNRESET};

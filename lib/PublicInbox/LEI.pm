@@ -23,13 +23,14 @@ use PublicInbox::Lock;
 use PublicInbox::Eml;
 use PublicInbox::Import;
 use PublicInbox::ContentHash qw(git_sha);
+use PublicInbox::IPC;
 use Time::HiRes qw(stat); # ctime comparisons for config cache
 use File::Path ();
 use File::Spec;
+use Carp ();
 use Sys::Syslog qw(openlog syslog closelog);
 our $quit = \&CORE::exit;
-our ($current_lei, $errors_log, $listener, $oldset, $dir_idle,
-	$recv_cmd, $send_cmd);
+our ($current_lei, $errors_log, $listener, $oldset, $dir_idle);
 my $GLP = Getopt::Long::Parser->new;
 $GLP->configure(qw(gnu_getopt no_ignore_case auto_abbrev));
 my $GLP_PASS = Getopt::Long::Parser->new;
@@ -1013,9 +1014,11 @@ sub start_mua {
 
 sub send_exec_cmd { # tell script/lei to execute a command
 	my ($self, $io, $cmd, $env) = @_;
-	my $sock = $self->{sock} // die 'lei client gone';
-	my $fds = [ map { fileno($_) } @$io ];
-	$send_cmd->($sock, $fds, exec_buf($cmd, $env), MSG_EOR);
+	PublicInbox::IPC::send_cmd(
+			$self->{sock} // die('lei client gone'),
+			[ map { fileno($_) } @$io ],
+			exec_buf($cmd, $env), MSG_EOR) //
+		Carp::croak("sendmsg: $!");
 }
 
 sub poke_mua { # forces terminal MUAs to wake up and hopefully notice new mail
@@ -1109,7 +1112,8 @@ sub accept_dispatch { # Listener {post_accept} callback
 	select($rvec, undef, undef, 60) or
 		return send($sock, 'timed out waiting to recv FDs', MSG_EOR);
 	# (4096 * 33) >MAX_ARG_STRLEN
-	my @fds = $recv_cmd->($sock, my $buf, 4096 * 33) or return; # EOF
+	my @fds = PublicInbox::IPC::recv_cmd($sock, my $buf, 4096 * 33) or
+		return; # EOF
 	if (!defined($fds[0])) {
 		warn(my $msg = "recv_cmd failed: $!");
 		return send($sock, $msg, MSG_EOR);
@@ -1147,7 +1151,8 @@ sub event_step {
 	local %ENV = %{$self->{env}};
 	local $current_lei = $self;
 	eval {
-		my @fds = $recv_cmd->($self->{sock} // return, my $buf, 4096);
+		my @fds = PublicInbox::IPC::recv_cmd(
+			$self->{sock} // return, my $buf, 4096);
 		if (scalar(@fds) == 1 && !defined($fds[0])) {
 			return if $! == EAGAIN;
 			die "recvmsg: $!" if $! != ECONNRESET;
@@ -1273,18 +1278,8 @@ sub lazy_start {
 	my @st = stat($path) or die "stat($path): $!";
 	my $dev_ino_expect = pack('dd', $st[0], $st[1]); # dev+ino
 	local $oldset = PublicInbox::DS::block_signals();
-	if ($narg == 5) {
-		$send_cmd = PublicInbox::Spawn->can('send_cmd4');
-		$recv_cmd = PublicInbox::Spawn->can('recv_cmd4') // do {
-			require PublicInbox::CmdIPC4;
-			$send_cmd = PublicInbox::CmdIPC4->can('send_cmd4');
-			PublicInbox::CmdIPC4->can('recv_cmd4');
-		} // do {
-			$send_cmd = PublicInbox::Syscall->can('send_cmd4');
-			PublicInbox::Syscall->can('recv_cmd4');
-		};
-	}
-	$recv_cmd or die <<"";
+	die "incompatible narg=$narg" if $narg != 5;
+	$PublicInbox::IPC::send_cmd or die <<"";
 (Socket::MsgHdr || Inline::C) missing/unconfigured (narg=$narg);
 
 	require PublicInbox::Listener;
