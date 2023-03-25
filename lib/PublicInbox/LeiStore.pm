@@ -612,7 +612,7 @@ sub _sto_atexit { # awaitpid cb
 sub write_prepare {
 	my ($self, $lei) = @_;
 	$lei // die 'BUG: $lei not passed';
-	unless ($self->{-ipc_req}) {
+	unless ($self->{-wq_s1}) {
 		my $dir = $lei->store_path;
 		substr($dir, -length('/lei/store'), 10, '');
 		pipe(my ($r, $w)) or die "pipe: $!";
