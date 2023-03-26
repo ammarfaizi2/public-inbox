@@ -1370,7 +1370,7 @@ help :
 	@echo Rarely needed targets:
 	@echo '    make reindex      - may be needed for new features/bugfixes'
 	@echo '    make compact      - rewrite Xapian storage to save space'
-	@echo '    make index        - initial index after clone
+	@echo '    make index        - initial index after clone'
 
 fetch :
 	public-inbox-fetch
