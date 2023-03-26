@@ -254,9 +254,10 @@ sub quit {
 	%{$self->{opendirs}} = ();
 	_done_for_now($self);
 	quit_done($self);
-	if (my $idle_mic = $self->{idle_mic}) {
+	if (my $idle_mic = delete $self->{idle_mic}) {
+		return unless $idle_mic->IsConnected && $idle_mic->Socket;
 		eval { $idle_mic->done };
-		if ($@) {
+		if ($@ && $idle_mic->IsConnected && $idle_mic->Socket) {
 			warn "IDLE DONE error: $@\n";
 			eval { $idle_mic->disconnect };
 			warn "IDLE LOGOUT error: $@\n" if $@;
