@@ -1320,11 +1320,11 @@ sub lazy_start {
 	};
 	require PublicInbox::DirIdle;
 	local $dir_idle = PublicInbox::DirIdle->new(sub {
-		# just rely on wakeup to hit PostLoopCallback set below
+		# just rely on wakeup to hit post_loop_do
 		dir_idle_handler($_[0]) if $_[0]->fullname ne $path;
 	});
 	$dir_idle->add_watches([$sock_dir]);
-	PublicInbox::DS->SetPostLoopCallback(sub {
+	local @PublicInbox::DS::post_loop_do = (sub {
 		my ($dmap, undef) = @_;
 		if (@st = defined($path) ? stat($path) : ()) {
 			if ($dev_ino_expect ne pack('dd', $st[0], $st[1])) {

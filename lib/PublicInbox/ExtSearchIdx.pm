@@ -1388,7 +1388,7 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 	my $quit = PublicInbox::SearchIdx::quit_cb($sync);
 	$sig->{QUIT} = $sig->{INT} = $sig->{TERM} = $quit;
 	local $self->{-watch_sync} = $sync; # for ->on_inbox_unlock
-	PublicInbox::DS->SetPostLoopCallback(sub { !$sync->{quit} });
+	local @PublicInbox::DS::post_loop_do = (sub { !$sync->{quit} });
 	$pr->("initial scan complete, entering event loop\n") if $pr;
 	# calls InboxIdle->event_step:
 	PublicInbox::DS::event_loop($sig, $oldset);

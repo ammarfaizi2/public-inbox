@@ -457,7 +457,7 @@ SKIP: {
 	my $cfg = PublicInbox::Config->new;
 	PublicInbox::DS->Reset;
 	my $ii = PublicInbox::InboxIdle->new($cfg);
-	my $cb = sub { PublicInbox::DS->SetPostLoopCallback(sub {}) };
+	my $cb = sub { @PublicInbox::DS::post_loop_do = (sub {}) };
 	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
 	$cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
 	my $watcherr = "$tmpdir/watcherr";
@@ -476,7 +476,7 @@ SKIP: {
 		'delivered a message for IDLE to kick -watch') or
 		diag "mda error \$?=$?";
 	diag 'waiting for IMAP IDLE wakeup';
-	PublicInbox::DS->SetPostLoopCallback(undef);
+	@PublicInbox::DS::post_loop_do = ();
 	PublicInbox::DS::event_loop();
 	diag 'inbox unlocked on IDLE wakeup';
 
@@ -493,7 +493,7 @@ SKIP: {
 		'delivered a message for -watch PollInterval');
 
 	diag 'waiting for PollInterval wakeup';
-	PublicInbox::DS->SetPostLoopCallback(undef);
+	@PublicInbox::DS::post_loop_do = ();
 	PublicInbox::DS::event_loop();
 	diag 'inbox unlocked (poll)';
 	$w->kill;

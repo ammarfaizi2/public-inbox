@@ -158,20 +158,6 @@ sub kw_changed {
 	join("\0", @$new_kw_sorted) eq $cur_kw ? 0 : 1;
 }
 
-sub all_terms {
-	my ($self, $pfx) = @_;
-	my $xdb = $self->xdb;
-	my $cur = $xdb->allterms_begin($pfx);
-	my $end = $xdb->allterms_end($pfx);
-	my %ret;
-	for (; $cur != $end; $cur++) {
-		my $tn = $cur->get_termname;
-		index($tn, $pfx) == 0 and
-			$ret{substr($tn, length($pfx))} = undef;
-	}
-	wantarray ? (sort keys %ret) : \%ret;
-}
-
 sub qparse_new {
 	my ($self) = @_;
 	my $qp = $self->SUPER::qparse_new; # PublicInbox::Search

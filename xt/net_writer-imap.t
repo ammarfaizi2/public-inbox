@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use Sys::Hostname qw(hostname);
@@ -233,7 +233,7 @@ EOM
 	my $pub_cfg = PublicInbox::Config->new;
 	PublicInbox::DS->Reset;
 	my $ii = PublicInbox::InboxIdle->new($pub_cfg);
-	my $cb = sub { PublicInbox::DS->SetPostLoopCallback(sub {}) };
+	my $cb = sub { @PublicInbox::DS::post_loop_do = (sub {}) };
 	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
 	$pub_cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
 	my $w = start_script(['-watch'], undef, { 2 => $err_wr });

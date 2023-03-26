@@ -371,7 +371,7 @@ sub git_bool {
 # is sufficient and doesn't leave "/.." or "/../"
 sub rel2abs_collapsed {
 	require File::Spec;
-	my $p = File::Spec->rel2abs($_[-1]);
+	my $p = File::Spec->rel2abs(@_);
 	return $p if substr($p, -3, 3) ne '/..' && index($p, '/../') < 0;
 	require Cwd;
 	Cwd::abs_path($p);

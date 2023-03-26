@@ -122,8 +122,10 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 			exit_err("setpgid", &cerrnum);
 		for (sig = 1; sig < NSIG; sig++)
 			signal(sig, SIG_DFL); /* ignore errors on signals */
-		if (*cd && chdir(cd) < 0)
-			exit_err("chdir", &cerrnum);
+		if (*cd && chdir(cd) < 0) {
+			write(2, "cd ", 3);
+			exit_err(cd, &cerrnum);
+		}
 
 		max_rlim = av_len(rlim);
 		for (i = 0; i < max_rlim; i += 3) {

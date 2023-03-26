@@ -1,9 +1,9 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # Licensed the same as Danga::Socket (and Perl5)
 # License: GPL-1.0+ or Artistic-1.0-Perl
 #  <https://www.gnu.org/licenses/gpl-1.0.txt>
 #  <https://dev.perl.org/licenses/artistic.html>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use_ok 'PublicInbox::DS';
 
 if ('close-on-exec for epoll and kqueue') {
@@ -12,7 +12,7 @@ if ('close-on-exec for epoll and kqueue') {
 	my $evfd_re = qr/(?:kqueue|eventpoll)/i;
 
 	PublicInbox::DS->SetLoopTimeout(0);
-	PublicInbox::DS->SetPostLoopCallback(sub { 0 });
+	local @PublicInbox::DS::post_loop_do = (sub { 0 });
 
 	# make sure execve closes if we're using fork()
 	my ($r, $w);
@@ -55,7 +55,7 @@ SKIP: {
 	my $cb = sub {};
 	for my $i (0..$n) {
 		PublicInbox::DS->SetLoopTimeout(0);
-		PublicInbox::DS->SetPostLoopCallback($cb);
+		local @PublicInbox::DS::post_loop_do = ($cb);
 		PublicInbox::DS::event_loop();
 		PublicInbox::DS->Reset;
 	}

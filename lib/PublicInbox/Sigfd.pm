@@ -4,7 +4,7 @@
 # Wraps a signalfd (or similar) for PublicInbox::DS
 # fields: (sig: hashref similar to %SIG, but signal numbers as keys)
 package PublicInbox::Sigfd;
-use strict;
+use v5.12;
 use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(signalfd EPOLLIN EPOLLET %SIGNUM);
 use POSIX ();
@@ -14,8 +14,8 @@ use POSIX ();
 sub new {
 	my ($class, $sig, $nonblock) = @_;
 	my %signo = map {;
-		# $num => $cb;
-		($SIGNUM{$_} // POSIX->can("SIG$_")->()) => $sig->{$_}
+		# $num => [ $cb, $signame ];
+		($SIGNUM{$_} // POSIX->can("SIG$_")->()) => [ $sig->{$_}, $_ ]
 	} keys %$sig;
 	my $self = bless { sig => \%signo }, $class;
 	my $io;
@@ -45,8 +45,8 @@ sub wait_once ($) {
 		for my $off (0..$nr) {
 			# the first uint32_t of signalfd_siginfo: ssi_signo
 			my $signo = unpack('L', substr($buf, 128 * $off, 4));
-			my $cb = $self->{sig}->{$signo};
-			$cb->($signo) if $cb ne 'IGNORE';
+			my ($cb, $signame) = @{$self->{sig}->{$signo}};
+			$cb->($signame) if $cb ne 'IGNORE';
 		}
 	}
 	$r;

@@ -44,7 +44,7 @@ our (
      $Epoll,                     # Global epoll fd (or DSKQXS ref)
      $ep_io,                     # IO::Handle for Epoll
 
-     $PostLoopCallback,          # subref to call at the end of each loop, if defined (global)
+     @post_loop_do,              # subref + args to call at the end of each loop
 
      $LoopTimeout,               # timeout of event loop in milliseconds
      @Timers,                    # timers
@@ -69,7 +69,7 @@ sub Reset {
 		%DescriptorMap = ();
 		@Timers = ();
 		%UniqTimer = ();
-		$PostLoopCallback = undef;
+		@post_loop_do = ();
 
 		# we may be iterating inside one of these on our stack
 		my @q = delete @Stack{keys %Stack};
@@ -79,7 +79,7 @@ sub Reset {
 		$Epoll = undef; # may call DSKQXS::DESTROY
 	} while (@Timers || keys(%Stack) || $nextq || $AWAIT_PIDS ||
 		$ToClose || keys(%DescriptorMap) ||
-		$PostLoopCallback || keys(%UniqTimer));
+		@post_loop_do || keys(%UniqTimer));
 
 	$reap_armed = undef;
 	$LoopTimeout = -1;  # no timeout by default
@@ -247,11 +247,13 @@ sub PostEventLoop () {
 	}
 
 	# by default we keep running, unless a postloop callback cancels it
-	$PostLoopCallback ? $PostLoopCallback->(\%DescriptorMap) : 1;
+	@post_loop_do ?  $post_loop_do[0]->(\%DescriptorMap,
+					@post_loop_do[1..$#post_loop_do])
+			: 1
 }
 
 # Start processing IO events. In most daemon programs this never exits. See
-# C<PostLoopCallback> for how to exit the loop.
+# C<post_loop_do> for how to exit the loop.
 sub event_loop (;$$) {
 	my ($sig, $oldset) = @_;
 	$Epoll //= _InitPoller();
@@ -285,24 +287,6 @@ sub event_loop (;$$) {
 			$obj->event_step;
 		}
 	} while (PostEventLoop());
-}
-
-=head2 C<< CLASS->SetPostLoopCallback( CODEREF ) >>
-
-Sets post loop callback function.  Pass a subref and it will be
-called every time the event loop finishes.
-
-Return 1 (or any true value) from the sub to make the loop continue, 0 or false
-and it will exit.
-
-The callback function will be passed two parameters: \%DescriptorMap
-
-=cut
-sub SetPostLoopCallback {
-    my ($class, $ref) = @_;
-
-    # global callback
-    $PostLoopCallback = (defined $ref && ref $ref eq 'CODE') ? $ref : undef;
 }
 
 #####################################################################

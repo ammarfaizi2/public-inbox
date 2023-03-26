@@ -1,0 +1,86 @@
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
+# License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+use v5.12;
+use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
+my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
+usage: public-inbox-cindex [options] GIT_DIR...
+usage: public-inbox-cindex [options] --project-list=FILE PROJECT_ROOT
+
+  Create and update search indices for code repos
+
+  -d EXTDIR           use EXTDIR instead of GIT_DIR/public-inbox-cindex
+  --no-fsync          speed up indexing, risk corruption on power outage
+  -L LEVEL            `medium', or `full' (default: medium)
+  --project-list=FILE use a cgit/gitweb-compatible list of projects
+  --update | -u       update previously-indexed code repos with `-d'
+  --jobs=NUM          set or disable parallelization (NUM=0)
+  --batch-size=BYTES  flush changes to OS after a given number of bytes
+  --max-size=BYTES    do not index commit diffs larger than the given size
+  --prune             prune old repos and commits
+  --reindex           reindex previously indexed repos
+  --verbose | -v      increase verbosity (may be repeated)
+
+BYTES may use `k', `m', and `g' suffixes (e.g. `10m' for 10 megabytes)
+See public-inbox-cindex(1) man page for full documentation.
+EOF
+my $opt = { fsync => 1, scan => 1 }; # --no-scan is hidden
+GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
+		indexlevel|index-level|L=s
+		batch_size|batch-size=s max_size|max-size=s
+		project-list=s exclude=s@
+		d=s update|u scan! prune dry-run|n C=s@ help|h))
+	or die $help;
+if ($opt->{help}) { print $help; exit 0 };
+die "--jobs must be >= 0\n" if defined $opt->{jobs} && $opt->{jobs} < 0;
+require IO::Handle;
+STDOUT->autoflush(1);
+STDERR->autoflush(1);
+$SIG{USR1} = 'IGNORE'; # to be overridden in cidx_sync
+$SIG{PIPE} = 'IGNORE';
+# require lazily to speed up --help
+require PublicInbox::Admin;
+PublicInbox::Admin::do_chdir(delete $opt->{C});
+my $cfg = PublicInbox::Config->new;
+my $cidx_dir = $opt->{d};
+PublicInbox::Admin::require_or_die('Search::Xapian');
+PublicInbox::Admin::progress_prepare($opt);
+my $env = PublicInbox::Admin::index_prepare($opt, $cfg);
+%ENV = (%ENV, %$env) if $env;
+
+require PublicInbox::CodeSearchIdx; # unstable internal API
+my @git_dirs;
+if (defined(my $pl = $opt->{'project-list'})) {
+	my $pfx = shift @ARGV // die <<EOM;
+PROJECTS_ROOT required for --project-list
+EOM
+	@ARGV and die <<EOM;
+--project-list does not accept additional directories
+(@ARGV)
+beyond `$pfx'
+EOM
+	open my $fh, '<', $pl or die "open($pl): $!\n";
+	chomp(@git_dirs = <$fh>);
+	$_ = PublicInbox::Admin::resolve_git_dir("$pfx/$_") for @git_dirs;
+} else {
+	@git_dirs = map { PublicInbox::Admin::resolve_git_dir($_) } @ARGV;
+}
+if (defined $cidx_dir) { # external index
+	die "`%' is not allowed in $cidx_dir\n" if $cidx_dir =~ /\%/;
+	my $cidx = PublicInbox::CodeSearchIdx->new($cidx_dir, $opt);
+	@{$cidx->{git_dirs}} = @git_dirs; # may be empty
+	$cidx->cidx_run;
+} elsif (!@git_dirs) {
+	die $help
+} else {
+	die <<EOM if $opt->{update};
+--update requires `-d EXTDIR'
+EOM
+	for my $gd (@git_dirs) {
+		my $cd = "$gd/public-inbox-cindex";
+		my $cidx = PublicInbox::CodeSearchIdx->new($cd, { %$opt });
+		$cidx->{-internal} = 1;
+		@{$cidx->{git_dirs}} = ($gd);
+		$cidx->cidx_run;
+	}
+}

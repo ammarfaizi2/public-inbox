@@ -110,43 +110,50 @@ sub load_xapian () {
 # a prefix common in patch emails
 our $LANG = 'english';
 
-# note: the non-X term prefix allocations are shared with
-# Xapian omega, see xapian-applications/omega/docs/termprefixes.rst
-my %bool_pfx_external = (
-	mid => 'Q', # Message-ID (full/exact), this is mostly uniQue
-	lid => 'G', # newsGroup (or similar entity), just inside <>
+our %PATCH_BOOL_COMMON = (
 	dfpre => 'XDFPRE',
 	dfpost => 'XDFPOST',
 	dfblob => 'XDFPRE XDFPOST',
 	patchid => 'XDFID',
 );
 
-my $non_quoted_body = 'XNQ XDFN XDFA XDFB XDFHH XDFCTX XDFPRE XDFPOST XDFID';
-my %prob_prefix = (
-	# for mairix compatibility
+# note: the non-X term prefix allocations are shared with
+# Xapian omega, see xapian-applications/omega/docs/termprefixes.rst
+my %bool_pfx_external = (
+	mid => 'Q', # Message-ID (full/exact), this is mostly uniQue
+	lid => 'G', # newsGroup (or similar entity), just inside <>
+	%PATCH_BOOL_COMMON
+);
+
+# for mairix compatibility
+our $NON_QUOTED_BODY = 'XNQ XDFN XDFA XDFB XDFHH XDFCTX XDFPRE XDFPOST XDFID';
+our %PATCH_PROB_COMMON = (
 	s => 'S',
-	m => 'XM', # 'mid:' (bool) is exact, 'm:' (prob) can do partial
-	l => 'XL', # 'lid:' (bool) is exact, 'l:' (prob) can do partial
 	f => 'A',
-	t => 'XTO',
-	tc => 'XTO XCC',
-	c => 'XCC',
-	tcf => 'XTO XCC A',
-	a => 'XTO XCC A',
-	b => $non_quoted_body . ' XQUOT',
-	bs => $non_quoted_body . ' XQUOT S',
+	b => $NON_QUOTED_BODY . ' XQUOT',
+	bs => $NON_QUOTED_BODY . ' XQUOT S',
 	n => 'XFN',
 
 	q => 'XQUOT',
-	nq => $non_quoted_body,
+	nq => $NON_QUOTED_BODY,
 	dfn => 'XDFN',
 	dfa => 'XDFA',
 	dfb => 'XDFB',
 	dfhh => 'XDFHH',
 	dfctx => 'XDFCTX',
+);
 
+my %prob_prefix = (
+	m => 'XM', # 'mid:' (bool) is exact, 'm:' (prob) can do partial
+	l => 'XL', # 'lid:' (bool) is exact, 'l:' (prob) can do partial
+	t => 'XTO',
+	tc => 'XTO XCC',
+	c => 'XCC',
+	tcf => 'XTO XCC A',
+	a => 'XTO XCC A',
+	%PATCH_PROB_COMMON,
 	# default:
-	'' => 'XM S A XQUOT XFN ' . $non_quoted_body,
+	'' => 'XM S A XQUOT XFN ' . $NON_QUOTED_BODY,
 );
 
 # not documenting m: and mid: for now, the using the URLs works w/o Xapian
@@ -305,7 +312,7 @@ sub date_parse_prepare {
 				$x = "\0%Y%m%d%H%M%S$#$to_parse\0";
 			}
 		}
-	} else { # "rt", let git interpret "YYYY", deal with Y10K later :P
+	} else { # (rt|ct), let git interpret "YYYY", deal with Y10K later :P
 		for my $x (@r) {
 			next if $x eq '' || $x =~ /\A[0-9]{5,}\z/;
 			push @$to_parse, $x;
@@ -454,20 +461,24 @@ sub mset_to_smsg {
 # read-write
 sub stemmer { $X{Stem}->new($LANG) }
 
-# read-only
-sub qparse_new {
+sub qp_init_common {
 	my ($self) = @_;
-
-	my $xdb = xdb($self);
 	my $qp = $X{QueryParser}->new;
 	$qp->set_default_op(OP_AND());
-	$qp->set_database($xdb);
+	$qp->set_database(xdb($self));
 	$qp->set_stemmer(stemmer($self));
 	$qp->set_stemming_strategy(STEM_SOME());
 	my $cb = $qp->can('set_max_wildcard_expansion') //
 		$qp->can('set_max_expansion'); # Xapian 1.5.0+
 	$cb->($qp, 100);
-	$cb = $qp->can('add_valuerangeprocessor') //
+	$qp;
+}
+
+# read-only
+sub qparse_new {
+	my ($self) = @_;
+	my $qp = qp_init_common($self);
+	my $cb = $qp->can('add_valuerangeprocessor') //
 		$qp->can('add_rangeprocessor'); # Xapian 1.5.0+
 	$cb->($qp, $NVRP->new(YYYYMMDD, 'd:'));
 	$cb->($qp, $NVRP->new(DT, 'dt:'));
@@ -546,11 +557,25 @@ sub xap_terms ($$;@) {
 }
 
 # get combined docid from over.num:
-# (not generic Xapian, only works with our sharding scheme)
+# (not generic Xapian, only works with our sharding scheme for mail)
 sub num2docid ($$) {
 	my ($self, $num) = @_;
 	my $nshard = $self->{nshard};
 	($num - 1) * $nshard + $num % $nshard + 1;
 }
+
+sub all_terms {
+	my ($self, $pfx) = @_;
+	my $cur = xdb($self)->allterms_begin($pfx);
+	my $end = $self->{xdb}->allterms_end($pfx);
+	my %ret;
+	for (; $cur != $end; $cur++) {
+		my $tn = $cur->get_termname;
+		index($tn, $pfx) == 0 and
+			$ret{substr($tn, length($pfx))} = undef;
+	}
+	wantarray ? (sort keys %ret) : \%ret;
+}
+
 
 1;

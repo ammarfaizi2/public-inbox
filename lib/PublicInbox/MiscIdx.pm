@@ -5,7 +5,7 @@
 # Things indexed include:
 # * inboxes themselves
 # * epoch information
-# * (maybe) git code repository information
+# * (maybe) git code repository information (not commits)
 # Expect ~100K-1M documents with no parallelism opportunities,
 # so no sharding, here.
 #

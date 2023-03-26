@@ -1,5 +1,6 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
-use strict;
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
+use v5.12;
 use Test::More;
 use IO::Handle;
 use POSIX qw(:signal_h);
@@ -46,7 +47,7 @@ SKIP: {
 		is($nbsig->wait_once, undef, 'nonblocking ->wait_once');
 		ok($! == Errno::EAGAIN, 'got EAGAIN');
 		kill('HUP', $$) or die "kill $!";
-		PublicInbox::DS->SetPostLoopCallback(sub {}); # loop once
+		local @PublicInbox::DS::post_loop_do = (sub {}); # loop once
 		PublicInbox::DS::event_loop();
 		is($hit->{HUP}->{sigfd}, 2, 'HUP sigfd fired in event loop') or
 			diag explain($hit); # sometimes fails on FreeBSD 11.x

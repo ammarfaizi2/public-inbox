@@ -8,7 +8,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Lock PublicInbox::IPC);
 use PublicInbox::SearchIdxShard;
-use PublicInbox::IPC;
+use PublicInbox::IPC qw(nproc_shards);
 use PublicInbox::Eml;
 use PublicInbox::Git;
 use PublicInbox::Import;
@@ -28,30 +28,6 @@ use POSIX ();
 my $OID = qr/[a-f0-9]{40,}/;
 # an estimate of the post-packed size to the raw uncompressed size
 our $PACKING_FACTOR = 0.4;
-
-# SATA storage lags behind what CPUs are capable of, so relying on
-# nproc(1) can be misleading and having extra Xapian shards is a
-# waste of FDs and space.  It can also lead to excessive IO latency
-# and slow things down.  Users on NVME or other fast storage can
-# use the NPROC env or switches in our script/public-inbox-* programs
-# to increase Xapian shards
-our $NPROC_MAX_DEFAULT = 4;
-
-sub nproc_shards ($) {
-	my ($creat_opt) = @_;
-	my $n = $creat_opt->{nproc} if ref($creat_opt) eq 'HASH';
-	$n //= $ENV{NPROC};
-	if (!$n) {
-		# assume 2 cores if not detectable or zero
-		state $NPROC_DETECTED = PublicInbox::IPC::detect_nproc() || 2;
-		$n = $NPROC_DETECTED;
-		$n = $NPROC_MAX_DEFAULT if $n > $NPROC_MAX_DEFAULT;
-	}
-
-	# subtract for the main process and git-fast-import
-	$n -= 1;
-	$n < 1 ? 1 : $n;
-}
 
 sub count_shards ($) {
 	my ($self) = @_;

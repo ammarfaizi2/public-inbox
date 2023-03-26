@@ -350,7 +350,7 @@ sub worker_quit { # $_[0] = signal name or number (unused)
 	my $proc_name;
 	my $warn = 0;
 	# drop idle connections and try to quit gracefully
-	PublicInbox::DS->SetPostLoopCallback(sub {
+	@PublicInbox::DS::post_loop_do = (sub {
 		my ($dmap, undef) = @_;
 		my $n = 0;
 		my $now = now();
@@ -510,7 +510,7 @@ sub upgrade_aborted ($) {
 	warn $@, "\n" if $@;
 }
 
-sub reap_children { # $_[0] = 'CHLD' or POSIX::SIGCHLD()
+sub reap_children { # $_[0] = 'CHLD'
 	while (1) {
 		my $p = waitpid(-1, WNOHANG) or return;
 		if (defined $reexec_pid && $p == $reexec_pid) {

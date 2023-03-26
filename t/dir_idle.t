@@ -1,7 +1,7 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use v5.10.1; use strict; use PublicInbox::TestCommon;
+use v5.12; use strict; use PublicInbox::TestCommon;
 use PublicInbox::DS qw(now);
 use File::Path qw(make_path);
 use_ok 'PublicInbox::DirIdle';
@@ -13,7 +13,7 @@ my $di = PublicInbox::DirIdle->new($cb);
 $di->add_watches(["$tmpdir/a", "$tmpdir/c"], 1);
 PublicInbox::DS->SetLoopTimeout(1000);
 my $end = 3 + now;
-PublicInbox::DS->SetPostLoopCallback(sub { scalar(@x) == 0 && now < $end });
+local @PublicInbox::DS::post_loop_do = (sub { scalar(@x) == 0 && now < $end });
 tick(0.011);
 rmdir("$tmpdir/a/b") or xbail "rmdir $!";
 PublicInbox::DS::event_loop();
