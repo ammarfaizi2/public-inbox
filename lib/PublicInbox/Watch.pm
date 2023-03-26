@@ -528,7 +528,8 @@ sub watch_nntp_init ($$) {
 sub watch { # main entry point
 	my ($self, $sig, $oldset) = @_;
 	$self->{oldset} = $oldset;
-	$self->{sig} = $sig;
+	my $first_sig;
+	$self->{sig} //= ($first_sig = $sig);
 	my $poll = {}; # intvl_seconds => [ uri1, uri2 ]
 	watch_imap_init($self, $poll) if $self->{imap};
 	watch_nntp_init($self, $poll) if $self->{nntp};
@@ -538,7 +539,7 @@ sub watch { # main entry point
 	}
 	watch_fs_init($self) if $self->{mdre};
 	local @PublicInbox::DS::post_loop_do = (sub { !$self->quit_done });
-	PublicInbox::DS::event_loop($sig, $oldset); # calls ->event_step
+	PublicInbox::DS::event_loop($first_sig, $oldset); # calls ->event_step
 	_done_for_now($self);
 }
 

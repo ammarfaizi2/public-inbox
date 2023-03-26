@@ -27,6 +27,7 @@ my $reload = sub {
 	$watch->quit;
 	$watch = PublicInbox::Watch->new(PublicInbox::Config->new);
 	if ($watch) {
+		$watch->{sig} = $prev->{sig}; # prevent redundant signalfd
 		warn "# reloaded\n";
 	} else {
 		warn("E: reloading failed\n");
