@@ -64,6 +64,7 @@ sub check_git_exe () {
 	if ($st ne $EXE_ST) {
 		my $rd = popen_rd([ $GIT_EXE, '--version' ]);
 		my $v = readline($rd);
+		close($rd) or die "$GIT_EXE --version: $?";
 		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
 			"$GIT_EXE --version output: $v # unparseable";
 		my @v = split(/\./, $1, 3);
