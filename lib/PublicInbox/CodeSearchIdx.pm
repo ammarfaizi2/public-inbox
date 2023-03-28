@@ -689,6 +689,7 @@ sub do_prune ($) {
 }
 
 sub shards_active { # post_loop_do
+	return if $DO_QUIT;
 	scalar(grep { $_->{-cidx_quit} } @IDX_SHARDS);
 }
 
