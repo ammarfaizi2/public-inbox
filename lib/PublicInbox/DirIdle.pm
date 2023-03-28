@@ -9,14 +9,14 @@ use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::In2Tie;
 
 my ($MAIL_IN, $MAIL_GONE, $ino_cls);
-if ($^O eq 'linux' && eval { require Linux::Inotify2; 1 }) {
+if ($^O eq 'linux' && eval { require PublicInbox::Inotify; 1 }) {
 	$MAIL_IN = Linux::Inotify2::IN_MOVED_TO() |
 		Linux::Inotify2::IN_CREATE();
 	$MAIL_GONE = Linux::Inotify2::IN_DELETE() |
 			Linux::Inotify2::IN_DELETE_SELF() |
 			Linux::Inotify2::IN_MOVE_SELF() |
 			Linux::Inotify2::IN_MOVED_FROM();
-	$ino_cls = 'Linux::Inotify2';
+	$ino_cls = 'PublicInbox::Inotify';
 # Perl 5.22+ is needed for fileno(DIRHANDLE) support:
 } elsif ($^V ge v5.22 && eval { require PublicInbox::KQNotify }) {
 	$MAIL_IN = PublicInbox::KQNotify::MOVED_TO_OR_CREATE();

@@ -10,9 +10,9 @@ use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN);
 my $IN_MODIFY = 0x02; # match Linux inotify
 my $ino_cls;
-if ($^O eq 'linux' && eval { require Linux::Inotify2; 1 }) {
+if ($^O eq 'linux' && eval { require PublicInbox::Inotify }) {
 	$IN_MODIFY = Linux::Inotify2::IN_MODIFY();
-	$ino_cls = 'Linux::Inotify2';
+	$ino_cls = 'PublicInbox::Inotify';
 } elsif (eval { require PublicInbox::KQNotify }) {
 	$IN_MODIFY = PublicInbox::KQNotify::NOTE_WRITE();
 	$ino_cls = 'PublicInbox::KQNotify';
