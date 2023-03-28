@@ -751,7 +751,8 @@ sub cidx_run { # main entry point
 	my ($self) = @_;
 	my $restore_umask = prep_umask($self);
 	local $DEFER = [];
-	local $SIGSET = PublicInbox::DS::block_signals();
+	local $SIGSET = PublicInbox::DS::block_signals(
+					POSIX::SIGTSTP, POSIX::SIGCONT);
 	my $restore = PublicInbox::OnDestroy->new($$,
 		\&PublicInbox::DS::sig_setmask, $SIGSET);
 	local $LIVE = {};

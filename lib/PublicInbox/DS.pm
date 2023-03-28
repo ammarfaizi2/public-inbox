@@ -193,10 +193,11 @@ sub RunTimers {
 
 sub sig_setmask { sigprocmask(SIG_SETMASK, @_) or die "sigprocmask: $!" }
 
-sub block_signals () {
-	my $oldset = POSIX::SigSet->new;
+sub block_signals { # anything in @_ stays unblocked
 	my $newset = POSIX::SigSet->new;
 	$newset->fillset or die "fillset: $!";
+	$newset->delset($_) for @_;
+	my $oldset = POSIX::SigSet->new;
 	sig_setmask($newset, $oldset);
 	$oldset;
 }
