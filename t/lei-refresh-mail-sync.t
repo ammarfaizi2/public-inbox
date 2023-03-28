@@ -137,8 +137,12 @@ SKIP: {
 	my $ar = PublicInbox::AutoReap->new($pid);
 	ok(!(lei 'refresh-mail-sync', $url), 'URL fails on dead -imapd');
 	ok(!(lei 'refresh-mail-sync', '--all'), '--all fails on dead -imapd');
-	$ar->kill for qw(avoid sig wake miss-no signalfd or EVFILT_SIG);
-	$ar->join('TERM');
+	{
+		local $SIG{CHLD} = sub { $ar->join('TERM'); undef $ar };
+		do {
+			eval { $ar->kill and tick(0.01) }
+		} while (defined($ar));
+	}
 
 	my $cmd = $srv->{imapd}->{cmd};
 	my $s = $srv->{imapd}->{s};
