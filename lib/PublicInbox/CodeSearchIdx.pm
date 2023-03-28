@@ -289,10 +289,9 @@ sub docids_by_postlist ($$) { # consider moving to PublicInbox::Search
 	@ids;
 }
 
-sub run_todo ($) {
-	my ($self) = @_;
+sub run_deferred () {
 	my $n;
-	while (defined(my $x = shift(@{$self->{todo} // []}))) {
+	while (defined(my $x = shift(@{$DEFER // []}))) {
 		my $cb = shift @$x;
 		$cb->(@$x);
 		++$n;
@@ -308,12 +307,12 @@ sub need_reap { # post_loop_do
 
 sub cidx_reap ($$) {
 	my ($self, $jobs) = @_;
-	while (run_todo($self)) {}
+	while (run_deferred()) {}
 	local @PublicInbox::DS::post_loop_do = (\&need_reap, $jobs);
 	while (need_reap(undef, $jobs)) {
 		PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
 	}
-	while (!$jobs && run_todo($self)) {}
+	while (!$jobs && run_deferred()) {}
 }
 
 sub cidx_await_cb { # awaitpid cb
@@ -527,7 +526,7 @@ sub index_repo { # cidx_await cb
 		$consumers->{$repo->{shard_n}} = undef;
 		commit_used_shards($self, $git, $consumers);
 		progress($self, "$git->{git_dir}: done");
-		return run_todo($self);
+		return run_deferred();
 	}
 	die "E: store_repo $git->{git_dir}: id=$id";
 }
@@ -725,7 +724,7 @@ sub prep_umask ($) {
 	my ($self) = @_;
 	my $um;
 	my $cur = umask;
-	if ($self->{-internal}) { # respect core.sharedRepository
+	if ($self->{-cidx_internal}) { # respect core.sharedRepository
 		@{$self->{git_dirs}} == 1 or die 'BUG: only for GIT_DIR';
 		# yuck, FIXME move umask handling out of inbox-specific stuff
 		require PublicInbox::InboxWritable;
@@ -750,14 +749,12 @@ sub prep_umask ($) {
 sub cidx_run { # main entry point
 	my ($self) = @_;
 	my $restore_umask = prep_umask($self);
-	local $self->{todo} = [];
-	local $DEFER = $self->{todo};
+	local $DEFER = [];
 	local $SIGSET = PublicInbox::DS::block_signals();
 	my $restore = PublicInbox::OnDestroy->new($$,
 		\&PublicInbox::DS::sig_setmask, $SIGSET);
 	local $LIVE = {};
-	local $DO_QUIT;
-	local $TMP_GIT;
+	local ($DO_QUIT, $TMP_GIT, $REINDEX);
 	local @IDX_SHARDS = cidx_init($self);
 	local $self->{current_info} = '';
 	local $MY_SIG = {
@@ -772,8 +769,7 @@ sub cidx_run { # main entry point
 			$m =~ s/\A(#?\s*)/$1$self->{current_info}: /;
 		$cb->($m, @_);
 	};
-	load_existing($self) unless $self->{-internal};
-	local $REINDEX;
+	load_existing($self) unless $self->{-cidx_internal};
 	if ($self->{-opt}->{reindex}) {
 		require PublicInbox::SharedKV;
 		$REINDEX = PublicInbox::SharedKV->new;

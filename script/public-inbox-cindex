@@ -79,7 +79,7 @@ EOM
 	for my $gd (@git_dirs) {
 		my $cd = "$gd/public-inbox-cindex";
 		my $cidx = PublicInbox::CodeSearchIdx->new($cd, { %$opt });
-		$cidx->{-internal} = 1;
+		$cidx->{-cidx_internal} = 1;
 		@{$cidx->{git_dirs}} = ($gd);
 		$cidx->cidx_run;
 	}
