@@ -4,6 +4,7 @@
 use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
+use IO::Uncompress::Gunzip qw(gunzip);
 require_git(2.6);
 use PublicInbox::Eml;
 use PublicInbox::Config;
@@ -76,6 +77,30 @@ $new_mid //= do {
 	local $/;
 	<$fh>;
 };
+
+my $m2t = create_inbox 'mid2tid-1', version => 2, indexlevel => 'medium', sub {
+	my ($im, $ibx) = @_;
+	for my $n (1..3) {
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail 'add';
+Date: Fri, 02 Oct 1993 00:0$n:00 +0000
+Message-ID: <t\@$n>
+Subject: tid $n
+From: x\@example.com
+References: <a-mid\@b>
+
+$n
+EOM
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail 'add';
+Date: Fri, 02 Oct 1993 00:0$n:00 +0000
+Message-ID: <ut\@$n>
+Subject: unrelated tid $n
+From: x\@example.com
+References: <b-mid\@b>
+
+EOM
+	}
+};
+
 my $cfgpath = "$ibx->{inboxdir}/pi_config";
 {
 	open my $fh, '>', $cfgpath or BAIL_OUT $!;
@@ -86,6 +111,9 @@ my $cfgpath = "$ibx->{inboxdir}/pi_config";
 [publicinbox "dup"]
 	inboxdir = $dibx->{inboxdir}
 	address = $dibx->{-primary_address}
+[publicinbox "m2t"]
+	inboxdir = $m2t->{inboxdir}
+	address = $m2t->{-primary_address}
 EOF
 	close $fh or BAIL_OUT;
 }
@@ -178,20 +206,18 @@ my $client1 = sub {
 	$cfg->each_inbox(sub { $_[0]->search->reopen });
 
 	SKIP: {
-		eval { require IO::Uncompress::Gunzip };
-		skip 'IO::Uncompress::Gunzip missing', 6 if $@;
 		my ($in, $out, $status);
 		my $req = GET('/v2test/a-mid@b/raw');
 		$req->header('Accept-Encoding' => 'gzip');
 		$res = $cb->($req);
 		is($res->header('Content-Encoding'), 'gzip', 'gzip encoding');
 		$in = $res->content;
-		IO::Uncompress::Gunzip::gunzip(\$in => \$out);
+		gunzip(\$in => \$out);
 		is($out, $raw, 'gzip response matches');
 
 		$res = $cb->(GET('/v2test/a-mid@b/t.mbox.gz'));
 		$in = $res->content;
-		$status = IO::Uncompress::Gunzip::gunzip(\$in => \$out);
+		$status = gunzip(\$in => \$out);
 		unlike($out, qr/^From oldbug/sm, 'buggy "From_" line omitted');
 		like($out, qr/^hello world$/m, 'got first in t.mbox.gz');
 		like($out, qr/^hello world!$/m, 'got second in t.mbox.gz');
@@ -202,7 +228,7 @@ my $client1 = sub {
 		# search interface
 		$res = $cb->(POST('/v2test/?q=m:a-mid@b&x=m'));
 		$in = $res->content;
-		$status = IO::Uncompress::Gunzip::gunzip(\$in => \$out);
+		$status = gunzip(\$in => \$out);
 		unlike($out, qr/^From oldbug/sm, 'buggy "From_" line omitted');
 		like($out, qr/^hello world$/m, 'got first in mbox POST');
 		like($out, qr/^hello world!$/m, 'got second in mbox POST');
@@ -213,7 +239,7 @@ my $client1 = sub {
 		# all.mbox.gz interface
 		$res = $cb->(GET('/v2test/all.mbox.gz'));
 		$in = $res->content;
-		$status = IO::Uncompress::Gunzip::gunzip(\$in => \$out);
+		$status = gunzip(\$in => \$out);
 		unlike($out, qr/^From oldbug/sm, 'buggy "From_" line omitted');
 		like($out, qr/^hello world$/m, 'got first in all.mbox');
 		like($out, qr/^hello world!$/m, 'got second in all.mbox');
@@ -335,6 +361,18 @@ my $client3 = sub {
 	local $SIG{__WARN__} = sub { push @warn, @_ };
 	$res = $cb->(GET('/v2test/?t=1970'.'01'.'01'));
 	is_deeply(\@warn, [], 'no warnings on YYYYMMDD only');
+
+	$res = $cb->(POST("/m2t/t\@1/?q=dt:19931002000300..&x=m"));
+	is($res->code, 200, 'got 200 on mid2tid query');
+	gunzip(\(my $in = $res->content) => \(my $out));
+	my @m = ($out =~ m!^Message-ID: <([^>]+)>\n!gms);
+	is_deeply(\@m, ['t@3'], 'only got latest result from query');
+
+	$res = $cb->(POST("/m2t/t\@1/?q=dt:19931002000400..&x=m"));
+	is($res->code, 404, '404 on out-of-range mid2tid query');
+
+	$res = $cb->(POST("/m2t/t\@1/?q=s:unrelated&x=m"));
+	is($res->code, 404, '404 on cross-thread search');
 };
 test_psgi(sub { $www->call(@_) }, $client3);
 test_httpd($env, $client3, 4);

@@ -386,6 +386,12 @@ sub mset {
 					sortable_serialise($uid_range->[1]));
 		$query = $X{Query}->new(OP_FILTER(), $query, $range);
 	}
+	if (defined(my $tid = $opt->{threadid})) {
+		$tid = sortable_serialise($tid);
+		$query = $X{Query}->new(OP_FILTER(), $query,
+				$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
+	}
+
 	my $xdb = xdb($self);
 	my $enq = $X{Enquire}->new($xdb);
 	$enq->set_query($query);

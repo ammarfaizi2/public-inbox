@@ -282,13 +282,35 @@ SELECT eidx_key FROM inboxes WHERE ibx_id = ?
 	$rows;
 }
 
+sub mid2tid {
+	my ($self, $mid) = @_;
+	my $dbh = dbh($self);
+
+	my $sth = $dbh->prepare_cached(<<'', undef, 1);
+SELECT id FROM msgid WHERE mid = ? LIMIT 1
+
+	$sth->execute($mid);
+	my $id = $sth->fetchrow_array or return;
+	$sth = $dbh->prepare_cached(<<'', undef, 1);
+SELECT num FROM id2num WHERE id = ? AND num > ?
+ORDER BY num ASC LIMIT 1
+
+	$sth->execute($id, 0);
+	my $num = $sth->fetchrow_array or return;
+	$sth = $dbh->prepare(<<'');
+SELECT tid FROM over WHERE num = ? LIMIT 1
+
+	$sth->execute($num);
+	$sth->fetchrow_array;
+}
+
 sub next_by_mid {
 	my ($self, $mid, $id, $prev) = @_;
 	my $dbh = dbh($self);
 
 	unless (defined $$id) {
 		my $sth = $dbh->prepare_cached(<<'', undef, 1);
-	SELECT id FROM msgid WHERE mid = ? LIMIT 1
+SELECT id FROM msgid WHERE mid = ? LIMIT 1
 
 		$sth->execute($mid);
 		$$id = $sth->fetchrow_array;

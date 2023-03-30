@@ -68,7 +68,9 @@ sub call {
 			my ($idx, $fn) = ($3, $4);
 			return invalid_inbox_mid($ctx, $1, $2) ||
 				get_attach($ctx, $idx, $fn);
-		} elsif ($path_info =~ m!$INBOX_RE/!o) {
+		} elsif ($path_info =~ m!$INBOX_RE/$MID_RE/\z!o) {
+			return invalid_inbox_mid($ctx, $1, $2) || mbox_results($ctx);
+		} elsif ($path_info =~ m!$INBOX_RE/\z!o) {
 			return invalid_inbox($ctx, $1) || mbox_results($ctx);
 		}
 	}
