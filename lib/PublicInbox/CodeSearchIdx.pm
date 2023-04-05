@@ -53,7 +53,7 @@ our (
 	$PRUNE_MAX, # per-shard document ID to stop at
 	$PRUNE_OP_P, # prune_done() notification socket
 	$PRUNE_NR, # total number pruned
-	@PRUNE_DONE, # marks off prune completions
+	$PRUNE_DONE, # marks off prune completions
 	$NCHANGE, # current number of changes
 	%ACTIVE_GIT_DIR, # GIT_DIR => undef mapping for prune
 );
@@ -290,13 +290,17 @@ sub shard_done { # called via PktOp on shard_index completion
 }
 
 sub prune_done { # called via PktOp->event_step completion
-	my ($shard) = @_;
-	$PRUNE_DONE[$shard->{shard}] = 1;
+	my ($self, $n) = @_;
+	return if $DO_QUIT || !$PRUNE_DONE;
+	die "BUG: \$PRUNE_DONE->[$n] already defined" if $PRUNE_DONE->[$n];
+	$PRUNE_DONE->[$n] = 1;
+	grep(defined, @$PRUNE_DONE) == @IDX_SHARDS and
+		progress($self, 'prune done')
 }
 
-sub prune_busy {
+sub prune_busy { # post_loop_do
 	return if $DO_QUIT;
-	grep(defined, @PRUNE_DONE) != @IDX_SHARDS;
+	grep(defined, @$PRUNE_DONE) != @IDX_SHARDS;
 }
 
 sub await_prune () {
@@ -711,7 +715,7 @@ sub event_step { # may be requeued via DS
 	$TMP_GIT->async_wait_all;
 	cidx_ckpoint($self);
 	return PublicInbox::DS::requeue($self) if $PRUNE_CUR <= $PRUNE_MAX;
-	send($PRUNE_OP_P, 'prune_done', MSG_EOR);
+	send($PRUNE_OP_P, "prune_done $self->{shard}", MSG_EOR);
 	$TMP_GIT->cleanup;
 	$TMP_GIT = $PRUNE_OP_P = $PRUNE_CUR = $PRUNE_MAX = undef;
 	%ACTIVE_GIT_DIR = ();
@@ -790,9 +794,9 @@ sub start_prune ($) {
 	my ($self) = @_;
 	init_tmp_git_dir($self);
 	my @active_git_dir = (@{$self->{git_dirs}}, @GIT_DIR_GONE);
+	my ($c, $p) = PublicInbox::PktOp->pair;
+	$c->{ops}->{prune_done} = [ $self ];
 	for my $s (@IDX_SHARDS) {
-		my ($c, $p) = PublicInbox::PktOp->pair;
-		$c->{ops}->{prune_done} = [ $s ];
 		$s->wq_io_do('prune_start', [ $p->{op_p} ],
 				$TMP_GIT->{git_dir}, @active_git_dir)
 	}
@@ -807,8 +811,8 @@ sub cidx_run { # main entry point
 	my $restore = PublicInbox::OnDestroy->new($$,
 		\&PublicInbox::DS::sig_setmask, $SIGSET);
 	local $LIVE = {};
-	local ($DO_QUIT, $TMP_GIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE,
-		@PRUNE_DONE);
+	local $PRUNE_DONE = [];
+	local ($DO_QUIT, $TMP_GIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local @IDX_SHARDS = cidx_init($self);
