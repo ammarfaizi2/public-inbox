@@ -636,6 +636,11 @@ EOM
 
 sub scan_git_dirs ($) {
 	my ($self) = @_;
+
+	# FreeBSD ignores/discards SIGCHLD while signals are blocked and
+	# EVFILT_SIGNAL is inactive, so we pretend we have a SIGCHLD pending
+	PublicInbox::DS::enqueue_reap();
+
 	@$GIT_TODO = @{$self->{git_dirs}};
 	index_next($self) for (1..$LIVE_JOBS);
 }
