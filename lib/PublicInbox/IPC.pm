@@ -268,12 +268,14 @@ sub sock_defined {
 	defined($wqw->{sock});
 }
 
-sub wq_worker_loop ($$) {
-	my ($self, $bcast2) = @_;
+sub wq_worker_loop ($$$) {
+	my ($self, $bcast2, $oldset) = @_;
 	my $wqw = PublicInbox::WQWorker->new($self, $self->{-wq_s2});
 	PublicInbox::WQWorker->new($self, $bcast2) if $bcast2;
 	local @PublicInbox::DS::post_loop_do = (\&sock_defined, $wqw);
-	PublicInbox::DS::event_loop();
+	my $sig = delete($self->{wq_sig});
+	$sig->{CHLD} //= \&PublicInbox::DS::enqueue_reap;
+	PublicInbox::DS::event_loop($sig, $oldset);
 	PublicInbox::DS->Reset;
 }
 
@@ -405,8 +407,7 @@ sub _wq_worker_start {
 			local @$self{keys %$fields} = values(%$fields);
 			my $on_destroy = $self->ipc_atfork_child;
 			local @SIG{keys %SIG} = values %SIG;
-			PublicInbox::DS::sig_setmask($oldset);
-			wq_worker_loop($self, $bcast2);
+			wq_worker_loop($self, $bcast2, $oldset);
 		};
 		warn "worker $self->{-wq_ident} PID:$$ died: $@" if $@;
 		undef $end; # trigger exit
