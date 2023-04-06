@@ -8,6 +8,7 @@ use PublicInbox::Config;
 use PublicInbox::Admin;
 use PublicInbox::Import;
 use File::Path qw(remove_tree);
+require PublicInbox::InboxWritable;
 
 require_mods(qw(DBD::SQLite Search::Xapian));
 use_ok 'PublicInbox::Over';
@@ -57,7 +58,7 @@ my $smsg;
 {
 	my $cfg = PublicInbox::Config->new;
 	my $ibx = $cfg->lookup($addr);
-	my $lvl = PublicInbox::Admin::detect_indexlevel($ibx);
+	my $lvl = PublicInbox::InboxWritable::detect_indexlevel($ibx);
 	is($lvl, 'medium', 'indexlevel detected');
 	is($ibx->{-skip_docdata}, 1, '--skip-docdata flag set on -index');
 	$smsg = $ibx->over->get_art(1);
@@ -80,7 +81,7 @@ SKIP: {
 	my $check_v2 = sub {
 		my $ibx = PublicInbox::Inbox->new({inboxdir => $v2dir,
 				address => $addr});
-		my $lvl = PublicInbox::Admin::detect_indexlevel($ibx);
+		my $lvl = PublicInbox::InboxWritable::detect_indexlevel($ibx);
 		is($lvl, 'medium', 'indexlevel detected after convert');
 		is($ibx->{-skip_docdata}, 1,
 			'--skip-docdata preserved after convert');

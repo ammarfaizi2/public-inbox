@@ -87,33 +87,6 @@ sub resolve_git_dir {
 	$dir;
 }
 
-# for unconfigured inboxes
-sub detect_indexlevel ($) {
-	my ($ibx) = @_;
-
-	my $over = $ibx->over;
-	my $srch = $ibx->search;
-	delete @$ibx{qw(over search)}; # don't leave open FDs lying around
-
-	# brand new or never before indexed inboxes default to full
-	return 'full' unless $over;
-	my $l = 'basic';
-	return $l unless $srch;
-	if (my $xdb = $srch->xdb) {
-		$l = 'full';
-		my $m = $xdb->get_metadata('indexlevel');
-		if ($m eq 'medium') {
-			$l = $m;
-		} elsif ($m ne '') {
-			warn <<"";
-$ibx->{inboxdir} has unexpected indexlevel in Xapian: $m
-
-		}
-		$ibx->{-skip_docdata} = 1 if $xdb->get_metadata('skip_docdata');
-	}
-	$l;
-}
-
 sub unconfigured_ibx ($$) {
 	my ($dir, $i) = @_;
 	my $name = "unconfigured-$i";

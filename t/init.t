@@ -6,6 +6,7 @@ use v5.10.1;
 use PublicInbox::Config;
 use PublicInbox::TestCommon;
 use PublicInbox::Admin;
+use PublicInbox::InboxWritable;
 my ($tmpdir, $for_destroy) = tmpdir();
 sub quiet_fail {
 	my ($cmd, $msg) = @_;
@@ -147,7 +148,7 @@ SKIP: {
 		ok(run_script($cmd), "-init -L $lvl");
 		is(read_indexlevel("v2$lvl"), $lvl, "indexlevel set to '$lvl'");
 		my $ibx = PublicInbox::Inbox->new({ inboxdir => $dir });
-		is(PublicInbox::Admin::detect_indexlevel($ibx), $lvl,
+		is(PublicInbox::InboxWritable::detect_indexlevel($ibx), $lvl,
 			'detected expected level w/o config');
 		ok(!$ibx->{-skip_docdata}, 'docdata written by default');
 	}
@@ -159,7 +160,7 @@ SKIP: {
 			"$name\@example.com" ];
 		ok(run_script($cmd), "-init -V$v --skip-docdata");
 		my $ibx = PublicInbox::Inbox->new({ inboxdir => $dir });
-		is(PublicInbox::Admin::detect_indexlevel($ibx), 'full',
+		is(PublicInbox::InboxWritable::detect_indexlevel($ibx), 'full',
 			"detected default indexlevel -V$v");
 		ok($ibx->{-skip_docdata}, "docdata skip set -V$v");
 		ok($ibx->search->has_threadid, 'has_threadid flag set on new inbox');

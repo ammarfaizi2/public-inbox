@@ -79,6 +79,8 @@ sub new {
 		my $ibx = $_[0] = PublicInbox::InboxWritable->new($_[0]);
 
 		my $watches = $ibx->{watch} or return;
+
+		$ibx->{indexlevel} //= $ibx->detect_indexlevel;
 		$watches = PublicInbox::Config::_array($watches);
 		for my $watch (@$watches) {
 			my $uri;

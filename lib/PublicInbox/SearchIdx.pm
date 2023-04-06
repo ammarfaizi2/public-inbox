@@ -1123,7 +1123,7 @@ sub begin_txn_lazy {
 }
 
 # store 'indexlevel=medium' in v2 shard=0 and v1 (only one shard)
-# This metadata is read by Admin::detect_indexlevel:
+# This metadata is read by InboxWritable->detect_indexlevel:
 sub set_metadata_once {
 	my ($self) = @_;
 

@@ -66,6 +66,7 @@ $opt->{-use_cwd} = 1;
 my @ibxs = PublicInbox::Admin::resolve_inboxes(\@ARGV, $opt, $cfg);
 PublicInbox::Admin::require_or_die('-index');
 unless (@ibxs) { print STDERR $help; exit 1 }
+require PublicInbox::InboxWritable;
 
 my (@eidx, %eidx_seen);
 my $update_extindex = $opt->{'update-extindex'};
@@ -96,8 +97,9 @@ for my $ei_name (@$update_extindex) {
 my $mods = {};
 my @eidx_unconfigured;
 foreach my $ibx (@ibxs) {
+	$ibx = PublicInbox::InboxWritable->new($ibx);
 	# detect_indexlevel may also set $ibx->{-skip_docdata}
-	my $detected = PublicInbox::Admin::detect_indexlevel($ibx);
+	my $detected = $ibx->detect_indexlevel;
 	# XXX: users can shoot themselves in the foot, with opt->{indexlevel}
 	$ibx->{indexlevel} //= $opt->{indexlevel} // ($opt->{xapian_only} ?
 			'full' : $detected);
@@ -117,11 +119,9 @@ $opt->{compact} = 0 if !$mods->{'Search::Xapian'};
 PublicInbox::Admin::require_or_die(keys %$mods);
 my $env = PublicInbox::Admin::index_prepare($opt, $cfg);
 local %ENV = (%ENV, %$env) if $env;
-require PublicInbox::InboxWritable;
 PublicInbox::Xapcmd::check_compact() if $opt->{compact};
 PublicInbox::Admin::progress_prepare($opt);
 for my $ibx (@ibxs) {
-	$ibx = PublicInbox::InboxWritable->new($ibx);
 	if ($opt->{compact} >= 2) {
 		PublicInbox::Xapcmd::run($ibx, 'compact', $opt->{compact_opt});
 	}

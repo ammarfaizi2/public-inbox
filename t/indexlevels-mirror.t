@@ -5,7 +5,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-use PublicInbox::Inbox;
+use PublicInbox::InboxWritable;
 require PublicInbox::Admin;
 my $PI_TEST_VERSION = $ENV{PI_TEST_VERSION} || 2;
 require_git('2.6') if $PI_TEST_VERSION == 2;
@@ -110,7 +110,8 @@ my $import_index_incremental = sub {
 
 	if ($level ne 'basic') {
 		ok(run_script(['-xcpdb', '-q', $mirror]), "v$v xcpdb OK");
-		is(PublicInbox::Admin::detect_indexlevel($ro_mirror), $level,
+		is(PublicInbox::InboxWritable::detect_indexlevel($ro_mirror),
+			$level,
 		   'indexlevel detectable by Admin after xcpdb v' .$v.$level);
 		delete $ro_mirror->{$_} for (qw(over search));
 		my $mset = $ro_mirror->search->mset('m:m@2');
@@ -152,7 +153,7 @@ my $import_index_incremental = sub {
 	is_deeply(\@rw_nums, \@expect, "v$v master has expected NNTP articles");
 	is_deeply(\@ro_nums, \@expect, "v$v mirror matches master articles");
 
-	is(PublicInbox::Admin::detect_indexlevel($ro_mirror), $level,
+	is(PublicInbox::InboxWritable::detect_indexlevel($ro_mirror), $level,
 	   'indexlevel detectable by Admin '.$v.$level);
 
 	SKIP: {
