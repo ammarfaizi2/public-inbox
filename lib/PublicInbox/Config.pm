@@ -318,6 +318,8 @@ sub parse_cgitrc {
 			$k =~ tr/-/_/;
 			$self->{"-cgit_$k"} = $v;
 		} elsif (m!\Ascan-path=(.+)\z!) {
+			# this depends on being after project-list in the
+			# config file, just like cgit.c
 			if (defined(my $list = $self->{-cgit_project_list})) {
 				scan_projects_coderepo($self, $list, $1);
 			} else {
