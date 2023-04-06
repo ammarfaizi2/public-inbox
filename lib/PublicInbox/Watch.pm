@@ -256,6 +256,10 @@ sub quit {
 	%{$self->{opendirs}} = ();
 	_done_for_now($self);
 	quit_done($self);
+	if (defined(my $fd = delete $self->{dir_idle_fd})) {
+		my $di = $PublicInbox::DS::DescriptorMap{$fd};
+		$di->close if $di && $di->can('add_watches');
+	}
 	if (my $idle_mic = delete $self->{idle_mic}) {
 		return unless $idle_mic->IsConnected && $idle_mic->Socket;
 		eval { $idle_mic->done };
@@ -280,6 +284,7 @@ sub watch_fs_init ($) {
 	require PublicInbox::DirIdle;
 	# inotify_create + EPOLL_CTL_ADD
 	my $dir_idle = PublicInbox::DirIdle->new($cb);
+	$self->{dir_idle_fd} = fileno($dir_idle->{sock}) if $dir_idle->{sock};
 	$dir_idle->add_watches([keys %{$self->{mdmap}}]);
 }
 
