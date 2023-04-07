@@ -340,6 +340,7 @@ lib/PublicInbox/TestCommon.pm
 lib/PublicInbox/Tmpfile.pm
 lib/PublicInbox/URIimap.pm
 lib/PublicInbox/URInntps.pm
+lib/PublicInbox/Umask.pm
 lib/PublicInbox/Unsubscribe.pm
 lib/PublicInbox/UserContent.pm
 lib/PublicInbox/V2Writable.pm

@@ -1,24 +1,16 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Extends read-only Inbox for writing
 package PublicInbox::InboxWritable;
 use strict;
 use v5.10.1;
-use parent qw(PublicInbox::Inbox Exporter);
+use parent qw(PublicInbox::Inbox PublicInbox::Umask Exporter);
 use PublicInbox::Import;
 use PublicInbox::Filter::Base qw(REJECT);
 use Errno qw(ENOENT);
 our @EXPORT_OK = qw(eml_from_path);
 use Fcntl qw(O_RDONLY O_NONBLOCK);
-
-use constant {
-	PERM_UMASK => 0,
-	OLD_PERM_GROUP => 1,
-	OLD_PERM_EVERYBODY => 2,
-	PERM_GROUP => 0660,
-	PERM_EVERYBODY => 0664,
-};
 
 sub new {
 	my ($class, $ibx, $creat_opt) = @_;
@@ -174,64 +166,6 @@ sub import_mbox {
 	my $im = $self->importer(1);
 	$cb->(undef, $fh, \&_mbox_eml_cb, $im, $self->filter);
 	$im->done;
-}
-
-sub _read_git_config_perm {
-	my ($self) = @_;
-	chomp(my $perm = $self->git->qx('config', 'core.sharedRepository'));
-	$perm;
-}
-
-sub _git_config_perm {
-	my $self = shift;
-	my $perm = scalar @_ ? $_[0] : _read_git_config_perm($self);
-	return PERM_UMASK if (!defined($perm) || $perm eq '');
-	return PERM_UMASK if ($perm eq 'umask');
-	return PERM_GROUP if ($perm eq 'group');
-	if ($perm =~ /\A(?:all|world|everybody)\z/) {
-		return PERM_EVERYBODY;
-	}
-	return PERM_GROUP if ($perm =~ /\A(?:true|yes|on|1)\z/);
-	return PERM_UMASK if ($perm =~ /\A(?:false|no|off|0)\z/);
-
-	my $i = oct($perm);
-	return PERM_UMASK if ($i == PERM_UMASK);
-	return PERM_GROUP if ($i == OLD_PERM_GROUP);
-	return PERM_EVERYBODY if ($i == OLD_PERM_EVERYBODY);
-
-	if (($i & 0600) != 0600) {
-		die "core.sharedRepository mode invalid: ".
-		    sprintf('%.3o', $i) . "\nOwner must have permissions\n";
-	}
-	($i & 0666);
-}
-
-sub _umask_for {
-	my ($perm) = @_; # _git_config_perm return value
-	my $rv = $perm;
-	return umask if $rv == 0;
-
-	# set +x bit if +r or +w were set
-	$rv |= 0100 if ($rv & 0600);
-	$rv |= 0010 if ($rv & 0060);
-	$rv |= 0001 if ($rv & 0006);
-	(~$rv & 0777);
-}
-
-sub with_umask {
-	my ($self, $cb, @arg) = @_;
-	my $old = umask($self->{umask} //= umask_prepare($self));
-	my $rv = eval { $cb->(@arg) };
-	my $err = $@;
-	umask $old;
-	die $err if $err;
-	$rv;
-}
-
-sub umask_prepare {
-	my ($self) = @_;
-	my $perm = _git_config_perm($self);
-	_umask_for($perm);
 }
 
 sub cleanup ($) {

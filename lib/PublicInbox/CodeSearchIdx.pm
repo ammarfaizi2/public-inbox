@@ -770,28 +770,23 @@ sub init_tmp_git_dir ($) {
 
 sub prep_umask ($) {
 	my ($self) = @_;
-	my $um;
-	my $cur = umask;
 	if ($self->{-cidx_internal}) { # respect core.sharedRepository
 		@{$self->{git_dirs}} == 1 or die 'BUG: only for GIT_DIR';
-		# yuck, FIXME move umask handling out of inbox-specific stuff
-		require PublicInbox::InboxWritable;
-		my $git = PublicInbox::Git->new($self->{git_dirs}->[0]);
-		chomp($um = $git->qx('config', 'core.sharedRepository') // '');
-		$um = PublicInbox::InboxWritable::_git_config_perm(undef, $um);
-		$um = PublicInbox::InboxWritable::_umask_for($um);
-		umask == $um or progress($self, 'umask from git: ',
-						sprintf('0%03o', $um));
+		local $self->{git} =
+			PublicInbox::Git->new($self->{git_dirs}->[0]);
+		$self->with_umask;
 	} elsif (-d $self->{cidx_dir}) { # respect existing perms
 		my @st = stat(_);
-		$um = (~$st[2] & 0777);
+		my $um = (~$st[2] & 0777);
+		$self->{umask} = $um; # for SearchIdx->with_umask
 		umask == $um or progress($self, 'using umask from ',
 						$self->{cidx_dir}, ': ',
 						sprintf('0%03o', $um));
-	}
-	defined($um) ?
-		PublicInbox::OnDestroy->new(\&CORE::umask, umask($um)) :
+		PublicInbox::OnDestroy->new($$, \&CORE::umask, umask($um));
+	} else {
+		$self->{umask} = umask; # for SearchIdx->with_umask
 		undef;
+	}
 }
 
 sub start_prune ($) {
@@ -894,11 +889,6 @@ sub shard_done_wait { # awaitpid cb via ipc_worker_reap
 		++$self->{shard_err} if defined($self->{shard_err});
 	}
 	PublicInbox::DS::enqueue_reap() if !shards_active(); # once more for PLC
-}
-
-sub with_umask { # TODO get rid of this treewide and rely on OnDestroy
-	my ($self, $cb, @arg) = @_;
-	$cb->(@arg);
 }
 
 1;

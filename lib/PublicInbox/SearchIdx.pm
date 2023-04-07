@@ -9,7 +9,8 @@
 package PublicInbox::SearchIdx;
 use strict;
 use v5.10.1;
-use parent qw(PublicInbox::Search PublicInbox::Lock Exporter);
+use parent qw(PublicInbox::Search PublicInbox::Lock PublicInbox::Umask
+	Exporter);
 use PublicInbox::Eml;
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::InboxWritable;
@@ -821,7 +822,8 @@ sub unindex_both { # git->cat_async callback
 
 sub with_umask {
 	my $self = shift;
-	($self->{ibx} // $self->{eidx})->with_umask(@_);
+	my $owner = $self->{ibx} // $self->{eidx};
+	$owner ? $owner->with_umask(@_) : $self->SUPER::with_umask(@_)
 }
 
 # called by public-inbox-index

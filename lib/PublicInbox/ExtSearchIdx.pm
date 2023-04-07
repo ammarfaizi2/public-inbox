@@ -16,7 +16,7 @@
 package PublicInbox::ExtSearchIdx;
 use strict;
 use v5.10.1;
-use parent qw(PublicInbox::ExtSearch PublicInbox::Lock);
+use parent qw(PublicInbox::ExtSearch PublicInbox::Umask PublicInbox::Lock);
 use Carp qw(croak carp);
 use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
@@ -1397,7 +1397,6 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 
 no warnings 'once';
 *done = \&PublicInbox::V2Writable::done;
-*with_umask = \&PublicInbox::InboxWritable::with_umask;
 *parallel_init = \&PublicInbox::V2Writable::parallel_init;
 *nproc_shards = \&PublicInbox::V2Writable::nproc_shards;
 *sync_prepare = \&PublicInbox::V2Writable::sync_prepare;

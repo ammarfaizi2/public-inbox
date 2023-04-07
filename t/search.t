@@ -41,8 +41,9 @@ sub oct_is ($$$) {
 
 {
 	# git repository perms
+	use_ok 'PublicInbox::Umask';
 	oct_is($ibx->_git_config_perm(),
-		&PublicInbox::InboxWritable::PERM_GROUP,
+		PublicInbox::Umask::PERM_GROUP(),
 		'undefined permission is group');
 	my @t = (
 		[ '0644', 0022, '644 => umask(0022)' ],
@@ -54,8 +55,8 @@ sub oct_is ($$$) {
 	);
 	for (@t) {
 		my ($perm, $exp, $msg) = @$_;
-		my $got = PublicInbox::InboxWritable::_umask_for(
-			PublicInbox::InboxWritable->_git_config_perm($perm));
+		my $got = PublicInbox::Umask::_umask_for(
+			PublicInbox::Umask->_git_config_perm($perm));
 		oct_is($got, $exp, $msg);
 	}
 }
