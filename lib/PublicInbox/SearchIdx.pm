@@ -114,15 +114,15 @@ sub load_xapian_writable () {
 	*sortable_serialise = $xap.'::sortable_serialise';
 	$DB_CREATE_OR_OPEN = eval($xap.'::DB_CREATE_OR_OPEN()');
 	$DB_OPEN = eval($xap.'::DB_OPEN()');
-	my $ver = (eval($xap.'::major_version()') << 16) |
-		(eval($xap.'::minor_version()') << 8) |
-		eval($xap.'::revision()');
-	if ($ver >= 0x10400) {
+	my $ver = eval 'v'.join('.', eval($xap.'::major_version()'),
+				eval($xap.'::minor_version()'),
+				eval($xap.'::revision()'));
+	if ($ver ge 1.4) { # new flags in Xapian 1.4
 		$DB_NO_SYNC = 0x4;
 		$DB_DANGEROUS = 0x10;
 	}
 	# Xapian v1.2.21..v1.2.24 were missing close-on-exec on OFD locks
-	$X->{CLOEXEC_UNSET} = 1 if $ver >= 0x010215 && $ver <= 0x010218;
+	$X->{CLOEXEC_UNSET} = 1 if $ver ge v1.2.21 && $ver le v1.2.24;
 	1;
 }
 
