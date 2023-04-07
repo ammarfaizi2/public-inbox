@@ -23,6 +23,7 @@ SKIP: {
 	for my $s (qw(HUP TERM INT WINCH)) {
 		$sig->{$s} = sub { $hit->{$s}->{sigfd}++ };
 	}
+	PublicInbox::DS->Reset;
 	my $sigfd = PublicInbox::Sigfd->new($sig, 0);
 	if ($sigfd) {
 		ok($sigfd, 'Sigfd->new works');
@@ -40,6 +41,7 @@ SKIP: {
 			is($hit->{$s}->{normal}, undef,
 				'normal $SIG{$s} not fired');
 		}
+		PublicInbox::DS->Reset;
 		$sigfd = undef;
 
 		my $nbsig = PublicInbox::Sigfd->new($sig, 1);
