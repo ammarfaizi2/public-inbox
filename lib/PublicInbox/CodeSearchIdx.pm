@@ -437,6 +437,7 @@ sub partition_refs ($$$) {
 		$fh;
 	} @RDONLY_XDB;
 
+	my $n0 = $NCHANGE;
 	while (defined(my $cmt = <$rfh>)) {
 		chomp $cmt;
 		my $n = hex(substr($cmt, 0, 8)) % scalar(@RDONLY_XDB);
@@ -458,7 +459,8 @@ sub partition_refs ($$$) {
 	close($rfh);
 	return () if $DO_QUIT;
 	if (!$? || (($? & 127) == POSIX::SIGPIPE && $seen > $SEEN_MAX)) {
-		progress($self, "$git->{git_dir}: $NCHANGE commits");
+		my $n = $NCHANGE - $n0;
+		progress($self, "$git->{git_dir}: $n commits") if $n;
 		for my $fh (@shard_in) {
 			$fh->flush or die "flush: $!";
 			sysseek($fh, 0, SEEK_SET) or die "seek: $!";
@@ -697,6 +699,8 @@ sub event_step { # may be requeued via DS
 	cidx_ckpoint($self);
 	return PublicInbox::DS::requeue($self) if $PRUNE_CUR <= $PRUNE_MAX;
 	send($PRUNE_OP_P, "prune_done $self->{shard}", MSG_EOR);
+	$PRUNE_NR //= 0;
+	progress($self, "prune [$self->{shard}] $PRUNE_NR done");
 	$TMP_GIT->cleanup;
 	$TMP_GIT = $PRUNE_OP_P = $PRUNE_CUR = $PRUNE_MAX = undef;
 	%ACTIVE_GIT_DIR = ();
