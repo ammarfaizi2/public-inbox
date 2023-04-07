@@ -276,7 +276,7 @@ sub fetch_args ($$) {
 			($lei->{opt}->{jobs} // 1) > 1;
 	push @cmd, '-v' if $lei->{opt}->{verbose};
 	push(@cmd, '-p') if $lei->{opt}->{prune};
-	PublicInbox::Git::version() >= ((2 << 24) | (29 << 16)) and
+	PublicInbox::Git::version() ge v2.29.0 and
 		push(@cmd, '--no-write-fetch-head');
 	@cmd;
 }

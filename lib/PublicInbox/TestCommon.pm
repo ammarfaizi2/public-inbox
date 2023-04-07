@@ -10,6 +10,7 @@ use Fcntl qw(F_SETFD :seek);
 use POSIX qw(dup2);
 use IO::Socket::INET;
 use File::Spec;
+use Scalar::Util qw(isvstring);
 our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
@@ -109,17 +110,12 @@ sub have_xapian_compact (;$) {
 
 sub require_git ($;$) {
 	my ($req, $nr) = @_;
-	state ($cur_int, $cur_ver);
-	$cur_int //= do {
-		chomp($cur_ver = xqx([qw(git --version)]));
-		my @v = ($cur_ver =~ /version (\d+)\.(\d+)(?:\.(\d+))?/);
-		($v[0] << 24) | ($v[1] << 16) | ($v[2] // 0);
-	};
+	require PublicInbox::Git;
+	state $cur_vstr = PublicInbox::Git::version();
+	$req = eval("v$req") unless isvstring($req);
 
-	my ($req_maj, $req_min, $req_sub) = split(/\./, $req);
-	my $req_int = ($req_maj << 24) | ($req_min << 16) | ($req_sub // 0);
-
-	return 1 if $cur_int >= $req_int;
+	return 1 if $cur_vstr ge $req;
+	state $cur_ver = sprintf('%vd', $cur_vstr);
 	return plan skip_all => "git $req+ required, have $cur_ver" if !$nr;
 	defined(wantarray) ? undef :
 		skip("git $req+ required (have $cur_ver), skipping $nr tests")

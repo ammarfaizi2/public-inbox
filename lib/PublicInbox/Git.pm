@@ -33,7 +33,7 @@ our $async_warn; # true in read-only daemons
 # 65: SHA-256 hex size + "\n" in preparation for git using non-SHA1
 use constant {
 	MAX_INFLIGHT => 512 * 3 / (65 + length('contents ')),
-	BATCH_CMD_VER => (2 << 24 | 36 << 16), # git 2.36+
+	BATCH_CMD_VER => v2.36.0, # git 2.36+
 };
 
 my %GIT_ESC = (
@@ -67,8 +67,7 @@ sub check_git_exe () {
 		close($rd) or die "$GIT_EXE --version: $?";
 		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
 			"$GIT_EXE --version output: $v # unparseable";
-		my @v = split(/\./, $1, 3);
-		$GIT_VER = ($v[0] << 24) | ($v[1] << 16) | $v[2];
+		$GIT_VER = eval("v$1") // die "BUG: bad vstring: $1 ($v)";
 		$EXE_ST = $st;
 	}
 }
@@ -159,7 +158,7 @@ sub _bidi_pipe {
 
 	# git 2.31.0+ supports -c core.abbrev=no, don't bother with
 	# core.abbrev=64 since not many releases had SHA-256 prior to 2.31
-	my $abbr = $GIT_VER < (2 << 24 | 31 << 16) ? 40 : 'no';
+	my $abbr = $GIT_VER lt v2.31.0 ? 40 : 'no';
 	my @cmd = ($GIT_EXE, "--git-dir=$gd", '-c', "core.abbrev=$abbr",
 			'cat-file', "--$batch");
 	if ($err) {
@@ -316,7 +315,7 @@ sub cat_async_wait ($) {
 sub batch_prepare ($) {
 	my ($self) = @_;
 	check_git_exe();
-	if ($GIT_VER >= BATCH_CMD_VER) {
+	if ($GIT_VER ge BATCH_CMD_VER) {
 		_bidi_pipe($self, qw(batch-command in out pid err_c));
 		$self->{-bc} = 1;
 	} else {
@@ -370,7 +369,7 @@ sub check_async_begin ($) {
 	die 'BUG: already in async check' if $self->{inflight_c};
 	cleanup($self) if alternates_changed($self);
 	check_git_exe();
-	if ($GIT_VER >= BATCH_CMD_VER) {
+	if ($GIT_VER ge BATCH_CMD_VER) {
 		_bidi_pipe($self, qw(batch-command in out pid err_c));
 		$self->{-bc} = 1;
 		$self->{inflight} = [];
