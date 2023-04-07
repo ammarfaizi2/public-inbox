@@ -85,7 +85,6 @@ sub new {
 		xpfx => "$dir/cidx".  PublicInbox::CodeSearch::CIDX_SCHEMA_VER,
 		cidx_dir => $dir,
 		creat => 1, # TODO: get rid of this, should be implicit
-		indexlevel => $l,
 		transact_bytes => 0, # for checkpoint
 		total_bytes => 0, # for lock_release
 		current_info => '',
@@ -617,16 +616,28 @@ sub cidx_init ($) {
 	}
 	$self->lock_acquire;
 	my @shards;
+	my $l = $self->{indexlevel} //= $self->{-opt}->{indexlevel};
+
 	for my $n (0..($self->{nshard} - 1)) {
 		my $shard = bless { %$self, shard => $n }, ref($self);
 		delete @$shard{qw(lockfh lock_path)};
-		$shard->idx_acquire;
+		my $xdb = $shard->idx_acquire;
+		if (!$n) {
+			if (($l // '') eq 'medium') {
+				$xdb->set_metadata('indexlevel', $l);
+			} elsif (($l // '') eq 'full') {
+				$xdb->set_metadata('indexlevel', ''); # unset
+			}
+			$l ||= $xdb->get_metadata('indexlevel') || 'full';
+		}
+		$shard->{indexlevel} = $l;
 		$shard->idx_release;
 		$shard->wq_workers_start("cidx shard[$n]", 1, $SIGSET, {
 			siblings => \@shards, # for ipc_atfork_child
 		}, \&shard_done_wait, $self);
 		push @shards, $shard;
 	}
+	$self->{indexlevel} //= $l;
 	# this warning needs to happen after idx_acquire
 	state $once;
 	warn <<EOM if $PublicInbox::Search::X{CLOEXEC_UNSET} && !$once++;

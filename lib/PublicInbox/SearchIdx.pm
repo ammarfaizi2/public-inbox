@@ -90,7 +90,7 @@ sub new {
 	$self;
 }
 
-sub need_xapian ($) { $_[0]->{indexlevel} =~ $xapianlevels }
+sub need_xapian ($) { ($_[0]->{indexlevel} // 'full') =~ $xapianlevels }
 
 sub idx_release {
 	my ($self, $wake) = @_;
