@@ -89,7 +89,8 @@ sub link_or_copy ($$) {
 	File::Copy::cp($src, $dst) or die "cp $src, $dst failed: $!\n";
 }
 
-$old->with_umask(sub {
+{
+	my $restore = $old->with_umask;
 	my $old_cfg = "$old->{inboxdir}/config";
 	local $ENV{GIT_CONFIG} = $old_cfg;
 	my $new_cfg = "$new->{inboxdir}/all.git/config";
@@ -110,12 +111,10 @@ $old->with_umask(sub {
 	my $desc = "$old->{inboxdir}/description";
 	link_or_copy($desc, "$new->{inboxdir}/description") if -e $desc;
 	my $clone = "$old->{inboxdir}/cloneurl";
-	if (-e $clone) {
-		warn <<"";
+	warn <<"" if -e $clone;
 $clone may not be valid after migrating to v2, not copying
 
-	}
-});
+}
 my $state = '';
 my $head = $old->{ref_head} || 'HEAD';
 my ($rd, $pid) = $old->git->popen(qw(fast-export --use-done-feature), $head);

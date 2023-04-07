@@ -89,13 +89,6 @@ sub init_inbox {
 	$self->done;
 }
 
-# returns undef on duplicate or spam
-# mimics Import::add and wraps it for v2
-sub add {
-	my ($self, $eml, $check_cb) = @_;
-	$self->{ibx}->with_umask(\&_add, $self, $eml, $check_cb);
-}
-
 sub idx_shard ($$) {
 	my ($self, $num) = @_;
 	$self->{idx_shards}->[$num % scalar(@{$self->{idx_shards}})];
@@ -113,8 +106,11 @@ sub do_idx ($$$) {
 	$n >= $self->{batch_bytes};
 }
 
-sub _add {
+# returns undef on duplicate or spam
+# mimics Import::add and wraps it for v2
+sub add {
 	my ($self, $mime, $check_cb) = @_;
+	my $restore = $self->{ibx}->with_umask;
 
 	# spam check:
 	if ($check_cb) {
@@ -391,17 +387,16 @@ sub rewrite_internal ($$;$$$) {
 # (retval[2]) is not part of the stable API shared with Import->remove
 sub remove {
 	my ($self, $eml, $cmt_msg) = @_;
-	my $r = $self->{ibx}->with_umask(\&rewrite_internal,
-						$self, $eml, $cmt_msg);
+	my $restore = $self->{ibx}->with_umask;
+	my $r = rewrite_internal($self, $eml, $cmt_msg);
 	defined($r) && defined($r->[0]) ? @$r: undef;
 }
 
 sub _replace ($$;$$) {
 	my ($self, $old_eml, $new_eml, $sref) = @_;
-	my $arg = [ $self, $old_eml, undef, $new_eml, $sref ];
-	my $rewritten = $self->{ibx}->with_umask(\&rewrite_internal,
-			$self, $old_eml, undef, $new_eml, $sref) or return;
-
+	my $restore = $self->{ibx}->with_umask;
+	my $rewritten = rewrite_internal($self, $old_eml, undef,
+					$new_eml, $sref) or return;
 	my $rewrites = $rewritten->{rewrites};
 	# ->done is called if there are rewrites since we gc+prune from git
 	$self->idx_init if @$rewrites;

@@ -1110,18 +1110,15 @@ sub DESTROY {
 	$_[0]->{lockfh} = undef;
 }
 
-sub _begin_txn {
+sub begin_txn_lazy {
 	my ($self) = @_;
+	return if $self->{txn};
+	my $restore = $self->with_umask;
 	my $xdb = $self->{xdb} || idx_acquire($self);
 	$self->{oidx}->begin_lazy if $self->{oidx};
 	$xdb->begin_transaction if $xdb;
 	$self->{txn} = 1;
 	$xdb;
-}
-
-sub begin_txn_lazy {
-	my ($self) = @_;
-	$self->with_umask(\&_begin_txn, $self) if !$self->{txn};
 }
 
 # store 'indexlevel=medium' in v2 shard=0 and v1 (only one shard)
@@ -1147,8 +1144,10 @@ sub set_metadata_once {
 	}
 }
 
-sub _commit_txn {
+sub commit_txn_lazy {
 	my ($self) = @_;
+	return unless delete($self->{txn});
+	my $restore = $self->with_umask;
 	if (my $eidx = $self->{eidx}) {
 		$eidx->git->async_wait_all;
 		$eidx->{transact_bytes} = 0;
@@ -1158,12 +1157,6 @@ sub _commit_txn {
 		$xdb->commit_transaction;
 	}
 	$self->{oidx}->commit_lazy if $self->{oidx};
-}
-
-sub commit_txn_lazy {
-	my ($self) = @_;
-	delete($self->{txn}) and
-		$self->with_umask(\&_commit_txn, $self);
 }
 
 sub eidx_shard_new {

@@ -1179,12 +1179,6 @@ sub update_last_commit { # overrides V2Writable
 	$self->{oidx}->eidx_meta($meta_key, $latest_cmt);
 }
 
-sub _idx_init { # with_umask callback
-	my ($self, $opt) = @_;
-	PublicInbox::V2Writable::_idx_init($self, $opt); # acquires ei.lock
-	$self->{midx} = PublicInbox::MiscIdx->new($self);
-}
-
 sub symlink_packs ($$) {
 	my ($ibx, $pd) = @_;
 	my $ret = 0;
@@ -1270,15 +1264,17 @@ sub idx_init { # similar to V2Writable
 	}
 	($has_new || $prune_nr || $new ne '') and
 		$self->{mg}->write_alternates($mode, $alt, $new);
-	$git_midx and $self->with_umask(sub {
+	my $restore = $self->with_umask;
+	if ($git_midx) {
 		my @cmd = ('multi-pack-index');
 		push @cmd, '--no-progress' if ($opt->{quiet}//0) > 1;
 		my $lk = $self->lock_for_scope;
 		system('git', "--git-dir=$ALL", @cmd, 'write');
 		# ignore errors, fairly new command, may not exist
-	});
+	}
 	$self->parallel_init($self->{indexlevel});
-	$self->with_umask(\&_idx_init, $self, $opt);
+	PublicInbox::V2Writable::_idx_init($self, $opt); # acquires ei.lock
+	$self->{midx} = PublicInbox::MiscIdx->new($self);
 	$self->{oidx}->begin_lazy;
 	$self->{oidx}->eidx_prep;
 	$self->{midx}->create_xdb if $new ne '';

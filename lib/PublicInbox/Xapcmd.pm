@@ -256,24 +256,6 @@ sub prepare_run {
 
 sub check_compact () { runnable_or_die($XAPIAN_COMPACT) }
 
-sub _run { # with_umask callback
-	my ($ibx, $cb, $opt) = @_;
-	my $im = $ibx->can('importer') ? $ibx->importer(0) : undef;
-	($im // $ibx)->lock_acquire;
-	my ($tmp, $queue) = prepare_run($ibx, $opt);
-
-	# fine-grained locking if we prepare for reindex
-	if (!$opt->{-coarse_lock}) {
-		prepare_reindex($ibx, $opt);
-		($im // $ibx)->lock_release;
-	}
-
-	$ibx->cleanup if $ibx->can('cleanup');
-	process_queue($queue, $cb, $opt);
-	($im // $ibx)->lock_acquire if !$opt->{-coarse_lock};
-	commit_changes($ibx, $im, $tmp, $opt);
-}
-
 sub run {
 	my ($ibx, $task, $opt) = @_; # task = 'cpdb' or 'compact'
 	my $cb = \&$task;
@@ -296,7 +278,22 @@ sub run {
 
 	local @SIG{keys %SIG} = values %SIG;
 	setup_signals();
-	$ibx->with_umask(\&_run, $ibx, $cb, $opt);
+	my $restore = $ibx->with_umask;
+
+	my $im = $ibx->can('importer') ? $ibx->importer(0) : undef;
+	($im // $ibx)->lock_acquire;
+	my ($tmp, $queue) = prepare_run($ibx, $opt);
+
+	# fine-grained locking if we prepare for reindex
+	if (!$opt->{-coarse_lock}) {
+		prepare_reindex($ibx, $opt);
+		($im // $ibx)->lock_release;
+	}
+
+	$ibx->cleanup if $ibx->can('cleanup');
+	process_queue($queue, $cb, $opt);
+	($im // $ibx)->lock_acquire if !$opt->{-coarse_lock};
+	commit_changes($ibx, $im, $tmp, $opt);
 }
 
 sub cpdb_retryable ($$) {
