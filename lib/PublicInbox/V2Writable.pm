@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # This interface wraps and mimics PublicInbox::Import
@@ -22,7 +22,6 @@ use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob);
 use IO::Handle; # ->autoflush
-use File::Temp ();
 use POSIX ();
 
 my $OID = qr/[a-f0-9]{40,}/;
@@ -660,23 +659,6 @@ sub import_init {
 	$im;
 }
 
-# XXX experimental
-sub diff ($$$) {
-	my ($mid, $cur, $new) = @_;
-
-	my $ah = File::Temp->new(TEMPLATE => 'email-cur-XXXX', TMPDIR => 1);
-	print $ah $cur->as_string or die "print: $!";
-	$ah->flush or die "flush: $!";
-	PublicInbox::Import::drop_unwanted_headers($new);
-	my $bh = File::Temp->new(TEMPLATE => 'email-new-XXXX', TMPDIR => 1);
-	print $bh $new->as_string or die "print: $!";
-	$bh->flush or die "flush: $!";
-	my $cmd = [ qw(diff -u), $ah->filename, $bh->filename ];
-	print STDERR "# MID conflict <$mid>\n";
-	my $pid = spawn($cmd, undef, { 1 => 2 });
-	waitpid($pid, 0) == $pid or die "diff did not finish";
-}
-
 sub get_blob ($$) {
 	my ($self, $smsg) = @_;
 	if (my $im = $self->{im}) {
@@ -700,9 +682,6 @@ sub content_exists ($$$) {
 		}
 		my $cur = PublicInbox::Eml->new($msg);
 		return 1 if content_matches($chashes, $cur);
-
-		# XXX DEBUG_DIFF is experimental and may be removed
-		diff($mid, $cur, $mime) if $ENV{DEBUG_DIFF};
 	}
 	undef;
 }
