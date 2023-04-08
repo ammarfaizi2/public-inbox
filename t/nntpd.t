@@ -8,6 +8,7 @@ use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Sys::Hostname;
 use POSIX qw(_exit);
 use PublicInbox::SHA;
+use PublicInbox::DS;
 
 # t/nntpd-v2.t wraps this for v2
 my $version = $ENV{PI_TEST_VERSION} || 1;
