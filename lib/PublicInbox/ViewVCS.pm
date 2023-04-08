@@ -514,7 +514,7 @@ sub solve_result {
 	return show_other($ctx, $res) if $type ne 'blob';
 	my $fn = $di->{path_b} // $hints->{path_b};
 	my $paths = $ctx->{-paths} //= do {
-		my $path = to_filename($fn // 'blob');
+		my $path = to_filename($fn // 'blob') // 'blob';
 		my $raw_more = qq[(<a\nhref="$path">raw</a>)];
 		my @def;
 
