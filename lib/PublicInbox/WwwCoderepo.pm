@@ -19,6 +19,7 @@ use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
 use PublicInbox::RepoTree;
+use PublicInbox::OnDestroy;
 
 my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
@@ -120,15 +121,13 @@ sub _refs_tags_link {
 		"</a>$align ", ascii_html($s), " ($cd)", @snap_fmt, "\n");
 }
 
-sub summary_finish {
+sub summary_END { # called via OnDestroy
 	my ($ctx) = @_;
-	my $wcb = delete($ctx->{env}->{'qspawn.wcb'}) or return; # already done
-	my @x = split(/\n\n/sm, delete($ctx->{-each_refs}), 3);
+	my $wcb = delete($ctx->{-wcb}) or return; # already done
 	PublicInbox::WwwStream::html_init($ctx);
 	my $zfh = $ctx->zfh;
 
-	# git log
-	my @r = split(/\n/s, pop(@x));
+	my @r = split(/\n/s, delete($ctx->{qx_res}->{'log'}) // '');
 	my $last = scalar(@r) > $ctx->{wcr}->{summary_log} ? pop(@r) : undef;
 	my $tip_html = '';
 	my $tip = $ctx->{qp}->{h};
@@ -149,7 +148,7 @@ EOM
 	print $zfh "...\n" if $last;
 
 	# README
-	my ($bref, $oid, $ref_path) = @{delete $ctx->{-readme}};
+	my ($bref, $oid, $ref_path) = @{delete $ctx->{qx_res}->{readme}};
 	if ($bref) {
 		my $l = PublicInbox::Linkify->new;
 		$$bref =~ s/\s*\z//sm;
@@ -163,14 +162,14 @@ EOM
 
 	# refs/heads
 	print $zfh '<a id=heads>', $HEADS_CMD , '</a>';
-	@r = split(/^/sm, shift(@x) // '');
+	@r = split(/^/sm, delete($ctx->{qx_res}->{heads}) // '');
 	$last = scalar(@r) > $ctx->{wcr}->{summary_branches} ? pop(@r) : undef;
 	chomp(@r);
 	for (@r) { print $zfh _refs_heads_link($_, './') }
 	print $zfh $NO_HEADS if !@r;
 	print $zfh qq(<a href="refs/heads/">...</a>\n) if $last;
 	print $zfh "\n<a id=tags>", $TAGS_CMD, '</a>';
-	@r = split(/^/sm, shift(@x) // '');
+	@r = split(/^/sm, delete($ctx->{qx_res}->{tags}) // '');
 	$last = scalar(@r) > $ctx->{wcr}->{summary_tags} ? pop(@r) : undef;
 	my ($snap_pfx, @snap_fmt) = _snapshot_link_prep($ctx);
 	chomp @r;
@@ -180,54 +179,56 @@ EOM
 	$wcb->($ctx->html_done('</pre>'));
 }
 
-sub capture_refs ($$) { # psgi_qx callback to capture git-for-each-ref + git-log
-	my ($bref, $ctx) = @_;
-	my $qsp_err = delete $ctx->{-qsp_err};
+sub capture { # psgi_qx callback to capture git-for-each-ref
+	my ($bref, $arg) = @_; # arg = [ctx, key, OnDestroy(summary_END)]
 	utf8::decode($$bref);
-	$ctx->{-each_refs} = $$bref;
-	summary_finish($ctx) if $ctx->{-readme};
+	$arg->[0]->{qx_res}->{$arg->[1]} = $$bref;
+	# summary_END may be called via OnDestroy $arg->[2]
 }
 
 sub set_readme { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $ctx) = @_;
-	my $ref_path = shift @{$ctx->{-nr_readme_tries}}; # e.g. HEAD:README
-	if ($type eq 'blob' && !$ctx->{-readme}) {
-		$ctx->{-readme} = [ $bref, $oid, $ref_path ];
-	} elsif (scalar @{$ctx->{-nr_readme_tries}} == 0) {
-		$ctx->{-readme} //= []; # nothing left to try
+	my $ref_path = shift @{$ctx->{-readme_tries}}; # e.g. HEAD:README
+	if ($type eq 'blob' && !$ctx->{qx_res}->{readme}) {
+		$ctx->{qx_res}->{readme} = [ $bref, $oid, $ref_path ];
+	} elsif (scalar @{$ctx->{-readme_tries}} == 0) {
+		$ctx->{qx_res}->{readme} //= []; # nothing left to try
 	} # or try another README...
-	summary_finish($ctx) if $ctx->{-each_refs} && $ctx->{-readme};
+	# summary_END may be called via OnDestroy ($ctx->{-END})
 }
 
-sub summary {
-	my ($self, $ctx) = @_;
-	$ctx->{wcr} = $self;
+sub summary ($$) {
+	my ($ctx, $wcb) = @_;
+	$ctx->{-wcb} = $wcb; # PublicInbox::HTTP::{Identity,Chunked}
 	my $tip = $ctx->{qp}->{h}; # same as cgit
 	if (defined $tip && $tip eq '') {
 		delete $ctx->{qp}->{h};
 		undef($tip);
 	}
-	my $nb = $self->{summary_branches} + 1;
-	my $nt = $self->{summary_tags} + 1;
-	my $nl = $self->{summary_log} + 1;
+	my ($nb, $nt, $nl) = map { $_ + 1 } @{$ctx->{wcr}}{qw(
+		summary_branches summary_tags summary_log)};
+	$ctx->{qx_res} = {};
+	my $qsp_err = \($ctx->{-qsp_err} = '');
+	my %opt = (quiet => 1, 2 => $ctx->{wcr}->{log_fh});
+	my %env = (GIT_DIR => $ctx->{git}->{git_dir});
+	my @log = (qw(git log), "-$nl", '--pretty=format:%d %H %h %cs %s');
+	push(@log, $tip) if defined $tip;
 
-	my @cmd = (qw(/bin/sh -c),
-		"$EACH_REF --count=$nb refs/heads; echo && " .
-		"$EACH_REF --count=$nt refs/tags; echo && " .
-		qq(git log -$nl --pretty=format:'%d %H %h %cs %s' "\$@" --));
-	push @cmd, 'git', $tip if defined($tip);
-	my $qsp = PublicInbox::Qspawn->new(\@cmd,
-		{ GIT_DIR => $ctx->{git}->{git_dir} },
-		{ quiet => 1, 2 => $self->{log_fh} });
-	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
+	# limit scope for MockHTTP test (t/solver_git.t)
+	my $END = PublicInbox::OnDestroy->new($$, \&summary_END, $ctx);
+	for (['log', \@log],
+		 [ 'heads', [@EACH_REF, "--count=$nb", 'refs/heads'] ],
+		 [ 'tags', [@EACH_REF, "--count=$nt", 'refs/tags'] ]) {
+		my ($k, $cmd) = @$_;
+		my $qsp = PublicInbox::Qspawn->new($cmd, \%env, \%opt);
+		$qsp->{qsp_err} = $qsp_err;
+		$qsp->psgi_qx($ctx->{env}, undef, \&capture,
+				[$ctx, $k, $END]);
+	}
 	$tip //= 'HEAD';
 	my @try = ("$tip:README", "$tip:README.md"); # TODO: configurable
-	$ctx->{-nr_readme_tries} = [ @try ];
-	PublicInbox::ViewVCS::do_cat_async($ctx, \&set_readme, @try);
-	sub { # $_[0] => PublicInbox::HTTP::{Identity,Chunked}
-		$ctx->{env}->{'qspawn.wcb'} = $_[0];
-		$qsp->psgi_qx($ctx->{env}, undef, \&capture_refs, $ctx);
-	}
+	my %ctx = (%$ctx, -END => $END, -readme_tries => [ @try ]);
+	PublicInbox::ViewVCS::do_cat_async(\%ctx, \&set_readme, @try);
 }
 
 # called by GzipFilter->close after translate
@@ -293,7 +294,8 @@ sub srv { # endpoint called by PublicInbox::WWW
 		($git = $cr->{$1})) {
 			PublicInbox::GitHTTPBackend::serve($ctx->{env},$git,$2);
 	} elsif ($path_info =~ m!\A/(.+?)/\z! and ($ctx->{git} = $cr->{$1})) {
-		summary($self, $ctx)
+		$ctx->{wcr} = $self;
+		sub { summary($ctx, $_[0]) }; # $_[0] = wcb
 	} elsif ($path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
 			($ctx->{git} = $cr->{$1})) {
 		$ctx->{lh} = $self->{log_fh};
