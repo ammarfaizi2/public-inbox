@@ -1074,7 +1074,11 @@ sub _index_sync {
 	my $ibx = $self->{ibx};
 	local $self->{current_info} = "$ibx->{inboxdir}";
 	$self->{batch_bytes} = $opt->{batch_size} // $BATCH_BYTES;
-	$ibx->git->batch_prepare;
+
+	if ($X->{CLOEXEC_UNSET}) {
+		$ibx->git->cat_file($tip);
+		$ibx->git->check($tip);
+	}
 	my $pr = $opt->{-progress};
 	my $sync = { reindex => $opt->{reindex}, -opt => $opt, ibx => $ibx };
 	my $quit = quit_cb($sync);

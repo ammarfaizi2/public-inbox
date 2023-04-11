@@ -229,8 +229,7 @@ sub cat_async_retry ($$) {
 	delete $self->{inflight};
 	cleanup($self);
 
-	$self->{inflight} = $inflight;
-	batch_prepare($self);
+	batch_prepare($self, $inflight);
 	my $buf = '';
 	for (my $i = 0; $i < @$inflight; $i += 3) {
 		$buf .= "$inflight->[$i]\n";
@@ -312,8 +311,8 @@ sub cat_async_wait ($) {
 	}
 }
 
-sub batch_prepare ($) {
-	my ($self) = @_;
+sub batch_prepare ($$) {
+	my ($self, $inflight) = @_;
 	check_git_exe();
 	if ($GIT_VER ge BATCH_CMD_VER) {
 		_bidi_pipe($self, qw(batch-command in out pid err_c));
@@ -321,7 +320,7 @@ sub batch_prepare ($) {
 	} else {
 		_bidi_pipe($self, qw(batch in out pid));
 	}
-	$self->{inflight} = [];
+	$self->{inflight} = $inflight;
 }
 
 sub _cat_file_cb {
@@ -581,7 +580,7 @@ sub cat_async_begin {
 	my ($self) = @_;
 	cleanup($self) if $self->alternates_changed;
 	die 'BUG: already in async' if $self->{inflight};
-	batch_prepare($self);
+	batch_prepare($self, []);
 }
 
 sub cat_async ($$$;$) {
