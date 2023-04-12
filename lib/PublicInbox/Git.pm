@@ -28,6 +28,10 @@ our $in_cleanup;
 our $RDTIMEO = 60_000; # milliseconds
 our $async_warn; # true in read-only daemons
 
+# committerdate:unix is git 2.9.4+ (2017-05-05), so using raw instead
+my @MODIFIED_DATE = qw[for-each-ref --sort=-committerdate
+			--format=%(committerdate:raw) --count=1];
+
 # 512: POSIX PIPE_BUF minimum (see pipe(7))
 # 3: @$inflight is flattened [ $OID, $cb, $arg ]
 # 65: SHA-256 hex size + "\n" in preparation for git using non-SHA1
@@ -592,10 +596,8 @@ sub cat_async ($$$;$) {
 
 # returns the modified time of a git repo, same as the "modified" field
 # of a grokmirror manifest
-sub modified ($) {
-	# committerdate:unix is git 2.9.4+ (2017-05-05), so using raw instead
-	my $fh = popen($_[0], qw[for-each-ref --sort=-committerdate
-				--format=%(committerdate:raw) --count=1]);
+sub modified ($;$) {
+	my $fh = $_[1] // popen($_[0], @MODIFIED_DATE);
 	(split(/ /, <$fh> // time))[0] + 0; # integerize for JSON
 }
 
@@ -632,41 +634,38 @@ sub cloneurl {
 # templates/this--description in git.git
 sub manifest_entry {
 	my ($self, $epoch, $default_desc) = @_;
-	my $fh = $self->popen('show-ref');
-	my $dig = PublicInbox::SHA->new(1);
-	while (read($fh, my $buf, 65536)) {
-		$dig->add($buf);
+	check_git_exe();
+	my $gd = $self->{git_dir};
+	my @git = ($GIT_EXE, "--git-dir=$gd");
+	my $sr = popen_rd([@git, 'show-ref']);
+	my $own = popen_rd([@git, qw(config gitweb.owner)]);
+	my $mod = popen_rd([@git, @MODIFIED_DATE]);
+	my $buf = description($self);
+	if (defined $epoch && index($buf, 'Unnamed repository') == 0) {
+		$buf = "$default_desc [epoch $epoch]";
 	}
-	close $fh or return; # empty, uninitialized git repo
-	undef $fh; # for open, below
-	my $git_dir = $self->{git_dir};
-	my $ent = {
-		fingerprint => $dig->hexdigest,
-		reference => undef,
-		modified => modified($self),
-	};
-	chomp(my $owner = $self->qx('config', 'gitweb.owner'));
-	utf8::decode($owner);
-	$ent->{owner} = $owner eq '' ? undef : $owner;
-	my $desc = description($self);
-	if (defined $epoch && index($desc, 'Unnamed repository') == 0) {
-		$desc = "$default_desc [epoch $epoch]";
-	}
-	$ent->{description} = $desc;
-	if (open($fh, '<', "$git_dir/objects/info/alternates")) {
+	my $ent = { description => $buf, reference => undef };
+	if (open(my $alt, '<', "$gd/objects/info/alternates")) {
 		# n.b.: GitPython doesn't seem to handle comments or C-quoted
 		# strings like native git does; and we don't for now, either.
 		local $/ = "\n";
-		chomp(my @alt = <$fh>);
+		chomp(my @alt = <$alt>);
 
 		# grokmirror only supports 1 alternate for "reference",
 		if (scalar(@alt) == 1) {
-			my $objdir = "$git_dir/objects";
-			my $ref = File::Spec->rel2abs($alt[0], $objdir);
-			$ref =~ s!/[^/]+/?\z!!; # basename
-			$ent->{reference} = $ref;
+			$buf = File::Spec->rel2abs($alt[0], "$gd/objects");
+			$buf =~ s!/[^/]+/?\z!!; # basename
+			$ent->{reference} = $buf;
 		}
 	}
+	my $dig = PublicInbox::SHA->new(1);
+	while (read($sr, $buf, 65536)) { $dig->add($buf) }
+	close $sr or return; # empty, uninitialized git repo
+	$ent->{fingerprint} = $dig->hexdigest;
+	$ent->{modified} = modified(undef, $mod);
+	chomp($buf = <$own> // '');
+	utf8::decode($buf);
+	$ent->{owner} = $buf eq '' ? undef : $buf;
 	$ent;
 }
 
