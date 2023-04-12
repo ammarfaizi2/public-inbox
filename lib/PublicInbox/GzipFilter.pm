@@ -18,6 +18,7 @@ use Compress::Raw::Zlib qw(Z_OK);
 use PublicInbox::CompressNoop;
 use PublicInbox::Eml;
 use PublicInbox::GitAsyncCat;
+use Carp qw(carp);
 
 our @EXPORT_OK = qw(gzf_maybe);
 my %OPT = (-WindowBits => 15 + 16, -AppendOutput => 1);
@@ -173,16 +174,13 @@ sub close {
 
 sub bail  {
 	my $self = shift;
-	if (my $env = $self->{env}) {
-		warn @_, "\n";
-		my $http = $env->{'psgix.io'} or return; # client abort
-		eval { $http->close }; # should hit our close
-		warn "E: error in http->close: $@" if $@;
-		eval { $self->close }; # just in case...
-		warn "E: error in self->close: $@" if $@;
-	} else {
-		warn @_, "\n";
-	}
+	carp @_;
+	my $env = $self->{env} or return;
+	my $http = $env->{'psgix.io'} or return; # client abort
+	eval { $http->close }; # should hit our close
+	carp "E: error in http->close: $@" if $@;
+	eval { $self->close }; # just in case...
+	carp "E: error in self->close: $@" if $@;
 }
 
 # this is public-inbox-httpd-specific
