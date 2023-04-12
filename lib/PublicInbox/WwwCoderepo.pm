@@ -24,7 +24,6 @@ use PublicInbox::OnDestroy;
 my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
 		qw(objectname refname:short subject creatordate:short)));
-my $EACH_REF = "@EACH_REF[0..2] '$EACH_REF[3]'";
 my $HEADS_CMD = <<'';
 # heads (aka `branches'):
 $ git for-each-ref --sort=-creatordate refs/heads \
