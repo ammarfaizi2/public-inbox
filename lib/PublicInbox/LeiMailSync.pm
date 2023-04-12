@@ -339,6 +339,17 @@ SELECT $op(uid) FROM blob2num WHERE fid = ?
 	$ret;
 }
 
+# must be called with lock
+sub _forget_fids ($;@) {
+	my $dbh = shift;
+	$dbh->begin_work;
+	for my $t (qw(blob2name blob2num folders)) {
+		my $sth = $dbh->prepare_cached("DELETE FROM $t WHERE fid = ?");
+		$sth->execute($_) for @_;
+	}
+	$dbh->commit;
+}
+
 # returns a { location => [ list-of-ids-or-names ] } mapping
 sub locations_for {
 	my ($self, $oidbin) = @_;
@@ -379,17 +390,27 @@ sub locations_for {
 
 	$sth = $dbh->prepare('SELECT loc FROM folders WHERE fid = ? LIMIT 1');
 	my $ret = {};
+	my $drop_fids = $dbh->{ReadOnly} ? undef : {};
 	while (my ($fid, $ids) = each %fid2id) {
 		$sth->execute($fid);
 		my ($loc) = $sth->fetchrow_array;
 		unless (defined $loc) {
+			my $del = '';
+			if ($drop_fids) {
+				$del = ' (deleting)';
+				$drop_fids->{$fid} = $fid;
+			}
 			my $oidhex = unpack('H*', $oidbin);
-			warn "E: fid=$fid for $oidhex unknown:\n", map {
-					'E: '.(ref() ? $$_ : "#$_")."\n";
+			warn "E: fid=$fid for $oidhex stale/unknown:\n", map {
+					'E: '.(ref() ? $$_ : "#$_")."$del\n";
 				} @$ids;
 			next;
 		}
 		$ret->{$loc} = $ids;
+	}
+	if ($drop_fids && scalar(values %$drop_fids)) {
+		my $lk = $self->lock_for_scope;
+		_forget_fids($self->{dbh}, values %$drop_fids);
 	}
 	scalar(keys %$ret) ? $ret : undef;
 }
@@ -596,14 +617,10 @@ EOF
 sub forget_folders {
 	my ($self, @folders) = @_;
 	my $lk = $self->lock_for_scope;
-	for my $folder (@folders) {
-		my $fid = delete($self->{fmap}->{$folder}) //
-			fid_for($self, $folder) // next;
-		for my $t (qw(blob2name blob2num folders)) {
-			$self->{dbh}->do("DELETE FROM $t WHERE fid = ?",
-					undef, $fid);
-		}
-	}
+	_forget_fids($self->{dbh}, map {
+		delete($self->{fmap}->{$_}) //
+			fid_for($self, $_) // ();
+	} @folders);
 }
 
 # only used for changing canonicalization errors
