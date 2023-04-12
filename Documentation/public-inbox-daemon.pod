@@ -115,6 +115,23 @@ per-listener C<cert=> option.  The private key may be
 concatenated into the path used by the cert, in which case this
 option is not needed.
 
+=item --multi-accept INTEGER
+
+By default, each worker accepts one connection at-a-time to maximize
+fairness and minimize contention across multiple processes on a
+shared listen socket.  Accepting multiple connections at once may be
+useful in constrained deployments with few, heavily-loaded workers.
+Negative values enables a worker to accept all available clients at
+once, possibly starving others in the process.  C<-1> behaves like
+C<multi_accept yes> in nginx; while C<0> (the default) is
+C<multi_accept no> in nginx.  Positive values allow
+fine-tuning without the runaway behavior of C<-1>.
+
+This may be specified on a per-listener basis via the C<multi-accept=>
+per-listener directive (e.g. C<-l http://127.0.0.1?multi-accept=1>).
+
+Default: 0
+
 =back
 
 =head1 SIGNALS

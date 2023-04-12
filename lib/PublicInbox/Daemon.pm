@@ -136,6 +136,8 @@ sub load_mod ($;$$) {
 	}
 	my $err = $tlsd->{err};
 	$tlsd->{warn_cb} = sub { print $err @_ }; # for local $SIG{__WARN__}
+	$opt->{'multi-accept'} and
+		$xn{'multi-accept'} = $opt->{'multi-accept'}->[-1];
 	\%xn;
 }
 
@@ -167,6 +169,7 @@ EOF
 		'u|user=s' => \$user,
 		'g|group=s' => \$group,
 		'D|daemonize' => \$daemonize,
+		'multi-accept=i' => \$PublicInbox::Listener::MULTI_ACCEPT,
 		'cert=s' => \$default_cert,
 		'key=s' => \$default_key,
 		'help|h' => \(my $show_help),
@@ -251,7 +254,7 @@ EOF
 		$s->blocking(0);
 		my $sockname = sockname($s);
 		warn "# bound $scheme://$sockname\n";
-		$xnetd->{$sockname} //= load_mod($scheme);
+		$xnetd->{$sockname} //= load_mod($scheme, $opt);
 		$listener_names->{$sockname} = $s;
 		push @listeners, $s;
 	}
@@ -712,7 +715,8 @@ sub daemon_loop ($) {
 		defer_accept($_, $tls_cb ? 'dataready' : $xn->{af_default});
 
 		# this calls epoll_create:
-		PublicInbox::Listener->new($_, $tls_cb || $xn->{post_accept})
+		PublicInbox::Listener->new($_, $tls_cb || $xn->{post_accept},
+						$xn->{'multi-accept'})
 	} @listeners;
 	PublicInbox::DS::event_loop($sig, $oldset);
 }
