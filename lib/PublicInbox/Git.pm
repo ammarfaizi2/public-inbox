@@ -262,20 +262,19 @@ sub cat_async_step ($$) {
 	my $head = my_readline($self->{in}, $rbuf);
 	my $cmd = ref($req) ? $$req : $req;
 	# ->fail may be called via Gcf2Client.pm
-	my $bc = $self->{-bc};
+	my $info = $self->{-bc} && substr($cmd, 0, 5) eq 'info ';
 	if ($head =~ /^([0-9a-f]{40,}) (\S+) ([0-9]+)$/) {
 		($oid, $type, $size) = ($1, $2, $3 + 0);
-		unless ($bc && $cmd =~ /\Ainfo /) { # --batch-command
+		unless ($info) { # --batch-command
 			$bref = my_read($self->{in}, $rbuf, $size + 1) or
 				$self->fail(defined($bref) ?
 						'read EOF' : "read: $!");
 			chop($$bref) eq "\n" or
 					$self->fail('LF missing after blob');
 		}
-	} elsif ($bc && $cmd =~ /\Ainfo / &&
-			$head =~ / (missing|ambiguous)\n/) {
+	} elsif ($info && $head =~ / (missing|ambiguous)\n/) {
 		$type = $1;
-		$oid = substr($cmd, 5);
+		$oid = substr($cmd, 5); # remove 'info '
 	} elsif ($head =~ s/ missing\n//s) {
 		$oid = $head;
 		# ref($req) indicates it's already been retried
@@ -286,7 +285,7 @@ sub cat_async_step ($$) {
 		$type = 'missing';
 		if ($oid eq '') {
 			$oid = $cmd;
-			$oid =~ s/\A(?:contents|info) // if $bc;
+			$oid =~ s/\A(?:contents|info) // if $self->{-bc};
 		}
 	} else {
 		my $err = $! ? " ($!)" : '';
@@ -294,7 +293,7 @@ sub cat_async_step ($$) {
 	}
 	$self->{rbuf} = $rbuf if $$rbuf ne '';
 	splice(@$inflight, 0, 3); # don't retry $cb on ->fail
-	if ($bc && $cmd =~ /\Ainfo /) {
+	if ($info) {
 		eval { $cb->($oid, $type, $size, $arg, $self) };
 		async_err($self, $req, $oid, $@, 'check') if $@;
 	} else {
