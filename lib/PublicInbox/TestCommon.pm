@@ -111,7 +111,7 @@ sub have_xapian_compact (;$) {
 sub require_git ($;$) {
 	my ($req, $nr) = @_;
 	require PublicInbox::Git;
-	state $cur_vstr = PublicInbox::Git::version();
+	state $cur_vstr = PublicInbox::Git::git_version();
 	$req = eval("v$req") unless isvstring($req);
 
 	return 1 if $cur_vstr ge $req;

@@ -52,11 +52,6 @@ my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
 my $EXE_ST = ''; # pack('dd', st_ctime, st_size);
 my ($GIT_EXE, $GIT_VER);
 
-sub version {
-	check_git_exe();
-	$GIT_VER;
-}
-
 sub check_git_exe () {
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
 	my @st = stat($GIT_EXE) or die "stat: $!";
@@ -70,6 +65,11 @@ sub check_git_exe () {
 		$GIT_VER = eval("v$1") // die "BUG: bad vstring: $1 ($v)";
 		$EXE_ST = $st;
 	}
+}
+
+sub git_version {
+	check_git_exe();
+	$GIT_VER;
 }
 
 # unquote pathnames used by git, see quote.c::unquote_c_style.c in git.git
