@@ -188,4 +188,29 @@ $set_manifest->($m);
 $test_puh->('--objstore=');
 ok(-e "$tmpdir/dst/objstore", 'objstore created');
 
+# ensure new repos can be detected
+{
+	xsys_e([qw(/bin/cp -Rp a.git c.git)], undef, { -C => "$tmpdir/src" });
+	open my $fh, '>>', "$tmpdir/src/projects.list" or xbail "open $!";
+	say $fh 'c.git' or xbail "say $!";
+	close $fh or xbail "close $!";
+	xsys_e([qw(git clone -q), "${url}c.git", "$tmpdir/dst/c.git"]);
+	SKIP: {
+		require_mods(qw(Plack::Test::ExternalServer LWP::UserAgent), 1);
+		use_ok($_) for qw(HTTP::Request::Common);
+		chop(my $uri = $url) eq '/' or xbail "BUG: no /";
+		local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = $uri;
+		my %opt = (ua => LWP::UserAgent->new);
+		$opt{ua}->max_redirect(0);
+		$opt{client} = sub {
+			my ($cb) = @_;
+			my $res = $cb->(GET('/c.git/'));
+			is($res->code, 200, 'got 200 response for /');
+			$res = $cb->(GET('/c.git/tree/'));
+			is($res->code, 200, 'got 200 response for /tree');
+		};
+		Plack::Test::ExternalServer::test_psgi(%opt);
+	}
+}
+
 done_testing;

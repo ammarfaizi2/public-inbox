@@ -47,7 +47,7 @@ sub new {
 	$self->{-by_eidx_key} = {};
 	$self->{-no_obfuscate} = {};
 	$self->{-limiters} = {};
-	$self->{-code_repos} = {}; # nick => PublicInbox::Git object
+	$self->{-coderepos} = {}; # nick => PublicInbox::Git object
 
 	if (my $no = delete $self->{'publicinbox.noobfuscate'}) {
 		$no = _array($no);
@@ -263,15 +263,26 @@ sub scan_tree_coderepo ($$) {
 	scan_path_coderepo($self, $path, $path);
 }
 
-sub scan_projects_coderepo ($$$) {
-	my ($self, $list, $path) = @_;
-	open my $fh, '<', $list or do {
-		warn "failed to open cgit projectlist=$list: $!\n";
+sub scan_projects_coderepo ($$) {
+	my ($self, $path) = @_;
+	my $l = $self->{-cgit_project_list} // die 'BUG: no cgit_project_list';
+	open my $fh, '<', $l or do {
+		warn "failed to open cgit project-list=$l: $!\n";
 		return;
 	};
 	while (<$fh>) {
 		chomp;
 		scan_path_coderepo($self, $path, "$path/$_");
+	}
+}
+
+sub apply_cgit_scan_path {
+	my ($self, @paths) = @_;
+	@paths or @paths = @{$self->{-cgit_scan_path}};
+	if (defined($self->{-cgit_project_list})) {
+		for my $p (@paths) { scan_projects_coderepo($self, $p) }
+	} else {
+		for my $p (@paths) { scan_tree_coderepo($self, $p) }
 	}
 }
 
@@ -317,14 +328,12 @@ sub parse_cgitrc {
 			my ($k, $v) = ($1, $2);
 			$k =~ tr/-/_/;
 			$self->{"-cgit_$k"} = $v;
+			delete $self->{-cgit_scan_path} if $k eq 'project_list';
 		} elsif (m!\Ascan-path=(.+)\z!) {
 			# this depends on being after project-list in the
 			# config file, just like cgit.c
-			if (defined(my $list = $self->{-cgit_project_list})) {
-				scan_projects_coderepo($self, $list, $1);
-			} else {
-				scan_tree_coderepo($self, $1);
-			}
+			push @{$self->{-cgit_scan_path}}, $1;
+			apply_cgit_scan_path($self, $1);
 		} elsif (m!\A(?:css|favicon|logo|repo\.logo)=(/.+)\z!) {
 			# absolute paths for static files via PublicInbox::Cgit
 			$self->{-cgit_static}->{$1} = 1;
@@ -336,13 +345,10 @@ sub parse_cgitrc {
 }
 
 # parse a code repo, only git is supported at the moment
-sub fill_code_repo {
+sub fill_coderepo {
 	my ($self, $nick) = @_;
 	my $pfx = "coderepo.$nick";
-	my $dir = $self->{"$pfx.dir"} // do { # aka "GIT_DIR"
-		warn "$pfx.dir unset\n";
-		return;
-	};
+	my $dir = $self->{"$pfx.dir"} // return undef; # aka "GIT_DIR"
 	my $git = PublicInbox::Git->new($dir);
 	if (defined(my $cgits = $self->{"$pfx.cgiturl"})) {
 		$git->{cgit_url} = $cgits = _array($cgits);
@@ -389,12 +395,12 @@ sub get_1 {
 
 sub repo_objs {
 	my ($self, $ibxish) = @_;
-	my $ibx_code_repos = $ibxish->{coderepo} // return;
+	my $ibx_coderepos = $ibxish->{coderepo} // return;
 	$ibxish->{-repo_objs} // do {
 		parse_cgitrc($self, undef, 0);
-		my $code_repos = $self->{-code_repos};
+		my $coderepos = $self->{-coderepos};
 		my @repo_objs;
-		for my $nick (@$ibx_code_repos) {
+		for my $nick (@$ibx_coderepos) {
 			my @parts = split(m!/!, $nick);
 			for (@parts) {
 				@parts = () unless valid_foo_name($_);
@@ -403,9 +409,10 @@ sub repo_objs {
 				warn "invalid coderepo name: `$nick'\n";
 				next;
 			}
-			my $repo = $code_repos->{$nick} //=
-						fill_code_repo($self, $nick);
-			push @repo_objs, $repo if $repo;
+			my $repo = $coderepos->{$nick} //=
+						fill_coderepo($self, $nick);
+			$repo ? push(@repo_objs, $repo) :
+				warn("coderepo.$nick.dir unset\n");
 		}
 		if (scalar @repo_objs) {
 			for (@repo_objs) {
@@ -612,6 +619,17 @@ sub glob2re ($) {
 			$1."($in_braces)";
 			/sge);
 	($changes - $qm) ? $schema_host_port.$re : undef;
+}
+
+sub get_coderepo {
+	my ($self, $nick) = @_;
+	$self->{-coderepos}->{$nick} // do {
+		defined($self->{-cgit_scan_path}) ? do {
+			apply_cgit_scan_path($self);
+			$self->{-coderepos}->{$nick} =
+					fill_coderepo($self, $nick);
+		} : undef;
+	};
 }
 
 1;

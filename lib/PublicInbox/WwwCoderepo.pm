@@ -45,10 +45,10 @@ sub prepare_coderepos {
 	# TODO: support gitweb and other repository viewers?
 	$pi_cfg->parse_cgitrc(undef, 0);
 
-	my $code_repos = $pi_cfg->{-code_repos};
+	my $coderepos = $pi_cfg->{-coderepos};
 	for my $k (grep(/\Acoderepo\.(?:.+)\.dir\z/, keys %$pi_cfg)) {
 		$k = substr($k, length('coderepo.'), -length('.dir'));
-		$code_repos->{$k} //= $pi_cfg->fill_code_repo($k);
+		$coderepos->{$k} //= $pi_cfg->fill_coderepo($k);
 	}
 
 	# associate inboxes and extindices with coderepos for search:
@@ -288,36 +288,38 @@ sub srv { # endpoint called by PublicInbox::WWW
 	my $path_info = $ctx->{env}->{PATH_INFO};
 	my $git;
 	# handle clone requests
-	my $cr = $self->{pi_cfg}->{-code_repos};
+	my $pi_cfg = $self->{pi_cfg};
 	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!x and
-		($git = $cr->{$1})) {
+		($git = $pi_cfg->get_coderepo($1))) {
 			PublicInbox::GitHTTPBackend::serve($ctx->{env},$git,$2);
-	} elsif ($path_info =~ m!\A/(.+?)/\z! and ($ctx->{git} = $cr->{$1})) {
+	} elsif ($path_info =~ m!\A/(.+?)/\z! and
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{wcr} = $self;
 		sub { summary($ctx, $_[0]) }; # $_[0] = wcb
 	} elsif ($path_info =~ m!\A/(.+?)/([a-f0-9]+)/s/([^/]+)?\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{lh} = $self->{log_fh};
 		PublicInbox::ViewVCS::show($ctx, $2, $3);
 	} elsif ($path_info =~ m!\A/(.+?)/tree/(.*)\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{lh} = $self->{log_fh};
 		PublicInbox::RepoTree::srv_tree($ctx, $2) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/snapshot/([^/]+)\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{wcr} = $self;
 		PublicInbox::RepoSnapshot::srv($ctx, $2) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/atom/(.*)\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{lh} = $self->{log_fh};
 		PublicInbox::RepoAtom::srv_atom($ctx, $2) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/tags\.atom\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		PublicInbox::RepoAtom::srv_tags_atom($ctx);
 	} elsif ($path_info =~ m!\A/(.+?)/(refs/(?:heads|tags))/\z! and
-			($ctx->{git} = $cr->{$1})) {
+			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		refs_foo($self, $ctx, $2);
-	} elsif ($path_info =~ m!\A/(.+?)\z! and ($git = $cr->{$1})) {
+	} elsif ($path_info =~ m!\A/(.+?)\z! and
+			($git = $pi_cfg->get_coderepo($1))) {
 		my $qs = $ctx->{env}->{QUERY_STRING};
 		my $url = $git->base_url($ctx->{env});
 		$url .= "?$qs" if $qs ne '';
