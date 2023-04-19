@@ -22,7 +22,9 @@ use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
 use PublicInbox::SHA ();
 use PublicInbox::DS qw(awaitpid);
-our @EXPORT_OK = qw(git_unquote git_quote);
+our %HEXLEN2SHA = (40 => 1, 64 => 256);
+our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
+our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN);
 our $PIPE_BUFSIZ = 65536; # Linux default
 our $in_cleanup;
 our $RDTIMEO = 60_000; # milliseconds

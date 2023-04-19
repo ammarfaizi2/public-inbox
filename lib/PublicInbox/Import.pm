@@ -461,13 +461,21 @@ my @INIT_FILES = ('HEAD' => undef, # filled in at runtime
 EOC
 
 sub init_bare {
-	my ($dir, $head) = @_; # or self
+	my ($dir, $head, $fmt) = @_; # or self
 	$dir = $dir->{git}->{git_dir} if ref($dir);
 	require File::Path;
 	File::Path::make_path(map { $dir.$_ } qw(/objects/info /refs/heads));
 	$INIT_FILES[1] //= 'ref: '.default_branch."\n";
 	my @fn_contents = @INIT_FILES;
 	$fn_contents[1] = "ref: refs/heads/$head\n" if defined $head;
+	$fn_contents[3] = <<EOM if defined($fmt) && $fmt ne 'sha1';
+[core]
+	repositoryFormatVersion = 1
+	filemode = true
+	bare = true
+[extensions]
+	objectFormat = $fmt
+EOM
 	while (my ($fn, $contents) = splice(@fn_contents, 0, 2)) {
 		my $f = $dir.'/'.$fn;
 		next if -f $f;

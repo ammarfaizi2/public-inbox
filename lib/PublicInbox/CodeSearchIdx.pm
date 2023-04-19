@@ -31,6 +31,7 @@ use PublicInbox::Config qw(glob2re);
 use PublicInbox::Spawn qw(spawn popen_rd);
 use PublicInbox::OnDestroy;
 use PublicInbox::CidxLogP;
+use PublicInbox::Git qw(%OFMT2HEXLEN);
 use Socket qw(MSG_EOR);
 use Carp ();
 our (
@@ -44,7 +45,6 @@ our (
 	@RDONLY_XDB, # Xapian::Database
 	@IDX_SHARDS, # clones of self
 	$MAX_SIZE,
-	$TMP_GIT, # PublicInbox::Git object for --prune
 	$REINDEX, # PublicInbox::SharedKV
 	@GIT_DIR_GONE, # [ git_dir1, git_dir2 ]
 	%TO_PRUNE, # (docid => docid) mapping (hash in case of retry_reopen)
@@ -58,6 +58,9 @@ our (
 	%ACTIVE_GIT_DIR, # GIT_DIR => undef mapping for prune
 	$IDX_TODO, # [ $git0, $root0, $git1, $root1, ...]
 	$GIT_TODO, # [ GIT_DIR0, GIT_DIR1, ...]
+	%HEXLEN2TMPGIT, # ((40|64) => PublicInbox::Git for prune)
+	%ALT_FH, # '', or 'sha256' => tmp IO for TMPGIT alternates
+	$TMPDIR, # File::Temp->newdir object
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -701,28 +704,33 @@ sub event_step { # may be requeued via DS
 			scalar(@cmt) == 1 or warn
 "BUG? shard[$self->{shard}] #$PRUNE_CUR has multiple commits: @cmt";
 			for my $o (@cmt) {
-				$TMP_GIT->check_async($o, \&prune_cb,
-							[$self, $PRUNE_CUR])
+				$HEXLEN2TMPGIT{length($o)}->check_async($o,
+						\&prune_cb, [$self, $PRUNE_CUR])
 			}
 		}
 	}
-	$TMP_GIT->async_wait_all;
+	$_->async_wait_all for (values %HEXLEN2TMPGIT);
 	cidx_ckpoint($self);
 	return PublicInbox::DS::requeue($self) if $PRUNE_CUR <= $PRUNE_MAX;
 	send($PRUNE_OP_P, "prune_done $self->{shard}", MSG_EOR);
 	$PRUNE_NR //= 0;
 	progress($self, "prune [$self->{shard}] $PRUNE_NR done");
-	$TMP_GIT->cleanup;
-	$TMP_GIT = $PRUNE_OP_P = $PRUNE_CUR = $PRUNE_MAX = undef;
-	%ACTIVE_GIT_DIR = ();
+	$_->cleanup for (values %HEXLEN2TMPGIT);
+	$PRUNE_OP_P = $PRUNE_CUR = $PRUNE_MAX = undef;
+	undef %ACTIVE_GIT_DIR;
+	undef %HEXLEN2TMPGIT;
 }
 
 sub prune_start { # via wq_io_do in IDX_SHARDS
-	my ($self, $git_dir, @active_git_dir) = @_;
+	my ($self, $tmpdir, @active_git_dir) = @_;
 	$PRUNE_CUR = 1;
 	$PRUNE_OP_P = delete $self->{0} // die 'BUG: no {0} op_p';
 	%ACTIVE_GIT_DIR = map { $_ => undef } @active_git_dir;
-	$TMP_GIT = PublicInbox::Git->new($git_dir); # TMP_GIT copy
+	for my $git_dir (<$tmpdir/*.git>) {
+		my ($hexlen) = ($git_dir =~ m!/hexlen([0-9]+)\.git\z!);
+		$hexlen or die "BUG: no hexlen in $git_dir";
+		$HEXLEN2TMPGIT{$hexlen} = PublicInbox::Git->new($git_dir);
+	}
 	$self->begin_txn_lazy;
 	$PRUNE_MAX = $self->{xdb}->get_lastdocid // 1;
 	event_step($self);
@@ -750,24 +758,6 @@ sub parent_quit {
 	warn "# SIG$_[0] received, quitting...\n";
 }
 
-sub init_tmp_git_dir ($) {
-	my ($self) = @_;
-	require File::Temp;
-	require PublicInbox::Import;
-	my $tmp = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
-	PublicInbox::Import::init_bare("$tmp", 'cidx-all');
-	my $f = "$tmp/objects/info/alternates";
-	open my $fh, '>', $f or die "open($f): $!";
-	my $o;
-	for (@{$self->{git_dirs}}) { # TODO: sha256 check?
-		$o = $_.'/objects';
-		say $fh $o if -d $o;
-	}
-	close $fh or die "close($f): $!";
-	$TMP_GIT = PublicInbox::Git->new("$tmp");
-	$TMP_GIT->{-tmp} = $tmp;
-}
-
 sub prep_umask ($) {
 	my ($self) = @_;
 	if ($self->{-cidx_internal}) { # respect core.sharedRepository
@@ -789,16 +779,60 @@ sub prep_umask ($) {
 	}
 }
 
-sub start_prune ($) {
+sub prep_alternate { # awaitpid callback for config extensions.objectFormat
+	my ($pid, $objdir, $out, $send_prune) = @_;
+	my $status = $? >> 8;
+	my $fmt;
+	if ($status == 1) { # unset, default is '' (SHA-1)
+		$fmt = 'sha1';
+	} elsif ($status == 0) {
+		seek($out, 0, SEEK_SET) or die "seek: $!";
+		chomp($fmt = <$out> // 'sha1');
+	} else {
+		return warn("git config \$?=$? for objdir=$objdir");
+	}
+	my $hexlen = $OFMT2HEXLEN{$fmt} // return warn <<EOM;
+E: ignoring objdir=$objdir, unknown extensions.objectFormat=$fmt
+EOM
+	unless ($ALT_FH{$fmt}) {
+		my $git_dir = "$TMPDIR/hexlen$hexlen.git";
+		PublicInbox::Import::init_bare($git_dir, 'cidx-all', $fmt);
+		my $f = "$git_dir/objects/info/alternates";
+		open $ALT_FH{$fmt}, '>', $f or die "open($f): $!";
+	}
+	say { $ALT_FH{$fmt} } $out or die "say: $!";
+	# send_prune fires on the last one
+}
+
+sub init_prune ($) {
 	my ($self) = @_;
 	return (@$PRUNE_DONE = map { 1 } @IDX_SHARDS) if !$self->{-opt}->{prune};
-	init_tmp_git_dir($self);
+
+	require File::Temp;
+	require PublicInbox::Import;
+	$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
+	my $send_prune = PublicInbox::OnDestroy->new($$, \&send_prune, $self);
+	my $cmd = [ 'git', undef, 'config', 'extensions.objectFormat' ];
+	for (@{$self->{git_dirs}}) {
+		my $o = $_.'/objects';
+		next if !-d $o;
+		$cmd->[1] = "--git-dir=$_";
+		open my $out, '+>', undef or die "open(tmp): $!";
+		my $pid = spawn($cmd, undef, { 1 => $out });
+		awaitpid($pid, \&prep_alternate, $o, $out, $send_prune);
+	}
+}
+
+sub send_prune { # OnDestroy when `git config extensions.objectFormat' are done
+	my ($self) = @_;
+	for (values %ALT_FH) { close $_ or die "close: $!" }
+	%ALT_FH = ();
 	my @active_git_dir = (@{$self->{git_dirs}}, @GIT_DIR_GONE);
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{prune_done} = [ $self ];
 	for my $s (@IDX_SHARDS) {
 		$s->wq_io_do('prune_start', [ $p->{op_p} ],
-				$TMP_GIT->{git_dir}, @active_git_dir)
+				"$TMPDIR", @active_git_dir)
 	}
 }
 
@@ -812,8 +846,8 @@ sub cidx_run { # main entry point
 	local $LIVE = {};
 	local $PRUNE_DONE = [];
 	local $IDX_TODO = [];
-	local ($DO_QUIT, $TMP_GIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE,
-		$GIT_TODO, $REPO_CTX);
+	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE,
+		$GIT_TODO, $REPO_CTX, %ALT_FH, $TMPDIR, %HEXLEN2TMPGIT);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local @IDX_SHARDS = cidx_init($self);
@@ -859,7 +893,7 @@ sub cidx_run { # main entry point
 	local $LIVE_JOBS = $self->{-opt}->{jobs} ||
 			PublicInbox::IPC::detect_nproc() || 2;
 	local @RDONLY_XDB = $self->xdb_shards_flat;
-	start_prune($self);
+	init_prune($self);
 	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
 
 	local @PublicInbox::DS::post_loop_do = (\&shards_active);
