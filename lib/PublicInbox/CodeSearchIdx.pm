@@ -61,6 +61,7 @@ our (
 	%HEXLEN2TMPGIT, # ((40|64) => PublicInbox::Git for prune)
 	%ALT_FH, # '', or 'sha256' => tmp IO for TMPGIT alternates
 	$TMPDIR, # File::Temp->newdir object
+	@PRUNE_QUEUE, # GIT_DIRs to prepare for pruning
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -779,9 +780,11 @@ sub prep_umask ($) {
 	}
 }
 
-sub prep_alternate { # awaitpid callback for config extensions.objectFormat
+sub prep_alternate_end { # awaitpid callback for config extensions.objectFormat
 	my ($pid, $objdir, $out, $send_prune) = @_;
 	my $status = $? >> 8;
+	my $next_dir = shift(@PRUNE_QUEUE);
+	prep_alternate_start($next_dir, $send_prune) if defined($next_dir);
 	my $fmt;
 	if ($status == 1) { # unset, default is '' (SHA-1)
 		$fmt = 'sha1';
@@ -801,7 +804,20 @@ EOM
 		open $ALT_FH{$fmt}, '>', $f or die "open($f): $!";
 	}
 	say { $ALT_FH{$fmt} } $out or die "say: $!";
-	# send_prune fires on the last one
+}
+
+sub prep_alternate_start {
+	my ($git_dir, $send_prune) = @_;
+	my $o = $git_dir.'/objects';
+	while (!-d $o) {
+		$git_dir = shift(@PRUNE_QUEUE) // return
+		$o = $git_dir.'/objects';
+	}
+	my $cmd = [ 'git', "--git-dir=$git_dir",
+			qw(config extensions.objectFormat) ];
+	open my $out, '+>', undef or die "open(tmp): $!";
+	my $pid = spawn($cmd, undef, { 1 => $out });
+	awaitpid($pid, \&prep_alternate_end, $o, $out, $send_prune);
 }
 
 sub init_prune ($) {
@@ -812,14 +828,9 @@ sub init_prune ($) {
 	require PublicInbox::Import;
 	$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
 	my $send_prune = PublicInbox::OnDestroy->new($$, \&send_prune, $self);
-	my $cmd = [ 'git', undef, 'config', 'extensions.objectFormat' ];
-	for (@{$self->{git_dirs}}) {
-		my $o = $_.'/objects';
-		next if !-d $o;
-		$cmd->[1] = "--git-dir=$_";
-		open my $out, '+>', undef or die "open(tmp): $!";
-		my $pid = spawn($cmd, undef, { 1 => $out });
-		awaitpid($pid, \&prep_alternate, $o, $out, $send_prune);
+	@PRUNE_QUEUE = @{$self->{git_dirs}};
+	for (1..$LIVE_JOBS) {
+		prep_alternate_start(shift(@PRUNE_QUEUE) // last, $send_prune);
 	}
 }
 
@@ -846,7 +857,7 @@ sub cidx_run { # main entry point
 	local $LIVE = {};
 	local $PRUNE_DONE = [];
 	local $IDX_TODO = [];
-	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE,
+	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNE_QUEUE,
 		$GIT_TODO, $REPO_CTX, %ALT_FH, $TMPDIR, %HEXLEN2TMPGIT);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
