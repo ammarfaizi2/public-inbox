@@ -9,6 +9,7 @@ use parent qw(PublicInbox::Lock);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::ContentHash qw(git_sha);
 use Carp ();
+use PublicInbox::Git qw(%HEXLEN2SHA);
 
 sub dbh_new {
 	my ($self) = @_;
@@ -457,7 +458,8 @@ WHERE b.oidbin = ?
 			local $/;
 			my $raw = <$fh>;
 			if ($vrfy) {
-				my $got = git_sha(1, \$raw)->hexdigest;
+				my $sha = $HEXLEN2SHA{length($oidhex)};
+				my $got = git_sha($sha, \$raw)->hexdigest;
 				if ($got ne $oidhex) {
 					warn "$f changed $oidhex => $got\n";
 					next;
