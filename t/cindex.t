@@ -165,6 +165,8 @@ if ('--prune') {
 	$csrch->reopen;
 	is(scalar($csrch->mset('s:hi')->items), 0,
 		'hit stays pruned since GIT_DIR was previously pruned');
+	isnt(scalar($csrch->mset('s:NUL')->items), 0,
+		'prune did not clobber entire index');
 }
 
 File::Path::remove_tree("$tmp/ext");

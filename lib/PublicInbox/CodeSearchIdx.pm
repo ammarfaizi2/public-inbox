@@ -803,7 +803,7 @@ EOM
 		my $f = "$git_dir/objects/info/alternates";
 		open $ALT_FH{$fmt}, '>', $f or die "open($f): $!";
 	}
-	say { $ALT_FH{$fmt} } $out or die "say: $!";
+	say { $ALT_FH{$fmt} } $objdir or die "say: $!";
 }
 
 sub prep_alternate_start {
