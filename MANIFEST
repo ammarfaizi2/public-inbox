@@ -160,6 +160,7 @@ lib/PublicInbox/AdminEdit.pm
 lib/PublicInbox/AltId.pm
 lib/PublicInbox/AutoReap.pm
 lib/PublicInbox/Cgit.pm
+lib/PublicInbox/CidxComm.pm
 lib/PublicInbox/CidxLogP.pm
 lib/PublicInbox/CmdIPC4.pm
 lib/PublicInbox/CodeSearch.pm
