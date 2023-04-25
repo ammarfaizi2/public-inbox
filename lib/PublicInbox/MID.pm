@@ -92,8 +92,7 @@ sub references ($) {
 	my ($hdr) = @_;
 	my @mids;
 	foreach my $f (qw(References In-Reply-To)) {
-		my @v = $hdr->header_raw($f);
-		foreach my $v (@v) {
+		for my $v ($hdr->header_raw($f)) {
 			push(@mids, ($v =~ /$MID_EXTRACT/g));
 		}
 	}
@@ -104,8 +103,7 @@ sub references ($) {
 	my %addr = ( y => 1, n => 1 );
 
 	foreach my $f (qw(To From Cc)) {
-		my @v = $hdr->header_raw($f);
-		foreach my $v (@v) {
+		for my $v ($hdr->header_raw($f)) {
 			$addr{$_} = 1 for (PublicInbox::Address::emails($v));
 		}
 	}

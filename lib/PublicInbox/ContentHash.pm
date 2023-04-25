@@ -76,8 +76,7 @@ sub content_digest ($;$) {
 		last;
 	}
 	foreach my $h (qw(Subject Date)) {
-		my @v = $eml->header($h);
-		foreach my $v (@v) {
+		for my $v ($eml->header($h)) {
 			utf8::encode($v);
 			$dig->add("$h\0$v\0");
 		}
@@ -86,8 +85,7 @@ sub content_digest ($;$) {
 	# not in the original message.  For the purposes of deduplication,
 	# do not take it into account:
 	foreach my $h (qw(To Cc)) {
-		my @v = $eml->header($h);
-		digest_addr($dig, $h, $_) foreach @v;
+		digest_addr($dig, $h, $_) for ($eml->header($h));
 	}
 	msg_iter($eml, \&content_dig_i, $dig);
 	$dig;
