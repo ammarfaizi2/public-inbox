@@ -226,6 +226,7 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
+	sysseek($in, 0, SEEK_SET) or die "seek: $!";
 	my ($rd, $pid) = $git->popen(@LOG_STDIN, undef, { 0 => $in });
 	close $in or die "close: $!";
 	awaitpid($pid, \&cidx_reap_log, $self, $op_p);
@@ -452,10 +453,6 @@ sub partition_refs ($$$) {
 	if (!$? || (($? & 127) == POSIX::SIGPIPE && $seen > $SEEN_MAX)) {
 		my $n = $NCHANGE - $n0;
 		progress($self, "$git->{git_dir}: $n commits") if $n;
-		for my $fh (@shard_in) {
-			$fh->flush or die "flush: $!";
-			sysseek($fh, 0, SEEK_SET) or die "seek: $!";
-		}
 		return @shard_in;
 	}
 	die "git --git-dir=$git->{git_dir} rev-list: \$?=$?\n";
@@ -542,6 +539,7 @@ sub index_repo { # cidx_await cb
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx, $commit_shard ];
 	for my $n (0..$#shard_in) {
+		$shard_in[$n]->flush or die "flush shard[$n]: $!";
 		-s $shard_in[$n] or next;
 		last if $DO_QUIT;
 		$IDX_SHARDS[$n]->wq_io_do('shard_index',
