@@ -1,10 +1,9 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Emergency Maildir delivery for MDA
 package PublicInbox::Emergency;
-use strict;
-use v5.10.1;
+use v5.12;
 use Fcntl qw(:DEFAULT SEEK_SET);
 use Sys::Hostname qw(hostname);
 use IO::Handle; # ->flush
@@ -35,14 +34,14 @@ sub prepare {
 	my ($self, $strref) = @_;
 	my $pid = $$;
 	my $tmp_key = "tmp.$pid";
-	die "already in transaction: $self->{$tmp_key}" if $self->{$tmp_key};
+	die "BUG: in transaction: $self->{$tmp_key}" if $self->{$tmp_key};
 	my ($tmp, $fh);
 	do {
 		$tmp = _fn_in($self, $pid, 'tmp');
 		$! = undef;
 	} while (!sysopen($fh, $tmp, O_CREAT|O_EXCL|O_RDWR) and $! == EEXIST);
-	print $fh $$strref or die "write failed: $!";
-	$fh->flush or die "flush failed: $!";
+	print $fh $$strref or die "print: $!";
+	$fh->flush or die "flush: $!";
 	$self->{fh} = $fh;
 	$self->{$tmp_key} = $tmp;
 }
@@ -51,15 +50,15 @@ sub abort {
 	my ($self) = @_;
 	delete $self->{fh};
 	my $tmp = delete $self->{"tmp.$$"} or return;
-	unlink($tmp) or warn "Failed to unlink $tmp: $!";
+	unlink($tmp) or warn "W: unlink($tmp): $!";
 	undef;
 }
 
 sub fh {
 	my ($self) = @_;
-	my $fh = $self->{fh} or die "{fh} not open!\n";
-	seek($fh, 0, SEEK_SET) or die "seek(fh) failed: $!";
-	sysseek($fh, 0, SEEK_SET) or die "sysseek(fh) failed: $!";
+	my $fh = $self->{fh} or die "BUG: {fh} not open";
+	seek($fh, 0, SEEK_SET) or die "seek: $!";
+	sysseek($fh, 0, SEEK_SET) or die "sysseek: $!";
 	$fh;
 }
 
@@ -73,7 +72,7 @@ sub commit {
 		$new = _fn_in($self, $pid, 'new');
 	} while (!($ok = link($tmp, $new)) && $! == EEXIST);
 	die "link($tmp, $new): $!" unless $ok;
-	unlink($tmp) or warn "Failed to unlink $tmp: $!";
+	unlink($tmp) or warn "W: unlink($tmp): $!";
 }
 
 sub DESTROY { commit($_[0]) }
