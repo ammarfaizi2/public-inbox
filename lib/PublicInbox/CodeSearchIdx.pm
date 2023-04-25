@@ -146,29 +146,18 @@ sub progress {
 sub store_repo { # wq_do - returns docid
 	my ($self, $repo) = @_;
 	$self->begin_txn_lazy;
-	my $xdb = $self->{xdb};
-	for (@{$repo->{to_delete}}) { $xdb->delete_document($_) } # XXX needed?
-	if (defined $repo->{docid}) {
-		my $doc = $self->get_doc($repo->{docid}) //
-			die "$repo->{git_dir} doc #$repo->{docid} gone";
-		add_val($doc, PublicInbox::CodeSearch::CT, $repo->{ct});
-		my %new = map { $_ => undef } @{$repo->{roots}};
-		my $old = xap_terms('G', $doc);
-		delete @new{keys %$old};
-		$doc->add_boolean_term('G'.$_) for keys %new;
-		delete @$old{@{$repo->{roots}}};
-		$doc->remove_term('G'.$_) for keys %$old;
-		$doc->set_data($repo->{fp});
-		$xdb->replace_document($repo->{docid}, $doc);
-		$repo->{docid}
+	$self->{xdb}->delete_document($_) for @{$repo->{to_delete}};
+	my $doc = $PublicInbox::Search::X{Document}->new;
+	add_val($doc, PublicInbox::CodeSearch::CT, $repo->{ct});
+	$doc->add_boolean_term("P$repo->{git_dir}");
+	$doc->add_boolean_term('T'.'r');
+	$doc->add_boolean_term('G'.$_) for @{$repo->{roots}};
+	$doc->set_data($repo->{fp}); # \n delimited
+	if ($repo->{docid}) {
+		$self->{xdb}->replace_document($repo->{docid}, $doc);
+		$repo->{docid};
 	} else {
-		my $new = $PublicInbox::Search::X{Document}->new;
-		add_val($new, PublicInbox::CodeSearch::CT, $repo->{ct});
-		$new->add_boolean_term("P$repo->{git_dir}");
-		$new->add_boolean_term('T'.'r');
-		$new->add_boolean_term('G'.$_) for @{$repo->{roots}};
-		$new->set_data($repo->{fp}); # \n delimited
-		$xdb->add_document($new);
+		$self->{xdb}->add_document($doc);
 	}
 }
 
