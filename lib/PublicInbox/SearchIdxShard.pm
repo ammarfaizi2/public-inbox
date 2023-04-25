@@ -32,12 +32,10 @@ sub new {
 	$self;
 }
 
-sub _worker_done {
+sub _worker_done { # OnDestroy cb
 	my ($self) = @_;
-	if ($self->need_xapian) {
-		die "$$ $0 xdb not released\n" if $self->{xdb};
-	}
-	die "$$ $0 still in transaction\n" if $self->{txn};
+	die "BUG: $$ $0 xdb active" if $self->need_xapian && $self->{xdb};
+	die "BUG: $$ $0 txn active" if $self->{txn};
 }
 
 sub ipc_atfork_child { # called automatically before ipc_worker_loop
@@ -64,7 +62,7 @@ sub echo {
 
 sub idx_close {
 	my ($self) = @_;
-	die "transaction in progress $self\n" if $self->{txn};
+	die "BUG: $$ $0 txn active" if $self->{txn};
 	$self->idx_release if $self->{xdb};
 }
 
