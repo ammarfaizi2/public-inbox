@@ -16,11 +16,9 @@ package PublicInbox::CodeSearchIdx;
 use v5.12;
 # parent order matters, we want ->DESTROY from IPC, not SearchIdx
 use parent qw(PublicInbox::CodeSearch PublicInbox::IPC PublicInbox::SearchIdx);
-use PublicInbox::Eml;
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::PktOp;
 use PublicInbox::IPC qw(nproc_shards);
-use PublicInbox::Admin;
 use POSIX qw(WNOHANG SEEK_SET);
 use File::Path ();
 use File::Spec ();
