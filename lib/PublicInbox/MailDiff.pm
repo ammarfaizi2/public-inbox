@@ -7,6 +7,7 @@ use PublicInbox::ContentHash qw(content_digest);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff qw(flush_diff);
 use PublicInbox::GitAsyncCat;
+use PublicInbox::ContentDigestDbg;
 
 sub write_part { # Eml->each_part callback
 	my ($ary, $self) = @_;
@@ -33,11 +34,6 @@ sub dump_eml ($$$) {
 	local $self->{curdir} = $dir;
 	mkdir $dir or die "mkdir($dir): $!";
 	$eml->each_part(\&write_part, $self);
-
-	return if $self->{ctx}; # don't need content_digest noise in WWW UI
-	require PublicInbox::ContentDigestDbg;
-
-	# XXX is this even useful?  perhaps hide it behind a CLI switch
 	open my $fh, '>', "$dir/content_digest" or die "open: $!";
 	my $dig = PublicInbox::ContentDigestDbg->new($fh);
 	content_digest($eml, $dig);

@@ -1,6 +1,5 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-# only loaded in lei
 package PublicInbox::ContentDigestDbg; # cf. PublicInbox::ContentDigest
 use v5.12;
 use Data::Dumper;
