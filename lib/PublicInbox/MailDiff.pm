@@ -11,7 +11,7 @@ use PublicInbox::GitAsyncCat;
 sub write_part { # Eml->each_part callback
 	my ($ary, $self) = @_;
 	my ($part, $depth, $idx) = @$ary;
-	if ($idx ne '1' || $self->{-raw_hdr}) {
+	if ($idx ne '1' || $self->{-raw_hdr}) { # lei mail-diff --raw-header
 		open my $fh, '>', "$self->{curdir}/$idx.hdr" or die "open: $!";
 		print $fh ${$part->{hdr}} or die "print $!";
 		close $fh or die "close $!";
@@ -20,7 +20,8 @@ sub write_part { # Eml->each_part callback
 	my ($s, $err) = msg_part_text($part, $ct);
 	my $sfx = defined($s) ? 'txt' : 'bin';
 	$s //= $part->body;
-	$s =~ s/\r+\n/\n/sg;
+	$s =~ s/\r\n/\n/gs; # TODO: consider \r+\n to match View
+	$s =~ s/\s*\z//s;
 	open my $fh, '>:utf8', "$self->{curdir}/$idx.$sfx" or die "open: $!";
 	print $fh $s or die "print $!";
 	close $fh or die "close $!";

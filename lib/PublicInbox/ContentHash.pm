@@ -45,7 +45,7 @@ sub content_dig_i {
 	my $ct = $part->content_type || 'text/plain';
 	my ($s, undef) = msg_part_text($part, $ct);
 	if (defined $s) {
-		$s =~ s/\r\n/\n/gs;
+		$s =~ s/\r\n/\n/gs; # TODO: consider \r+\n to match View
 		$s =~ s/\s*\z//s;
 		utf8::encode($s);
 	} else {
