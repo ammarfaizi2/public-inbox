@@ -178,9 +178,8 @@ sub term_generator ($) { # write-only
 sub index_phrase ($$$$) {
 	my ($self, $text, $wdf_inc, $prefix) = @_;
 
-	my $tg = term_generator($self);
-	$tg->index_text($text, $wdf_inc, $prefix);
-	$tg->increase_termpos;
+	term_generator($self)->index_text($text, $wdf_inc, $prefix);
+	$self->{term_generator}->increase_termpos;
 }
 
 sub index_text ($$$$) {
@@ -189,8 +188,8 @@ sub index_text ($$$$) {
 	if ($self->{indexlevel} eq 'full') {
 		index_phrase($self, $text, $wdf_inc, $prefix);
 	} else {
-		my $tg = term_generator($self);
-		$tg->index_text_without_positions($text, $wdf_inc, $prefix);
+		term_generator($self)->index_text_without_positions(
+					$text, $wdf_inc, $prefix);
 	}
 }
 
@@ -457,8 +456,7 @@ sub eml2doc ($$$;$) {
 	add_val($doc, PublicInbox::Search::UID(), $smsg->{num});
 	add_val($doc, PublicInbox::Search::THREADID, $smsg->{tid});
 
-	my $tg = term_generator($self);
-	$tg->set_document($doc);
+	term_generator($self)->set_document($doc);
 	index_headers($self, $smsg);
 
 	if (defined(my $eidx_key = $smsg->{eidx_key})) {
