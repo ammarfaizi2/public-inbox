@@ -1,8 +1,7 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
+use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Config;
 use PublicInbox::InboxWritable;
@@ -552,6 +551,34 @@ EOM
 SELECT DISTINCT(docid) FROM xref3 ORDER BY docid
 EOM
 	is_deeply($x, $o, 'xref3 and over docids match');
+}
+
+{
+	my $d = "$home/eidx-med";
+	ok(run_script([qw(-extindex --dangerous --all -L medium -j3), $d]),
+		'extindex medium init');
+	my $es = PublicInbox::ExtSearch->new($d);
+	is($es->xdb->get_metadata('indexlevel'), 'medium',
+		'es indexlevel before');
+	my @xdb = $es->xdb_shards_flat;
+	is($xdb[0]->get_metadata('indexlevel'), 'medium',
+		'0 indexlevel before');
+	shift @xdb;
+	for (@xdb) {
+		ok(!$_->get_metadata('indexlevel'), 'no indexlevel in >0 shard')
+	}
+	is($es->xdb->get_metadata('indexlevel'), 'medium', 'indexlevel before');
+	ok(run_script([qw(-xcpdb -R5), $d]), 'xcpdb R5');
+	$es = PublicInbox::ExtSearch->new($d);
+	is($es->xdb->get_metadata('indexlevel'), 'medium',
+		'0 indexlevel after');
+	@xdb = $es->xdb_shards_flat;
+	is(scalar(@xdb), 5, 'got 5 shards');
+	is($xdb[0]->get_metadata('indexlevel'), 'medium', '0 indexlevel after');
+	shift @xdb;
+	for (@xdb) {
+		ok(!$_->get_metadata('indexlevel'), 'no indexlevel in >0 shard')
+	}
 }
 
 done_testing;

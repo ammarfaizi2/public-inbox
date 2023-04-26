@@ -219,7 +219,7 @@ sub prepare_run {
 		my @old_shards;
 		while (defined(my $dn = readdir($dh))) {
 			if ($dn =~ /\A[0-9]+\z/) {
-				push @old_shards, $dn;
+				push(@old_shards, $dn + 0);
 			} elsif ($dn eq '.' || $dn eq '..') {
 			} elsif ($dn =~ /\Aover\.sqlite3/) {
 			} elsif ($dn eq 'misc' && $misc_ok) {
@@ -228,7 +228,7 @@ sub prepare_run {
 			}
 		}
 		die "No Xapian shards found in $old\n" unless @old_shards;
-
+		@old_shards = sort { $a <=> $b } @old_shards;
 		my ($src, $max_shard);
 		if (!defined($reshard) || $reshard == scalar(@old_shards)) {
 			# 1:1 copy
@@ -464,11 +464,10 @@ sub cpdb ($$) { # cb_spawn callback
 			$dst->set_metadata('last_commit', $lc) if $lc;
 
 			# only the first xapian shard (0) gets 'indexlevel'
-			if ($new =~ m!(?:xapian[0-9]+|xap[0-9]+/0)\b!) {
+			if ($new =~ m!/(?:xapian[0-9]+|(?:ei|xap)[0-9]+/0)\b!) {
 				my $l = $src->get_metadata('indexlevel');
-				if ($l eq 'medium') {
+				$l eq 'medium' and
 					$dst->set_metadata('indexlevel', $l);
-				}
 			}
 			if ($pr_data) {
 				my $tot = $src->get_doccount;
