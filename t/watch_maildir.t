@@ -97,6 +97,7 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	PublicInbox::Watch->new($cfg)->scan('full');
 	@list = $git->qx('ls-tree', '-r', '--name-only', $default_branch);
 	is(scalar @list, 1, 'tree has one file');
+	chomp(@list);
 	my $mref = $git->cat_file('HEAD:'.$list[0]);
 	like($$mref, qr/something\n\z/s, 'message scrubbed on import');
 
@@ -137,10 +138,7 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	PublicInbox::Watch->new($cfg)->scan('full');
 	@list = $git->qx('ls-tree', '-r', '--name-only', $default_branch);
 	is(scalar @list, 1, 'tree has one file after spamc checked');
-
-	# XXX: workaround some weird caching/memoization in cat-file,
-	# shouldn't be an issue in real-world use, though...
-	$git = PublicInbox::Git->new($git_dir);
+	chomp(@list);
 
 	my $mref = $git->cat_file($default_branch.':'.$list[0]);
 	like($$mref, qr/something\n\z/s, 'message scrubbed on import');
