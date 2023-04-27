@@ -73,13 +73,13 @@ Numerous optional modules are likely to be useful as well:
                                    (HTTP and IMAP search)
 
 - Inline::C                        deb: libinline-c-perl
-                                   pkg: pkg-Inline-C
+                                   pkg: p5-Inline-C
                                    rpm: perl-Inline (or perl-Inline-C)
                                    (speeds up process spawning on Linux,
                                     see public-inbox-daemon(8))
 
 - Email::Address::XS               deb: libemail-address-xs-perl
-                                   pkg: pkg-Email-Address-XS
+                                   pkg: p5-Email-Address-XS
                                    (correct parsing of tricky email
                                     addresses, phrases and comments,
                                     required for IMAP)
@@ -127,7 +127,7 @@ Numerous optional modules are likely to be useful as well:
                                     on *BSDs)
 
 - Net::Server                      deb: libnet-server-perl
-                                   pkg: pkg-Net-Server
+                                   pkg: p5-Net-Server
                                    rpm: perl-Net-Server
                                    (for HTTP/IMAP/NNTP background daemons,
                                     not needed as systemd services or
