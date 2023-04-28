@@ -1160,6 +1160,7 @@ sub index_todo ($$$) {
 		};
 		if ($f eq 'm') {
 			if ($sync->{max_size}) {
+				$req->{git} = $all;
 				$all->check_async($oid, \&check_size, $req);
 			} else {
 				$all->cat_async($oid, $index_oid, $req);

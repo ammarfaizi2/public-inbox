@@ -62,7 +62,7 @@ sub find_missing {
 }
 
 sub tree_show { # git check_async callback
-	my ($oid, $type, $size, $ctx) = @_;
+	my (undef, $oid, $type, $size, $ctx) = @_;
 	return find_missing($ctx) if $type eq 'missing';
 
 	my $res = [ $ctx->{git}, $oid, $type, $size ];

@@ -299,13 +299,8 @@ sub cat_async_step ($$) {
 	}
 	$self->{rbuf} = $rbuf if $$rbuf ne '';
 	splice(@$inflight, 0, 3); # don't retry $cb on ->fail
-	if ($info) {
-		eval { $cb->($oid, $type, $size, $arg, $self) };
-		async_err($self, $req, $oid, $@, 'check') if $@;
-	} else {
-		eval { $cb->($bref, $oid, $type, $size, $arg) };
-		async_err($self, $req, $oid, $@, 'cat') if $@;
-	}
+	eval { $cb->($bref, $oid, $type, $size, $arg) };
+	async_err($self, $req, $oid, $@, $info ? 'check' : 'cat') if $@;
 }
 
 sub cat_async_wait ($) {
@@ -357,7 +352,7 @@ sub check_async_step ($$) {
 	}
 	$self->{rbuf_c} = $rbuf if $$rbuf ne '';
 	splice(@$inflight_c, 0, 3); # don't retry $cb on ->fail
-	eval { $cb->($hex, $type, $size, $arg, $self) };
+	eval { $cb->(undef, $hex, $type, $size, $arg) };
 	async_err($self, $req, $hex, $@, 'check') if $@;
 }
 
@@ -415,7 +410,7 @@ sub check_async ($$$$) {
 }
 
 sub _check_cb { # check_async callback
-	my ($hex, $type, $size, $result) = @_;
+	my (undef, $hex, $type, $size, $result) = @_;
 	@$result = ($hex, $type, $size);
 }
 

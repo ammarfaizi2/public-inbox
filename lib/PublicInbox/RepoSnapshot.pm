@@ -42,7 +42,7 @@ sub archive_hdr { # parse_hdr for Qspawn
 }
 
 sub ver_check { # git->check_async callback
-	my ($oid, $type, $size, $ctx) = @_;
+	my (undef, $oid, $type, $size, $ctx) = @_;
 	return if defined $ctx->{etag};
 	my $treeish = shift @{$ctx->{-try}} // die 'BUG: no {-try}';
 	if ($type eq 'missing') {
