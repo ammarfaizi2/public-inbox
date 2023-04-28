@@ -1,7 +1,7 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
+use v5.12;
 use IO::Handle (); # autoflush
 use Fcntl qw(SEEK_SET);
 use PublicInbox::TestCommon;
@@ -31,7 +31,7 @@ require_ok 'PublicInbox::GzipFilter';
 	open my $fh, '<', 'COPYING' or die "open(COPYING): $!";
 	my $buf = do { local $/; <$fh> };
 	while ($filter->write($buf .= rand)) {}
-	ok($sigpipe, 'got SIGPIPE');
+	ok($sigpipe, 'got SIGPIPE') or diag "\$!=$!";
 	close $w;
 }
 done_testing;
