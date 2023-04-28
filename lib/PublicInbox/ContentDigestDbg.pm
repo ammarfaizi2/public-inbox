@@ -11,7 +11,7 @@ sub new { bless [ PublicInbox::SHA->new(256), $_[1] ], __PACKAGE__ }
 sub add {
 	$_[0]->[0]->add($_[1]);
 	my @dbg = split(/^/sm, $_[1]);
-	if ($dbg[0] =~ /\A(To|Cc)\0/) { # fold excessively long lines
+	if (@dbg && $dbg[0] =~ /\A(To|Cc)\0/) { # fold excessively long lines
 		@dbg = map { split(/,/s, $_) } @dbg;
 	}
 	print { $_[0]->[1] } Dumper(\@dbg) or die "print $!";
