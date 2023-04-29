@@ -452,7 +452,7 @@ sub skip_identical ($$$) {
 	}
 }
 
-sub apply_result ($$) {
+sub apply_result ($$) { # qx_cb
 	my ($bref, $self) = @_;
 	my ($qsp_err, $di) = delete @$self{qw(-qsp_err -cur_di)};
 	dbg($self, $$bref);
@@ -466,7 +466,8 @@ sub apply_result ($$) {
 			return do_git_apply($self);
 		} else {
 			$msg .= " (no patches left to try for $di->{oid_b})\n";
-			ERR($self, $msg);
+			dbg($self, $msg);
+			return done($self, undef);
 		}
 	} else {
 		skip_identical($self, $patches, $di->{oid_b});
