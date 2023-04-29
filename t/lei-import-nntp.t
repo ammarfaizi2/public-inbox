@@ -43,7 +43,8 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	lei_ok 'ls-mail-sync';
 	like($lei_out, qr!\A\Q$url\E\n\z!, 'ls-mail-sync output as-expected');
 
-	ok(!lei(qw(import), "$url/12-1"), 'backwards range rejected');
+	ok(!lei(qw(import), "$url/12-1"), 'backwards range rejected') or
+		diag $lei_err;
 
 	# new home
 	local $ENV{HOME} = "$tmpdir/h2";
