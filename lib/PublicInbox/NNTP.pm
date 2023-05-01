@@ -537,7 +537,11 @@ sub blob_cb { # called by git->cat_async via ibx_async_cat
 	my ($bref, $oid, $type, $size, $smsg) = @_;
 	my $self = $smsg->{nntp};
 	my $code = $smsg->{nntp_code};
-	if (!defined($oid)) {
+	if (!defined($type)) {
+		warn "E: git aborted on $oid / $smsg->{blob} ".
+			$self->{-ibx}->{inboxdir};
+		return $self->close;
+	} elsif ($type ne 'blob') {
 		# it's possible to have TOCTOU if an admin runs
 		# public-inbox-(edit|purge), just move onto the next message
 		warn "E: $smsg->{blob} missing in $smsg->{-ibx}->{inboxdir}\n";

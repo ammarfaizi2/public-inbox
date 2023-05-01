@@ -216,7 +216,10 @@ sub retr_cb { # called by git->cat_async via ibx_async_cat
 	my ($self, $off, $top_nr) = @$args;
 	my $hex = $self->{cache}->[$off * 3 + 2] //
 		die "BUG: no hex (oid=$oid)";
-	if (!defined($oid)) {
+	if (!defined($type)) {
+		warn "E: git aborted on $oid / $hex $self->{ibx}->{inboxdir}";
+		return $self->close;
+	} elsif ($type ne 'blob') {
 		# it's possible to have TOCTOU if an admin runs
 		# public-inbox-(edit|purge), just move onto the next message
 		warn "E: $hex missing in $self->{ibx}->{inboxdir}\n";

@@ -172,7 +172,7 @@ sub close {
 	(delete($self->{http_out}) // return)->close;
 }
 
-sub bail  {
+sub bail {
 	my $self = shift;
 	carp @_;
 	my $env = $self->{env} or return;
@@ -188,16 +188,19 @@ sub async_blob_cb { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $self) = @_;
 	my $http = $self->{env}->{'psgix.io'}; # PublicInbox::HTTP
 	$http->{forward} or return; # client aborted
-	my $smsg = $self->{smsg} or bail($self, 'BUG: no smsg');
-	if (!defined($oid)) {
+	my $smsg = $self->{smsg} or return bail($self, 'BUG: no smsg');
+	$type // return
+		bail($self, "abort: $smsg->{blob} $self->{ibx}->{inboxdir}");
+	if ($type ne 'blob') {
 		# it's possible to have TOCTOU if an admin runs
 		# public-inbox-(edit|purge), just move onto the next message
-		warn "E: $smsg->{blob} missing in $self->{ibx}->{inboxdir}\n";
+		warn "E: $smsg->{blob} $type in $self->{ibx}->{inboxdir}\n";
 		return $http->next_step($self->can('async_next'));
 	}
-	$smsg->{blob} eq $oid or bail($self, "BUG: $smsg->{blob} != $oid");
+	$smsg->{blob} eq $oid or return
+		bail($self, "BUG: $smsg->{blob} != $oid");
 	eval { $self->async_eml(PublicInbox::Eml->new($bref)) };
-	bail($self, "E: async_eml: $@") if $@;
+	return bail($self, "E: async_eml: $@") if $@;
 	if ($self->{-low_prio}) { # run via PublicInbox::WWW::event_step
 		push(@{$self->{www}->{-low_prio_q}}, $self) == 1 and
 				PublicInbox::DS::requeue($self->{www});
