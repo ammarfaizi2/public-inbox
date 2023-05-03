@@ -28,12 +28,12 @@ sub setup_signals {
 	};
 }
 
-sub resolve_eidxdir {
-	my ($cd) = @_;
+sub resolve_any_idxdir ($$) {
+	my ($cd, $lock_bn) = @_;
 	my $try = $cd // '.';
 	my $root_dev_ino;
-	while (1) { # favor v2, first
-		if (-f "$try/ei.lock") {
+	while (1) {
+		if (-f "$try/$lock_bn") { # inbox.lock, ei.lock, cidx.lock
 			return rel2abs_collapsed($try);
 		} elsif (-d $try) {
 			my @try = stat _;
@@ -49,28 +49,16 @@ sub resolve_eidxdir {
 	}
 }
 
+sub resolve_eidxdir ($) { resolve_any_idxdir($_[0], 'ei.lock') }
+
 sub resolve_inboxdir {
 	my ($cd, $ver) = @_;
-	my $try = $cd // '.';
-	my $root_dev_ino;
-	while (1) { # favor v2, first
-		if (-f "$try/inbox.lock") {
-			$$ver = 2 if $ver;
-			return rel2abs_collapsed($try);
-		} elsif (-d $try) {
-			my @try = stat _;
-			$root_dev_ino //= do {
-				my @root = stat('/') or die "stat /: $!\n";
-				"$root[0]\0$root[1]";
-			};
-			last if "$try[0]\0$try[1]" eq $root_dev_ino;
-			$try .= '/..'; # continue, cd up
-		} else {
-			die "`$try' is not a directory\n";
-		}
-	}
-	my $dir = resolve_git_dir($cd);
-	$$ver = 1 if $ver;
+	my $dir;
+	if (defined($dir = resolve_any_idxdir($cd, 'inbox.lock'))) { # try v2
+		$$ver = 2 if $ver;
+	} elsif (defined($dir = resolve_git_dir($cd))) { # try v1
+		$$ver = 1 if $ver;
+	} # else: not an inbox at all
 	$dir;
 }
 
