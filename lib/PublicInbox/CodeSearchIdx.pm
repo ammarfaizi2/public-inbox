@@ -648,9 +648,7 @@ sub prune_do { # via wq_io_do in IDX_SHARDS
 	local $/ = "\0";
 	while (my $p = <$gone>) { # Q$cmt or P$git_dir
 		chomp $p;
-		my @docids = docids_by_postlist($self, $p) or warn <<EOM;
-W: no docids for `$p' [$self->{shard}]
-EOM
+		my @docids = docids_by_postlist($self, $p);
 		for (@docids) {
 			$TXN_BYTES -= $xdb->get_doclength($_) * 42;
 			$xdb->delete_document($_);
@@ -914,9 +912,13 @@ sub cidx_run { # main entry point
 		my $re = '(?:'.join('\\z|', map {
 				glob2re($_) // qr/\A\Q$_\E/
 			} @$excl).'\\z)';
+		my @excl;
 		@{$self->{git_dirs}} = grep {
-			$_ =~ /$re/ ? (warn("# excluding $_\n"), 0) : 1;
+			$_ =~ /$re/ ? (push(@excl, $_), 0) : 1;
 		} @{$self->{git_dirs}};
+		warn("# excluding $_\n") for @excl;
+		my %uniq; # List::Util::uniq requires Perl 5.26+
+		@GIT_DIR_GONE = grep { !$uniq{$_}++ } (@GIT_DIR_GONE, @excl);
 	}
 	local $NCHANGE = 0;
 	local $LIVE_JOBS = $self->{-opt}->{jobs} ||
