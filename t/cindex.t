@@ -76,6 +76,13 @@ ok(!-d "$zp/.git/public-inbox-cindex", 'no cindex in original coderepo');
 ok(run_script([qw(-cindex -L medium --dangerous -q -d),
 	"$tmp/med", $zp, "$tmp/wt0"]), 'cindex external medium');
 
+
+SKIP: {
+	have_xapian_compact;
+	ok(run_script([qw(-compact -q), "$tmp/ext"]), 'compact on full');
+	ok(run_script([qw(-compact -q), "$tmp/med"]), 'compact on medium');
+}
+
 my $no_metadata_set = sub {
 	my ($i, $extra, $xdb) = @_;
 	for my $xdb (@$xdb) {

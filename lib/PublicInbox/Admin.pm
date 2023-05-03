@@ -50,6 +50,7 @@ sub resolve_any_idxdir ($$) {
 }
 
 sub resolve_eidxdir ($) { resolve_any_idxdir($_[0], 'ei.lock') }
+sub resolve_cidxdir ($) { resolve_any_idxdir($_[0], 'cidx.lock') }
 
 sub resolve_inboxdir {
 	my ($cd, $ver) = @_;
@@ -97,12 +98,22 @@ sub resolve_inboxes ($;$$) {
 		$cfg or die "--all specified, but $cfgfile not readable\n";
 		@$argv and die "--all specified, but directories specified\n";
 	}
-	my (@old, @ibxs, @eidx);
+	my (@old, @ibxs, @eidx, @cidx);
+	if ($opt->{-cidx_ok}) {
+		require PublicInbox::CodeSearchIdx;
+		@$argv = grep {
+			if (defined(my $d = resolve_cidxdir($_))) {
+				push @cidx, PublicInbox::CodeSearchIdx->new(
+							$d, $opt);
+				undef;
+			} else {
+				1;
+			}
+		} @$argv;
+	}
 	if ($opt->{-eidx_ok}) {
 		require PublicInbox::ExtSearchIdx;
-		my $i = -1;
 		@$argv = grep {
-			$i++;
 			if (defined(my $ei = resolve_eidxdir($_))) {
 				$ei = PublicInbox::ExtSearchIdx->new($ei, $opt);
 				push @eidx, $ei;
@@ -124,6 +135,7 @@ sub resolve_inboxes ($;$$) {
 				warn "W: $ibx->{name} $ibx->{inboxdir}: $!\n";
 			}
 		});
+		# TODO: no way to configure cindex in config file, yet
 	} else { # directories specified on the command-line
 		my @dirs = @$argv;
 		push @dirs, '.' if !@dirs && $opt->{-use_cwd};
@@ -164,7 +176,8 @@ sub resolve_inboxes ($;$$) {
 		die "-V$min_ver inboxes not supported by $0\n\t",
 		    join("\n\t", @old), "\n";
 	}
-	$opt->{-eidx_ok} ? (\@ibxs, \@eidx) : @ibxs;
+	($opt->{-eidx_ok} || $opt->{-cidx_ok}) ? (\@ibxs, \@eidx, \@cidx)
+						: @ibxs;
 }
 
 my @base_mod = ();

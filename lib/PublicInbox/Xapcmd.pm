@@ -1,7 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::Xapcmd;
-use strict;
+use v5.12;
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::Syscall;
 use PublicInbox::Admin qw(setup_signals);
@@ -75,7 +75,7 @@ sub commit_changes ($$$$) {
 	$tmp = undef;
 	if (!$opt->{-coarse_lock}) {
 		$opt->{-skip_lock} = 1;
-		$im //= $ibx if $ibx->can('eidx_sync');
+		$im //= $ibx if $ibx->can('eidx_sync') || $ibx->can('cidx_run');
 		if ($im->can('count_shards')) { # v2w or eidx
 			my $pr = $opt->{-progress};
 			my $n = $im->count_shards;
@@ -93,6 +93,8 @@ sub commit_changes ($$$$) {
 		local %ENV = (%ENV, %$env) if $env;
 		if ($ibx->can('eidx_sync')) {
 			$ibx->eidx_sync($opt);
+		} elsif ($ibx->can('cidx_run')) {
+			$ibx->cidx_run($opt);
 		} else {
 			PublicInbox::Admin::index_inbox($ibx, $im, $opt);
 		}
@@ -117,7 +119,8 @@ sub runnable_or_die ($) {
 
 sub prepare_reindex ($$) {
 	my ($ibx, $opt) = @_;
-	if ($ibx->can('eidx_sync')) { # no prep needed for ExtSearchIdx
+	if ($ibx->can('eidx_sync') || $ibx->can('cidx_run')) {
+		# no prep needed for ExtSearchIdx nor CodeSearchIdx
 	} elsif ($ibx->version == 1) {
 		my $dir = $ibx->search->xdir(1);
 		my $xdb = $PublicInbox::Search::X{Database}->new($dir);
@@ -186,7 +189,9 @@ sub prepare_run {
 	my $tmp = {}; # old shard dir => File::Temp->newdir object or undef
 	my @queue; # ([old//src,newdir]) - list of args for cpdb() or compact()
 	my ($old, $misc_ok);
-	if ($ibx->can('eidx_sync')) {
+	if ($ibx->can('cidx_run')) {
+		$old = $ibx->xdir(1);
+	} elsif ($ibx->can('eidx_sync')) {
 		$misc_ok = 1;
 		$old = $ibx->xdir(1);
 	} elsif (my $srch = $ibx->search) {
@@ -261,15 +266,17 @@ sub run {
 	my $cb = \&$task;
 	PublicInbox::Admin::progress_prepare($opt ||= {});
 	my $dir;
-	for my $fld (qw(inboxdir topdir)) {
+	for my $fld (qw(inboxdir topdir cidx_dir)) {
 		my $d = $ibx->{$fld} // next;
 		-d $d or die "$fld=$d does not exist\n";
 		$dir = $d;
 		last;
 	}
-	check_compact() if $opt->{compact} && $ibx->search;
+	check_compact() if $opt->{compact} &&
+				($ibx->can('cidx_run') || $ibx->search);
 
-	if (!$ibx->can('eidx_sync') && !$opt->{-coarse_lock}) {
+	if (!$ibx->can('eidx_sync') && $ibx->can('version') &&
+					!$opt->{-coarse_lock}) {
 		# per-epoch ranges for v2
 		# v1:{ from => $OID }, v2:{ from => [ $OID, $OID, $OID ] } }
 		$opt->{reindex} = { from => $ibx->version == 1 ? '' : [] };

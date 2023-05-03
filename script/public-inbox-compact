@@ -1,12 +1,12 @@
 #!perl -w
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
-my $opt = { compact => 1, -coarse_lock => 1, -eidx_ok => 1 };
+my $opt = { compact => 1, -coarse_lock => 1,
+	-eidx_ok => 1, -cidx_ok => 1 };
 my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
-usage: public-inbox-compact <INBOX_DIR|EXTINDEX_DIR>
+usage: public-inbox-compact <INBOX_DIR|EXTINDEX_DIR|CINDEX_DIR>
 
   Compact Xapian DBs in an inbox
 
@@ -31,12 +31,14 @@ PublicInbox::Admin::progress_prepare($opt);
 require PublicInbox::InboxWritable;
 require PublicInbox::Xapcmd;
 my $cfg = PublicInbox::Config->new;
-my ($ibxs, $eidxs) = PublicInbox::Admin::resolve_inboxes(\@ARGV, $opt, $cfg);
-unless ($ibxs) { print STDERR $help; exit 1 }
+my ($ibxs, $eidxs, $cidxs) =
+	PublicInbox::Admin::resolve_inboxes(\@ARGV, $opt, $cfg);
+unless (@$ibxs || @$eidxs || @$cidxs) { print STDERR $help; exit 1 }
 for my $ibx (@$ibxs) {
 	$ibx = PublicInbox::InboxWritable->new($ibx);
 	PublicInbox::Xapcmd::run($ibx, 'compact', $opt);
 }
-for my $eidx (@$eidxs) {
-	PublicInbox::Xapcmd::run($eidx, 'compact', $opt);
+for my $ibxish (@$eidxs, @$cidxs) {
+	my $restore = $ibxish->can('prep_umask') ? $ibxish->prep_umask : undef;
+	PublicInbox::Xapcmd::run($ibxish, 'compact', $opt);
 }
