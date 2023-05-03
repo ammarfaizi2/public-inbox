@@ -90,7 +90,6 @@ $test->('local');
 	defined($pid) or BAIL_OUT 'no spawn, no test';
 	is($ipc->ipc_do('test_pid'), $pid, 'worker pid returned');
 	$test->('worker');
-	$ipc->ipc_lock_init("$tmpdir/lock");
 	is($ipc->ipc_do('test_pid'), $pid, 'worker pid returned');
 	$ipc->ipc_worker_stop;
 	ok(!kill(0, $pid) && $!{ESRCH}, 'worker stopped');

@@ -173,15 +173,6 @@ sub ipc_worker_stop {
 	awaitpid($pid) if $$ == $ppid; # for non-event loop
 }
 
-# use this if we have multiple readers reading curl or "pigz -dc"
-# and writing to the same store
-sub ipc_lock_init {
-	my ($self, $f) = @_;
-	$f // die 'BUG: no filename given';
-	require PublicInbox::Lock;
-	$self->{-ipc_lock} //= bless { lock_path => $f }, 'PublicInbox::Lock'
-}
-
 sub _wait_return ($$) {
 	my ($r_res, $sub) = @_;
 	my $ret = _get_rec($r_res) // die "no response on $sub";
@@ -193,8 +184,6 @@ sub _wait_return ($$) {
 sub ipc_do {
 	my ($self, $sub, @args) = @_;
 	if (my $w_req = $self->{-ipc_req}) { # run in worker
-		my $ipc_lock = $self->{-ipc_lock};
-		my $lock = $ipc_lock ? $ipc_lock->lock_for_scope : undef;
 		if (defined(wantarray)) {
 			my $r_res = $self->{-ipc_res} or die 'no ipc_res';
 			_send_rec($w_req, [ wantarray, $sub, @args ]);
