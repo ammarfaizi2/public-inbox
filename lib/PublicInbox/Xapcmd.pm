@@ -6,6 +6,7 @@ use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::Syscall;
 use PublicInbox::Admin qw(setup_signals);
 use PublicInbox::Over;
+use PublicInbox::Search qw(xap_terms);
 use PublicInbox::SearchIdx;
 use File::Temp 0.19 (); # ->newdir
 use File::Path qw(remove_tree);
@@ -76,14 +77,14 @@ sub commit_changes ($$$$) {
 	if (!$opt->{-coarse_lock}) {
 		$opt->{-skip_lock} = 1;
 		$im //= $ibx if $ibx->can('eidx_sync') || $ibx->can('cidx_run');
-		if ($im->can('count_shards')) { # v2w or eidx
+		if ($im->can('count_shards')) { # v2w, eidx, cidx
 			my $pr = $opt->{-progress};
 			my $n = $im->count_shards;
 			if (defined $reshard && $n != $reshard) {
 				die
 "BUG: counted $n shards after resharding to $reshard";
 			}
-			my $prev = $im->{shards};
+			my $prev = $im->{shards} // $ibx->{nshard};
 			if ($pr && $prev != $n) {
 				$pr->("shard count changed: $prev => $n\n");
 				$im->{shards} = $n;
@@ -93,9 +94,7 @@ sub commit_changes ($$$$) {
 		local %ENV = (%ENV, %$env) if $env;
 		if ($ibx->can('eidx_sync')) {
 			$ibx->eidx_sync($opt);
-		} elsif ($ibx->can('cidx_run')) {
-			$ibx->cidx_run($opt);
-		} else {
+		} elsif (!$ibx->can('cidx_run')) {
 			PublicInbox::Admin::index_inbox($ibx, $im, $opt);
 		}
 	}
@@ -150,8 +149,9 @@ sub kill_pids {
 }
 
 sub process_queue {
-	my ($queue, $cb, $opt) = @_;
+	my ($queue, $task, $opt) = @_;
 	my $max = $opt->{jobs} // scalar(@$queue);
+	my $cb = \&$task;
 	if ($max <= 1) {
 		while (defined(my $args = shift @$queue)) {
 			$cb->($args, $opt);
@@ -263,7 +263,6 @@ sub check_compact () { runnable_or_die($XAPIAN_COMPACT) }
 
 sub run {
 	my ($ibx, $task, $opt) = @_; # task = 'cpdb' or 'compact'
-	my $cb = \&$task;
 	PublicInbox::Admin::progress_prepare($opt ||= {});
 	my $dir;
 	for my $fld (qw(inboxdir topdir cidx_dir)) {
@@ -298,7 +297,11 @@ sub run {
 	}
 
 	$ibx->cleanup if $ibx->can('cleanup');
-	process_queue($queue, $cb, $opt);
+	if ($task eq 'cpdb' && $opt->{reshard} && $ibx->can('cidx_run')) {
+		cidx_reshard($ibx, $queue, $opt);
+	} else {
+		process_queue($queue, $task, $opt);
+	}
 	($im // $ibx)->lock_acquire if !$opt->{-coarse_lock};
 	commit_changes($ibx, $im, $tmp, $opt);
 }
@@ -411,17 +414,95 @@ sub cpdb_loop ($$$;$$) {
 	} while (cpdb_retryable($src, $pfx));
 }
 
+sub xapian_write_prep ($) {
+	my ($opt) = @_;
+	PublicInbox::SearchIdx::load_xapian_writable();
+	my $flag = eval($PublicInbox::Search::Xap.'::DB_CREATE()');
+	die if $@;
+	$flag |= $PublicInbox::SearchIdx::DB_NO_SYNC if !$opt->{fsync};
+	(\%PublicInbox::Search::X, $flag);
+}
+
+sub compact_tmp_shard ($) {
+	my ($wip) = @_;
+	my $new = $wip->dirname;
+	my ($dir) = ($new =~ m!(.*?/)[^/]+/*\z!);
+	same_fs_or_die($dir, $new);
+	my $ft = File::Temp->newdir("$new.compact-XXXX", DIR => $dir);
+	PublicInbox::Syscall::nodatacow_dir($ft->dirname);
+	$ft;
+}
+
+sub cidx_reshard { # not docid based
+	my ($cidx, $queue, $opt) = @_;
+	my ($X, $flag) = xapian_write_prep($opt);
+	my $src = $cidx->xdb;
+	delete($cidx->{xdb}) == $src or die "BUG: xdb != $src";
+	my $pfx = $opt->{-progress_pfx} = progress_pfx($cidx->xdir.'/0');
+	my $pr = $opt->{-progress};
+	my $pr_data = { pr => $pr, pfx => $pfx, nr => 0 } if $pr;
+	local @SIG{keys %SIG} = values %SIG;
+
+	# like copydatabase(1), be sure we don't overwrite anything in case
+	# of other bugs:
+	setup_signals() if $opt->{compact};
+	my @tmp;
+	my @dst = map {
+		my $wip = $_->[1];
+		my $tmp = $opt->{compact} ? compact_tmp_shard($wip) : $wip;
+		push @tmp, $tmp;
+		$X->{WritableDatabase}->new($tmp->dirname, $flag);
+	} @$queue;
+	my $l = $src->get_metadata('indexlevel');
+	$dst[0]->set_metadata('indexlevel', $l) if $l eq 'medium';
+	my $fmt;
+	if ($pr_data) {
+		my $tot = $src->get_doccount;
+		$fmt = "$pfx % ".length($tot)."u/$tot\n";
+		$pr->("$pfx copying $tot documents\n");
+	}
+	my $cur = $src->postlist_begin('');
+	my $end = $src->postlist_end('');
+	my $git_dir_hash = $cidx->can('git_dir_hash');
+	my ($n, $nr);
+	for (; $cur != $end; $cur++) {
+		my $doc = $src->get_document($cur->get_docid);
+		if (my @cmt = xap_terms('Q', $doc)) {
+			$n = hex(substr($cmt[0], 0, 8)) % scalar(@dst);
+			warn "W: multi-commit: @cmt" if scalar(@cmt) != 1;
+		} elsif (my @P = xap_terms('P', $doc)) {
+			$n = $git_dir_hash->($P[0]) % scalar(@dst);
+			warn "W: multi-path @P " if scalar(@P) != 1;
+		} else {
+			warn "W: skipped, no terms in ".$cur->get_docid;
+			next;
+		}
+		$dst[$n]->add_document($doc);
+		$pr->(sprintf($fmt, $nr)) if $pr_data && !(++$nr & 1023);
+	}
+	return if !$opt->{compact};
+	$src = undef;
+	@dst = (); # flushes and closes
+	my @q;
+	for my $tmp (@tmp) {
+		my $arg = shift @$queue // die 'BUG: $queue empty';
+		my $wip = $arg->[1] // die 'BUG: no $wip';
+		push @q, [ "$tmp", $wip ];
+	}
+	delete $opt->{-progress_pfx};
+	process_queue(\@q, 'compact', $opt);
+}
+
 # Like copydatabase(1), this is horribly slow; and it doesn't seem due
 # to the overhead of Perl.
 sub cpdb ($$) { # cb_spawn callback
 	my ($args, $opt) = @_;
-	my ($old, $newdir) = @$args;
-	my $new = $newdir->dirname;
+	my ($old, $wip) = @$args;
 	my ($src, $cur_shard);
 	my $reshard;
-	PublicInbox::SearchIdx::load_xapian_writable();
-	my $XapianDatabase = $PublicInbox::Search::X{Database};
+	my ($X, $flag) = xapian_write_prep($opt);
 	if (ref($old) eq 'ARRAY') {
+		my $new = $wip->dirname;
 		($cur_shard) = ($new =~ m!(?:xap|ei)[0-9]+/([0-9]+)\b!);
 		defined $cur_shard or
 			die "BUG: could not extract shard # from $new";
@@ -431,36 +512,27 @@ sub cpdb ($$) { # cb_spawn callback
 		# resharding, M:N copy means have full read access
 		foreach (@$old) {
 			if ($src) {
-				my $sub = $XapianDatabase->new($_);
+				my $sub = $X->{Database}->new($_);
 				$src->add_database($sub);
 			} else {
-				$src = $XapianDatabase->new($_);
+				$src = $X->{Database}->new($_);
 			}
 		}
 	} else {
-		$src = $XapianDatabase->new($old);
+		$src = $X->{Database}->new($old);
 	}
 
-	my ($tmp, $ft);
+	my $tmp = $wip;
 	local @SIG{keys %SIG} = values %SIG;
 	if ($opt->{compact}) {
-		my ($dir) = ($new =~ m!(.*?/)[^/]+/*\z!);
-		same_fs_or_die($dir, $new);
-		$ft = File::Temp->newdir("$new.compact-XXXX", DIR => $dir);
+		$tmp = compact_tmp_shard($wip);
 		setup_signals();
-		$tmp = $ft->dirname;
-		PublicInbox::Syscall::nodatacow_dir($tmp);
-	} else {
-		$tmp = $new;
 	}
 
 	# like copydatabase(1), be sure we don't overwrite anything in case
 	# of other bugs:
-	my $flag = eval($PublicInbox::Search::Xap.'::DB_CREATE()');
-	die if $@;
-	my $XapianWritableDatabase = $PublicInbox::Search::X{WritableDatabase};
-	$flag |= $PublicInbox::SearchIdx::DB_NO_SYNC if !$opt->{fsync};
-	my $dst = $XapianWritableDatabase->new($tmp, $flag);
+	my $new = $wip->dirname;
+	my $dst = $X->{WritableDatabase}->new($tmp->dirname, $flag);
 	my $pr = $opt->{-progress};
 	my $pfx = $opt->{-progress_pfx} = progress_pfx($new);
 	my $pr_data = { pr => $pr, pfx => $pfx, nr => 0 } if $pr;
@@ -502,7 +574,7 @@ sub cpdb ($$) { # cb_spawn callback
 		# individually.
 		$src = undef;
 		foreach (@$old) {
-			my $old = $XapianDatabase->new($_);
+			my $old = $X->{Database}->new($_);
 			cpdb_loop($old, $dst, $pr_data, $cur_shard, $reshard);
 		}
 	} else {

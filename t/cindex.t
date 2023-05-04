@@ -185,4 +185,9 @@ ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", $zp]),
 	is($st[2] & 0777, 0604, 'created lock respects odd permissions');
 }
 
+ok(run_script([qw(-xcpdb), "$tmp/ext"]), 'xcpdb upgrade');
+ok(run_script([qw(-xcpdb -R4), "$tmp/ext"]), 'xcpdb reshard');
+ok(run_script([qw(-xcpdb -R2 --compact), "$tmp/ext"]), 'xcpdb reshard+compact');
+ok(run_script([qw(-xcpdb --compact), "$tmp/ext"]), 'xcpdb compact');
+
 done_testing;
