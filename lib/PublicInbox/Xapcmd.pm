@@ -319,10 +319,11 @@ sub cpdb_retryable ($$) {
 
 sub progress_pfx ($) {
 	my ($wip) = @_; # tempdir v2: ([0-9])+-XXXX
-	my @p = split('/', $wip);
+	my @p = split(m'/', $wip);
 
-	# return "xap15/0" for v2, or "xapian15" for v1:
-	($p[-1] =~ /\A([0-9]+)/) ? "$p[-2]/$1" : $p[-1];
+	# "basename(inboxdir)/xap15/0" for v2,
+	# "basename(inboxdir)/xapian15" for v1:
+	($p[-1] =~ /\A([0-9]+)/) ? "$p[-3]/$p[-2]/$1" : "$p[-2]/$p[-1]";
 }
 
 sub kill_compact { # setup_signals callback
