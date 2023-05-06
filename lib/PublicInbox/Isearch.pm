@@ -1,12 +1,11 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Provides everything the PublicInbox::Search object does;
 # but uses global ExtSearch (->ALL) with an eidx_key query to
 # emulate per-Inbox search using ->ALL.
 package PublicInbox::Isearch;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::ExtSearch;
 use PublicInbox::Search;
 
@@ -48,8 +47,8 @@ SELECT MAX(docid) FROM xref3 WHERE ibx_id = ? AND xnum >= ? AND xnum <= ?
 		$r[1] = $sth->fetchrow_array;
 		if (defined($r[1]) && defined($r[0])) {
 			$opt{limit} = $r[1] - $r[0] + 1;
-		} else {
-			$r[1] //= 0xffffffff;
+		} else { # these are fed to SQLite
+			$r[1] //= '0x7'.('f'x15); # string for some 32-bit Perl
 			$r[0] //= 0;
 		}
 		$opt{uid_range} = \@r;
