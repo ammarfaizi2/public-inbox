@@ -871,9 +871,9 @@ sub cidx_run { # main entry point
 	local $LIVE = {};
 	local $PRUNE_DONE = [];
 	local $IDX_TODO = [];
+	local $GIT_TODO = [];
 	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNE_QUEUE,
-		$GIT_TODO, $REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, @SORT,
-		$PRUNE_ENV);
+		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, @SORT, $PRUNE_ENV);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local @IDX_SHARDS = cidx_init($self);
