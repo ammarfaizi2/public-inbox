@@ -628,11 +628,6 @@ EOM
 
 sub scan_git_dirs ($) {
 	my ($self) = @_;
-
-	# FreeBSD ignores/discards SIGCHLD while signals are blocked and
-	# EVFILT_SIGNAL is inactive, so we pretend we have a SIGCHLD pending
-	PublicInbox::DS::enqueue_reap();
-
 	@$GIT_TODO = @{$self->{git_dirs}};
 	index_next($self) for (1..$LIVE_JOBS);
 }
@@ -668,8 +663,8 @@ sub shards_active { # post_loop_do
 	return 1 if scalar(@$GIT_TODO) || scalar(@$IDX_TODO) || $REPO_CTX;
 	return 1 if keys(%$LIVE);
 	for my $s (grep { $_->{-wq_s1} } @IDX_SHARDS) {
-		$s->{-cidx_quit} = 1;
-		$s->wq_close;
+		$s->{-cidx_quit} = 1 if defined($s->{-wq_s1});
+		$s->wq_close; # may recurse via awaitpid outside of event_loop
 	}
 	scalar(grep { $_->{-cidx_quit} } @IDX_SHARDS);
 }
@@ -926,6 +921,10 @@ sub cidx_run { # main entry point
 	local @RDONLY_XDB = $self->xdb_shards_flat;
 	init_prune($self);
 	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
+
+	# FreeBSD ignores/discards SIGCHLD while signals are blocked and
+	# EVFILT_SIGNAL is inactive, so we pretend we have a SIGCHLD pending
+	PublicInbox::DS::enqueue_reap();
 
 	local @PublicInbox::DS::post_loop_do = (\&shards_active);
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET) if shards_active();
