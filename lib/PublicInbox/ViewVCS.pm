@@ -596,10 +596,9 @@ sub show_blob { # git->cat_async callback
 # GET /$INBOX/$GIT_OBJECT_ID/s/$FILENAME
 sub show ($$;$) {
 	my ($ctx, $oid_b, $fn) = @_;
-	my $qp = $ctx->{qp};
 	my $hints = $ctx->{hints} = {};
 	while (my ($from, $to) = each %QP_MAP) {
-		defined(my $v = $qp->{$from}) or next;
+		my $v = $ctx->{qp}->{$from} // next;
 		$hints->{$to} = $v if $v ne '';
 	}
 	$ctx->{fn} = $fn;

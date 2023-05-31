@@ -33,15 +33,11 @@ sub generate_html_index {
 	my ($ctx) = @_;
 	# if the 'r' query parameter is given, it is a legacy permalink
 	# which we must continue supporting:
-	my $qp = $ctx->{qp};
-	my $ibx = $ctx->{ibx};
-	if ($qp && !$qp->{r} && $ibx->over) {
+	!$ctx->{qp}->{r} && $ctx->{ibx}->over and
 		return PublicInbox::View::index_topics($ctx);
-	}
 
-	my $env = $ctx->{env};
-	my $url = $ibx->base_url($env) . 'new.html';
-	my $qs = $env->{QUERY_STRING};
+	my $url = $ctx->{ibx}->base_url($ctx->{env}) . 'new.html';
+	my $qs = $ctx->{env}->{QUERY_STRING};
 	$url .= "?$qs" if $qs ne '';
 	[302, [ 'Location', $url, 'Content-Type', 'text/plain'],
 		[ "Redirecting to $url\n" ] ];
@@ -88,7 +84,6 @@ sub recent_msgs {
 	return PublicInbox::View::paginate_recent($ctx, $max) if $ibx->over;
 
 	# only for rare v1 inboxes which aren't indexed at all
-	my $qp = $ctx->{qp};
 	my $hex = '[a-f0-9]';
 	my $addmsg = qr!^:000000 100644 \S+ (\S+) A\t${hex}{2}/${hex}{38}$!;
 	my $delmsg = qr!^:100644 000000 (\S+) \S+ D\t(${hex}{2}/${hex}{38})$!;
@@ -96,7 +91,7 @@ sub recent_msgs {
 
 	# revision ranges may be specified
 	my $range = 'HEAD';
-	my $r = $qp->{r} if $qp;
+	my $r = $ctx->{qp}->{r};
 	if ($r && ($r =~ /\A(?:$refhex\.\.)?$refhex\z/o)) {
 		$range = $r;
 	}

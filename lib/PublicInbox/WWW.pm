@@ -45,14 +45,21 @@ sub call {
 	my $ctx = { env => $env, www => $self };
 
 	# we don't care about multi-value
-	%{$ctx->{qp}} = map {
-		utf8::decode($_);
-		tr/+/ /;
-		my ($k, $v) = split(/=/, $_, 2);
-		# none of the keys we care about will need escaping
-		($k // '', uri_unescape($v // ''))
-	} split(/[&;]+/, $env->{QUERY_STRING});
-
+	# '0' isn't a QUERY_STRING we care about
+	if (my $qs = $env->{QUERY_STRING}) {
+		utf8::decode($qs);
+		$qs =~ tr/+/ /;
+		%{$ctx->{qp}} = map {
+			# we only use single-char query param keys
+			if (s/\A([A-Za-z])=//) {
+				$1 => uri_unescape($_)
+			} elsif (/\A[a-z]\z/) { # some boolean options
+				$_ => ''
+			} else {
+				() # ignored
+			}
+		} split(/[&;]+/, $qs);
+	}
 	my $path_info = path_info_raw($env);
 	my $method = $env->{REQUEST_METHOD};
 
