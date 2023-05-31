@@ -302,9 +302,9 @@ sub mset_thread {
 	my $rootset = PublicInbox::SearchThread::thread($msgs,
 		$r ? \&sort_relevance : \&PublicInbox::View::sort_ds,
 		$ctx);
-	my $skel = search_nav_bot($ctx, $mset, $q).
-		"<pre>-- links below jump to the message on this page --\n";
-
+	my $skel = search_nav_bot($ctx, $mset, $q).'<pre>'. <<EOM;
+-- pct% links below jump to the message on this page, permalinks otherwise --
+EOM
 	$ctx->{-upfx} = '';
 	$ctx->{anchor_idx} = 1;
 	$ctx->{cur_level} = 0;
