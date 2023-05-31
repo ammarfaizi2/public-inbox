@@ -276,7 +276,7 @@ sub search_nav_bot { # also used by WwwListing for searching extindex miscidx
 	my $rev = $q->qs_html(o => $o < 0 ? 0 : -1);
 	$rv .= qq{ | <a\nhref="?$rev">reverse</a>};
 	exists($ctx->{ibx}) and
-		$rv .= q{ | sort options + mbox downloads <a href=#d>above</a></pre>};
+		$rv .= q{ | options <a href=#d>above</a></pre>};
 	$rv;
 }
 
