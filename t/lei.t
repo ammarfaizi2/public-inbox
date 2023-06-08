@@ -149,7 +149,10 @@ my $test_fail = sub {
 	for my $lk (qw(ei inbox)) {
 		my $d = "$home/newline\n$lk";
 		my $all = $lk eq 'ei' ? 'ALL' : 'all';
-		File::Path::mkpath("$d/$all.git/objects");
+		{ # quiet newline warning on older Perls
+			local $^W = undef if $^V lt v5.22.0;
+			File::Path::mkpath("$d/$all.git/objects");
+		}
 		open my $fh, '>', "$d/$lk.lock" or BAIL_OUT "open $d/$lk.lock";
 		for my $fl (qw(-I --only)) {
 			ok(!lei('q', $fl, $d, 'whatever'),
