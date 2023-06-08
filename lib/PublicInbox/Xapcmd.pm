@@ -589,7 +589,6 @@ sub cpdb ($$) { # cb_spawn callback
 	# this is probably the best place to do xapian-compact
 	# since $dst isn't readable by HTTP or NNTP clients, yet:
 	compact([ $tmp, $new ], $opt);
-	remove_tree($tmp) or die "failed to remove $tmp: $!\n";
 }
 
 1;
