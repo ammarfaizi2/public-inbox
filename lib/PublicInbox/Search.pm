@@ -209,19 +209,19 @@ sub xdb_shards_flat ($) {
 	my (@xdb, $slow_phrase);
 	load_xapian();
 	$self->{qp_flags} //= $QP_FLAGS;
-	if ($xpfx =~ m!/xapian[0-9]+\z!) {
+	if ($xpfx =~ m!/xapian[0-9]+\z!) { # v1
 		@xdb = ($X{Database}->new($xpfx));
 		$self->{qp_flags} |= FLAG_PHRASE() if !-f "$xpfx/iamchert";
-	} else {
+	} else { # v2, eidx, cidx
 		opendir(my $dh, $xpfx) or return (); # not initialized yet
 		# We need numeric sorting so shard[0] is first for reading
 		# Xapian metadata, if needed
 		my $last = max(grep(/\A[0-9]+\z/, readdir($dh))) // return ();
-		for (0..$last) {
-			my $shard_dir = "$self->{xpfx}/$_";
-			push @xdb, $X{Database}->new($shard_dir);
+		@xdb = map {
+			my $shard_dir = "$xpfx/$_";
 			$slow_phrase ||= -f "$shard_dir/iamchert";
-		}
+			$X{Database}->new($shard_dir);
+		} (0..$last);
 		$self->{qp_flags} |= FLAG_PHRASE() if !$slow_phrase;
 	}
 	@xdb;
@@ -371,31 +371,28 @@ sub query_approxidate {
 	date_parse_finalize($git, $to_parse, $_[2]) if $to_parse;
 }
 
-# read-only
+# read-only, for mail only (codesearch has different rules)
 sub mset {
-	my ($self, $query_string, $opt) = @_;
-	$opt ||= {};
+	my ($self, $qry_str, $opt) = @_;
 	my $qp = $self->{qp} //= $self->qparse_new;
-	my $query = $qp->parse_query($query_string, $self->{qp_flags});
+	my $qry = $qp->parse_query($qry_str, $self->{qp_flags});
 	if (defined(my $eidx_key = $opt->{eidx_key})) {
-		$query = $X{Query}->new(OP_FILTER(), $query, 'O'.$eidx_key);
+		$qry = $X{Query}->new(OP_FILTER(), $qry, 'O'.$eidx_key);
 	}
 	if (defined(my $uid_range = $opt->{uid_range})) {
 		my $range = $X{Query}->new(OP_VALUE_RANGE(), UID,
 					sortable_serialise($uid_range->[0]),
 					sortable_serialise($uid_range->[1]));
-		$query = $X{Query}->new(OP_FILTER(), $query, $range);
+		$qry = $X{Query}->new(OP_FILTER(), $qry, $range);
 	}
 	if (defined(my $tid = $opt->{threadid})) {
 		$tid = sortable_serialise($tid);
-		$query = $X{Query}->new(OP_FILTER(), $query,
-				$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
+		$qry = $X{Query}->new(OP_FILTER(), $qry,
+			$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
 	}
 
-	my $xdb = xdb($self);
-	my $enq = $X{Enquire}->new($xdb);
-	$enq->set_query($query);
-	$opt ||= {};
+	my $enq = $X{Enquire}->new(xdb($self));
+	$enq->set_query($qry);
 	my $rel = $opt->{relevance} // 0;
 	if ($rel == -2) { # ORDER BY docid/UID (highest first)
 		$enq->set_weighting_scheme($X{BoolWeight}->new);
@@ -411,9 +408,8 @@ sub mset {
 
 	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse
 	# on `-tt' ({threads} > 1) which sets the Flagged|Important keyword
-	if (($opt->{threads} // 0) == 1 && has_threadid($self)) {
+	(($opt->{threads} // 0) == 1 && has_threadid($self)) and
 		$enq->set_collapse_key(THREADID);
-	}
 	retry_reopen($self, \&enquire_once, $enq,
 			$opt->{offset} || 0, $opt->{limit} || 50);
 }
