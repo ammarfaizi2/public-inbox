@@ -390,7 +390,11 @@ sub mset {
 		$qry = $X{Query}->new(OP_FILTER(), $qry,
 			$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
 	}
+	do_enquire($self, $qry, $opt, TS);
+}
 
+sub do_enquire { # shared with CodeSearch
+	my ($self, $qry, $opt, $col) = @_;
 	my $enq = $X{Enquire}->new(xdb($self));
 	$enq->set_query($qry);
 	my $rel = $opt->{relevance} // 0;
@@ -401,9 +405,9 @@ sub mset {
 		$enq->set_weighting_scheme($X{BoolWeight}->new);
 		$enq->set_docid_order($ENQ_ASCENDING);
 	} elsif ($rel == 0) {
-		$enq->set_sort_by_value_then_relevance(TS, !$opt->{asc});
+		$enq->set_sort_by_value_then_relevance($col, !$opt->{asc});
 	} else { # rel > 0
-		$enq->set_sort_by_relevance_then_value(TS, !$opt->{asc});
+		$enq->set_sort_by_relevance_then_value($col, !$opt->{asc});
 	}
 
 	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse

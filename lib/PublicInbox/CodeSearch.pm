@@ -106,16 +106,7 @@ sub mset {
 	$qry = $PublicInbox::Search::X{Query}->new(
 				PublicInbox::Search::OP_FILTER(),
 				$qry, 'T'.'c');
-
-	my $enq = $PublicInbox::Search::X{Enquire}->new($self->xdb);
-	$enq->set_query($qry);
-	if ($opt->{relevance}) {
-		$enq->set_sort_by_relevance_then_value(CT, !$opt->{asc});
-	} else {
-		$enq->set_sort_by_value_then_relevance(CT, !$opt->{asc});
-	}
-	$self->retry_reopen($self->can('enquire_once'), $enq,
-			$opt->{offset} || 0, $opt->{limit} || 50);
+	$self->do_enquire($qry, $opt, CT);
 }
 
 1;
