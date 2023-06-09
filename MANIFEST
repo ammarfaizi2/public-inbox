@@ -165,6 +165,7 @@ lib/PublicInbox/CidxLogP.pm
 lib/PublicInbox/CmdIPC4.pm
 lib/PublicInbox/CodeSearch.pm
 lib/PublicInbox/CodeSearchIdx.pm
+lib/PublicInbox/Compat.pm
 lib/PublicInbox/CompressNoop.pm
 lib/PublicInbox/Config.pm
 lib/PublicInbox/ConfigIter.pm

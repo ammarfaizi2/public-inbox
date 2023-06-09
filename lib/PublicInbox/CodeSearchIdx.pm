@@ -31,6 +31,7 @@ use PublicInbox::OnDestroy;
 use PublicInbox::CidxLogP;
 use PublicInbox::CidxComm;
 use PublicInbox::Git qw(%OFMT2HEXLEN);
+use PublicInbox::Compat qw(uniqstr);
 use Socket qw(MSG_EOR);
 use Carp ();
 our (
@@ -578,8 +579,7 @@ sub load_existing ($) { # for -u/--update
 		}
 		push @$dirs, @cur;
 	}
-	my %uniq; # List::Util::uniq requires Perl 5.26+
-	@$dirs = grep { !$uniq{$_}++ } @$dirs;
+	@$dirs = uniqstr @$dirs;
 }
 
 # SIG handlers:
@@ -912,8 +912,7 @@ sub cidx_run { # main entry point
 			$_ =~ /$re/ ? (push(@excl, $_), 0) : 1;
 		} @{$self->{git_dirs}};
 		warn("# excluding $_\n") for @excl;
-		my %uniq; # List::Util::uniq requires Perl 5.26+
-		@GIT_DIR_GONE = grep { !$uniq{$_}++ } (@GIT_DIR_GONE, @excl);
+		@GIT_DIR_GONE = uniqstr @GIT_DIR_GONE, @excl;
 	}
 	local $NCHANGE = 0;
 	local $LIVE_JOBS = $self->{-opt}->{jobs} ||

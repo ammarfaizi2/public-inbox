@@ -7,6 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
 use PublicInbox::InboxWritable qw(eml_from_path);
+use PublicInbox::Compat qw(uniqstr);
 
 # /^input_/ subs are used by (or override) PublicInbox::LeiInput superclass
 
@@ -40,8 +41,7 @@ sub pmdir_cb { # called via wq_io_do from LeiPmdir->each_mdir_fn
 	my @oidbin = $lms ? $lms->name_oidbin($folder, $bn) : ();
 	@oidbin > 1 and warn("W: $folder/*/$$bn not unique:\n",
 				map { "\t".unpack('H*', $_)."\n" } @oidbin);
-	my %seen;
-	my @docids = sort { $a <=> $b } grep { !$seen{$_}++ }
+	my @docids = sort { $a <=> $b } uniqstr
 			map { $lse->over->oidbin_exists($_) } @oidbin;
 	my $vmd = $self->{-import_kw} ? { kw => $kw } : undef;
 	if (scalar @docids) {

@@ -6,6 +6,7 @@ package PublicInbox::LeiMailSync;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Lock);
+use PublicInbox::Compat qw(uniqstr);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::ContentHash qw(git_sha);
 use Carp ();
@@ -543,20 +544,19 @@ EOM
 --all=@no not accepted (must be `local' and/or `remote')
 EOM
 	}
-	my (%seen, @inc);
 	my @all = $self->folders;
 	for my $ok (@ok) {
 		if ($ok eq 'local') {
-			@inc = grep(!m!\A[a-z0-9\+]+://!i, @all);
+			push @$folders, grep(!m!\A[a-z0-9\+]+://!i, @all);
 		} elsif ($ok eq 'remote') {
-			@inc = grep(m!\A[a-z0-9\+]+://!i, @all);
+			push @$folders, grep(m!\A[a-z0-9\+]+://!i, @all);
 		} elsif ($ok ne '') {
 			return $lei->fail("--all=$all not understood");
 		} else {
-			@inc = @all;
+			push @$folders, @all;
 		}
-		push(@$folders, (grep { !$seen{$_}++ } @inc));
 	}
+	@$folders = uniqstr @$folders;
 	scalar(@$folders) || $lei->fail(<<EOM);
 no --mail-sync folders known to lei
 EOM
@@ -656,8 +656,8 @@ sub num_oidbin ($$$) {
 SELECT oidbin FROM blob2num WHERE fid = ? AND uid = ? ORDER BY _rowid_
 EOM
 	$sth->execute($fid, $uid);
-	my %uniq; # for public-inbox <= 1.7.0
-	grep { !$uniq{$_}++ } map { $_->[0] } @{$sth->fetchall_arrayref};
+	# for public-inbox <= 1.7.0:
+	uniqstr(map { $_->[0] } @{$sth->fetchall_arrayref});
 }
 
 sub name_oidbin ($$$) {
@@ -674,8 +674,7 @@ EOM
 	$sth->bind_param(2, $nm, SQL_VARCHAR);
 	$sth->execute;
 	my @old = map { $_->[0] } @{$sth->fetchall_arrayref};
-	my %uniq; # for public-inbox <= 1.7.0
-	grep { !$uniq{$_}++ } (@bin, @old);
+	uniqstr @bin, @old # for public-inbox <= 1.7.0
 }
 
 sub imap_oidhex {

@@ -18,6 +18,7 @@ use PublicInbox::Qspawn;
 use PublicInbox::Tmpfile;
 use PublicInbox::GitAsyncCat;
 use PublicInbox::Eml;
+use PublicInbox::Compat qw(uniqstr);
 use URI::Escape qw(uri_escape_utf8);
 
 # POSIX requires _POSIX_ARG_MAX >= 4096, and xargs is required to
@@ -556,8 +557,7 @@ sub extract_diffs_done {
 	my $diffs = delete $self->{tmp_diffs};
 	if (scalar @$diffs) {
 		unshift @{$self->{patches}}, @$diffs;
-		my %seen; # List::Util::uniq requires Perl 5.26+ :<
-		my @u = grep { !$seen{$_}++ } map { di_url($self, $_) } @$diffs;
+		my @u = uniqstr(map { di_url($self, $_) } @$diffs);
 		dbg($self, "found $want->{oid_b} in " .  join(" ||\n\t", @u));
 		++$self->{nr_p};
 

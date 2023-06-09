@@ -10,6 +10,7 @@ use PublicInbox::MID qw(mid2path);
 use PublicInbox::Eml;
 use List::Util qw(max);
 use Carp qw(croak);
+use PublicInbox::Compat qw(uniqstr);
 
 # returns true if further checking is required
 sub check_inodes ($) {
@@ -250,11 +251,7 @@ EOM
 			# nntp://news.example.com/alt.example
 			push @m, $u;
 		}
-
-		# List::Util::uniq requires Perl 5.26+, maybe we
-		# can use it by 2030 or so
-		my %seen;
-		@urls = grep { !$seen{$_}++ } (@urls, @m);
+		@urls = uniqstr @urls, @m;
 	}
 	\@urls;
 }
@@ -274,8 +271,7 @@ sub pop3_url {
 			@urls = map { m!\Apop3?s?://! ? $_ : "pop3://$_" } @$ps;
 		if (my $mi = $self->{'pop3mirror'}) {
 			my @m = map { m!\Apop3?s?://! ? $_ : "pop3://$_" } @$mi;
-			my %seen; # List::Util::uniq requires Perl 5.26+
-			@urls = grep { !$seen{$_}++ } (@urls, @m);
+			@urls = uniqstr @urls, @m;
 		}
 		my $n = 0;
 		for (@urls) { $n += s!/+\z!! }
