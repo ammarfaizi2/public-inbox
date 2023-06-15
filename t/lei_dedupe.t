@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -10,6 +10,8 @@ use PublicInbox::Smsg;
 require_mods(qw(DBD::SQLite));
 use_ok 'PublicInbox::LeiDedupe';
 my $eml = eml_load('t/plack-qp.eml');
+my $sameish = eml_load('t/plack-qp.eml');
+$sameish->header_set('Message-ID', '<cuepee@example.com>');
 my $mid = $eml->header_raw('Message-ID');
 my $different = eml_load('t/msg_iter-order.eml');
 $different->header_set('Message-ID', $mid);
@@ -47,6 +49,8 @@ for my $strat (undef, 'content') {
 	ok(!$dd->is_dup($different), "different is_dup with $desc dedupe");
 	ok(!$dd->is_smsg_dup($smsg), "is_smsg_dup pass w/ $desc dedupe");
 	ok($dd->is_smsg_dup($smsg), "is_smsg_dup reject w/ $desc dedupe");
+	ok(!$dd->is_dup($sameish),
+		"Message-ID accounted for w/ same content otherwise");
 }
 $lei->{opt}->{dedupe} = 'bogus';
 eval { PublicInbox::LeiDedupe->new($lei) };

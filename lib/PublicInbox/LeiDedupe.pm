@@ -2,7 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::LeiDedupe;
 use v5.12;
-use PublicInbox::ContentHash qw(content_hash git_sha);
+use PublicInbox::ContentHash qw(content_hash content_digest git_sha);
 use PublicInbox::SHA qw(sha256);
 
 # n.b. mutt sets most of these headers not sure about Bytes
@@ -69,7 +69,12 @@ sub dedupe_content ($) {
 	my ($skv) = @_;
 	(sub { # may be called in a child process
 		my ($eml) = @_; # $oidhex = $_[1], ignored
-		$skv->set_maybe(content_hash($eml), '');
+
+		# we must account for Message-ID via hash_mids, since
+		# (unlike v2 dedupe) Message-ID is not accounted for elsewhere:
+		$skv->set_maybe(content_digest($eml, PublicInbox::SHA->new(256),
+				1 # hash_mids
+				)->digest, '');
 	}, sub {
 		my ($smsg) = @_;
 		$skv->set_maybe(smsg_hash($smsg), '');

@@ -54,16 +54,23 @@ sub content_dig_i {
 	$dig->add($s);
 }
 
-sub content_digest ($;$) {
-	my ($eml, $dig) = @_;
+sub content_digest ($;$$) {
+	my ($eml, $dig, $hash_mids) = @_;
 	$dig //= Digest::SHA->new(256);
 
 	# References: and In-Reply-To: get used interchangeably
 	# in some "duplicates" in LKML.  We treat them the same
 	# in SearchIdx, so treat them the same for this:
 	# do NOT consider the Message-ID as part of the content_hash
-	# if we got here, we've already got Message-ID reuse
-	my %seen = map { $_ => 1 } @{mids($eml)};
+	# if we got here, we've already got Message-ID reuse for v2.
+	#
+	# However, `lei q --dedupe=content' does use $hash_mids since
+	# it doesn't have any other dedupe
+	my $mids = mids($eml);
+	if ($hash_mids) {
+		$dig->add("mid\0$_\0") for @$mids;
+	}
+	my %seen = map { $_ => 1 } @$mids;
 	for (grep { !$seen{$_}++ } @{references($eml)}) {
 		utf8::encode($_);
 		$dig->add("ref\0$_\0");
