@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 test_lei(sub {
@@ -110,6 +110,21 @@ $res = json_utf8->decode($lei_out);
 is_deeply($res->[0]->{kw}, ['seen'], 'keyword set');
 is_deeply($res->[0]->{L}, ['inbox'], 'label set');
 
+# idempotent import can add label
+lei_ok([qw(import -F eml - +L:boombox)],
+	undef, { %$lei_opt, 0 => \$eml_str });
+lei_ok(qw(q m:inbox@example.com));
+$res = json_utf8->decode($lei_out);
+is_deeply($res->[0]->{kw}, ['seen'], 'keyword remains set');
+is_deeply($res->[0]->{L}, [qw(boombox inbox)], 'new label added');
+
+# idempotent import can add keyword
+lei_ok([qw(import -F eml - +kw:answered)],
+	undef, { %$lei_opt, 0 => \$eml_str });
+lei_ok(qw(q m:inbox@example.com));
+$res = json_utf8->decode($lei_out);
+is_deeply($res->[0]->{kw}, [qw(answered seen)], 'keyword added');
+is_deeply($res->[0]->{L}, [qw(boombox inbox)], 'labels preserved');
 
 # see t/lei_to_mail.t for "import -F mbox*"
 });

@@ -387,8 +387,14 @@ sub add_eml {
 		_lms_rw($self)->set_src($smsg->oidbin, @{$vmd->{sync_info}});
 	}
 	unless ($im_mark) { # duplicate blob returns undef
-		return unless wantarray;
+		return unless wantarray || $vmd;
 		my @docids = $oidx->blob_exists($smsg->{blob});
+		if ($vmd) {
+			for my $docid (@docids) {
+				my $idx = $eidx->idx_shard($docid);
+				_add_vmd($self, $idx, $docid, $vmd);
+			}
+		}
 		return _docids_and_maybe_kw $self, \@docids;
 	}
 
