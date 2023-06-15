@@ -50,6 +50,10 @@ A prefix can specify the format of the output: C<maildir>,
 C<mboxrd>, C<mboxcl2>, C<mboxcl>, C<mboxo>.  For a description of
 mail formats, see L<lei-mail-formats(5)>.
 
+C<v2:/path/to/inbox> may be used to create a new inbox of
+L<public-inbox-v2-format(5)>.  The new inbox will not be configured
+in the L<public-inbox-config(5)> file.
+
 C<maildir> is the default for an existing directory or non-existing path.
 
 Default: C<-> (stdout)
