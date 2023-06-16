@@ -225,15 +225,19 @@ sub mbox_all {
 	return mbox_all_ids($ctx) if $q_string !~ /\S/;
 	my $srch = $ctx->{ibx}->isrch or
 		return PublicInbox::WWW::need($ctx, 'Search');
-	my $over = $ctx->{ibx}->over or
-		return PublicInbox::WWW::need($ctx, 'Overview');
 
 	my $qopts = $ctx->{qopts} = { relevance => -2 }; # ORDER BY docid DESC
 
 	# {threadid} limits results to a given thread
 	# {threads} collapses results from messages in the same thread,
 	# allowing us to use ->expand_thread w/o duplicates in our own code
-	$qopts->{threadid} = $over->mid2tid($ctx->{mid}) if defined($ctx->{mid});
+	if (defined($ctx->{mid})) {
+		my $over = ($ctx->{ibx}->{isrch} ?
+				$ctx->{ibx}->{isrch}->{es}->over :
+				$ctx->{ibx}->over) or
+			return PublicInbox::WWW::need($ctx, 'Overview');
+		$qopts->{threadid} = $over->mid2tid($ctx->{mid});
+	}
 	$qopts->{threads} = 1 if $q->{t};
 	$srch->query_approxidate($ctx->{ibx}->git, $q_string);
 	my $mset = $srch->mset($q_string, $qopts);

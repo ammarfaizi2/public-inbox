@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -21,7 +21,28 @@ mkdir "$home/.public-inbox" or BAIL_OUT $!;
 my $pi_config = "$home/.public-inbox/config";
 cp($cfg_path, $pi_config) or BAIL_OUT;
 my $env = { HOME => $home };
-run_script([qw(-extindex --all), "$tmpdir/eidx"], $env) or BAIL_OUT;
+my $m2t = create_inbox 'mid2tid', version => 2, indexlevel => 'basic', sub {
+	my ($im, $ibx) = @_;
+	for my $n (1..3) {
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail 'add';
+Date: Fri, 02 Oct 1993 00:0$n:00 +0000
+Message-ID: <t\@$n>
+Subject: tid $n
+From: x\@example.com
+References: <a-mid\@b>
+
+$n
+EOM
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail 'add';
+Date: Fri, 02 Oct 1993 00:0$n:00 +0000
+Message-ID: <ut\@$n>
+Subject: unrelated tid $n
+From: x\@example.com
+References: <b-mid\@b>
+
+EOM
+	}
+};
 {
 	open my $cfgfh, '>>', $pi_config or BAIL_OUT;
 	$cfgfh->autoflush(1);
@@ -32,8 +53,14 @@ run_script([qw(-extindex --all), "$tmpdir/eidx"], $env) or BAIL_OUT;
 [publicinbox]
 	wwwlisting = all
 	grokManifest = all
+[publicinbox "m2t"]
+	inboxdir = $m2t->{inboxdir}
+	address = $m2t->{-primary_address}
 EOM
+	close $cfgfh or xbail "close: $!";
 }
+
+run_script([qw(-extindex --all), "$tmpdir/eidx"], $env) or BAIL_OUT;
 my $www = PublicInbox::WWW->new(PublicInbox::Config->new($pi_config));
 my $client = sub {
 	my ($cb) = @_;
@@ -83,6 +110,14 @@ my $client = sub {
 		't2 manifest');
 	is_deeply([ sort keys %{$m->{'/t1'}} ], [ '/t1' ],
 		't2 manifest');
+
+	# ensure ibx->{isrch}->{es}->over is used instead of ibx->over:
+	$res = $cb->(POST("/m2t/t\@1/?q=dt:19931002000259..&x=m"));
+	is($res->code, 200, 'hit on mid2tid query');
+	$res = $cb->(POST("/m2t/t\@1/?q=dt:19931002000400..&x=m"));
+	is($res->code, 404, '404 on out-of-range mid2tid query');
+	$res = $cb->(POST("/m2t/t\@1/?q=s:unrelated&x=m"));
+	is($res->code, 404, '404 on cross-thread search');
 };
 test_psgi(sub { $www->call(@_) }, $client);
 %$env = (%$env, TMPDIR => $tmpdir, PI_CONFIG => $pi_config);
