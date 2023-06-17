@@ -64,7 +64,7 @@ EOM
 		$pfx = qr/\A\Q$pfx\E/i;
 		my $tmp = $top;
 		$top = '';
-		my ($s, $u, $same_host);
+		my ($s, $u);
 		my $q_val = delete($ctx->{-q_value_html}) // '';
 		$q_val = qq(\nvalue="$q_val") if $q_val ne '';
 		for (@url) {
