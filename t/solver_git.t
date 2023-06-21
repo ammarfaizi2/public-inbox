@@ -1,14 +1,14 @@
 #!perl -w
 # Copyright (C)  all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use Cwd qw(abs_path);
-require_git(2.6);
+require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(popen_rd);
-require_mods(qw(DBD::SQLite Search::Xapian Plack::Util));
+require_mods(qw(DBD::SQLite Search::Xapian URI::Escape));
+require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
 my $git_dir = xqx([qw(git rev-parse --git-common-dir)], undef, $rdr);
 $git_dir = xqx([qw(git rev-parse --git-dir)], undef, $rdr) if $? != 0;
@@ -18,7 +18,6 @@ chomp $git_dir;
 # needed for alternates, and --absolute-git-dir is only in git 2.13+
 $git_dir = abs_path($git_dir);
 
-use_ok "PublicInbox::$_" for (qw(Inbox V2Writable Git SolverGit WWW));
 my $patch2 = eml_load 't/solve/0002-rename-with-modifications.patch';
 my $patch2_oid = git_sha(1, $patch2)->hexdigest;
 
@@ -209,10 +208,11 @@ my $hinted = $res;
 shift @$res; shift @$hinted;
 is_deeply($res, $hinted, 'hints work (or did not hurt :P');
 
-my @psgi = qw(HTTP::Request::Common Plack::Test URI::Escape Plack::Builder);
+my @psgi = qw(HTTP::Request::Common Plack::Test Plack::Builder);
 SKIP: {
 	require_mods(@psgi, 7 + scalar(@psgi));
 	use_ok($_) for @psgi;
+	require PublicInbox::WWW;
 	my $binfoo = "$ibx->{inboxdir}/binfoo.git";
 	my $l = "$ibx->{inboxdir}/inbox.lock";
 	-f $l or BAIL_OUT "BUG: $l missing: $!";
