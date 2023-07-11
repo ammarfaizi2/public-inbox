@@ -174,6 +174,7 @@ WriteMakefile(
 		'File::Temp' => '0.19', # for ->tmpdir support
 		'Getopt::Long' => 0,
 		'Exporter' => 0,
+		'IO::Poll' => 0,
 		# ExtUtils::MakeMaker # this file won't run w/o it...
 	},
 	MAN3PODS => \%man3,
