@@ -5,7 +5,7 @@
 # Remove this when supported LTS/enterprise distros are all
 # Linux::Inotify2 >= 2.3
 package PublicInbox::LI2Wrap;
-use v5.10.1;
+use v5.12;
 our @ISA = qw(Linux::Inotify2);
 
 sub wrapclose {
