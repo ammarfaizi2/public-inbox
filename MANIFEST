@@ -338,6 +338,7 @@ lib/PublicInbox/Spawn.pm
 lib/PublicInbox/SpawnPP.pm
 lib/PublicInbox/Syscall.pm
 lib/PublicInbox/TLS.pm
+lib/PublicInbox/TailNotify.pm
 lib/PublicInbox/TestCommon.pm
 lib/PublicInbox/Tmpfile.pm
 lib/PublicInbox/URIimap.pm
@@ -579,6 +580,7 @@ t/solve/bare.patch
 t/solver_git.t
 t/spamcheck_spamc.t
 t/spawn.t
+t/tail_notify.t
 t/thread-cycle.t
 t/thread-index-gap.t
 t/time.t

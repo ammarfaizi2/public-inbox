@@ -2,10 +2,11 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # end-to-end IMAP tests, see unit tests in t/imap.t, too
-use strict;
-use v5.10.1;
+use v5.12;
 use Time::HiRes ();
+use PublicInbox::DS qw(now);
 use PublicInbox::TestCommon;
+use PublicInbox::TailNotify;
 use PublicInbox::Config;
 require_mods(qw(-imapd Mail::IMAPClient));
 my $imap_client = 'Mail::IMAPClient';
@@ -436,103 +437,6 @@ ok($mic->logout, 'logged out');
 	like(<$c>, qr/\Atagonly BAD Error in IMAP command/, 'tag-only line');
 }
 
-SKIP: {
-	use_ok 'PublicInbox::InboxIdle';
-	require_git '1.8.5', 4;
-	my $old_env = { HOME => $ENV{HOME} };
-	my $home = "$tmpdir/watch_home";
-	mkdir $home or BAIL_OUT $!;
-	mkdir "$home/.public-inbox" or BAIL_OUT $!;
-	local $ENV{HOME} = $home;
-	my $name = 'watchimap';
-	my $addr = "i1-$level\@example.com";
-	my $url = "http://example.com/i1";
-	my $inboxdir = "$tmpdir/watchimap";
-	my $cmd = ['-init', '-V2', '-Lbasic', $name, $inboxdir, $url, $addr];
-	my $imapurl = "imap://$ihost:$iport/inbox.i1.0";
-	run_script($cmd) or BAIL_OUT("init $name");
-	xsys(qw(git config), "--file=$home/.public-inbox/config",
-			"publicinbox.$name.watch",
-			$imapurl) == 0 or BAIL_OUT "git config $?";
-	my $cfg = PublicInbox::Config->new;
-	PublicInbox::DS->Reset;
-	my $ii = PublicInbox::InboxIdle->new($cfg);
-	my $cb = sub { @PublicInbox::DS::post_loop_do = (sub {}) };
-	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
-	$cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
-	my $watcherr = "$tmpdir/watcherr";
-	open my $err_wr, '>>', $watcherr or BAIL_OUT $!;
-	open my $err, '<', $watcherr or BAIL_OUT $!;
-	my $w = start_script(['-watch'], undef, { 2 => $err_wr });
-
-	diag 'waiting for initial fetch...';
-	PublicInbox::DS::event_loop();
-	diag 'inbox unlocked on initial fetch, waiting for IDLE';
-
-	tick until (grep(/# \S+ idling/, <$err>));
-	open my $fh, '<', 't/iso-2202-jp.eml' or BAIL_OUT $!;
-	$old_env->{ORIGINAL_RECIPIENT} = $addr;
-	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
-		'delivered a message for IDLE to kick -watch') or
-		diag "mda error \$?=$?";
-	diag 'waiting for IMAP IDLE wakeup';
-	@PublicInbox::DS::post_loop_do = ();
-	PublicInbox::DS::event_loop();
-	diag 'inbox unlocked on IDLE wakeup';
-
-	# try again with polling
-	xsys(qw(git config), "--file=$home/.public-inbox/config",
-		'imap.PollInterval', 0.11) == 0
-		or BAIL_OUT "git config $?";
-	$w->kill('HUP');
-	diag 'waiting for -watch reload + initial fetch';
-	tick until (grep(/# will check/, <$err>));
-
-	open $fh, '<', 't/psgi_attach.eml' or BAIL_OUT $!;
-	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
-		'delivered a message for -watch PollInterval');
-
-	diag 'waiting for PollInterval wakeup';
-	@PublicInbox::DS::post_loop_do = ();
-	PublicInbox::DS::event_loop();
-	diag 'inbox unlocked (poll)';
-	$w->kill;
-	$w->join;
-	is($?, 0, 'no error in exited -watch process');
-
-	$cfg->each_inbox(sub { shift->unsubscribe_unlock('ident') });
-	$ii->close;
-	PublicInbox::DS->Reset;
-	seek($err, 0, 0);
-	my @err = grep(!/^(?:I:|#)/, <$err>);
-	is(@err, 0, 'no warnings/errors from -watch'.join(' ', @err));
-
-	if ($ENV{TEST_KILL_IMAPD}) { # not sure how reliable this test can be
-		xsys(qw(git config), "--file=$home/.public-inbox/config",
-			qw(--unset imap.PollInterval)) == 0
-			or BAIL_OUT "git config $?";
-		truncate($err_wr, 0) or BAIL_OUT $!;
-		my @t0 = times;
-		$w = start_script(['-watch'], undef, { 2 => $err_wr });
-		seek($err, 0, 0);
-		tick until (grep(/# \S+ idling/, <$err>));
-		diag 'killing imapd, waiting for CPU spins';
-		my $delay = 0.11;
-		$td->kill(9);
-		tick $delay;
-		$w->kill;
-		$w->join;
-		is($?, 0, 'no error in exited -watch process');
-		my @t1 = times;
-		my $c = $t1[2] + $t1[3] - $t0[2] - $t0[3];
-		my $thresh = (0.9 * $delay);
-		diag "c=$c, threshold=$thresh";
-		ok($c < $thresh, 'did not burn much CPU');
-		is_deeply([grep(/ line \d+$/m, <$err>)], [],
-				'no backtraces from errors');
-	}
-}
-
 {
 	ok(my $ic = $imap_client->new(%mic_opt), 'logged in');
 	my $mb = "$ibx[0]->{newsgroup}.$first_range";
@@ -558,6 +462,125 @@ EOF
 		ok($ic->examine($mb), "EXAMINE $mb");
 		my $raw = $ic->get_envelope($uidnext);
 		is_deeply($envl, $raw, 'raw and compressed match');
+	}
+}
+
+my $wait_re = sub {
+	my ($tail_notify, $re) = @_;
+	my $end = now() + 5;
+	my (@l, @all);
+	until (grep(/$re/, @l = $tail_notify->getlines(5)) || now > $end) {
+		push @all, @l;
+		@l = ();
+	}
+	return \@l if @l;
+	diag explain(\@all);
+	xbail "never got `$re' message";
+};
+
+my $watcherr = "$tmpdir/watcherr";
+
+SKIP: {
+	use_ok 'PublicInbox::InboxIdle';
+	require_git '1.8.5', 4;
+	my $old_env = { HOME => $ENV{HOME} };
+	my $home = "$tmpdir/watch_home";
+	mkdir $home or BAIL_OUT $!;
+	mkdir "$home/.public-inbox" or BAIL_OUT $!;
+	local $ENV{HOME} = $home;
+	my $name = 'watchimap';
+	my $addr = "i1-$level\@example.com";
+	my $url = "http://example.com/i1";
+	my $inboxdir = "$tmpdir/watchimap";
+	my $cmd = ['-init', '-V2', '-Lbasic', $name, $inboxdir, $url, $addr];
+	my $imapurl = "imap://$ihost:$iport/inbox.i1.0";
+	run_script($cmd) or BAIL_OUT("init $name");
+	xsys(qw(git config), "--file=$home/.public-inbox/config",
+			"publicinbox.$name.watch",
+			$imapurl) == 0 or BAIL_OUT "git config $?";
+	my $cfg = PublicInbox::Config->new;
+	PublicInbox::DS->Reset;
+	my $ii = PublicInbox::InboxIdle->new($cfg);
+	my $cb = sub { @PublicInbox::DS::post_loop_do = (sub {}) };
+	my $obj = bless \$cb, 'PublicInbox::TestCommon::InboxWakeup';
+	$cfg->each_inbox(sub { $_[0]->subscribe_unlock('ident', $obj) });
+	open my $err_wr, '>>', $watcherr or BAIL_OUT $!;
+	my $errw = PublicInbox::TailNotify->new($watcherr);
+	my $w = start_script(['-watch'], undef, { 2 => $err_wr });
+
+	diag 'waiting for initial fetch...';
+	PublicInbox::DS::event_loop();
+	diag 'inbox unlocked on initial fetch, waiting for IDLE';
+
+	$wait_re->($errw, qr/# \S+ idling/);
+
+	open my $fh, '<', 't/iso-2202-jp.eml' or BAIL_OUT $!;
+	$old_env->{ORIGINAL_RECIPIENT} = $addr;
+	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
+		'delivered a message for IDLE to kick -watch') or
+		diag "mda error \$?=$?";
+	diag 'waiting for IMAP IDLE wakeup';
+	@PublicInbox::DS::post_loop_do = ();
+	PublicInbox::DS::event_loop();
+	diag 'inbox unlocked on IDLE wakeup';
+
+	# try again with polling
+	xsys(qw(git config), "--file=$home/.public-inbox/config",
+		'imap.PollInterval', 0.11) == 0
+		or BAIL_OUT "git config $?";
+	$w->kill('HUP');
+	diag 'waiting for -watch reload + initial fetch';
+
+	$wait_re->($errw, qr/# will check/);
+
+	open $fh, '<', 't/psgi_attach.eml' or BAIL_OUT $!;
+	ok(run_script([qw(-mda --no-precheck)], $old_env, { 0 => $fh }),
+		'delivered a message for -watch PollInterval');
+
+	diag 'waiting for PollInterval wakeup';
+	@PublicInbox::DS::post_loop_do = ();
+	PublicInbox::DS::event_loop();
+	diag 'inbox unlocked (poll)';
+	$w->kill;
+	$w->join;
+	is($?, 0, 'no error in exited -watch process');
+
+	$cfg->each_inbox(sub { shift->unsubscribe_unlock('ident') });
+	$ii->close;
+	PublicInbox::DS->Reset;
+	open my $errfh, '<', $watcherr or xbail "open: $!";
+	my @err = grep(!/^(?:I:|#)/, <$errfh>);
+	is(@err, 0, 'no warnings/errors from -watch'.join(' ', @err));
+
+	SKIP: { # not sure how reliable this test can be
+		skip 'TEST_KILL_IMAPD not set', 1 if !$ENV{TEST_KILL_IMAPD};
+		$^O eq 'linux' or
+			diag "TEST_KILL_IMAPD may not be reliable under $^O";
+		xsys(qw(git config), "--file=$home/.public-inbox/config",
+			qw(--unset imap.PollInterval)) == 0
+			or BAIL_OUT "git config $?";
+		unlink $watcherr or xbail $!;
+		open my $err_wr, '>>', $watcherr or xbail $!;
+		my @t0 = times;
+		$w = start_script(['-watch'], undef, { 2 => $err_wr });
+
+		$wait_re->($errw, qr/# \S+ idling/);
+
+		diag 'killing imapd, waiting for CPU spins';
+		my $delay = 0.11;
+		$td->kill(9);
+		tick $delay;
+		$w->kill;
+		$w->join;
+		is($?, 0, 'no error in exited -watch process');
+		my @t1 = times;
+		my $c = $t1[2] + $t1[3] - $t0[2] - $t0[3];
+		my $thresh = (0.9 * $delay);
+		diag "c=$c, threshold=$thresh";
+		ok($c < $thresh, 'did not burn much CPU');
+		open $errfh, '<', $watcherr or xbail "open: $!";
+		is_deeply([grep(/ line \d+$/m, <$errfh>)], [],
+				'no backtraces from errors');
 	}
 }
 
