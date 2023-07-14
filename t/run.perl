@@ -85,9 +85,13 @@ if ($shuffle) {
 	@tests = sort {
 		($t->{$b}->{elapsed} // 0) <=> ($t->{$a}->{elapsed} // 0)
 	} @tests;
-	say "# top 10 longest tests (`make check' regenerates)";
-	for (@tests[0..9]) {
-		printf "# %0.6f %s\n", $t->{$_}->{elapsed}, $_;
+	if (scalar(@tests) > 1) {
+		my $end = $#tests > 9 ? 9 : $#tests;
+		my $nr = $end + 1;
+		say "# top $nr longest tests (`make check' regenerates)";
+		for (grep defined, @tests[0..$end]) {
+			printf "# %0.6f %s\n", $t->{$_}->{elapsed}, $_;
+		}
 	}
 }
 
@@ -208,7 +212,7 @@ for (my $i = $repeat; $i != 0; $i--) {
 	# fill the queue before forking so children can start earlier
 	$wr->autoflush(1);
 	$wr->blocking(0);
-	my $todo_buf = join('', map { pack('I', $_) } (0..$#todo));
+	my $todo_buf = pack('I*', 0..$#todo);
 	my $woff = syswrite($wr, $todo_buf) // DIE "syswrite: $!";
 	substr($todo_buf, 0, $woff, '');
 	$eof = undef;
