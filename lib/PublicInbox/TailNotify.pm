@@ -43,7 +43,6 @@ sub new {
 	} else {
 		$self->{inot} = PublicInbox::FakeInotify->new;
 	}
-	$self->{inot}->watch($fn, $TAIL_MOD);
 	reopen_file($self);
 	$self->{inot}->watch($fn, $TAIL_MOD);
 	$self;
@@ -64,6 +63,8 @@ again:
 			if (defined $end) {
 				$wait = $end - now;
 				$wait = 0 if $wait < 0;
+			} else {
+				undef $wait;
 			}
 		}
 		select($rfds, undef, undef, $wait);
