@@ -4,9 +4,7 @@
 # handles "lei q" command and provides internals for
 # several other sub-commands (up, lcat, ...)
 package PublicInbox::LeiQuery;
-use strict;
-use v5.10.1;
-use PublicInbox::OverIdx;
+use v5.12;
 
 sub prep_ext { # externals_each callback
 	my ($lxs, $exclude, $loc) = @_;
@@ -18,6 +16,7 @@ sub _start_query { # used by "lei q" and "lei up"
 	require PublicInbox::LeiOverview;
 	PublicInbox::LeiOverview->new($self) or return;
 	my $opt = $self->{opt};
+	require PublicInbox::OverIdx; # loads DBI
 	PublicInbox::OverIdx::fork_ok($opt);
 	my ($xj, $mj) = split(/,/, $opt->{jobs} // '');
 	(defined($xj) && $xj ne '' && $xj !~ /\A[1-9][0-9]*\z/) and
