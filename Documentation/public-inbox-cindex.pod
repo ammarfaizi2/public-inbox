@@ -1,0 +1,141 @@
+=head1 NAME
+
+public-inbox-cindex - create and update search for code repositories
+
+=head1 SYNOPSIS
+
+public-inbox-cindex [OPTIONS] GIT_DIR...
+
+public-inbox-cindex [OPTIONS] --update
+
+=head1 DESCRIPTION
+
+public-inbox-cindex creates and updates the Xapian search index for
+git code repository (C<coderepo>) search.  It can also associate
+(fuzzy join) coderepos with Xapian-indexed inboxes.  It only indexes
+commit messages and diffs as they would show up in an email.  It
+does not index the contents of blobs directly.
+
+Like inbox indices, coderepo indices can either be internal or external
+to a coderepo.  Either way, they're both created and updated through
+public-inbox-cindex.
+
+Once the initial indices are created by public-inbox-cindex,
+the L</--update> switch will incrementally update them.
+
+=head1 OPTIONS
+
+=over
+
+=item -d EXTDIR
+
+Use the given directory as an external index.  External indices are
+generally recommended to internal indices since they do not need
+write access to any code repositories themselves.  They are highly
+recommended when many repositories share a common history or if
+there is an M:N relationship between inboxes and coderepos.
+
+=item -j JOBS
+
+=item --jobs=JOBS
+
+Influences the number of Xapian indexing shards.
+
+If the repo has not been indexed or initialized, C<JOBS - 1>
+shards will be created.
+
+Default: the number of existing Xapian shards
+
+=item --reindex
+
+Forces a re-index of all commits.  This can be used for in-place
+upgrades and bugfixes while read-only processes are utilizing the index.
+
+=item --update
+
+=item -u
+
+Incrementally index all previously-indexed coderepos.
+
+=item --prune
+
+Removes commits which are no longer accessible via git.
+Use this after L<git-gc(1)> (or L<git-prune(1)>).
+
+=item --no-fsync
+
+Disables L<fsync(2)> and L<fdatasync(2)> operations on SQLite
+and Xapian.  This is only effective with Xapian 1.4+.  This is
+primarily intended for systems with low RAM and the small
+(default) C<--batch-size=1m>.  Users of large C<--batch-size>
+may even find disabling L<fdatasync(2)> causes too much dirty
+data to accumulate, resulting on latency spikes from writeback.
+
+=item --max-size SIZE
+
+=item --batch-size SIZE
+
+These affect the coderepo index the same way they affect
+inbox indices.  See L<public-inbox-index(1)>.
+
+=back
+
+=head1 FILES
+
+For internal indices, the Xapian DB is stored in
+C<$GIT_DIR/public-inbox-cindex>.
+
+External indices are stored wherever L</-d> EXTDIR points.
+
+=head1 CONFIGURATION
+
+=over 8
+
+=item publicinbox.indexMaxSize
+
+=item publicinbox.indexBatchSize
+
+These configuration knobs affect the coderepo index the same way
+they affect inbox indices.  See L<public-inbox-index(1)>.
+
+=back
+
+=head1 ENVIRONMENT
+
+=over 8
+
+=item PI_CONFIG
+
+Used to override the default "~/.public-inbox/config" value.
+
+=item XAPIAN_FLUSH_THRESHOLD
+
+The number of documents to update before committing changes to
+disk.  This environment is handled directly by Xapian, refer to
+Xapian API documentation for more details.
+
+Use C<publicinbox.indexBatchSize> instead.
+
+=back
+
+=head1 UPGRADING
+
+Occasionally, public-inbox will update its schema version and
+require a full reindex by running this command with L</--reindex>.
+
+=head1 CONTACT
+
+Feedback welcome via plain-text mail to L<mailto:meta@public-inbox.org>
+
+The mail archives are hosted at L<https://public-inbox.org/meta/> and
+L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta/>
+
+=head1 COPYRIGHT
+
+Copyright all contributors L<mailto:meta@public-inbox.org>
+
+License: AGPL-3.0+ L<https://www.gnu.org/licenses/agpl-3.0.txt>
+
+=head1 SEE ALSO
+
+L<public-inbox-index(1)>

@@ -67,6 +67,7 @@ Documentation/lei.pod
 Documentation/lei_design_notes.txt
 Documentation/marketing.txt
 Documentation/mknews.perl
+Documentation/public-inbox-cindex.pod
 Documentation/public-inbox-clone.pod
 Documentation/public-inbox-compact.pod
 Documentation/public-inbox-config.pod
