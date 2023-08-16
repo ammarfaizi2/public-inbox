@@ -121,7 +121,7 @@ Default: none, uses C<publicinbox.indexBatchSize>
 
 =head1 UPGRADING
 
-Occasionally, public-inbox will update it's schema version and
+Occasionally, public-inbox will update its schema version and
 require a full index by running this command.
 
 =head1 CONTACT
