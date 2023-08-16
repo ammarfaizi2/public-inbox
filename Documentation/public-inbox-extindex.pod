@@ -93,6 +93,12 @@ Putting an C<extindex> entry in the config allows L<PublicInbox::WWW>.
 You can have any number of C<extentry.$NAME> sections where C<$NAME>
 is something other than C<all> to display a union of several inboxes.
 
+It is strongly recommended any public inboxes indexed by this command
+have a stable C<publicinbox.$NAME.newsgroup> entry (regardless of
+the presence of an NNTP or IMAP server).  Otherwise, public-inbox-extindex
+will use C<publicinbox.$NAME.inboxdir> as an internal key which can
+cause needless reindexing and require L<--gc> if inboxes are relocated.
+
 See L<public-inbox-config(5)> for more details.
 
 =head1 ENVIRONMENT
