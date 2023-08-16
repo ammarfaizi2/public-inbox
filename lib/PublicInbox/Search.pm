@@ -576,12 +576,9 @@ sub all_terms {
 	my $end = $self->{xdb}->allterms_end($pfx);
 	my %ret;
 	for (; $cur != $end; $cur++) {
-		my $tn = $cur->get_termname;
-		index($tn, $pfx) == 0 and
-			$ret{substr($tn, length($pfx))} = undef;
+		$ret{substr($cur->get_termname, length($pfx))} = undef;
 	}
 	wantarray ? (sort keys %ret) : \%ret;
 }
-
 
 1;
