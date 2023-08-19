@@ -47,11 +47,11 @@ SELECT MAX(docid) FROM xref3 WHERE ibx_id = ? AND xnum >= ? AND xnum <= ?
 		$r[1] = $sth->fetchrow_array;
 		if (defined($r[1]) && defined($r[0])) {
 			$opt{limit} = $r[1] - $r[0] + 1;
-		} else { # these are fed to SQLite
-			$r[1] //= '0x7'.('f'x15); # string for some 32-bit Perl
+		} else {
+			$r[1] //= $self->{es}->xdb->get_lastdocid;
 			$r[0] //= 0;
 		}
-		$opt{uid_range} = \@r;
+		$opt{uid_range} = \@r; # these are fed to Xapian and SQLite
 	}
 	$self->{es}->mset($str, \%opt);
 }
