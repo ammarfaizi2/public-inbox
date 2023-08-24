@@ -162,7 +162,6 @@ lib/PublicInbox/AltId.pm
 lib/PublicInbox/AutoReap.pm
 lib/PublicInbox/Cgit.pm
 lib/PublicInbox/CidxComm.pm
-lib/PublicInbox/CidxDumpShardRoots.pm
 lib/PublicInbox/CidxLogP.pm
 lib/PublicInbox/CidxRecvIbx.pm
 lib/PublicInbox/CidxXapHelperAux.pm

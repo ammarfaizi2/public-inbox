@@ -10,12 +10,8 @@ use PublicInbox::Syscall qw(EPOLLIN);
 
 # rpipe connects to req->fp[1] in xap_helper.h
 sub new {
-	my ($cls, $rpipe, $cidx, $pfx, $associate) = @_;
-	my $self = bless {
-		cidx => $cidx,
-		pfx => $pfx,
-		associate => $associate
-	}, $cls;
+	my ($cls, $rpipe, $cidx, $pfx) = @_;
+	my $self = bless { cidx => $cidx, pfx => $pfx }, $cls;
 	$rpipe->blocking(0);
 	$self->SUPER::new($rpipe, EPOLLIN);
 }
@@ -36,7 +32,7 @@ sub event_step {
 	my @lines = split(/^/m, $buf);
 	$self->{buf} = pop @lines if substr($lines[-1], -1) ne "\n";
 	for my $l (@lines) {
-		if ($l =~ /\Amset\.size=[0-9]+\n\z/) {
+		if ($l =~ /\Amset\.size=[0-9]+ nr_out=[0-9]+\n\z/) {
 			delete $self->{cidx}->{PENDING}->{$pfx};
 			$self->{cidx}->index_next;
 		}

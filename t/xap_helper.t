@@ -91,7 +91,7 @@ my $test = sub {
 	my $res = do { local $/; <$r> };
 	is(join('', @res), $res, 'got identical response w/ error pipe');
 	my $stats = do { local $/; <$err_rd> };
-	is($stats, "mset.size=6\n", 'mset.size reported');
+	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported');
 
 	if ($arg[-1] !~ /\('-j0'\)/) {
 		kill('KILL', $cinfo{pid});
@@ -105,12 +105,14 @@ my $test = sub {
 };
 my $ar;
 
-$ar = $test->(qw[-MPublicInbox::XapHelper -e
-		PublicInbox::XapHelper::start('-j0')]);
-$ar = $test->(qw[-MPublicInbox::XapHelper -e
-		PublicInbox::XapHelper::start('-j1')]);
-
-my @NO_CXX = (0);
+my @NO_CXX;
+if (!$ENV{TEST_XH_CXX_ONLY}) {
+	$ar = $test->(qw[-MPublicInbox::XapHelper -e
+			PublicInbox::XapHelper::start('-j0')]);
+	$ar = $test->(qw[-MPublicInbox::XapHelper -e
+			PublicInbox::XapHelper::start('-j1')]);
+	push @NO_CXX, 0;
+}
 SKIP: {
 	eval {
 		require PublicInbox::XapHelperCxx;
@@ -124,6 +126,20 @@ SKIP: {
 	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
 			PublicInbox::XapHelperCxx::start('-j1')]);
 };
+
+require PublicInbox::CodeSearch;
+my $cs_int = PublicInbox::CodeSearch->new("$crepo/public-inbox-cindex");
+my $root2id_file = "$tmp/root2id";
+my @id2root;
+{
+	open my $fh, '>', $root2id_file;
+	my $i = -1;
+	for ($cs_int->all_terms('G')) {
+		print $fh $_, "\0", ++$i, "\0";
+		$id2root[$i] = $_;
+	}
+	close $fh;
+}
 
 for my $n (@NO_CXX) {
 	local $ENV{PI_NO_CXX} = $n;
@@ -141,7 +157,19 @@ for my $n (@NO_CXX) {
 	my $res = do { local $/; <$r> };
 	is($res, "$dfid 9\n$mid 9\n", "got expected result ($xhc->{impl})");
 	my $err = do { local $/; <$err_r> };
-	is($err, "mset.size=1\n", "got expected status ($xhc->{impl})");
+	is($err, "mset.size=1 nr_out=2\n", "got expected status ($xhc->{impl})");
+
+	pipe($err_r, $err_w);
+	$r = $xhc->mkreq([ undef, $err_w ], qw(dump_roots -c -A XDFID),
+			(map { ('-d', $_) } @int),
+			$root2id_file, 'dt:19700101'.'000000..');
+	close $err_w;
+	my @res = <$r>;
+	is(scalar(@res), 5, 'got expected rows');
+	is(scalar(@res), scalar(grep(/\A[0-9a-f]{40,} [0-9]+\n\z/, @res)),
+		'entries match format');
+	$err = do { local $/; <$err_r> };
+	is($err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})");
 }
 
 done_testing;

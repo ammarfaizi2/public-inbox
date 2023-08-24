@@ -8,7 +8,9 @@ use Getopt::Long (); # good API even if we only use short options
 our $GLP = Getopt::Long::Parser->new;
 $GLP->configure(qw(require_order bundling no_ignore_case no_auto_abbrev));
 use PublicInbox::Search qw(xap_terms);
+use PublicInbox::CodeSearch;
 use PublicInbox::IPC;
+use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
 our (%SRCH, %PIDS, $parent_pid);
 our $stderr = \*STDERR;
@@ -44,15 +46,63 @@ sub cmd_dump_ibx {
 	my $mset = $req->{srch}->mset($qry_str, $opt);
 	my $out = $req->{0};
 	$out->autoflush(1);
+	my $nr = 0;
 	for my $it ($mset->items) {
 		my $doc = $it->get_document;
 		for my $p (@pfx) {
 			for (xap_terms($p, $doc)) {
 				print $out "$_ $ibx_id\n" or die "print: $!";
+				++$nr;
 			}
 		}
 	}
-	if (my $err = $req->{1}) { say $err 'mset.size=', $mset->size }
+	if (my $err = $req->{1}) {
+		say $err 'mset.size='.$mset->size.' nr_out='.$nr
+	}
+}
+
+sub cmd_dump_roots {
+	my ($req, $root2id_file, $qry_str) = @_;
+	$qry_str // return
+		warn('usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR');
+	my @pfx = @{$req->{A}} or return warn('dump_roots requires -A PREFIX');
+	open my $fh, '<', $root2id_file or die "open($root2id_file): $!";
+	my %root2id; # record format: $OIDHEX "\0" uint32_t
+	my @x = split(/\0/, do { local $/; <$fh> } // die "readline: $!");
+	while (@x) {
+		my $oidhex = shift @x;
+		$root2id{$oidhex} = shift @x;
+	}
+	my $opt = { relevance => -1, limit => $req->{'m'},
+			offset => $req->{o} // 0 };
+	my $mset = $req->{srch}->mset($qry_str, $opt);
+	$req->{0}->autoflush(1);
+	my $buf = '';
+	my $nr = 0;
+	for my $it ($mset->items) {
+		my $doc = $it->get_document;
+		my $G = join(' ', map { $root2id{$_} } xap_terms('G', $doc));
+		for my $p (@pfx) {
+			for (xap_terms($p, $doc)) {
+				$buf .= "$_ $G\n";
+				++$nr;
+			}
+		}
+		if (!($nr & 0x3fff)) {
+			flock($fh, LOCK_EX) or die "flock: $!";
+			print { $req->{0} } $buf or die "print: $!";
+			flock($fh, LOCK_UN) or die "flock: $!";
+			$buf = '';
+		}
+	}
+	if ($buf ne '') {
+		flock($fh, LOCK_EX) or die "flock: $!";
+		print { $req->{0} } $buf or die "print: $!";
+		flock($fh, LOCK_UN) or die "flock: $!";
+	}
+	if (my $err = $req->{1}) {
+		say $err 'mset.size='.$mset->size.' nr_out='.$nr
+	}
 }
 
 sub dispatch {

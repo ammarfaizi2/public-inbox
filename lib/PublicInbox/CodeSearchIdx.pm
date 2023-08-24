@@ -87,7 +87,6 @@ our (
 	@AWK, @COMM, @SORT, # awk(1), comm(1), sort(1) commands
 	@ASSOC_PFX, # any combination of XDFID, XDFPRE, XDFPOST
 	$QRY_STR, # common query string for both code and inbox associations
-	@DUMP_SHARD_ROOTS_OK, # for associate
 	$DUMP_IBX_WPIPE, # goes to sort(1)
 	@ID2ROOT,
 );
@@ -505,25 +504,11 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $self->{shard}", MSG_EOR);
 }
 
-sub dump_shard_roots_done { # via PktOp on dump_shard_roots completion
-	my ($self, $associate, $n) = @_;
-	return if $DO_QUIT;
-	progress($self, "dump_shard_roots [$n] done");
-	$DUMP_SHARD_ROOTS_OK[$n] = 1;
-	# may run associate()
-}
-
 sub assoc_max_init ($) {
 	my ($self) = @_;
 	my $max = $self->{-opt}->{'associate-max'} // $ASSOC_MAX;
 	$max = $ASSOC_MAX if !$max;
 	$max < 0 ? ((2 ** 31) - 1) : $max;
-}
-
-# dump the patchids of each shard: $XDFID $ROOT1 $ROOT2..
-sub dump_shard_roots { # via wq_io_do for associate
-	my ($self, $root2id, $qry_str) = @_;
-	PublicInbox::CidxDumpShardRoots::start($self, $root2id, $qry_str);
 }
 
 sub dump_roots_once {
@@ -532,26 +517,33 @@ sub dump_roots_once {
 	$TODO{associating} = 1; # keep shards_active() happy
 	progress($self, 'dumping IDs from coderepos');
 	local $self->{xdb};
-	@ID2ROOT = map { pack('H*', $_) } $self->all_terms('G');
-	my $id = 0;
-	my %root2id = map { $_ => $id++ } @ID2ROOT;
-	# dump_shard_roots | sort -k1,1 | OFS=' ' uniq_fold >to_root_id
+	@ID2ROOT = $self->all_terms('G');
+	my $root2id = "$TMPDIR/root2id";
+	open my $fh, '>', $root2id or die "open($root2id): $!";
+	my $nr = -1;
+	for (@ID2ROOT) { print $fh $_, "\0", ++$nr, "\0" } # mmap-friendly
+	close $fh or die "close: $!";
+	# dump_roots | sort -k1,1 | OFS=' ' uniq_fold >to_root_id
 	pipe(my ($sort_r, $sort_w)) or die "pipe: $!";
 	pipe(my ($fold_r, $fold_w)) or die "pipe: $!";
 	my @sort = (@SORT, '-k1,1');
 	my $dst = "$TMPDIR/to_root_id";
-	open my $fh, '>', $dst or die "open($dst): $!";
+	open $fh, '>', $dst or die "open($dst): $!";
 	my $env = { %$CMD_ENV, OFS => ' ' };
 	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fold_w });
 	my $fold_pid = spawn(\@UNIQ_FOLD, $env, { 0 => $fold_r, 1 => $fh });
 	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
 	awaitpid($fold_pid, \&cmd_done, [@UNIQ_FOLD, '(shards)'], $associate);
-	my ($c, $p) = PublicInbox::PktOp->pair;
-	$c->{ops}->{dump_shard_roots_done} = [ $self, $associate ];
-	my @arg = ('dump_shard_roots', [ $p->{op_p}, $sort_w ],
-			\%root2id, $QRY_STR);
-	$_->wq_io_do(@arg) for @IDX_SHARDS;
-	progress($self, 'waiting on dump_shard_roots sort');
+	my @arg = ((map { ('-A', $_) } @ASSOC_PFX), '-c',
+		'-m', assoc_max_init($self), $root2id, $QRY_STR);
+	for my $d ($self->shard_dirs) {
+		pipe(my ($err_r, $err_w)) or die "pipe: $!";
+		$XHC->mkreq([$sort_w, $err_w], qw(dump_roots -d), $d, @arg);
+		my $desc = "dump_roots $d";
+		$self->{PENDING}->{$desc} = $associate;
+		PublicInbox::CidxXapHelperAux->new($err_r, $self, $desc);
+	}
+	progress($self, 'waiting on dump_roots sort');
 }
 
 sub dump_ibx { # sends to xap_helper.h
@@ -563,8 +555,8 @@ sub dump_ibx { # sends to xap_helper.h
 	pipe(my ($r, $w)) or die "pipe: $!";
 	$XHC->mkreq([$DUMP_IBX_WPIPE, $w], @cmd);
 	my $ekey = $ibx->eidx_key;
-	$self->{PENDING}->{$ekey} = undef;
-	PublicInbox::CidxXapHelperAux->new($r, $self, $ekey, $TODO{associate});
+	$self->{PENDING}->{$ekey} = $TODO{associate};
+	PublicInbox::CidxXapHelperAux->new($r, $self, $ekey);
 }
 
 sub dump_ibx_start {
@@ -885,8 +877,7 @@ sub associate {
 	my ($self) = @_;
 	return if $DO_QUIT;
 	@IDX_SHARDS or return warn("# aborting on no shards\n");
-	grep(defined, @DUMP_SHARD_ROOTS_OK) == @IDX_SHARDS or
-		die "E: shards not dumped properly\n";
+	unlink("$TMPDIR/root2id");
 	my @pending = keys %{$self->{PENDING}};
 	die "E: pending=@pending jobs not done\n" if @pending;
 	progress($self, 'associating...');
@@ -906,7 +897,7 @@ sub associate {
 		my $nr = $score{$k};
 		my ($ibx_id, $root) = split(/ /, $k);
 		my $ekey = $IBX[$ibx_id]->eidx_key;
-		$root = unpack('H*', $ID2ROOT[$root]);
+		$root = $ID2ROOT[$root];
 		progress($self, "$ekey => $root has $nr matches");
 	}
 	delete $TODO{associating}; # break out of shards_active()
@@ -1048,7 +1039,6 @@ sub cidx_read_comm { # via PublicInbox::CidxComm::event_step
 sub init_associate_prefork ($) {
 	my ($self) = @_;
 	return unless $self->{-opt}->{associate};
-	require PublicInbox::CidxDumpShardRoots;
 	require PublicInbox::CidxXapHelperAux;
 	require PublicInbox::XapClient;
 	$self->{-pi_cfg} = PublicInbox::Config->new;
@@ -1120,7 +1110,7 @@ sub cidx_run { # main entry point
 	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNE_QUEUE,
 		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, $CMD_ENV,
 		%TODO, @IBXQ, @IBX, @JOIN, @ASSOC_PFX, $DUMP_IBX_WPIPE,
-		@ID2ROOT, @DUMP_SHARD_ROOTS_OK, $XH_PID, $XHC, @SORT);
+		@ID2ROOT, $XH_PID, $XHC, @SORT);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local $self->{ASSOC_PFX} = \@ASSOC_PFX;
