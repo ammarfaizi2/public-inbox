@@ -511,8 +511,10 @@ sub assoc_max_init ($) {
 	$max < 0 ? ((2 ** 31) - 1) : $max;
 }
 
-sub dump_roots_once {
+sub dump_roots_start {
 	my ($self, $associate) = @_;
+	($XHC, $XH_PID) = PublicInbox::XapClient::start_helper("-j$NPROC");
+	awaitpid($XH_PID, \&cmd_done, ['xap_helper', "-j$NPROC"]);
 	$associate // die 'BUG: no $associate';
 	$TODO{associating} = 1; # keep shards_active() happy
 	progress($self, 'dumping IDs from coderepos');
@@ -571,7 +573,6 @@ sub dump_ibx_start {
 	my $fold_pid = spawn(\@UNIQ_FOLD, $CMD_ENV, { 0 => $fold_r, 1 => $fh });
 	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
 	awaitpid($fold_pid, \&cmd_done, [@UNIQ_FOLD, '(ibx)'], $associate);
-	($XHC, $XH_PID) = PublicInbox::XapClient::start_helper("-j$NPROC");
 }
 
 sub index_next ($) {
@@ -586,11 +587,11 @@ sub index_next ($) {
 		fp_start($self, $git, $prep_repo);
 		ct_start($self, $git, $prep_repo);
 	} elsif ($TMPDIR) {
+		return if delete($TODO{dump_roots_start});
 		delete $TODO{dump_ibx_start}; # runs OnDestroy once
 		return dump_ibx($self, shift @IBXQ) if @IBXQ;
-		progress($self, 'done dumping inboxes') if $DUMP_IBX_WPIPE;
 		undef $DUMP_IBX_WPIPE; # done dumping inboxes, dump roots
-		dump_roots_once($self, delete($TODO{associate}) // return);
+		delete $TODO{associate};
 	}
 	# else: wait for shards_active (post_loop_do) callback
 }
@@ -934,6 +935,8 @@ EOM
 	$TODO{associate} = PublicInbox::OnDestroy->new($$, \&associate, $self);
 	$TODO{dump_ibx_start} = PublicInbox::OnDestroy->new($$,
 				\&dump_ibx_start, $self, $TODO{associate});
+	$TODO{dump_roots_start} = PublicInbox::OnDestroy->new($$,
+				\&dump_roots_start, $self, $TODO{associate});
 	my $id = -1;
 	@IBXQ = map { ++$id } @IBX;
 }
