@@ -197,7 +197,7 @@ sub xdir ($;$) {
 	my ($self, $rdonly) = @_;
 	if ($rdonly || !defined($self->{shard})) {
 		$self->{xpfx};
-	} else { # v2 + extindex only:
+	} else { # v2, extindex, cindex only:
 		"$self->{xpfx}/$self->{shard}";
 	}
 }

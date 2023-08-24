@@ -11,6 +11,26 @@
 #
 # We shard repos using the first 32-bits of sha256($ABS_GIT_DIR)
 #
+# --associate joins root commits of coderepos to inboxes based on prefixes.
+#
+# Internally, each inbox is assigned a non-negative integer index ($IBX_ID),
+# and each root commit object ID (SHA-1/SHA-256 hex) is also assigned
+# a non-negative integer index ($ROOT_COMMIT_OID_ID).
+#
+# associate dumps to 2 intermediate files in $TMPDIR:
+#
+# * to_root_id - each line is of the format:
+#
+#	$PFX $ROOT_COMMIT_OID_ID
+#
+# * to_ibx_id - each line is of the format:
+#
+#	$PFX $IBX_ID
+#
+# In both cases, $PFX is typically the value of the patchid (XDFID) but it
+# can be configured to use any combination of patchid, dfpre, dfpost or
+# dfblob.
+#
 # See PublicInbox::CodeSearch (read-only API) for more
 package PublicInbox::CodeSearchIdx;
 use v5.12;
@@ -25,14 +45,14 @@ use File::Spec ();
 use PublicInbox::SHA qw(sha256_hex);
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::SearchIdx qw(add_val);
-use PublicInbox::Config qw(glob2re);
+use PublicInbox::Config qw(glob2re rel2abs_collapsed);
 use PublicInbox::Spawn qw(which spawn popen_rd);
 use PublicInbox::OnDestroy;
 use PublicInbox::CidxLogP;
 use PublicInbox::CidxComm;
 use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
-use Socket qw(MSG_EOR);
+use Socket qw(MSG_EOR AF_UNIX SOCK_SEQPACKET);
 use Carp ();
 our (
 	$LIVE, # pid => cmd
@@ -55,14 +75,24 @@ our (
 	%ALT_FH, # hexlen => tmp IO for TMPDIR git alternates
 	$TMPDIR, # File::Temp->newdir object for prune
 	@PRUNE_QUEUE, # GIT_DIRs to prepare for pruning
-	$PRUNE_ENV, # env for awk(1), comm(1), sort(1) commands during prune
+	%TODO, @IBXQ, @IBX,
+	@JOIN, # join(1) command for associate
+	$CMD_ENV, # env for awk(1), comm(1), sort(1) commands during prune
 	@AWK, @COMM, @SORT, # awk(1), comm(1), sort(1) commands
+	@ASSOC_PFX, # any combination of XDFID, XDFPRE, XDFPOST
+	$QRY_STR, # common query string for both code and inbox associations
+	$IBXDIR_FEED, # SOCK_SEQPACKET
+	@DUMP_SHARD_ROOTS_OK, @RECV_IBX_OK, # for associate
+	@ID2ROOT,
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
 # branches don't diverge by more than this number of commits...
 # git walks commits quickly if it doesn't have to read trees
 our $SEEN_MAX = 100000;
+
+# window for commits/emails to determine a inbox <-> coderepo association
+my $ASSOC_MAX = 50000;
 
 our @PRUNE_BATCH = qw(git _ cat-file --batch-all-objects --batch-check);
 
@@ -455,6 +485,91 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $self->{shard}", MSG_EOR);
 }
 
+sub dump_shard_roots_done { # via PktOp on dump_shard_roots completion
+	my ($self, $associate, $n) = @_;
+	return if $DO_QUIT;
+	progress($self, "dump_shard_roots [$n] done");
+	$DUMP_SHARD_ROOTS_OK[$n] = 1;
+	# may run associate()
+}
+
+sub assoc_max_init ($) {
+	my ($self) = @_;
+	my $max = $self->{-opt}->{'associate-max'} // $ASSOC_MAX;
+	$max = $ASSOC_MAX if !$max;
+	$max < 0 ? ((2 ** 31) - 1) : $max;
+}
+
+# dump the patchids of each shard: $XDFID $ROOT1 $ROOT2..
+sub dump_shard_roots { # via wq_io_do for associate
+	my ($self, $root2id, $qry_str) = @_;
+	PublicInbox::CidxDumpShardRoots::start($self, $root2id, $qry_str);
+}
+
+sub dump_roots_once {
+	my ($self, $associate) = @_;
+	$associate // die 'BUG: no $associate';
+	$TODO{associating} = 1; # keep shards_active() happy
+	progress($self, 'dumping IDs from coderepos');
+	local $self->{xdb};
+	@ID2ROOT = map { pack('H*', $_) } $self->all_terms('G');
+	my $id = 0;
+	my %root2id = map { $_ => $id++ } @ID2ROOT;
+	pipe(my ($r, $w)) or die "pipe: $!";
+	my @sort = (@SORT, '-k1,1');
+	my $dst = "$TMPDIR/to_root_id";
+	open my $fh, '>', $dst or die "open($dst): $!";
+	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $r, 1 => $fh });
+	close $r or die "close: $!";
+	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
+	my ($c, $p) = PublicInbox::PktOp->pair;
+	$c->{ops}->{dump_shard_roots_done} = [ $self, $associate ];
+	my @arg = ('dump_shard_roots', [ $p->{op_p}, $w ], \%root2id, $QRY_STR);
+	$_->wq_io_do(@arg) for @IDX_SHARDS;
+	progress($self, 'waiting on dump_shard_roots sort');
+}
+
+sub recv_ibx_done { # via PktOp on recv_ibx completion
+	my ($self, $pid, $n) = @_;
+	return if $DO_QUIT;
+	progress($self, "recv_ibx [$n] done");
+	$RECV_IBX_OK[$n] = 1;
+}
+
+# causes a worker to become a dumper for inbox/extindex
+sub recv_ibx { # wq_io_do
+	my ($self, $qry_str) = @_;
+	PublicInbox::CidxRecvIbx->new($self, $qry_str);
+}
+
+sub dump_ibx { # sends to PublicInbox::CidxRecvIbx::event_step
+	my ($self, $id_dir) = @_; # id_dir: "$IBX_ID=$INBOXDIR"
+	my $n = length($id_dir);
+	my $w = send($IBXDIR_FEED, $id_dir, MSG_EOR) // die "send: $!";
+	$n == $w or die "send($id_dir) $w != $n";
+}
+
+# repurpose shard workers to dump inbox patchids with perfect balance
+sub dump_ibx_start {
+	my ($self, $associate) = @_;
+	pipe(my ($sort_r, $sort_w)) or die "pipe: $!";
+	my @sort = (@SORT, '-k1,1');
+	my $dst = "$TMPDIR/to_ibx_id";
+	open my $fh, '>', $dst or die "open($dst): $!";
+	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fh });
+	close $sort_r or die "close: $!";
+	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
+
+	my ($r, $w);
+	socketpair($r, $w, AF_UNIX, SOCK_SEQPACKET, 0) or die "socketpair: $!";
+	my ($c, $p) = PublicInbox::PktOp->pair;
+	$c->{ops}->{recv_ibx_done} = [ $self, $associate ];
+	$c->{ops}->{index_next} = [ $self ];
+	my $io = [ $p->{op_p}, $r, $sort_w ];
+	$_->wq_io_do('recv_ibx', $io, $QRY_STR) for @IDX_SHARDS;
+	$IBXDIR_FEED = $w;
+}
+
 sub index_next ($) {
 	my ($self) = @_;
 	return if $DO_QUIT;
@@ -466,6 +581,12 @@ sub index_next ($) {
 							$self, $git);
 		fp_start($self, $git, $prep_repo);
 		ct_start($self, $git, $prep_repo);
+	} elsif ($TMPDIR) {
+		delete $TODO{dump_ibx_start}; # runs OnDestroy once
+		return dump_ibx($self, shift @IBXQ) if @IBXQ;
+		progress($self, 'done dumping inboxes') if $IBXDIR_FEED;
+		undef $IBXDIR_FEED; # done dumping inboxes, dump roots
+		dump_roots_once($self, delete($TODO{associate}) // return);
 	}
 	# else: wait for shards_active (post_loop_do) callback
 }
@@ -502,7 +623,7 @@ sub commit_shard { # OnDestroy cb
 	for my $n (keys %$active) {
 		$IDX_SHARDS[$n]->wq_io_do('shard_commit', [ $p->{op_p} ]);
 	}
-	undef $p; # shard_done fires when all shards are committed
+	# shard_done fires when all shards are committed
 }
 
 sub index_repo { # cidx_await cb
@@ -628,8 +749,8 @@ EOM
 
 sub scan_git_dirs ($) {
 	my ($self) = @_;
-	@$GIT_TODO = @{$self->{git_dirs}};
-	index_next($self) for (1..$LIVE_JOBS);
+	my $n = @$GIT_TODO = @{$self->{git_dirs}};
+	progress($self, "scanning $n code repositories...");
 }
 
 sub prune_do { # via wq_io_do in IDX_SHARDS
@@ -661,7 +782,7 @@ sub shards_active { # post_loop_do
 	return if grep(defined, $PRUNE_DONE, $GIT_TODO, $IDX_TODO, $LIVE) != 4;
 	return 1 if grep(defined, @$PRUNE_DONE) != @IDX_SHARDS;
 	return 1 if scalar(@$GIT_TODO) || scalar(@$IDX_TODO) || $REPO_CTX;
-	return 1 if keys(%$LIVE);
+	return 1 if keys(%$LIVE) || @IBXQ || keys(%TODO);
 	for my $s (grep { $_->{-wq_s1} } @IDX_SHARDS) {
 		$s->{-cidx_quit} = 1 if defined($s->{-wq_s1});
 		$s->wq_close; # may recurse via awaitpid outside of event_loop
@@ -674,6 +795,7 @@ sub kill_shards { $_->wq_kill(@_) for (@IDX_SHARDS) }
 
 sub parent_quit {
 	$DO_QUIT = POSIX->can("SIG$_[0]")->();
+	$IBXDIR_FEED = undef;
 	kill_shards(@_);
 	warn "# SIG$_[0] received, quitting...\n";
 }
@@ -717,6 +839,7 @@ sub prep_alternate_end { # awaitpid callback for config extensions.objectFormat
 E: ignoring objdir=$objdir, unknown extensions.objectFormat=$fmt
 EOM
 	unless ($ALT_FH{$hexlen}) {
+		require PublicInbox::Import;
 		my $git_dir = "$TMPDIR/hexlen$hexlen.git";
 		PublicInbox::Import::init_bare($git_dir, 'cidx-all', $fmt);
 		my $f = "$git_dir/objects/info/alternates";
@@ -739,18 +862,80 @@ sub prep_alternate_start {
 	awaitpid($pid, \&prep_alternate_end, $o, $out, $run_prune);
 }
 
-sub prune_cmd_done { # awaitpid cb for sort, xapian-delve, sed failures
-	my ($pid, $cmd, $run_prune) = @_;
+sub cmd_done { # awaitpid cb for sort, xapian-delve, sed failures
+	my ($pid, $cmd, $run_on_destroy) = @_;
 	$? and die "@$cmd failed: \$?=$?";
+	# $run_on_destroy calls associate() or run_prune()
+}
+
+# runs once all inboxes and shards are dumped via OnDestroy
+sub associate {
+	my ($self) = @_;
+	return if $DO_QUIT;
+	@IDX_SHARDS or return warn("# aborting on no shards\n");
+	grep(defined, @DUMP_SHARD_ROOTS_OK) == @IDX_SHARDS or
+		die "E: shards not dumped properly\n";
+	grep(defined, @RECV_IBX_OK) == @IDX_SHARDS or
+		die "E: inboxes not dumped properly\n";
+	progress($self, 'associating...');
+	my @join = ('time', @JOIN, 'to_ibx_id', 'to_root_id');
+	my $rd = popen_rd(\@join, $CMD_ENV, { -C => "$TMPDIR" });
+	my %score;
+	while (<$rd>) { # PFX ibx_id root_id
+		my (undef, $ibx_id, @root_id) = split(/ /, $_);
+		++$score{"$ibx_id $_"} for @root_id;
+	}
+	close $rd or die "@join failed: $?=$?";
+	my $min = $self->{-opt}->{'assoc-min'} // 10;
+	progress($self, scalar(keys %score).' potential pairings...');
+	for my $k (keys %score) {
+		my $nr = $score{$k};
+		my ($ibx_id, $root) = split(/ /, $k);
+		my $ekey = $IBX[$ibx_id]->eidx_key;
+		$root = unpack('H*', $ID2ROOT[$root]);
+		progress($self, "$ekey => $root has $nr matches");
+	}
+	delete $TODO{associating}; # break out of shards_active()
+	# TODO
+	warn "# Waiting for $TMPDIR/cont @JOIN";
+	system "ls -Rl $TMPDIR >&2";
+	system "wc -l $TMPDIR/to_*_id >&2";
+	#sleep(1) until -f "$TMPDIR/cont";
+	# warn "# Waiting for $TMPDIR/cont";
+	# sleep(1) until -f "$TMPDIR/cont";
+}
+
+sub require_progs {
+	my $op = shift;
+	while (my ($x, $argv) = splice(@_, 0, 2)) {
+		my $e = $x;
+		$e =~ tr/a-z-/A-Z_/;
+		my $c = $ENV{$e} // $x;
+		$argv->[0] //= which($c) // die "E: `$x' required for --$op\n";
+	}
+}
+
+sub init_associate_postfork ($) {
+	my ($self) = @_;
+	return unless $self->{-opt}->{associate};
+	require_progs('associate', join => \@JOIN);
+	$QRY_STR = $self->{-opt}->{'associate-date-range'} // '1.year.ago..';
+	substr($QRY_STR, 0, 0) = 'dt:';
+	scalar(@{$self->{git_dirs} //  []}) or die <<EOM;
+E: no coderepos to associate
+EOM
+	my $approx_git = PublicInbox::Git->new($self->{git_dirs}->[0]); # ugh
+	$self->query_approxidate($approx_git, $QRY_STR); # in-place
+	$TODO{associate} = PublicInbox::OnDestroy->new($$, \&associate, $self);
+	$TODO{dump_ibx_start} = PublicInbox::OnDestroy->new($$,
+				\&dump_ibx_start, $self, $TODO{associate});
+	my $id = -1;
+	@IBXQ = map { ++$id } @IBX;
 }
 
 sub init_prune ($) {
 	my ($self) = @_;
 	return (@$PRUNE_DONE = map { 1 } @IDX_SHARDS) if !$self->{-opt}->{prune};
-
-	require File::Temp;
-	require PublicInbox::Import;
-	$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
 
 	# Dealing with millions of commits here at once, so use faster tools.
 	# xapian-delve is nearly an order-of-magnitude faster than Xapian Perl
@@ -758,33 +943,21 @@ sub init_prune ($) {
 	# sort+comm are more memory-efficient with gigantic lists
 	my @delve = (undef, qw(-A Q -1));
 	my @sed = (undef, '-ne', 's/^Q//p');
-	@SORT = (undef, '-u');
 	@COMM = (undef, qw(-2 -3 indexed_commits -));
 	@AWK = (undef, '$2 == "commit" { print $1 }'); # --batch-check output
-	my @x = ('xapian-delve' => \@delve, sed => \@sed,
-		sort => \@SORT, comm => \@COMM, awk => \@AWK);
-	while (my ($x, $argv) = splice(@x, 0, 2)) {
-		my $e = $x;
-		$e =~ tr/a-z-/A-Z_/;
-		my $c = $ENV{$e} // $x;
-		$argv->[0] = which($c) // die "E: `$x' required for --prune\n";
-	}
+	require_progs('prune', 'xapian-delve' => \@delve, sed => \@sed,
+			comm => \@COMM, awk => \@AWK);
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
-	for (qw(parallel compress-program buffer-size)) { # GNU sort options
-		my $v = $self->{-opt}->{"sort-$_"};
-		push @SORT, "--$_=$v" if defined $v;
-	}
 	my $run_prune = PublicInbox::OnDestroy->new($$, \&run_prune, $self);
 	pipe(my ($sed_in, $delve_out)) or die "pipe: $!";
 	pipe(my ($sort_in, $sed_out)) or die "pipe: $!";
 	open(my $sort_out, '+>', "$TMPDIR/indexed_commits") or die "open: $!";
-	$PRUNE_ENV = { TMPDIR => "$TMPDIR", LC_ALL => 'C', LANG => 'C' };
-	my $pid = spawn(\@SORT, $PRUNE_ENV, { 0 => $sort_in, 1 => $sort_out });
-	awaitpid($pid, \&prune_cmd_done, \@SORT, $run_prune);
-	$pid = spawn(\@sed, $PRUNE_ENV, { 0 => $sed_in, 1 => $sed_out });
-	awaitpid($pid, \&prune_cmd_done, \@sed, $run_prune);
+	my $pid = spawn(\@SORT, $CMD_ENV, { 0 => $sort_in, 1 => $sort_out });
+	awaitpid($pid, \&cmd_done, \@SORT, $run_prune);
+	$pid = spawn(\@sed, $CMD_ENV, { 0 => $sed_in, 1 => $sed_out });
+	awaitpid($pid, \&cmd_done, \@sed, $run_prune);
 	$pid = spawn(\@delve, undef, { 1 => $delve_out });
-	awaitpid($pid, \&prune_cmd_done, \@delve, $run_prune);
+	awaitpid($pid, \&cmd_done, \@delve, $run_prune);
 	@PRUNE_QUEUE = @{$self->{git_dirs}};
 	for (1..$LIVE_JOBS) {
 		prep_alternate_start(shift(@PRUNE_QUEUE) // last, $run_prune);
@@ -809,14 +982,14 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	pipe(my ($awk_in, $batch_out)) or die "pipe: $!";
 	pipe(my ($sort_in, $awk_out)) or die "pipe: $!";
 	pipe(my ($comm_in, $sort_out)) or die "pipe: $!";
-	my $awk_pid = spawn(\@AWK, $PRUNE_ENV, { 0 => $awk_in, 1 => $awk_out });
-	my $sort_pid = spawn(\@SORT, $PRUNE_ENV,
+	my $awk_pid = spawn(\@AWK, $CMD_ENV, { 0 => $awk_in, 1 => $awk_out });
+	my $sort_pid = spawn(\@SORT, $CMD_ENV,
 				{ 0 => $sort_in, 1 => $sort_out });
-	my ($comm_rd, $comm_pid) = popen_rd(\@COMM, $PRUNE_ENV,
+	my ($comm_rd, $comm_pid) = popen_rd(\@COMM, $CMD_ENV,
 				{ 0 => $comm_in, -C => "$TMPDIR" });
-	awaitpid($awk_pid, \&prune_cmd_done, \@AWK);
-	awaitpid($sort_pid, \&prune_cmd_done, \@SORT);
-	awaitpid($comm_pid, \&prune_cmd_done, \@COMM);
+	awaitpid($awk_pid, \&cmd_done, \@AWK);
+	awaitpid($sort_pid, \&cmd_done, \@SORT);
+	awaitpid($comm_pid, \&cmd_done, \@COMM);
 	PublicInbox::CidxComm->new($comm_rd, $self); # calls cidx_read_comm
 	my $git_ver = PublicInbox::Git::git_version();
 	push @PRUNE_BATCH, '--buffer' if $git_ver ge v2.6;
@@ -856,6 +1029,35 @@ sub cidx_read_comm { # via PublicInbox::CidxComm::event_step
 	for (@gone) { close $_ or die "close: $!" };
 }
 
+sub init_associate_prefork ($) {
+	my ($self) = @_;
+	return unless $self->{-opt}->{associate};
+	require PublicInbox::CidxRecvIbx;
+	require PublicInbox::CidxDumpShardRoots;
+	$self->{-pi_cfg} = PublicInbox::Config->new;
+	my @unknown;
+	my @pfx = @{$self->{-opt}->{'associate-prefixes'} // [ 'patchid' ]};
+	for (map { split(/\s*,\s*/) } @pfx) {
+		my $v = $PublicInbox::Search::PATCH_BOOL_COMMON{$_} //
+			push(@unknown, $_);
+		push(@ASSOC_PFX, split(/ /, $v));
+	}
+	die <<EOM if @unknown;
+--associate-prefixes contains unsupported prefixes: @unknown
+EOM
+	@ASSOC_PFX = uniqstr @ASSOC_PFX;
+	my %incl = map {
+		rel2abs_collapsed($_) => undef;
+	} (@{$self->{-opt}->{include} // []});
+	$self->{-pi_cfg}->each_inbox(\&_prep_ibx, $self, \%incl);
+}
+
+sub _prep_ibx { # each_inbox callback
+	my ($ibx, $self, $incl) = @_;
+	($self->{-opt}->{all} || exists($incl->{$ibx->{inboxdir}})) and
+		push @{$self->{IBX}}, $ibx;
+}
+
 sub cidx_run { # main entry point
 	my ($self) = @_;
 	my $restore_umask = prep_umask($self);
@@ -868,10 +1070,27 @@ sub cidx_run { # main entry point
 	local $IDX_TODO = [];
 	local $GIT_TODO = [];
 	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNE_QUEUE,
-		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, @SORT, $PRUNE_ENV);
+		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, $CMD_ENV,
+		%TODO, @IBXQ, @IBX, @JOIN, @ASSOC_PFX, $IBXDIR_FEED, @ID2ROOT,
+		@DUMP_SHARD_ROOTS_OK, @RECV_IBX_OK);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
-	local @IDX_SHARDS = cidx_init($self);
+	local @SORT = (undef, '-u');
+	local $self->{IBX} = \@IBX;
+	local $self->{ASSOC_PFX} = \@ASSOC_PFX;
+	local $self->{-pi_cfg};
+	if (grep { $_ } @{$self->{-opt}}{qw(prune associate)}) {
+		require File::Temp;
+		$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
+		$CMD_ENV = { TMPDIR => "$TMPDIR", LC_ALL => 'C', LANG => 'C' };
+		require_progs('(prune|associate)', sort => \@SORT);
+		for (qw(parallel compress-program buffer-size)) { # GNU sort
+			my $v = $self->{-opt}->{"sort-$_"};
+			push @SORT, "--$_=$v" if defined $v;
+		}
+		init_associate_prefork($self)
+	}
+	local @IDX_SHARDS = cidx_init($self); # forks workers
 	local $self->{current_info} = '';
 	local $MY_SIG = {
 		CHLD => \&PublicInbox::DS::enqueue_reap,
@@ -919,7 +1138,9 @@ sub cidx_run { # main entry point
 			PublicInbox::IPC::detect_nproc() || 2;
 	local @RDONLY_XDB = $self->xdb_shards_flat;
 	init_prune($self);
+	init_associate_postfork($self);
 	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
+	index_next($self) for (1..$LIVE_JOBS);
 
 	# FreeBSD ignores/discards SIGCHLD while signals are blocked and
 	# EVFILT_SIGNAL is inactive, so we pretend we have a SIGCHLD pending
@@ -953,5 +1174,10 @@ sub shard_done_wait { # awaitpid cb via ipc_worker_reap
 	}
 	PublicInbox::DS::enqueue_reap() if !shards_active(); # once more for PLC
 }
+
+sub do_quit { $DO_QUIT }
+
+sub tmpdir { $TMPDIR }
+
 
 1;

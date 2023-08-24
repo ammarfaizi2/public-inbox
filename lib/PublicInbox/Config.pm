@@ -11,7 +11,7 @@ package PublicInbox::Config;
 use strict;
 use v5.10.1;
 use parent qw(Exporter);
-our @EXPORT_OK = qw(glob2re);
+our @EXPORT_OK = qw(glob2re rel2abs_collapsed);
 use PublicInbox::Inbox;
 use PublicInbox::Spawn qw(popen_rd);
 our $LD_PRELOAD = $ENV{LD_PRELOAD}; # only valid at startup
