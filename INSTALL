@@ -68,7 +68,8 @@ Numerous optional modules are likely to be useful as well:
                                    (for v2, IMAP, NNTP, or gzipped mboxes)
 
 - Search::Xapian or Xapian(.pm)    deb: libsearch-xapian-perl
-                                   pkg: p5-Search-Xapian OR p5-Xapian
+                                   pkg: p5-Search-Xapian OR p5-Xapian (FreeBSD)
+                                        xapian-bindings-perl (OpenBSD)
                                    rpm: perl-Search-Xapian
                                    (HTTP and IMAP search)
 
