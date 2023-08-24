@@ -1058,6 +1058,37 @@ sub _prep_ibx { # each_inbox callback
 		push @{$self->{IBX}}, $ibx;
 }
 
+sub show_roots { # for diagnostics
+	my ($self) = @_;
+	local $self->{xdb};
+	my $cur = $self->xdb->allterms_begin('G');
+	my $end = $self->{xdb}->allterms_end('G');
+	my $qrepo = $PublicInbox::Search::X{Query}->new('T'.'r');
+	my $enq = $PublicInbox::Search::X{Enquire}->new($self->{xdb});
+	$enq->set_weighting_scheme($PublicInbox::Search::X{BoolWeight}->new);
+	$enq->set_docid_order($PublicInbox::Search::ENQ_ASCENDING);
+	for (; $cur != $end; $cur++) {
+		my $G_oidhex = $cur->get_termname;
+		my $qry = $PublicInbox::Search::X{Query}->new(
+				PublicInbox::Search::OP_FILTER(),
+				$qrepo, $G_oidhex);
+		$enq->set_query($qry);
+		my ($off, $lim) = (0, 10000);
+		say 'commit ',substr($G_oidhex, 1), ' appears in:';
+		while (1) {
+			my $mset = $enq->get_mset($off, $lim);
+			my $size = $mset->size or last;
+			for my $x ($mset->items) {
+				my $doc = $x->get_document;
+				for (xap_terms('P', $x->get_document)) {
+					say '- /', substr($_, 1);
+				}
+			}
+			$off += $size;
+		}
+	}
+}
+
 sub cidx_run { # main entry point
 	my ($self) = @_;
 	my $restore_umask = prep_umask($self);
@@ -1150,6 +1181,7 @@ sub cidx_run { # main entry point
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET) if shards_active();
 	PublicInbox::DS->Reset;
 	$self->lock_release(!!$NCHANGE);
+	show_roots($self) if $self->{-opt}->{'show-roots'} # for diagnostics
 }
 
 sub ipc_atfork_child { # @IDX_SHARDS
