@@ -36,28 +36,74 @@ sub cmd_test_inspect {
 		($req->{srch}->has_threadid ? 1 : 0)
 }
 
+sub iter_retry_check ($) {
+	die unless ref($@) =~ /\bDatabaseModifiedError\b/;
+	$_[0]->{srch}->reopen;
+	undef; # retries
+}
+
+sub dump_ibx_iter ($$$) {
+	my ($req, $ibx_id, $it) = @_;
+	my $out = $req->{0};
+	eval {
+		my $doc = $it->get_document;
+		for my $p (@{$req->{A}}) {
+			for (xap_terms($p, $doc)) {
+				print $out "$_ $ibx_id\n" or die "print: $!";
+				++$req->{nr_out};
+			}
+		}
+	};
+	$@ ? iter_retry_check($req) : 0;
+}
+
+sub emit_mset_stats ($$) {
+	my ($req, $mset) = @_;
+	my $err = $req->{1} or return;
+	say $err 'mset.size='.$mset->size.' nr_out='.$req->{nr_out}
+}
+
 sub cmd_dump_ibx {
 	my ($req, $ibx_id, $qry_str) = @_;
 	$qry_str // return warn('usage: dump_ibx [OPTIONS] IBX_ID QRY_STR');
-	my @pfx = @{$req->{A}} or return warn('dump_ibx requires -A PREFIX');
+	$req->{A} or return warn('dump_ibx requires -A PREFIX');
 	my $max = $req->{srch}->{xdb}->get_doccount;
 	my $opt = { relevance => -1, limit => $max, offset => $req->{o} // 0 };
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
-	my $out = $req->{0};
-	$out->autoflush(1);
-	my $nr = 0;
+	$req->{0}->autoflush(1);
 	for my $it ($mset->items) {
-		my $doc = $it->get_document;
-		for my $p (@pfx) {
-			for (xap_terms($p, $doc)) {
-				print $out "$_ $ibx_id\n" or die "print: $!";
-				++$nr;
-			}
+		for (my $t = 10; $t > 0; --$t) {
+			$t = dump_ibx_iter($req, $ibx_id, $it) // $t;
 		}
 	}
 	if (my $err = $req->{1}) {
-		say $err 'mset.size='.$mset->size.' nr_out='.$nr
+		say $err 'mset.size='.$mset->size.' nr_out='.$req->{nr_out}
+	}
+}
+
+sub dump_roots_iter ($$$) {
+	my ($req, $root2id, $it) = @_;
+	eval {
+		my $doc = $it->get_document;
+		my $G = join(' ', map { $root2id->{$_} } xap_terms('G', $doc));
+		for my $p (@{$req->{A}}) {
+			for (xap_terms($p, $doc)) {
+				$req->{wbuf} .= "$_ $G\n";
+				++$req->{nr_out};
+			}
+		}
+	};
+	$@ ? iter_retry_check($req) : 0;
+}
+
+sub dump_roots_flush ($$) {
+	my ($req, $fh) = @_;
+	if ($req->{wbuf} ne '') {
+		flock($fh, LOCK_EX) or die "flock: $!";
+		print { $req->{0} } $req->{wbuf} or die "print: $!";
+		flock($fh, LOCK_UN) or die "flock: $!";
+		$req->{wbuf} = '';
 	}
 }
 
@@ -65,44 +111,29 @@ sub cmd_dump_roots {
 	my ($req, $root2id_file, $qry_str) = @_;
 	$qry_str // return
 		warn('usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR');
-	my @pfx = @{$req->{A}} or return warn('dump_roots requires -A PREFIX');
+	$req->{A} or return warn('dump_roots requires -A PREFIX');
 	open my $fh, '<', $root2id_file or die "open($root2id_file): $!";
-	my %root2id; # record format: $OIDHEX "\0" uint32_t
+	my $root2id; # record format: $OIDHEX "\0" uint32_t
 	my @x = split(/\0/, do { local $/; <$fh> } // die "readline: $!");
 	while (@x) {
 		my $oidhex = shift @x;
-		$root2id{$oidhex} = shift @x;
+		$root2id->{$oidhex} = shift @x;
 	}
 	my $opt = { relevance => -1, limit => $req->{'m'},
 			offset => $req->{o} // 0 };
 	my $mset = $req->{srch}->mset($qry_str, $opt);
 	$req->{0}->autoflush(1);
-	my $buf = '';
-	my $nr = 0;
+	$req->{wbuf} = '';
 	for my $it ($mset->items) {
-		my $doc = $it->get_document;
-		my $G = join(' ', map { $root2id{$_} } xap_terms('G', $doc));
-		for my $p (@pfx) {
-			for (xap_terms($p, $doc)) {
-				$buf .= "$_ $G\n";
-				++$nr;
-			}
+		for (my $t = 10; $t > 0; --$t) {
+			$t = dump_roots_iter($req, $root2id, $it) // $t;
 		}
-		if (!($nr & 0x3fff)) {
-			flock($fh, LOCK_EX) or die "flock: $!";
-			print { $req->{0} } $buf or die "print: $!";
-			flock($fh, LOCK_UN) or die "flock: $!";
-			$buf = '';
+		if (!($req->{nr_out} & 0x3fff)) {
+			dump_roots_flush($req, $fh);
 		}
 	}
-	if ($buf ne '') {
-		flock($fh, LOCK_EX) or die "flock: $!";
-		print { $req->{0} } $buf or die "print: $!";
-		flock($fh, LOCK_UN) or die "flock: $!";
-	}
-	if (my $err = $req->{1}) {
-		say $err 'mset.size='.$mset->size.' nr_out='.$nr
-	}
+	dump_roots_flush($req, $fh);
+	emit_mset_stats($req, $mset);
 }
 
 sub dispatch {
@@ -153,6 +184,7 @@ sub recv_loop {
 			next;
 		}
 		my @argv = split(/\0/, $rbuf);
+		$req->{nr_out} = 0;
 		eval { $req->dispatch(@argv) } if @argv;
 	}
 }

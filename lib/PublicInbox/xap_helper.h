@@ -63,6 +63,12 @@ static void code_nrp_init(void);
 static void qp_init_mail_search(Xapian::QueryParser *);
 static void qp_init_code_search(Xapian::QueryParser *);
 
+enum exc_iter {
+	ITER_OK = 0,
+	ITER_RETRY,
+	ITER_ABORT
+};
+
 struct srch {
 	int paths_len; // int for comparisons
 	unsigned qp_flags;
@@ -196,6 +202,13 @@ static Xapian::MSet commit_mset(struct req *req, const char *qry_str)
 	return enquire_mset(req, &enq);
 }
 
+static void emit_mset_stats(struct req *req, const Xapian::MSet *mset)
+{
+	if (req->fp[1])
+		fprintf(req->fp[1], "mset.size=%llu nr_out=%zu\n",
+			(unsigned long long)mset->size(), req->nr_out);
+}
+
 static bool starts_with(const std::string *s, const char *pfx, size_t pfx_len)
 {
 	return s->size() >= pfx_len && !memcmp(pfx, s->c_str(), pfx_len);
@@ -224,6 +237,20 @@ static int my_setlinebuf(FILE *fp) // glibc setlinebuf(3) can't report errors
 	return setvbuf(fp, NULL, _IOLBF, 0);
 }
 
+static enum exc_iter dump_ibx_iter(struct req *req, const char *ibx_id,
+				Xapian::MSetIterator *i)
+{
+	try {
+		Xapian::Document doc = i->get_document();
+		for (int p = 0; p < req->pfxc; p++)
+			dump_ibx_term(req, req->pfxv[p], &doc, ibx_id);
+	} catch (const Xapian::DatabaseModifiedError & e) {
+		req->srch->db->reopen();
+		return ITER_RETRY;
+	}
+	return ITER_OK;
+}
+
 static bool cmd_dump_ibx(struct req *req)
 {
 	if ((optind + 1) >= req->argc) {
@@ -243,20 +270,18 @@ static bool cmd_dump_ibx(struct req *req)
 	req->asc = true;
 	req->sort_col = -1;
 	Xapian::MSet mset = mail_mset(req, req->argv[optind + 1]);
+
+	// @UNIQ_FOLD in CodeSearchIdx.pm can handle duplicate lines fine
+	// in case we need to retry on DB reopens
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
-		try {
-			Xapian::Document doc = i.get_document();
-			for (int p = 0; p < req->pfxc; p++)
-				dump_ibx_term(req, req->pfxv[p], &doc, ibx_id);
-		} catch (const Xapian::Error & e) {
-			fprintf(orig_err, "W: %s (#%ld)\n",
-				e.get_description().c_str(), (long)(*i));
-			continue;
-		}
+		for (int t = 10; t > 0; --t)
+			switch (dump_ibx_iter(req, ibx_id, &i)) {
+			case ITER_OK: t = 0; break; // leave inner loop
+			case ITER_RETRY: break; // continue for-loop
+			case ITER_ABORT: return false; // error
+			}
 	}
-	if (req->fp[1])
-		fprintf(req->fp[1], "mset.size=%llu nr_out=%zu\n",
-			(unsigned long long)mset.size(), req->nr_out);
+	emit_mset_stats(req, &mset);
 	return true;
 }
 
@@ -312,8 +337,7 @@ static void dump_roots_ensure(void *ptr)
 	fbuf_ensure(&drt->wbuf);
 }
 
-static bool root2ids_str(struct fbuf *root_ids, struct dump_roots_tmp *drt,
-			Xapian::Document *doc)
+static bool root2ids_str(struct fbuf *root_ids, Xapian::Document *doc)
 {
 	if (!fbuf_init(root_ids)) return false;
 
@@ -408,9 +432,28 @@ done_free:
 	return ok;
 }
 
+static enum exc_iter dump_roots_iter(struct req *req,
+				struct dump_roots_tmp *drt,
+				Xapian::MSetIterator *i)
+{
+	CLEANUP_FBUF struct fbuf root_ids = { 0 }; // " $ID0 $ID1 $IDx..\n"
+	try {
+		Xapian::Document doc = i->get_document();
+		if (!root2ids_str(&root_ids, &doc))
+			return ITER_ABORT; // bad request, abort
+		for (int p = 0; p < req->pfxc; p++)
+			dump_roots_term(req, req->pfxv[p], drt,
+					&root_ids, &doc);
+	} catch (const Xapian::DatabaseModifiedError & e) {
+		req->srch->db->reopen();
+		return ITER_RETRY;
+	}
+	return ITER_OK;
+}
+
 static bool cmd_dump_roots(struct req *req)
 {
-	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt { .root2id_fd = -1 };
+	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = { .root2id_fd = -1 };
 	if ((optind + 1) >= req->argc) {
 		warnx("usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR");
 		return false; // need file + qry_str
@@ -432,7 +475,7 @@ static bool cmd_dump_roots(struct req *req)
 	// each entry is at least 43 bytes ({OIDHEX}\0{INT}\0),
 	// so /32 overestimates the number of expected entries by
 	// ~%25 (as recommended by Linux hcreate(3) manpage)
-	size_t est = (drt.sb.st_size / 32) + 1;
+	size_t est = (drt.sb.st_size / 32) + 1; //+1 for "\0" termination
 	if ((uint64_t)drt.sb.st_size > (uint64_t)SIZE_MAX) {
 		warnx("%s size too big (%lld bytes > %zu)", root2id_file,
 			(long long)drt.sb.st_size, SIZE_MAX);
@@ -469,30 +512,24 @@ static bool cmd_dump_roots(struct req *req)
 	req->asc = true;
 	req->sort_col = -1;
 	Xapian::MSet mset = commit_mset(req, req->argv[optind + 1]);
+
+	// @UNIQ_FOLD in CodeSearchIdx.pm can handle duplicate lines fine
+	// in case we need to retry on DB reopens
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
-		CLEANUP_FBUF struct fbuf root_ids = { 0 };
 		if (!drt.wbuf.fp && !fbuf_init(&drt.wbuf))
 			return false;
-		try {
-			Xapian::Document doc = i.get_document();
-			if (!root2ids_str(&root_ids, &drt, &doc))
-				return false;
-			for (int p = 0; p < req->pfxc; p++)
-				dump_roots_term(req, req->pfxv[p], &drt,
-						&root_ids, &doc);
-		} catch (const Xapian::Error & e) {
-			fprintf(orig_err, "W: %s (#%ld)\n",
-				e.get_description().c_str(), (long)(*i));
-			continue;
-		}
+		for (int t = 10; t > 0; --t)
+			switch (dump_roots_iter(req, &drt, &i)) {
+			case ITER_OK: t = 0; break; // leave inner loop
+			case ITER_RETRY: break; // continue for-loop
+			case ITER_ABORT: return false; // error
+			}
 		if (!(req->nr_out & 0x3fff) && !dump_roots_flush(req, &drt))
 			return false;
 	}
 	if (!dump_roots_flush(req, &drt))
 		return false;
-	if (req->fp[1])
-		fprintf(req->fp[1], "mset.size=%llu nr_out=%zu\n",
-			(unsigned long long)mset.size(), req->nr_out);
+	emit_mset_stats(req, &mset);
 	return true;
 }
 
