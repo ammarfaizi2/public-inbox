@@ -123,4 +123,9 @@ sub has_threadid { 1 }
 
 sub help { $_[0]->{es}->help }
 
+sub xh_args { # prep getopt args to feed to xap_helper.h socket
+	my ($self, $opt) = @_; # TODO uid_range
+	($self->{es}->xh_args, '-O', $self->{eidx_key});
+}
+
 1;

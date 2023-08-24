@@ -66,6 +66,15 @@ our $NVRP; # '$Xap::'.('NumberValueRangeProcessor' or 'NumberRangeProcessor')
 # let's hope the ABI is stable
 our $ENQ_DESCENDING = 0;
 our $ENQ_ASCENDING = 1;
+our @MAIL_VMAP = (
+	[ YYYYMMDD, 'd:'],
+	[ DT, 'dt:' ],
+	# these are undocumented for WWW, but lei and IMAP use them
+	[ BYTES, 'z:' ],
+	[ TS, 'rt:' ],
+	[ UID, 'uid:' ]
+);
+our @MAIL_NRP;
 
 sub load_xapian () {
 	return 1 if defined $Xap;
@@ -101,6 +110,7 @@ sub load_xapian () {
 		# or make indexlevel=medium as default
 		$QP_FLAGS = FLAG_PHRASE() | FLAG_BOOLEAN() | FLAG_LOVEHATE() |
 				FLAG_WILDCARD();
+		@MAIL_NRP = map { $NVRP->new(@$_) } @MAIL_VMAP;
 		return 1;
 	}
 	undef;
@@ -490,14 +500,8 @@ sub qparse_new {
 	my $qp = qp_init_common($self);
 	my $cb = $qp->can('add_valuerangeprocessor') //
 		$qp->can('add_rangeprocessor'); # Xapian 1.5.0+
-	$cb->($qp, $NVRP->new(YYYYMMDD, 'd:'));
-	$cb->($qp, $NVRP->new(DT, 'dt:'));
 
-	# for IMAP, undocumented for WWW and may be split off go away
-	$cb->($qp, $NVRP->new(BYTES, 'z:'));
-	$cb->($qp, $NVRP->new(TS, 'rt:'));
-	$cb->($qp, $NVRP->new(UID, 'uid:'));
-
+	$cb->($qp, $_) for @MAIL_NRP;
 	while (my ($name, $prefix) = each %bool_pfx_external) {
 		$qp->add_boolean_prefix($name, $_) foreach split(/ /, $prefix);
 	}
@@ -525,6 +529,40 @@ EOF
 		$qp->add_prefix($name, $_) foreach split(/ /, $prefix);
 	}
 	$qp;
+}
+
+sub generate_cxx () { # generates snippet for xap_helper.h
+	my $ret = <<EOM;
+# line ${\__LINE__} "${\__FILE__}"
+static NRP *mail_nrp[${\scalar(@MAIL_VMAP)}];
+static void mail_nrp_init(void)
+{
+EOM
+	for (0..$#MAIL_VMAP) {
+		my $x = $MAIL_VMAP[$_];
+		$ret .= qq{\tmail_nrp[$_] = new NRP($x->[0], "$x->[1]");\n}
+	}
+$ret .= <<EOM;
+}
+
+# line ${\__LINE__} "${\__FILE__}"
+static void qp_init_mail_search(Xapian::QueryParser *qp)
+{
+	for (size_t i = 0; i < MY_ARRAY_SIZE(mail_nrp); i++)
+		qp->ADD_RP(mail_nrp[i]);
+EOM
+	for my $name (sort keys %bool_pfx_external) {
+		for (split(/ /, $bool_pfx_external{$name})) {
+			$ret .= qq{\tqp->add_boolean_prefix("$name", "$_");\n}
+		}
+	}
+	# TODO: altid support
+	for my $name (sort keys %prob_prefix) {
+		for (split(/ /, $prob_prefix{$name})) {
+			$ret .= qq{\tqp->add_prefix("$name", "$_");\n}
+		}
+	}
+	$ret .= "}\n";
 }
 
 sub help {
@@ -583,6 +621,10 @@ sub all_terms {
 		$ret{substr($cur->get_termname, length($pfx))} = undef;
 	}
 	wantarray ? (sort keys %ret) : \%ret;
+}
+
+sub xh_args { # prep getopt args to feed to xap_helper.h socket
+	map { ('-d', $_) } shard_dirs($_[0]);
 }
 
 1;

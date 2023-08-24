@@ -16,6 +16,12 @@ use constant {
 	# in refs/{heads,tags}.  AT(col=0) may be used to store disk usage
 	# in the future, but disk usage calculation is espensive w/ alternates
 };
+our @CODE_NRP;
+our @CODE_VMAP = (
+	[ AT, 'd:' ], # mairix compat
+	[ AT, 'dt:' ], # mail compat
+	[ CT, 'ct:' ],
+);
 
 # note: the non-X term prefix allocations are shared with Xapian omega,
 # see xapian-applications/omega/docs/termprefixes.rst
@@ -45,15 +51,17 @@ sub new {
 	bless { xpfx => "$dir/cidx".CIDX_SCHEMA_VER }, $cls;
 }
 
-sub cqparse_new ($) {
+sub qparse_new ($) {
 	my ($self) = @_;
 	my $qp = $self->qp_init_common;
 	my $cb = $qp->can('add_valuerangeprocessor') //
 		$qp->can('add_rangeprocessor'); # Xapian 1.5.0+
-	$cb->($qp, $PublicInbox::Search::NVRP->new(AT, 'd:')); # mairix compat
-	$cb->($qp, $PublicInbox::Search::NVRP->new(AT, 'dt:')); # mail compat
-	$cb->($qp, $PublicInbox::Search::NVRP->new(CT, 'ct:'));
-
+	if (!@CODE_NRP) {
+		@CODE_NRP = map {
+			$PublicInbox::Search::NVRP->new(@$_)
+		} @CODE_VMAP;
+	}
+	$cb->($qp, $_) for @CODE_NRP;
 	while (my ($name, $pfx) = each %bool_pfx_external) {
 		$qp->add_boolean_prefix($name, $_) for split(/ /, $pfx);
 	}
@@ -61,6 +69,40 @@ sub cqparse_new ($) {
 		$qp->add_prefix($name, $_) for split(/ /, $pfx);
 	}
 	$qp;
+}
+
+sub generate_cxx () { # generates snippet for xap_helper.h
+	my ($line, $file) = (__LINE__ + 2, __FILE__);
+	my $ret = <<EOM;
+# line ${\__LINE__} "${\__FILE__}"
+static NRP *code_nrp[${\scalar(@CODE_VMAP)}];
+static void code_nrp_init(void)
+{
+EOM
+	for (0..$#CODE_VMAP) {
+		my $x = $CODE_VMAP[$_];
+		$ret .= qq{\tcode_nrp[$_] = new NRP($x->[0], "$x->[1]");\n}
+	}
+$ret .= <<EOM;
+}
+
+# line ${\__LINE__} "${\__FILE__}"
+static void qp_init_code_search(Xapian::QueryParser *qp)
+{
+	for (size_t i = 0; i < MY_ARRAY_SIZE(code_nrp); i++)
+		qp->ADD_RP(code_nrp[i]);
+EOM
+	for my $name (sort keys %bool_pfx_external) {
+		for (split(/ /, $bool_pfx_external{$name})) {
+			$ret .= qq{\tqp->add_boolean_prefix("$name", "$_");\n}
+		}
+	}
+	for my $name (sort keys %prob_prefix) {
+		for (split(/ /, $prob_prefix{$name})) {
+			$ret .= qq{\tqp->add_prefix("$name", "$_");\n}
+		}
+	}
+	$ret .= "}\n";
 }
 
 # returns a Xapian::Query to filter by roots
@@ -89,7 +131,7 @@ sub roots_filter { # retry_reopen callback
 
 sub mset {
 	my ($self, $qry_str, $opt) = @_;
-	my $qp = $self->{qp} //= cqparse_new($self);
+	my $qp = $self->{qp} //= qparse_new($self);
 	my $qry = $qp->parse_query($qry_str, $self->{qp_flags});
 
 	# limit to commits with shared roots

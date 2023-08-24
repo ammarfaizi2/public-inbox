@@ -162,10 +162,10 @@ lib/PublicInbox/AltId.pm
 lib/PublicInbox/AutoReap.pm
 lib/PublicInbox/Cgit.pm
 lib/PublicInbox/CidxComm.pm
-lib/PublicInbox/CidxDumpIbx.pm
 lib/PublicInbox/CidxDumpShardRoots.pm
 lib/PublicInbox/CidxLogP.pm
 lib/PublicInbox/CidxRecvIbx.pm
+lib/PublicInbox/CidxXapHelperAux.pm
 lib/PublicInbox/CmdIPC4.pm
 lib/PublicInbox/CodeSearch.pm
 lib/PublicInbox/CodeSearchIdx.pm
@@ -368,8 +368,12 @@ lib/PublicInbox/WwwListing.pm
 lib/PublicInbox/WwwStatic.pm
 lib/PublicInbox/WwwStream.pm
 lib/PublicInbox/WwwText.pm
+lib/PublicInbox/XapClient.pm
+lib/PublicInbox/XapHelper.pm
+lib/PublicInbox/XapHelperCxx.pm
 lib/PublicInbox/Xapcmd.pm
 lib/PublicInbox/gcf2_libgit2.h
+lib/PublicInbox/xap_helper.h
 sa_config/Makefile
 sa_config/README
 sa_config/root/etc/spamassassin/public-inbox.pre
@@ -610,6 +614,7 @@ t/www_altid.t
 t/www_listing.t
 t/www_static.t
 t/x-unknown-alpine.eml
+t/xap_helper.t
 t/xcpdb-reshard.t
 version-gen.perl
 xt/cmp-msgstr.t
