@@ -202,28 +202,32 @@ sub xdir ($;$) {
 	}
 }
 
-# returns all shards as separate Xapian::Database objects w/o combining
-sub xdb_shards_flat ($) {
+# returns shard directories as an array of strings, does not verify existence
+sub shard_dirs ($) {
 	my ($self) = @_;
 	my $xpfx = $self->{xpfx};
-	my (@xdb, $slow_phrase);
-	load_xapian();
-	$self->{qp_flags} //= $QP_FLAGS;
-	if ($xpfx =~ m!/xapian[0-9]+\z!) { # v1
-		@xdb = ($X{Database}->new($xpfx));
-		$self->{qp_flags} |= FLAG_PHRASE() if !-f "$xpfx/iamchert";
-	} else { # v2, eidx, cidx
+	if ($xpfx =~ m!/xapian[0-9]+\z!) { # v1 inbox
+		($xpfx);
+	} else { # v2 inbox, eidx, cidx
 		opendir(my $dh, $xpfx) or return (); # not initialized yet
 		# We need numeric sorting so shard[0] is first for reading
 		# Xapian metadata, if needed
 		my $last = max(grep(/\A[0-9]+\z/, readdir($dh))) // return ();
-		@xdb = map {
-			my $shard_dir = "$xpfx/$_";
-			$slow_phrase ||= -f "$shard_dir/iamchert";
-			$X{Database}->new($shard_dir);
-		} (0..$last);
-		$self->{qp_flags} |= FLAG_PHRASE() if !$slow_phrase;
+		map { "$xpfx/$_" } (0..$last);
 	}
+}
+
+# returns all shards as separate Xapian::Database objects w/o combining
+sub xdb_shards_flat ($) {
+	my ($self) = @_;
+	load_xapian();
+	$self->{qp_flags} //= $QP_FLAGS;
+	my $slow_phrase;
+	my @xdb = map {
+		$slow_phrase ||= -f "$_/iamchert";
+		$X{Database}->new($_); # raises if missing
+	} shard_dirs($self);
+	$self->{qp_flags} |= FLAG_PHRASE() if !$slow_phrase;
 	@xdb;
 }
 
