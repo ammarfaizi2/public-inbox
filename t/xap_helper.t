@@ -4,6 +4,8 @@
 use v5.12;
 use PublicInbox::TestCommon;
 require_mods(qw(DBD::SQLite Search::Xapian));
+my $msg = no_scm_rights;
+plan(skip_all => $msg) if $msg; # TODO: FIFO support?
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM MSG_EOR);
 require PublicInbox::AutoReap;

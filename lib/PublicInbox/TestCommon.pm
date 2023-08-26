@@ -22,7 +22,7 @@ BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
-		create_coderepo
+		create_coderepo no_scm_rights
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing);
@@ -567,6 +567,16 @@ sub ignore_inline_c_missing {
 		grep(!/\bInline\b/, split(/^/m, $_[0])))));
 }
 
+sub no_scm_rights () {
+	state $ok = PublicInbox::Spawn->can('send_cmd4') || do {
+			require PublicInbox::Syscall;
+			PublicInbox::Syscall->can('send_cmd4');
+		} || eval { require Socket::MsgHdr; 1 };
+	return if $ok;
+	'Inline::C unconfigured/missing '.
+	'(mkdir -p ~/.cache/public-inbox/inline-c) OR Socket::MsgHdr missing';
+}
+
 sub test_lei {
 SKIP: {
 	my ($cb) = pop @_;
@@ -591,15 +601,8 @@ SKIP: {
 	$ENV{LANG} = $ENV{LC_ALL} = 'C';
 	my (undef, $fn, $lineno) = caller(0);
 	my $t = "$fn:$lineno";
-	state $lei_daemon = PublicInbox::Spawn->can('send_cmd4') || do {
-			require PublicInbox::Syscall;
-			PublicInbox::Syscall->can('send_cmd4');
-		} || eval { require Socket::MsgHdr; 1 };
-	unless ($lei_daemon) {
-		skip('Inline::C unconfigured/missing '.
-'(mkdir -p ~/.cache/public-inbox/inline-c) OR Socket::MsgHdr missing',
-			1);
-	}
+	state $msg = no_scm_rights();
+	skip $msg, 1 if $msg;
 	$lei_opt = { 1 => \$lei_out, 2 => \$lei_err };
 	my ($daemon_pid, $for_destroy, $daemon_xrd);
 	my $tmpdir = $test_opt->{tmpdir};
