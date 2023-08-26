@@ -262,5 +262,14 @@ symlink-install : lib/PublicInbox.pm
 pure_all :: lib/PublicInbox.pm
 lib/PublicInbox.pm : FORCE
 	VERSION=\$(VERSION) \$(PERL) -w ./version-gen.perl
+
+test-asan : pure_all
+	CXXFLAGS='-O0 -Wall -ggdb3 -fsanitize=address' \
+		prove -bvw t/xap_helper.t
+
+VG_OPT = '-v --trace-children=yes --track-fds=yes'
+VG_OPT += ' --leak-check=yes --track-origins=yes'
+test-valgrind : pure_all
+	VALGRIND="valgrind \$\$(VG_OPT)" prove -bvw t/xap_helper.t
 EOF
 }
