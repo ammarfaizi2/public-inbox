@@ -1,16 +1,14 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-use PublicInbox::Config;
-my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape DBD::SQLite);
-require_git 2.6;
-require_mods(@mods);
-use_ok 'PublicInbox::WWW';
-foreach my $mod (@mods) { use_ok $mod; }
+my @use = qw(HTTP::Request::Common Plack::Test);
+my @req = qw(URI::Escape DBD::SQLite);
+require_git v2.6;
+require_mods(@use, @req, qw(PublicInbox::WWW PublicInbox::Config));
+$_->import for @use;
 my $cfg = '';
 foreach my $i (1..2) {
 	my $ibx = create_inbox "test-$i", version => 2, indexlevel => 'basic',
