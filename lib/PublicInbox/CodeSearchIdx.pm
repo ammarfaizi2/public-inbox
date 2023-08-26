@@ -948,7 +948,8 @@ sub init_prune ($) {
 	# Dealing with millions of commits here at once, so use faster tools.
 	# xapian-delve is nearly an order-of-magnitude faster than Xapian Perl
 	# bindings.  sed/awk are faster than Perl for simple stream ops, and
-	# sort+comm are more memory-efficient with gigantic lists
+	# sort+comm are more memory-efficient with gigantic lists.
+	# pipeline: delve | sed | sort >indexed_commits
 	my @delve = (undef, qw(-A Q -1));
 	my @sed = (undef, '-ne', 's/^Q//p');
 	@COMM = (undef, qw(-2 -3 indexed_commits -));
@@ -988,6 +989,12 @@ sub dump_git_commits { # awaitpid cb
 sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	my ($self) = @_;
 	return if $DO_QUIT;
+	# setup the following pipeline: (
+	#	git --git-dir=hexlen40.git cat-file \
+	#		--batch-all-objects --batch-check &&
+	#	git --git-dir=hexlen64.git cat-file \
+	#		--batch-all-objects --batch-check
+	# ) | awk | sort | comm | cidx_read_comm()
 	pipe(my ($awk_in, $batch_out)) or die "pipe: $!";
 	pipe(my ($sort_in, $awk_out)) or die "pipe: $!";
 	pipe(my ($comm_in, $sort_out)) or die "pipe: $!";
