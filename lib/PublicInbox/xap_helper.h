@@ -436,7 +436,7 @@ static enum exc_iter dump_roots_iter(struct req *req,
 				struct dump_roots_tmp *drt,
 				Xapian::MSetIterator *i)
 {
-	CLEANUP_FBUF struct fbuf root_ids = { 0 }; // " $ID0 $ID1 $IDx..\n"
+	CLEANUP_FBUF struct fbuf root_ids = {}; // " $ID0 $ID1 $IDx..\n"
 	try {
 		Xapian::Document doc = i->get_document();
 		if (!root2ids_str(&root_ids, &doc))
@@ -453,7 +453,8 @@ static enum exc_iter dump_roots_iter(struct req *req,
 
 static bool cmd_dump_roots(struct req *req)
 {
-	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = { .root2id_fd = -1 };
+	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = {};
+	drt.root2id_fd = -1;
 	if ((optind + 1) >= req->argc) {
 		warnx("usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR");
 		return false; // need file + qry_str
@@ -563,12 +564,13 @@ union my_cmsg {
 
 static bool recv_req(struct req *req, char *rbuf, size_t *len)
 {
-	union my_cmsg cmsg = { 0 };
-	struct msghdr msg = { .msg_iovlen = 1 };
+	union my_cmsg cmsg = {};
+	struct msghdr msg = {};
 	struct iovec iov;
 	iov.iov_base = rbuf;
 	iov.iov_len = *len;
 	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
 	msg.msg_control = &cmsg.hdr;
 	msg.msg_controllen = CMSG_SPACE(RECV_FD_SPACE);
 
@@ -823,7 +825,7 @@ static void recv_loop(void) // worker process loop
 	static char rbuf[4096 * 33]; // per-process
 	while (!parent_pid || getppid() == parent_pid) {
 		size_t len = sizeof(rbuf);
-		struct req req = { 0 };
+		struct req req = {};
 		if (!recv_req(&req, rbuf, &len))
 			continue;
 		if (req.fp[1]) {
