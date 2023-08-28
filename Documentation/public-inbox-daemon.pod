@@ -101,6 +101,8 @@ Default: 1
 The default TLS certificate for HTTPS, IMAPS, NNTPS, POP3S and/or STARTTLS
 support if the C<cert> option is not given with C<--listen>.
 
+=for comment FIXME this paragraph needs repair
+
 Well-known TCP ports automatically get TLS or STARTTLS support
 If using systemd-compatible socket activation and a TCP listener
 on port well-known ports (563 is inherited, it is automatically
@@ -112,15 +114,15 @@ STARTTLS support.
 
 The default TLS certificate key for the default C<--cert> or
 per-listener C<cert=> option.  The private key may be
-concatenated into the path used by the cert, in which case this
+concatenated into the cert file itself, in which case this
 option is not needed.
 
 =item --multi-accept INTEGER
 
-By default, each worker accepts one connection at-a-time to maximize
+By default, each worker accepts one connection at a time to maximize
 fairness and minimize contention across multiple processes on a
 shared listen socket.  Accepting multiple connections at once may be
-useful in constrained deployments with few, heavily-loaded workers.
+useful in constrained deployments with few, heavily loaded workers.
 Negative values enables a worker to accept all available clients at
 once, possibly starving others in the process.  C<-1> behaves like
 C<multi_accept yes> in nginx; while C<0> (the default) is
@@ -137,7 +139,7 @@ Default: 0
 =head1 SIGNALS
 
 Most of our signal handling behavior is copied from L<nginx(8)>
-and/or L<starman(1)>; so it is possible to reuse common scripts
+and/or L<starman(1)>, so it is possible to reuse common scripts
 for managing them.
 
 =over 8
@@ -158,7 +160,7 @@ Reload config files associated with the process.
 
 =item SIGTTIN
 
-Increase the number of running workers processes by one.
+Increase the number of running worker processes by one.
 
 =item SIGTTOU
 
@@ -166,7 +168,7 @@ Decrease the number of running worker processes by one.
 
 =item SIGWINCH
 
-Stop all running worker processes.   SIGHUP or SIGTTIN
+Stop all running worker processes.  SIGHUP or SIGTTIN
 may be used to restart workers.
 
 =item SIGQUIT
@@ -194,7 +196,7 @@ activation.  See L<systemd.socket(5)> and L<sd_listen_fds(3)>.
 
 =item PERL_INLINE_DIRECTORY
 
-Pointing this to point to a writable directory enables the use
+Pointing this to a writable directory enables the use
 of L<Inline> and L<Inline::C> extensions which may provide
 platform-specific performance improvements.  Currently, this
 enables the use of L<vfork(2)> which speeds up subprocess
@@ -211,8 +213,8 @@ created by a user. See L<Inline> and L<Inline::C> for more details.
 There are two ways to upgrade a running process.
 
 Users of process management systems with socket activation
-(L<systemd(1)> or similar) may rely on multiple instances For
-systemd, this means using two (or more) '@' instances for each
+(L<systemd(1)> or similar) may rely on multiple daemon instances.
+For systemd, this means using two (or more) '@' instances for each
 service (e.g. C<SERVICENAME@INSTANCE>) as documented in
 L<systemd.unit(5)>.
 

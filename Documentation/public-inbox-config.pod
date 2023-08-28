@@ -191,7 +191,7 @@ Default: :all
 The local path name of a CSS file for the PSGI web interface.
 May contain the attributes "media", "title" and "href" which match
 the associated attributes of the HTML <style> tag.
-"href" may be specified to point to the URL of an remote CSS file
+"href" may be specified to point to the URL of a remote CSS file
 and the path may be "/dev/null" or any empty file.
 Multiple files may be specified and will be included in the
 order specified.
@@ -291,10 +291,10 @@ Default: /var/www/htdocs/cgit/cgit.cgi or /usr/lib/cgit/cgit.cgi
 =item publicinbox.cgitdata
 
 A path to the data directory used by cgit for storing static files.
-Typically guessed based the location of C<cgit.cgi> (from
-C<publicinbox.cgitbin>, but may be overridden.
+Typically guessed based on the location of C<cgit.cgi> (from
+C<publicinbox.cgitbin>), but may be overridden.
 
-Default: basename of C<publicinbox.cgitbin>, /var/www/htdocs/cgit/
+Default: dirname of C<publicinbox.cgitbin>, /var/www/htdocs/cgit/
 or /usr/share/cgit/
 
 =item publicinbox.cgit
@@ -311,7 +311,7 @@ Try using C<cgit> as the first choice, this is the default.
 =item * fallback
 
 Fall back to using C<cgit> only if our native, inbox-aware
-git code repository viewer doesn't recognized the URL.
+git code repository viewer doesn't recognize the URL.
 
 =item * rewrite
 

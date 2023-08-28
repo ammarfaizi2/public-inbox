@@ -209,8 +209,8 @@ sub await_cb ($;@) {
 	warn "E: awaitpid($pid): $@" if $@;
 }
 
-# This relies on our Perl process is single-threaded, or at least
-# no threads are spawning and waiting on processes (``, system(), etc...)
+# This relies on our Perl process being single-threaded, or at least
+# no threads spawning and waiting on processes (``, system(), etc...)
 # Threads are officially discouraged by the Perl5 team, and I expect
 # that to remain the case.
 sub reap_pids {

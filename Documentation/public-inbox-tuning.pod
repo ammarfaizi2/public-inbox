@@ -79,8 +79,8 @@ RAM.  Attempts to parallelize random I/O on HDDs leads to pathological
 slowdowns as inboxes grow.
 
 While C<-V2> introduced Xapian shards as a parallelization
-mechanism for SSDs; enabling C<publicInbox.indexSequentialShard>
-repurposes sharding as mechanism to reduce the kernel page cache
+mechanism for SSDs, enabling C<publicInbox.indexSequentialShard>
+repurposes sharding as a mechanism to reduce the kernel page cache
 footprint when indexing on HDDs.
 
 Initializing a mirror with a high C<--jobs> count to create more
@@ -108,7 +108,7 @@ indices on btrfs to achieve acceptable performance (even on SSD).
 Disabling copy-on-write also disables checksumming, thus C<raid1>
 (or higher) configurations may be corrupt after unsafe shutdowns.
 
-Fortunately, these SQLite and Xapian indices are designed to
+Fortunately, these SQLite and Xapian indices are designed to be
 recoverable from git if missing.
 
 Disabling CoW does not prevent all fragmentation.  Large values
@@ -125,7 +125,7 @@ C<btrfs filesystem defragment -fr $INBOX_DIR> may be necessary.
 Large filesystems benefit significantly from the C<space_cache=v2>
 mount option documented in L<btrfs(5)>.
 
-Older, non-CoW filesystems are generally work well out-of-the-box
+Older, non-CoW filesystems generally work well out of the box
 for our Xapian and SQLite indices.
 
 =head2 Performance on solid state drives
@@ -152,7 +152,7 @@ C<LimitNOFILE=> in L<systemd.exec(5)>) may need to be raised to
 accommodate many concurrent clients.
 
 Transport Layer Security (IMAPS, NNTPS, or via STARTTLS) significantly
-increases memory use of client sockets, sure to account for that in
+increases memory use of client sockets, be sure to account for that in
 capacity planning.
 
 =head2 Other OS tuning knobs
@@ -168,7 +168,7 @@ Other OSes may have similar tuning knobs (patches appreciated).
 L<public-inbox-extindex(1)> allows any number of public-inboxes
 to share the same Xapian indices.
 
-git 2.33+ startup time is orders-of-magnitude faster and uses
+git 2.33+ startup time is orders of magnitude faster and uses
 less memory when dealing with thousands of alternates required
 for thousands of inboxes with L<public-inbox-extindex(1)>.
 

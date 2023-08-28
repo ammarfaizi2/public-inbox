@@ -126,7 +126,7 @@ Other subcommands include
 
 =head1 FILES
 
-By default storage is located at C<$XDG_DATA_HOME/lei/store>.  The
+By default, storage is located at C<$XDG_DATA_HOME/lei/store>.  The
 configuration for lei resides at C<$XDG_CONFIG_HOME/lei/config>.
 
 =head1 ERRORS

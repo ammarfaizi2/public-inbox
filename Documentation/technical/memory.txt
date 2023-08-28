@@ -8,7 +8,7 @@ memory-efficient.
 We strive to keep processes small to improve locality, allow
 the kernel to cache more files, and to be a good neighbor to
 other processes running on the machine.  Taking advantage of
-automatic reference counting (ARC) in Perl allows us
+automatic reference counting (ARC) in Perl allows us to
 deterministically release memory back to the heap.
 
 We start with a simple data model with few circular

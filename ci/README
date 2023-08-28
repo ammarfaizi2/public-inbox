@@ -27,7 +27,7 @@ run in the top-level source tree, that is, as `./ci/run.sh'.
 	or doing development.  However, it can be convenient to for
 	users to mass-install several packages.
 
-* ci/profiles.sh - prints to-be tested package profile for the current OS
+* ci/profiles.sh - prints to-be-tested package profile for the current OS
 
 	Called automatically by ci/run.sh
 	The output is read by ci/run.sh

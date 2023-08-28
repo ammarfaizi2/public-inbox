@@ -54,7 +54,7 @@ This is similar to the C<spam> command above, but does
 not feed the message to L<spamc(1)> and only removes messages
 which match on any of the C<To:>, C<Cc:>, and C<List-ID:> headers.
 
-The C<--all> option may be used match C<spam> semantics in removing
+The C<--all> option may be used to match C<spam> semantics in removing
 the message from all configured inboxes.  C<--all> is only
 available in public-inbox 1.6.0+.
 
@@ -82,7 +82,7 @@ L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta/>
 
 =head1 COPYRIGHT
 
-Copyright 2019-2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<https://www.gnu.org/licenses/agpl-3.0.txt>
 

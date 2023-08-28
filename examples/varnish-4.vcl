@@ -28,7 +28,7 @@ sub vcl_recv {
 }
 
 sub vcl_pipe {
-	# By default Connection: close is set on all piped requests by varnish,
+	# By default, Connection: close is set on all piped requests by varnish,
 	# but public-inbox-httpd supports persistent connections well :)
 	unset bereq.http.connection;
 	return (pipe);

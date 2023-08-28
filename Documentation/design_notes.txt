@@ -52,15 +52,15 @@ Why email?
   There is no need to ask the NSA for backups of your mail archives :)
 
 * git, one of the most widely-used version control systems, includes many
-  tools for for email, including: git-format-patch(1), git-send-email(1),
+  tools for email, including: git-format-patch(1), git-send-email(1),
   git-am(1), git-imap-send(1).  Furthermore, the development of git itself
   is based on the git mailing list: https://public-inbox.org/git/
   (or
   http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/git/
-  for Tor users)
+  for Tor users).
 
 * Email is already the de-facto form of communication in many Free Software
-  communities..
+  communities.
 
 * Fallback/transition to private email and other lists, in case the
   public-inbox host becomes unavailable, users may still directly email
@@ -76,13 +76,13 @@ Why git?
 
 * As of 2016, git is widely used and known to nearly all Free Software
   developers.  For non-developers it is packaged for all major GNU/Linux
-  and *BSD distributions.  NNTP is not as widely-used nowadays, and
+  and *BSD distributions.  NNTP is not as widely used nowadays, and
   most IMAP clients do not have good support for read-only mailboxes.
 
 Why perl 5?
 -----------
 
-* Perl 5 is widely available on modern *nix systems with good a history
+* Perl 5 is widely available on modern *nix systems, with a good history
   of backwards and forward compatibility.
 
 * git and SpamAssassin both use it, so it should be one less thing for

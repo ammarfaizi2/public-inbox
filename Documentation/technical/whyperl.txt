@@ -21,7 +21,7 @@ Good Things
 
   Perl 5 is installed on many, if not most GNU/Linux and
   BSD-based servers and workstations.  It is likely the most
-  widely-installed programming environment that offers a
+  widely installed programming environment that offers a
   significant amount of POSIX functionality.  Users won't
   have to waste bandwidth or space with giant toolchains or
   architecture-specific binaries.
@@ -47,8 +47,8 @@ Good Things
 
 * Predictable performance
 
-  While Perl is neither fast or memory-efficient, its
-  performance and memory use are predictable and does not
+  While Perl is neither fast nor memory-efficient, its
+  performance and memory use are predictable and do not
   require GC tuning by the user.
 
   public-inbox is developed for (and mostly on) old
@@ -56,7 +56,7 @@ Good Things
   late 1990s, and any cheap VPS today has more than enough
   RAM and CPU for handling plain-text email.
 
-  Low hardware requirements increases the reach of our software
+  Low hardware requirements increase the reach of our software
   to more users, improving centralization resistance.
 
 * Compatibility
@@ -86,7 +86,7 @@ Good Things
 
   There should be no need to rely on language-specific
   package managers such as cpan(1), those systems increase
-  the learning curve for users and systems administrators.
+  the learning curve for users and system administrators.
 
 * Compactness and terseness
 
@@ -98,7 +98,7 @@ Good Things
 * Performance ceiling and escape hatch
 
   With optional Inline::C, we can be "as fast as C" in some
-  cases.  Inline::C is widely-packaged by distros and it
+  cases.  Inline::C is widely packaged by distros and it
   gives us an escape hatch for dealing with missing bindings
   or performance problems should they arise.  Inline::C use
   (as opposed to XS) also preserves the software freedom and
@@ -135,7 +135,7 @@ Bad Things
   (m//, substr(), index(), etc.) still require memory copies
   into userspace, negating a benefit of zero-copy.
 
-* The XS/C API make it difficult to improve internals while
+* The XS/C API makes it difficult to improve internals while
   preserving compatibility.
 
 * Lack of optional type checking.  This may be a blessing in
@@ -161,14 +161,14 @@ Red herrings to ignore when evaluating other runtimes
 -----------------------------------------------------
 
 These don't discount a language or runtime from being
-being used, they're just not interesting.
+used, they're just not interesting.
 
 * Lightweight threading
 
   While lightweight threading implementations are
-  convenient, they tend to be significantly heavier than a
+  convenient, they tend to be significantly heavier than
   pure event-loop systems (or multi-threaded event-loop
-  systems)
+  systems).
 
   Lightweight threading implementations have stack overhead
   and growth typically measured in kilobytes.  The userspace

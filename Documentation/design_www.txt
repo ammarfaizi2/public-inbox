@@ -102,7 +102,7 @@ We also set <title> to make window management easier.
 
 We favor <pre>-formatted text since public-inbox is intended as a place
 to share and discuss patches and code.  Unfortunately, long paragraphs
-tends to be less readable with fixed-width serif fonts which GUI
+tend to be less readable with fixed-width serif fonts which GUI
 browsers default to.
 
 * No graphics, images, or icons at all.  We tolerate, but do not
@@ -122,12 +122,12 @@ browsers default to.
   avoided as they do not render well with some displays or user-chosen
   fonts.
 
-* No JavaScript. JS is historically too buggy and insecure, and we will
+* No JavaScript.  JS is historically too buggy and insecure, and we will
   never expect our readers to do either of the following:
-  a) read and audit all our code for on every single page load
-  b) trust us and and run code without reading it
+  a) read and audit all our code on every single page load
+  b) trust us and run code without reading it
 
-* We only use CSS for one reason: wrapping pre-formatted text
+* We only use CSS for one reason: wrapping pre-formatted text.
   This is necessary because unfortunate GUI browsers tend to be
   prone to layout widening from unwrapped mailers.
   Do not expect CSS to be enabled, especially with scary things like:
@@ -141,4 +141,4 @@ CSS classes (for user-supplied CSS)
 -----------------------------------
 
 See examples in contrib/css/ and lib/PublicInbox/WwwText.pm
-(or https://public-inbox.org/meta/_/text/color/ soon)
+(or <https://public-inbox.org/meta/_/text/color/>)

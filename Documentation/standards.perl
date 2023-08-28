@@ -11,11 +11,11 @@ Non-exhaustive list of standards public-inbox software attempts or
 intends to implement.  This list is intended to be a quick reference
 for hackers and users.
 
-Given the goals of interoperability and accessibility; strict
+Given the goals of interoperability and accessibility, strict
 conformance to standards is not always possible, but rather
 best-effort taking into account real-world cases.  In particular,
 "obsolete" standards remain relevant as long as clients and
-data exists.
+data using them exist.
 
 IETF RFCs
 ---------

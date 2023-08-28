@@ -32,19 +32,19 @@ Per-message classes
   Common abbreviation: $mime, $eml
   Used by: PublicInbox::WWW, PublicInbox::SearchIdx
 
-  An representation of an entire email, multipart or not.
+  A representation of an entire email, multipart or not.
   An option to use libgmime or libmailutils may be supported
   in the future for performance and memory use.
 
   This can be a memory hog with big messages and giant
   attachments, so our PublicInbox::WWW interface only keeps
-  one object of this class in memory at-a-time.
+  one object of this class in memory at a time.
 
   In other words, this is the "meat" of the message, whereas
   $smsg (below) is just the "skeleton".
 
   Our PublicInbox::V2Writable class may have two objects of this
-  type in memory at-a-time for deduplication.
+  type in memory at a time for deduplication.
 
   In public-inbox 1.4 and earlier, Email::MIME and its subclass,
   PublicInbox::MIME were used.  Despite still slurping,
@@ -61,10 +61,10 @@ Per-message classes
 
   This is loaded from either the overview DB (over.sqlite3) or
   the Xapian DB (docdata.glass), though the Xapian docdata
-  is won't hold NNTP-only fields (Cc:/To:)
+  won't hold NNTP-only fields (Cc:/To:).
 
   There may be hundreds or thousands of these objects in memory
-  at-a-time, so fields are pruned if unneeded.
+  at a time, so fields are pruned if unneeded.
 
 * PublicInbox::SearchThread::Msg - subclass of Smsg
   Common abbreviation: $cont or $node
@@ -75,9 +75,9 @@ Per-message classes
   Nowadays, this is a re-blessed $smsg with additional fields.
 
   As with $smsg objects, there may be hundreds or thousands
-  of these objects in memory at-a-time.
+  of these objects in memory at a time.
 
-  We also do not use a linked-list for storing children as JWZ
+  We also do not use a linked list for storing children as JWZ
   describes, but instead a Perl hashref for {children} which
   becomes an arrayref upon sorting.
 
@@ -88,7 +88,7 @@ Per-inbox classes
 
 * PublicInbox::Inbox - represents a single public-inbox
   Common abbreviation: $ibx
-  Used everywhere
+  Used everywhere.
 
   This represents a "publicinbox" section in the config
   file, see public-inbox-config(5) for details.
@@ -152,7 +152,7 @@ ad-hoc structures shared across packages
   This holds the PSGI $env as well as any internal variables
   used by various modules of PublicInbox::WWW.
 
-  As with the PSGI $env, there is one per-active WWW
+  As with the PSGI $env, there is one per active WWW
   request+response cycle.  It does not exist for idle HTTP
   clients.
 
@@ -174,8 +174,8 @@ daemon classes
   Common abbreviation: $http
   Used by: PublicInbox::DS, public-inbox-httpd
 
-  Unlike PublicInbox::NNTP, this class no knowledge of any of
-  the email or git-specific parts of public-inbox, only PSGI.
+  Unlike PublicInbox::NNTP, this class has no knowledge of any of
+  the email- or git-specific parts of public-inbox, only PSGI.
   However, it supports APIs and behaviors (e.g. streaming large
   responses) which PublicInbox::WWW may take advantage of.
 
@@ -188,7 +188,7 @@ daemon classes
 
   This class calls non-blocking accept(2) or accept4(2) on a
   listen socket to create new PublicInbox::HTTP and
-  PublicInbox::HTTP instances.
+  PublicInbox::NNTP instances.
 
 * PublicInbox::HTTPD
   Common abbreviation: $httpd
@@ -197,9 +197,9 @@ daemon classes
   wrappers around client sockets accepted from
   PublicInbox::Listener.
 
-  Since the SERVER_NAME and SERVER_PORT PSGI variables needs to be
+  Since the SERVER_NAME and SERVER_PORT PSGI variables need to be
   exposed for HTTP/1.0 requests when Host: headers are missing,
-  this is per-Listener socket.
+  this is per Listener socket.
 
 * PublicInbox::HTTPD::Async
   Common abbreviation: $async

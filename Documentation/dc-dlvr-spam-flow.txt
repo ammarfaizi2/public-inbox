@@ -39,7 +39,7 @@ delivery path as well as removing the message from the git tree.
 
 * incron - run commands based on filesystem events: http://incron.aiken.cz/
 
-* sendmail / MTA - we use and recommend use postfix, which includes a
+* sendmail / MTA - we use and recommend postfix, which includes a
                    sendmail-compatible wrapper: http://www.postfix.org/
 
 * spamc / spamd - SpamAssassin: http://spamassassin.apache.org/

@@ -1,8 +1,8 @@
 TODO items for public-inbox
 
 (Not in any particular order, and
-performance, ease-of-setup, installation, maintainability, etc
-all need to be considered for everything we introduce)
+performance, ease of setup, installation, maintainability, etc.
+all need to be considered for everything we introduce.)
 
 * general performance improvements, but without relying on
   XS or pre-built modules any more than we currently do.
@@ -32,7 +32,7 @@ all need to be considered for everything we introduce)
   portability to older Linux, free BSDs and maybe Hurd).
 
 * dogfood latest Xapian, Perl5, SQLite, git and various modules to
-  ensure things continue working as they should (or more better)
+  ensure things continue working as they should (or better)
   while retaining compatibility with old versions.
 
 * Support more of RFC 3977 (NNTP)

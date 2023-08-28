@@ -1,7 +1,7 @@
 public-inbox (server-side) installation
 ---------------------------------------
 
-This is for folks who want to setup their own public-inbox instance.
+This is for folks who want to set up their own public-inbox instance.
 Clients should use normal git-clone/git-fetch, IMAP or NNTP clients
 if they want to import mail into their personal inboxes.
 
@@ -135,7 +135,7 @@ Numerous optional modules are likely to be useful as well:
                                     foreground servers)
 
 The following module is typically pulled in by dependencies listed
-above, so there is no need to explicitly install them:
+above, so there is no need to explicitly install it:
 
 - DBI                              deb: libdbi-perl
                                    pkg: p5-DBI

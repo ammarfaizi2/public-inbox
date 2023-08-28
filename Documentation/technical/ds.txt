@@ -19,7 +19,7 @@ Most notably:
   triggers a call.
 
   The lack of read/write callback distinction is driven by the
-  fact TLS libraries (e.g. OpenSSL via IO::Socket::SSL) may
+  fact that TLS libraries (e.g. OpenSSL via IO::Socket::SSL) may
   declare SSL_WANT_READ on SSL_write(), and SSL_WANT_READ on
   SSL_read().  So we end up having to let each user object decide
   whether it wants to make read or write calls depending on its
@@ -35,7 +35,7 @@ Most notably:
   Reducing the user-supplied code down to a single callback allows
   subclasses to keep their logic self-contained.  The combination
   of this change and one-shot wakeups (see below) for bidirectional
-  data flows make asynchronous code easier to reason about.
+  data flows makes asynchronous code easier to reason about.
 
 Other divergences:
 
@@ -53,7 +53,7 @@ Other divergences:
 
 Augmented features:
 
-* obj->write(CODEREF) passes the object itself to the CODEREF
+* obj->write(CODEREF) passes the object itself to the CODEREF.
   Being able to enqueue subroutine calls is a powerful feature in
   Danga::Socket for keeping linear logic in an asynchronous environment.
   Unfortunately, each subroutine takes several kilobytes of memory.

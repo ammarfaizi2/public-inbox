@@ -12,7 +12,7 @@ reproducible.
 Keeping all communications as email ensures the full history
 of the entire project can be mirrored by anyone with the
 resources to do so.  Compact, low-complexity data requires
-less resources to mirror, so sticking with plain-text
+less resources to mirror, so sticking with plain text
 ensures more parties can mirror and potentially fork the
 project with all its data.
 
@@ -26,4 +26,4 @@ If these things make power hungry project leaders and admins
 uncomfortable, good.  That was the point.  It's how checks
 and balances ought to work.
 
-Comments, corrections, etc welcome: meta@public-inbox.org
+Comments, corrections, etc. welcome: meta@public-inbox.org

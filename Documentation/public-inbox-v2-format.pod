@@ -30,7 +30,7 @@ databases for parallelism by "shards".
   - all.git                         # empty, alternates to $EPOCH.git
   - xap$SCHEMA_VERSION/$SHARD       # per-shard Xapian DB
   - xap$SCHEMA_VERSION/over.sqlite3 # OVER-view DB for NNTP, threading
-  - msgmap.sqlite3                  # same the v1 msgmap
+  - msgmap.sqlite3                  # same as the v1 msgmap
 
 For blob lookups, the reader only needs to open the "all.git"
 repository with $GIT_DIR/objects/info/alternates which references
@@ -89,7 +89,7 @@ After-the-fact invocations of L<public-inbox-index> will ignore
 messages written to 'd' after they are written to 'm'.
 
 Deltafication is not significantly improved over v1, but overall
-storage for trees is made as as small as possible.  Initial
+storage for trees is made as small as possible.  Initial
 statistics and benchmarks showing the benefits of this approach
 are documented at:
 
@@ -97,7 +97,7 @@ L<https://public-inbox.org/meta/20180209205140.GA11047@dcvr/>
 
 =head2 XAPIAN SHARDS
 
-Another second scalability problem in v1 was the inability to
+Another scalability problem in v1 was the inability to
 utilize multiple CPU cores for Xapian indexing.  This is
 addressed by using shards in Xapian to perform import
 indexing in parallel.

@@ -17,7 +17,7 @@ public-inbox spawned around three main ideas:
   communication.  Users may have broken graphics drivers, limited
   eyesight, or be unable to afford modern hardware.
 
-public-inbox aims to be easy-to-deploy and manage; encouraging projects
+public-inbox aims to be easy to deploy and manage, encouraging projects
 to run their own instances with minimal overhead.
 
 Implementation
@@ -27,7 +27,7 @@ public-inbox stores mail in git repositories as documented
 in https://public-inbox.org/public-inbox-v2-format.txt and
 https://public-inbox.org/public-inbox-v1-format.txt
 
-By storing (and optionally) exposing an inbox via git, it is
+By storing and (optionally) exposing an inbox via git, it is
 fast and efficient to host and mirror public-inboxes.
 
 Traditional mailing lists use the "push" model.  For readers,
@@ -42,11 +42,11 @@ follow the list via NNTP, IMAP, POP3, Atom feed or HTML archives.
 
 If a reader loses interest, they simply stop following.
 
-Since we use git, mirrors are easy-to-setup, and lists are
-easy-to-relocate to different mail addresses without losing
+Since we use git, mirrors are easy to set up, and lists are
+easy to relocate to different mail addresses without losing
 or splitting archives.
 
-_Anybody_ may also setup a delivery-only mailing list server to
+_Anybody_ may also set up a delivery-only mailing list server to
 replay a public-inbox git archive to subscribers via SMTP.
 
 Features
@@ -111,7 +111,7 @@ and pull requests to our public-inbox address at:
 
 Please Cc: all recipients when replying as we do not require
 subscription.  This also makes it easier to rope in folks of
-tangentially related projects we depend on (e.g. git developers
+tangentially related projects we depend on (e.g., git developers
 on git@vger.kernel.org).
 
 The archives are readable via IMAP, NNTP or HTTP:
@@ -155,8 +155,8 @@ This improves accessibility, and saves bandwidth and storage
 as mail is archived forever.
 
 As of the 2010s, successful online social networks and forums are the
-ones which heavily restrict users formatting options; so public-inbox
-aims to preserve the focus on content, and not presentation.
+ones which heavily restrict users' formatting options; public-inbox
+aims to preserve the focus on content, not presentation.
 
 Copyright
 ---------

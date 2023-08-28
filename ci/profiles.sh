@@ -2,7 +2,7 @@
 # Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# Prints OS-specific package profiles to stdout (one per-newline) to use
+# Prints OS-specific package profiles to stdout (one per line) to use
 # as command-line args for ci/deps.perl.  Called automatically by ci/run.sh
 
 # set by os-release(5) or similar

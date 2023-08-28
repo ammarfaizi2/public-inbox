@@ -155,7 +155,7 @@ options:
 
   -l ADDRESS    address to listen on$dh
   --cert=FILE   default SSL/TLS certificate
-  --key=FILE    default SSL/TLS certificate
+  --key=FILE    default SSL/TLS certificate key
   -W WORKERS    number of worker processes to spawn (default: 1)
 
 See public-inbox-daemon(8) and $prog(1) man pages for more.
