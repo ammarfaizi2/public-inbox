@@ -101,14 +101,11 @@ Default: 1
 The default TLS certificate for HTTPS, IMAPS, NNTPS, POP3S and/or STARTTLS
 support if the C<cert> option is not given with C<--listen>.
 
-=for comment FIXME this paragraph needs repair
-
-Well-known TCP ports automatically get TLS or STARTTLS support
-If using systemd-compatible socket activation and a TCP listener
-on port well-known ports (563 is inherited, it is automatically
-NNTPS when this option is given.  When a listener on port 119 is
-inherited and this option is given, it automatically gets
-STARTTLS support.
+With this option, well-known TCP ports automatically get TLS or STARTTLS
+support if using systemd-compatible socket activation.  That is, ports
+443, 563, 993, and 995 support HTTPS, NNTPS, IMAPS, and POP3S,
+respectively; while ports 110, 119, and 143 support STARTTLS on POP3,
+NNTP, and IMAP, respectively.
 
 =item --key /path/to/key
 
