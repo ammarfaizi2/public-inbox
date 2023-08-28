@@ -293,15 +293,12 @@ ALL_LIBC
 use Inline C => $all_libc, BUILD_NOISY => 1;
 EOM
 		my $err = $@;
-		my $ndc_err = '';
-		$err = $@;
 		open(STDERR, '>&', $olderr) or warn "restore stderr: $!";
 		open(STDOUT, '>&', $oldout) or warn "restore stdout: $!";
 		if ($err) {
 			seek($fh, 0, SEEK_SET);
 			my @msg = <$fh>;
-			warn "Inline::C build failed:\n",
-				$ndc_err, $err, "\n", @msg;
+			warn "Inline::C build failed:\n", $err, "\n", @msg;
 			$all_libc = undef;
 		}
 	}
