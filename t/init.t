@@ -19,7 +19,11 @@ sub quiet_fail {
 	my $cfgfile = "$ENV{PI_DIR}/config";
 	my $cmd = [ '-init', 'blist', "$tmpdir/blist",
 		   qw(http://example.com/blist blist@example.com) ];
+	my $umask = umask(070) // xbail "umask: $!";
 	ok(run_script($cmd), 'public-inbox-init OK');
+	umask($umask) // xbail "umask: $!";
+	my $mode = (stat($cfgfile))[2];
+	is(sprintf('0%03o', $mode & 0777), '0604', 'config respects umask');
 
 	is(read_indexlevel('blist'), '', 'indexlevel unset by default');
 

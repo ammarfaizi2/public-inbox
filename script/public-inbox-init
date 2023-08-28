@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -122,7 +122,8 @@ sysopen($lockfh, $lockfile, O_RDWR|O_CREAT|O_EXCL) or do {
 };
 require PublicInbox::OnDestroy;
 my $auto_unlink = PublicInbox::OnDestroy->new($$, sub { unlink $lockfile });
-my ($perm, %seen);
+my $perm = 0644 & ~umask;
+my %seen;
 if (-e $pi_config) {
 	open(my $oh, '<', $pi_config) or die "unable to read $pi_config: $!\n";
 	my @st = stat($oh);
@@ -219,7 +220,7 @@ if (sysopen $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
 }
 
 # needed for git prior to v2.1.0
-umask(0077) if defined $perm;
+umask(0077);
 
 require PublicInbox::Spawn;
 PublicInbox::Spawn->import(qw(run_die));
@@ -246,10 +247,8 @@ for my $kv (@c_extra) {
 }
 
 # needed for git prior to v2.1.0
-if (defined $perm) {
-	chmod($perm & 07777, $pi_config_tmp) or
-			die "(f)chmod failed on future $pi_config: $!\n";
-}
+chmod($perm & 07777, $pi_config_tmp) or
+	die "(f)chmod failed on future $pi_config: $!\n";
 
 rename $pi_config_tmp, $pi_config or
 	die "failed to rename `$pi_config_tmp' to `$pi_config': $!\n";
