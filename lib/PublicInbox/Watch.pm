@@ -42,7 +42,7 @@ sub compile_watchheaders ($) {
 
 sub new {
 	my ($class, $cfg) = @_;
-	my (%mdmap, $spamc);
+	my (%mdmap);
 	my (%imap, %nntp); # url => [inbox objects] or 'watchspam'
 	my (@imap, @nntp);
 
