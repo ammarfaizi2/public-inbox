@@ -30,8 +30,8 @@ GNU/Linux)
 		esac
 
 		case $ID--$VERSION_ID in
-		-|*--|--*) continue ;;
-		*--*) break ;;
+		*--|--*) continue ;;
+		*) break ;;
 		esac
 	done
 	;;
