@@ -340,7 +340,6 @@ sub spawn ($;$$) {
 		$redir->[$child_fd] = $parent_fd // $child_fd;
 	}
 	my $rlim = [];
-
 	foreach my $l (@RLIMITS) {
 		my $v = $opts->{$l} // next;
 		my $r = eval "require BSD::Resource; BSD::Resource::$l();";
