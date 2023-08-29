@@ -185,18 +185,42 @@ SKIP: {
 		require BSD::Resource;
 		defined(BSD::Resource::RLIMIT_CPU())
 	} or skip 'BSD::Resource::RLIMIT_CPU missing', 3;
-	my ($r, $w);
-	pipe($r, $w) or die "pipe: $!";
-	my $cmd = ['sh', '-c', 'while true; do :; done'];
+	my $cmd = [ $^X, ($^W ? ('-w') : ()), '-e', <<'EOM' ];
+use POSIX qw(:signal_h);
+use BSD::Resource qw(times);
+use Time::HiRes qw(time); # gettimeofday
+my $set = POSIX::SigSet->new;
+$set->emptyset; # spawn() defaults to blocking all signals
+sigprocmask(SIG_SETMASK, $set) or die "SIG_SETMASK: $!";
+my $tot = 0;
+$SIG{XCPU} = sub { print "SIGXCPU $tot\n"; exit(1) };
+my $next = time + 1.1;
+while (1) {
+	# OpenBSD needs some syscalls (e.g. `times', `gettimeofday'
+	# and `write' (via Perl warn)) on otherwise idle systems to
+	# hit RLIMIT_CPU and fire signals:
+	# https://marc.info/?i=02A4BB8D-313C-464D-845A-845EB6136B35@gmail.com
+	my @t = times;
+	$tot = $t[0] + $t[1];
+	if (time > $next) {
+		warn "# T: @t (utime, ctime, cutime, cstime)\n";
+		$next = time + 1.1;
+	}
+}
+EOM
+	pipe(my($r, $w)) or die "pipe: $!";
 	my $fd = fileno($w);
-	my $opt = { RLIMIT_CPU => [ 1, 1 ], RLIMIT_CORE => [ 0, 0 ], 1 => $fd };
+	my $opt = { RLIMIT_CPU => [ 1, 9 ], RLIMIT_CORE => [ 0, 0 ], 1 => $fd };
 	my $pid = spawn($cmd, undef, $opt);
 	close $w or die "close(w): $!";
 	my $rset = '';
 	vec($rset, fileno($r), 1) = 1;
 	ok(select($rset, undef, undef, 5), 'child died before timeout');
 	is(waitpid($pid, 0), $pid, 'XCPU child process reaped');
-	isnt($?, 0, 'non-zero exit status');
+	my $line;
+	like($line = readline($r), qr/SIGXCPU/, 'SIGXCPU handled') or
+		diag explain($line);
+	is($? >> 8, 1, 'non-zero exit status');
 }
 
 SKIP: {
