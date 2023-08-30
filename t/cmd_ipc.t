@@ -5,7 +5,7 @@ use strict;
 use v5.10.1;
 use Test::More;
 use PublicInbox::TestCommon;
-use Socket qw(AF_UNIX SOCK_STREAM MSG_EOR);
+use Socket qw(AF_UNIX SOCK_STREAM);
 pipe(my ($r, $w)) or BAIL_OUT;
 my ($send, $recv);
 require_ok 'PublicInbox::Spawn';
@@ -122,7 +122,7 @@ SKIP: {
 	$send = $send_ic;
 	$recv = $recv_ic;
 	$do_test->(SOCK_STREAM, 0, 'Inline::C stream');
-	$do_test->($SOCK_SEQPACKET, MSG_EOR, 'Inline::C seqpacket');
+	$do_test->($SOCK_SEQPACKET, 0, 'Inline::C seqpacket');
 }
 
 SKIP: {
@@ -131,7 +131,7 @@ SKIP: {
 	$send = PublicInbox::CmdIPC4->can('send_cmd4');
 	$recv = PublicInbox::CmdIPC4->can('recv_cmd4');
 	$do_test->(SOCK_STREAM, 0, 'MsgHdr stream');
-	$do_test->($SOCK_SEQPACKET, MSG_EOR, 'MsgHdr seqpacket');
+	$do_test->($SOCK_SEQPACKET, 0, 'MsgHdr seqpacket');
 	SKIP: {
 		($send_ic && $recv_ic) or
 			skip 'Inline::C not installed/enabled', 12;
@@ -149,7 +149,7 @@ SKIP: {
 	$recv = PublicInbox::Syscall->can('recv_cmd4') or
 		skip 'recv_cmd4 not defined for arch';
 	$do_test->(SOCK_STREAM, 0, 'PP Linux stream');
-	$do_test->($SOCK_SEQPACKET, MSG_EOR, 'PP Linux seqpacket');
+	$do_test->($SOCK_SEQPACKET, 0, 'PP Linux seqpacket');
 }
 
 done_testing;

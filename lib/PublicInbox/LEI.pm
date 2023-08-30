@@ -10,7 +10,7 @@ use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
 use Getopt::Long ();
-use Socket qw(AF_UNIX SOCK_SEQPACKET MSG_EOR pack_sockaddr_un);
+use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET);
 use Cwd qw(getcwd);
 use POSIX qw(strftime);
@@ -481,7 +481,7 @@ sub x_it ($$) {
 	if ($self->{pkt_op_p}) { # worker => lei-daemon
 		$self->{pkt_op_p}->pkt_do('x_it', $code);
 	} elsif ($self->{sock}) { # lei->daemon => lei(1) client
-		send($self->{sock}, "x_it $code", MSG_EOR);
+		send($self->{sock}, "x_it $code", 0);
 	} elsif ($quit == \&CORE::exit) { # an admin (one-shot) command
 		exit($code >> 8);
 	} # else ignore if client disconnected
@@ -548,7 +548,7 @@ sub child_error { # passes non-fatal curl exit codes to user
 	if ($self->{pkt_op_p}) { # to top lei-daemon
 		$self->{pkt_op_p}->pkt_do('child_error', $child_error);
 	} elsif ($self->{sock}) { # to lei(1) client
-		send($self->{sock}, "child_error $child_error", MSG_EOR);
+		send($self->{sock}, "child_error $child_error", 0);
 	} # else noop if client disconnected
 }
 
@@ -1017,7 +1017,7 @@ sub send_exec_cmd { # tell script/lei to execute a command
 	PublicInbox::IPC::send_cmd(
 			$self->{sock} // die('lei client gone'),
 			[ map { fileno($_) } @$io ],
-			exec_buf($cmd, $env), MSG_EOR) //
+			exec_buf($cmd, $env), 0) //
 		Carp::croak("sendmsg: $!");
 }
 
@@ -1028,7 +1028,7 @@ sub poke_mua { # forces terminal MUAs to wake up and hopefully notice new mail
 	while (my $op = shift(@$alerts)) {
 		if ($op eq ':WINCH') {
 			# hit the process group that started the MUA
-			send($sock, '-WINCH', MSG_EOR) if $sock;
+			send($sock, '-WINCH', 0) if $sock;
 		} elsif ($op eq ':bell') {
 			out($self, "\a");
 		} elsif ($op =~ /(?<!\\),/) { # bare ',' (not ',,')
@@ -1037,7 +1037,7 @@ sub poke_mua { # forces terminal MUAs to wake up and hopefully notice new mail
 			my $cmd = $1; # run an arbitrary command
 			require Text::ParseWords;
 			$cmd = [ Text::ParseWords::shellwords($cmd) ];
-			send($sock, exec_buf($cmd, {}), MSG_EOR) if $sock;
+			send($sock, exec_buf($cmd, {}), 0) if $sock;
 		} else {
 			warn("W: unsupported --alert=$op\n"); # non-fatal
 		}
@@ -1093,7 +1093,7 @@ sub pgr_err {
 	print { $self->{2} } @msg;
 	$self->{2}->autoflush(1);
 	stop_pager($self);
-	send($self->{sock}, 'wait', MSG_EOR); # wait for user to quit pager
+	send($self->{sock}, 'wait', 0); # wait for user to quit pager
 }
 
 sub stop_pager {
@@ -1110,25 +1110,25 @@ sub accept_dispatch { # Listener {post_accept} callback
 	my $self = bless { sock => $sock }, __PACKAGE__;
 	vec(my $rvec = '', fileno($sock), 1) = 1;
 	select($rvec, undef, undef, 60) or
-		return send($sock, 'timed out waiting to recv FDs', MSG_EOR);
+		return send($sock, 'timed out waiting to recv FDs', 0);
 	# (4096 * 33) >MAX_ARG_STRLEN
 	my @fds = PublicInbox::IPC::recv_cmd($sock, my $buf, 4096 * 33) or
 		return; # EOF
 	if (!defined($fds[0])) {
 		warn(my $msg = "recv_cmd failed: $!");
-		return send($sock, $msg, MSG_EOR);
+		return send($sock, $msg, 0);
 	} else {
 		my $i = 0;
 		for my $fd (@fds) {
 			open($self->{$i++}, '+<&=', $fd) and next;
-			send($sock, "open(+<&=$fd) (FD=$i): $!", MSG_EOR);
+			send($sock, "open(+<&=$fd) (FD=$i): $!", 0);
 		}
-		$i == 4 or return send($sock, 'not enough FDs='.($i-1), MSG_EOR)
+		$i == 4 or return send($sock, 'not enough FDs='.($i-1), 0)
 	}
 	# $ENV_STR = join('', map { "\0$_=$ENV{$_}" } keys %ENV);
 	# $buf = "$argc\0".join("\0", @ARGV).$ENV_STR."\0\0";
 	substr($buf, -2, 2, '') eq "\0\0" or  # s/\0\0\z//
-		return send($sock, 'request command truncated', MSG_EOR);
+		return send($sock, 'request command truncated', 0);
 	my ($argc, @argv) = split(/\0/, $buf, -1);
 	undef $buf;
 	my %env = map { split(/=/, $_, 2) } splice(@argv, $argc);
@@ -1174,7 +1174,7 @@ sub event_step {
 			die "unrecognized client signal: $buf";
 		}
 		my $s = $self->{-socks} // []; # lei up --all
-		@$s = grep { send($_, $buf, MSG_EOR) } @$s;
+		@$s = grep { send($_, $buf, 0) } @$s;
 	};
 	if (my $err = $@) {
 		eval { $self->fail($err) };
@@ -1534,7 +1534,7 @@ sub cfg_dump ($$) {
 sub request_umask {
 	my ($lei) = @_;
 	my $s = $lei->{sock} // return;
-	send($s, 'umask', MSG_EOR) // die "send: $!";
+	send($s, 'umask', 0) // die "send: $!";
 	vec(my $rvec = '', fileno($s), 1) = 1;
 	select($rvec, undef, undef, 2) or die 'timeout waiting for umask';
 	recv($s, my $v, 5, 0) // die "recv: $!";

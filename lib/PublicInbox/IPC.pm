@@ -16,7 +16,7 @@ use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
 use PublicInbox::OnDestroy;
 use PublicInbox::WQWorker;
-use Socket qw(AF_UNIX MSG_EOR SOCK_STREAM);
+use Socket qw(AF_UNIX SOCK_STREAM);
 my $MY_MAX_ARG_STRLEN = 4096 * 33; # extra 4K for serialization
 my $SEQPACKET = eval { Socket::SOCK_SEQPACKET() }; # portable enough?
 our @EXPORT_OK = qw(ipc_freeze ipc_thaw nproc_shards);
@@ -279,7 +279,7 @@ sub wq_broadcast {
 		my $buf = ipc_freeze([$sub, @args]);
 		for my $bcast1 (values %$wkr) {
 			my $sock = $bcast1 // $self->{-wq_s1} // next;
-			send($sock, $buf, MSG_EOR) // croak "send: $!";
+			send($sock, $buf, 0) // croak "send: $!";
 			# XXX shouldn't have to deal with EMSGSIZE here...
 		}
 	} else {
@@ -294,7 +294,7 @@ sub stream_in_full ($$$) {
 		croak "socketpair: $!";
 	my $n = send_cmd($s1, [ fileno($r) ],
 			ipc_freeze(['do_sock_stream', length($buf)]),
-			MSG_EOR) // croak "sendmsg: $!";
+			0) // croak "sendmsg: $!";
 	undef $r;
 	$n = send_cmd($w, $fds, $buf, 0) // croak "sendmsg: $!";
 	while ($n < length($buf)) {
@@ -316,7 +316,7 @@ sub wq_io_do { # always async
 		if (length($buf) > $MY_MAX_ARG_STRLEN) {
 			stream_in_full($s1, $fds, $buf);
 		} else {
-			my $n = send_cmd $s1, $fds, $buf, MSG_EOR;
+			my $n = send_cmd $s1, $fds, $buf, 0;
 			return if defined($n); # likely
 			$!{ETOOMANYREFS} and
 				croak "sendmsg: $! (check RLIMIT_NOFILE)";
@@ -365,7 +365,7 @@ sub wq_nonblock_do { # always async
 	if ($self->{wqb}) { # saturated once, assume saturated forever
 		$self->{wqb}->flush_send($buf);
 	} else {
-		$send_cmd->($self->{-wq_s1}, [], $buf, MSG_EOR) //
+		$send_cmd->($self->{-wq_s1}, [], $buf, 0) //
 			($!{EAGAIN} ? PublicInbox::WQBlocked->new($self, $buf)
 					: croak("sendmsg: $!"));
 	}

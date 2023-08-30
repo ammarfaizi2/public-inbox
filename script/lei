@@ -2,7 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
-use Socket qw(AF_UNIX SOCK_SEQPACKET MSG_EOR pack_sockaddr_un);
+use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use PublicInbox::CmdIPC4;
 my $narg = 5;
 my $sock;
@@ -109,9 +109,9 @@ open my $dh, '<', '.' or die "open(.) $!";
 my $buf = join("\0", scalar(@ARGV), @ARGV);
 while (my ($k, $v) = each %ENV) { $buf .= "\0$k=$v" }
 $buf .= "\0\0";
-$send_cmd->($sock, [0, 1, 2, fileno($dh)], $buf, MSG_EOR) or die "sendmsg: $!";
-$SIG{TSTP} = sub { send($sock, 'STOP', MSG_EOR); kill 'STOP', $$ };
-$SIG{CONT} = sub { send($sock, 'CONT', MSG_EOR) };
+$send_cmd->($sock, [0, 1, 2, fileno($dh)], $buf, 0) or die "sendmsg: $!";
+$SIG{TSTP} = sub { send($sock, 'STOP', 0); kill 'STOP', $$ };
+$SIG{CONT} = sub { send($sock, 'CONT', 0) };
 
 my $x_it_code = 0;
 while (1) {
@@ -126,7 +126,7 @@ while (1) {
 	} elsif ($buf eq '-WINCH') {
 		kill($buf, @parent); # for MUA
 	} elsif ($buf eq 'umask') {
-		send($sock, 'u'.pack('V', umask), MSG_EOR) or die "send: $!"
+		send($sock, 'u'.pack('V', umask), 0) or die "send: $!"
 	} elsif ($buf =~ /\Ax_it ([0-9]+)\z/) {
 		$x_it_code ||= $1 + 0;
 		last;

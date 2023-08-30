@@ -123,7 +123,7 @@ while (keys %workers) { # reacts to SIGCHLD
 		}
 	}
 	while ($u = shift @queue) {
-		my $s = $todo[1]->send($u, MSG_EOR);
+		my $s = $todo[1]->send($u, 0);
 		if ($!{EAGAIN}) {
 			unshift @queue, $u;
 			last;
@@ -177,7 +177,7 @@ sub worker_loop {
 		foreach my $l (@links, "DONE\t$u") {
 			next if $l eq '' || $l =~ /\.mbox(?:\.gz)\z/;
 			do {
-				$s = $done_wr->send($l, MSG_EOR);
+				$s = $done_wr->send($l, 0);
 			} while (!defined $s && $!{EINTR});
 			die "$$ send $!\n" unless defined $s;
 			my $n = length($l);

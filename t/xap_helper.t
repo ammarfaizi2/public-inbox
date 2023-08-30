@@ -7,7 +7,7 @@ require_mods(qw(DBD::SQLite Search::Xapian));
 my $msg = no_scm_rights;
 plan(skip_all => $msg) if $msg; # TODO: FIFO support?
 use PublicInbox::Spawn qw(spawn);
-use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM MSG_EOR);
+use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM);
 require PublicInbox::AutoReap;
 require PublicInbox::IPC;
 require PublicInbox::XapClient;
@@ -54,7 +54,7 @@ my $doreq = sub {
 	my $buf = join("\0", @arg, '');
 	my @fds = fileno($y);
 	push @fds, fileno($err) if $err;
-	my $n = PublicInbox::IPC::send_cmd($s, \@fds, $buf, MSG_EOR);
+	my $n = PublicInbox::IPC::send_cmd($s, \@fds, $buf, 0);
 	$n // xbail "send: $!";
 	my $arg = "@arg";
 	$arg =~ s/\Q$tmp\E/\$TMP/gs;

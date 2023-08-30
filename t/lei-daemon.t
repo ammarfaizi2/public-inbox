@@ -2,7 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
-use Socket qw(AF_UNIX SOCK_SEQPACKET MSG_EOR pack_sockaddr_un);
+use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 
 test_lei({ daemon_only => 1 }, sub {
 	my $send_cmd = PublicInbox::Spawn->can('send_cmd4') // do {
@@ -40,7 +40,7 @@ test_lei({ daemon_only => 1 }, sub {
 			socket(my $c, AF_UNIX, SOCK_SEQPACKET, 0) or
 							BAIL_OUT "socket: $!";
 			connect($c, $addr) or BAIL_OUT "connect: $!";
-			$send_cmd->($c, \@fds, 'hi',  MSG_EOR);
+			$send_cmd->($c, \@fds, 'hi',  0);
 		}
 		lei_ok('daemon-pid');
 		chomp($pid = $lei_out);

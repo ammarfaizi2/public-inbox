@@ -9,7 +9,7 @@
 package PublicInbox::XapClient;
 use v5.12;
 use PublicInbox::Spawn qw(spawn);
-use Socket qw(AF_UNIX SOCK_SEQPACKET MSG_EOR);
+use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
 
 sub mkreq {
@@ -21,7 +21,7 @@ sub mkreq {
 	}
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
-	$n = PublicInbox::IPC::send_cmd($self->{io}, \@fds, $buf, MSG_EOR) //
+	$n = PublicInbox::IPC::send_cmd($self->{io}, \@fds, $buf, 0) //
 		die "send_cmd: $!";
 	$n == length($buf) or die "send_cmd: $n != ".length($buf);
 	$r;

@@ -8,7 +8,6 @@ use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLOUT EPOLLONESHOT);
 use PublicInbox::IPC;
 use Carp ();
-use Socket qw(MSG_EOR);
 
 sub new {
 	my ($cls, $wq, $buf) = @_;
@@ -25,7 +24,7 @@ sub flush_send {
 		} else {
 			my $wq_s1 = $self->{sock};
 			my $n = $PublicInbox::IPC::send_cmd->($wq_s1, [], $buf,
-								MSG_EOR);
+								0);
 			next if defined($n);
 			Carp::croak("sendmsg: $!") unless $!{EAGAIN};
 			PublicInbox::DS::epwait($wq_s1, EPOLLOUT|EPOLLONESHOT);

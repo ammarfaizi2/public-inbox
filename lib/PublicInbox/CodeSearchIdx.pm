@@ -55,7 +55,7 @@ use PublicInbox::CidxLogP;
 use PublicInbox::CidxComm;
 use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
-use Socket qw(MSG_EOR AF_UNIX SOCK_SEQPACKET);
+use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use Carp ();
 our (
 	$LIVE, # pid => cmd
@@ -253,7 +253,7 @@ sub cidx_reap_log { # awaitpid cb
 	my ($pid, $self, $op_p) = @_;
 	if (!$? || ($DO_QUIT && (($? & 127) == $DO_QUIT ||
 				($? & 127) == POSIX::SIGPIPE))) {
-		send($op_p, "shard_done $self->{shard}", MSG_EOR);
+		send($op_p, "shard_done $self->{shard}", 0);
 	} else {
 		warn "E: git @LOG_STDIN: \$?=$?\n";
 		$self->{xdb}->cancel_transaction;
@@ -501,7 +501,7 @@ sub shard_commit { # via wq_io_do
 	my ($self) = @_;
 	my $op_p = delete($self->{0}) // die 'BUG: no {0} op_p';
 	$self->commit_txn_lazy;
-	send($op_p, "shard_done $self->{shard}", MSG_EOR);
+	send($op_p, "shard_done $self->{shard}", 0);
 }
 
 sub assoc_max_init ($) {
@@ -782,7 +782,7 @@ sub prune_commit { # via wq_io_do in IDX_SHARDS
 	my $prune_op_p = delete $self->{0} // die 'BUG: no {0} op_p';
 	my $nr = delete $self->{nr_prune} // die 'BUG: nr_prune undef';
 	cidx_ckpoint($self, "prune [$self->{shard}] $nr done") if $nr;
-	send($prune_op_p, "prune_done $self->{shard}", MSG_EOR);
+	send($prune_op_p, "prune_done $self->{shard}", 0);
 }
 
 sub shards_active { # post_loop_do
