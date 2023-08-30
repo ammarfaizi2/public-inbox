@@ -460,6 +460,16 @@ static enum exc_iter dump_roots_iter(struct req *req,
 	return ITER_OK;
 }
 
+static char *hsearch_enter_key(char *s)
+{
+#if defined(__OpenBSD__) /* hdestroy frees each key */
+	char *ret = strdup(s);
+	if (!ret) perror("strdup");
+	return ret;
+#endif // glibc, musl, FreeBSD, NetBSD do not free keys
+	return s;
+}
+
 static bool cmd_dump_roots(struct req *req)
 {
 	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = {};
@@ -511,7 +521,8 @@ static bool cmd_dump_roots(struct req *req)
 	}
 	for (size_t i = 0; i < tot; ) {
 		ENTRY e;
-		e.key = drt.entries[i++];
+		e.key = hsearch_enter_key(drt.entries[i++]);
+		if (!e.key) return false;
 		e.data = drt.entries[i++];
 		if (!hsearch(e, ENTER)) {
 			warn("hsearch(%s => %s, ENTER)", e.key,
