@@ -107,13 +107,12 @@ my $test = sub {
 };
 my $ar;
 
-my @NO_CXX;
-if (!$ENV{TEST_XH_CXX_ONLY}) {
+my @NO_CXX = (1);
+unless ($ENV{TEST_XH_CXX_ONLY}) {
 	$ar = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j0')]);
 	$ar = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j1')]);
-	push @NO_CXX, 0;
 }
 SKIP: {
 	eval {
@@ -121,8 +120,8 @@ SKIP: {
 		PublicInbox::XapHelperCxx::check_build();
 	};
 	skip "XapHelperCxx build: $@", 1 if $@;
-	push @NO_CXX, 1;
 
+	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
 	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
 			PublicInbox::XapHelperCxx::start('-j0')]);
 	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
