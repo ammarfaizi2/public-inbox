@@ -50,9 +50,18 @@
 #	define SET_MAX_EXPANSION set_max_wildcard_expansion
 #endif
 
+#if defined(__FreeBSD__) || defined(__GLIBC__)
+#	define STDERR_ASSIGNABLE (1)
+#else
+#	define STDERR_ASSIGNABLE (0)
+#endif
+
 static const int sock_fd = 0; // SOCK_SEQPACKET as stdin :P
 static pid_t parent_pid;
+#if STDERR_ASSIGNABLE
 static FILE *orig_err = stderr;
+#endif
+static int orig_err_fd = -1;
 static void *srch_tree; // tsearch + tdelete + twalk
 static pid_t *worker_pids; // nr => pid
 static unsigned long nworker;
@@ -820,6 +829,37 @@ static void cleanup_pids(void)
 	worker_pids = NULL;
 }
 
+static void stderr_set(FILE *tmp_err)
+{
+#if STDERR_ASSIGNABLE
+	if (my_setlinebuf(tmp_err))
+		perror("W: setlinebuf(tmp_err)");
+	stderr = tmp_err;
+	return;
+#endif
+	int fd = fileno(tmp_err);
+	if (fd < 0) err(EXIT_FAILURE, "BUG: fileno(tmp_err)");
+	while (dup2(fd, STDERR_FILENO) < 0) {
+		if (errno != EINTR)
+			err(EXIT_FAILURE, "dup2(%d => 2)", fd);
+	}
+}
+
+static void stderr_restore(FILE *tmp_err)
+{
+#if STDERR_ASSIGNABLE
+	stderr = orig_err;
+	return;
+#endif
+	if (ferror(stderr) | fflush(stderr))
+		perror("ferror|fflush stderr");
+	while (dup2(orig_err_fd, STDERR_FILENO) < 0) {
+		if (errno != EINTR)
+			err(EXIT_FAILURE, "dup2(%d => 2)", orig_err_fd);
+	}
+	clearerr(stderr);
+}
+
 static void recv_loop(void) // worker process loop
 {
 	static char rbuf[4096 * 33]; // per-process
@@ -828,18 +868,15 @@ static void recv_loop(void) // worker process loop
 		struct req req = {};
 		if (!recv_req(&req, rbuf, &len))
 			continue;
-		if (req.fp[1]) {
-			if (my_setlinebuf(req.fp[1]))
-				perror("W: setlinebuf(req.fp[1])");
-			stderr = req.fp[1];
-		}
+		if (req.fp[1])
+			stderr_set(req.fp[1]);
 		req.argc = (int)SPLIT2ARGV(req.argv, rbuf, len);
 		if (req.argc > 0)
 			dispatch(&req);
 		if (ferror(req.fp[0]) | fclose(req.fp[0]))
 			perror("ferror|fclose fp[0]");
 		if (req.fp[1]) {
-			stderr = orig_err;
+			stderr_restore(req.fp[1]);
 			if (ferror(req.fp[1]) | fclose(req.fp[1]))
 				perror("ferror|fclose fp[1]");
 		}
@@ -894,6 +931,12 @@ int main(int argc, char *argv[])
 	mail_nrp_init();
 	code_nrp_init();
 	atexit(cleanup_all);
+
+	if (!STDERR_ASSIGNABLE) {
+		orig_err_fd = dup(STDERR_FILENO);
+		if (orig_err_fd < 0)
+			err(EXIT_FAILURE, "dup(2)");
+	}
 
 	nworker = 0;
 #ifdef _SC_NPROCESSORS_ONLN
