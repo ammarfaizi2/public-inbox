@@ -150,6 +150,7 @@ WriteMakefile(
 
 		# perl-modules-5.xx or libperl5.xx in Debian-based
 		# part of "perl5" on FreeBSD
+		'autodie' => 0,
 		'Compress::Raw::Zlib' => 0,
 		'Compress::Zlib' => 0,
 		'Data::Dumper' => 0,

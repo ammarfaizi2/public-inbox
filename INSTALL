@@ -201,6 +201,7 @@ library.  Debian-based distros put them in "libperl5.$MINOR" or
 "perl-modules-5.$MINOR"; and FreeBSD puts them in "perl5".
 RPM-based distros split them out into separate packages:
 
+* autodie                          rpm: perl-autodie
 * Digest::SHA                      rpm: perl-Digest-SHA
 * Data::Dumper                     rpm: perl-Data-Dumper
 * Encode                           rpm: perl-Encode
