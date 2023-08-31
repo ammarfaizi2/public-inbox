@@ -37,9 +37,15 @@ sub cmd_test_inspect {
 }
 
 sub iter_retry_check ($) {
-	die unless ref($@) =~ /\bDatabaseModifiedError\b/;
-	$_[0]->{srch}->reopen;
-	undef; # retries
+	if (ref($@) =~ /\bDatabaseModifiedError\b/) {
+		$_[0]->{srch}->reopen;
+		undef; # retries
+	} elsif (ref($@) =~ /\bDocNotFoundError\b/) {
+		warn "doc not found: $@";
+		0; # continue to next doc
+	} else {
+		die;
+	}
 }
 
 sub dump_ibx_iter ($$$) {
