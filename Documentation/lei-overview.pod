@@ -119,11 +119,13 @@ code repository.
 
 =head1 PERFORMANCE NOTES
 
-L<Inline::C> is required, lei runs as a background daemon to reduce
-startup costs and can provide real-time L<kqueue(2)>/L<inotify(7)>
-Maildir monitoring.  L<IO::KQueue> (p5-IO-KQueue on FreeBSD) and
-L<Linux::Inotify2> (liblinux-inotify2-perl and perl-Linux-Inotify2 in
-.deb and .rpm-based distros, respectively) are recommended.
+L<Inline::C> is required on BSDs and can speed things up on Linux.
+
+lei runs as a background daemon to reduce startup costs and can
+provide real-time L<kqueue(2)>/L<inotify(7)> Maildir monitoring.
+L<IO::KQueue> (p5-IO-KQueue on FreeBSD) and L<Linux::Inotify2>
+(liblinux-inotify2-perl and perl-Linux-Inotify2 in .deb and .rpm-based
+distros, respectively) are recommended.
 
 L<Socket::MsgHdr> is optional (libsocket-msghdr-perl in Debian),
 and further improves startup performance.  Its effect is most felt

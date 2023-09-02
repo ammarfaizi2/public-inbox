@@ -76,7 +76,8 @@ Numerous optional modules are likely to be useful as well:
 - Inline::C                        deb: libinline-c-perl
                                    pkg: p5-Inline-C
                                    rpm: perl-Inline (or perl-Inline-C)
-                                   (speeds up process spawning on Linux,
+                                   (required for lei on *BSD;
+                                    speeds up process spawning on Linux,
                                     see public-inbox-daemon(8))
 
 - Email::Address::XS               deb: libemail-address-xs-perl
@@ -88,17 +89,17 @@ Numerous optional modules are likely to be useful as well:
 - Parse::RecDescent                deb: libparse-recdescent-perl
                                    pkg: p5-Parse-RecDescent
                                    rpm: perl-ParseRecDescent
-                                   (optional, for public-inbox-imapd(1))
+                                   (only for public-inbox-imapd(1))
 
 - Mail::IMAPClient                 deb: libmail-imapclient-perl
                                    pkg: p5-Mail-IMAPClient
                                    rpm: perl-Mail-IMAPClient
-                                   (optional for lei and public-inbox-watch)
+                                   (only for lei and public-inbox-watch)
 
 - BSD::Resource                    deb: libbsd-resource-perl
                                    pkg: p5-BSD-Resource
                                    rpm: perl-BSD-Resource
-                                   (optional, for PSGI limiters
+                                   (only for PSGI limiters,
                                     see public-inbox-config(5))
 
 - Plack::Middleware::ReverseProxy  deb: libplack-middleware-reverseproxy-perl
@@ -113,7 +114,7 @@ Numerous optional modules are likely to be useful as well:
 * xapian-compact (tool)            deb: xapian-tools
                                    pkg: xapian-core
                                    rpm: xapian-core
-                                   (optional, for public-inbox-compact(1))
+                                   (only for public-inbox-compact(1))
 
 * curl (tool)                      deb, pkg, rpm: curl
                                    (for HTTP(S) externals with curl)
