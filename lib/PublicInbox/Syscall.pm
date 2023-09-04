@@ -2,7 +2,7 @@
 # specifically the Debian libsys-syscall-perl 0.25-6 version to
 # fix upstream regressions in 0.25.
 #
-# See devel/syscall-list in the public-inbox source tree for maintenance
+# See devel/sysdefs-list in the public-inbox source tree for maintenance
 # <https://80x24.org/public-inbox.git>, and machines from the GCC Farm:
 # <https://cfarm.tetaneutral.net/>
 #
@@ -246,7 +246,7 @@ if ($^O eq "linux") {
         warn <<EOM;
 machine=$machine ptrsize=$Config{ptrsize} has no syscall definitions
 git clone https://80x24.org/public-inbox.git and
-Send the output of ./devel/syscall-list to meta\@public-inbox.org
+Send the output of ./devel/sysdefs-list to meta\@public-inbox.org
 EOM
     }
     if ($u64_mod_8) {
@@ -259,7 +259,8 @@ EOM
 }
 # use Inline::C for *BSD-only or general POSIX stuff.
 # Linux guarantees stable syscall numbering, BSDs only offer a stable libc
-# use devel/syscall-list on Linux to detect new syscall numbers
+# use devel/sysdefs-list on Linux to detect new syscall numbers and
+# other system constants
 
 ############################################################################
 # epoll functions

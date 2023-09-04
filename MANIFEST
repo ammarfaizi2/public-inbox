@@ -123,7 +123,7 @@ contrib/selinux/el7/publicinbox.fc
 contrib/selinux/el7/publicinbox.te
 devel/README
 devel/longest-tests
-devel/syscall-list
+devel/sysdefs-list
 examples/README
 examples/README.unsubscribe
 examples/cgit-commit-filter.lua

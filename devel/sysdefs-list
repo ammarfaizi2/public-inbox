@@ -1,31 +1,37 @@
 # Copyright all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <http://www.gnu.org/licenses/agpl-3.0.txt>
-# Dump syscall numbers under Linux and any other kernel which
-# promises stable syscall numbers.  This is to maintain
-# PublicInbox::Syscall
-# DO NOT USE this for *BSDs, none of the current BSD kernels
-# we know about promise stable syscall numbers, we'll use
-# Inline::C to support them.
+# Dump system-specific constant numbers this is to maintain
+# PublicInbox::Syscall and any other system-specific pieces.
+# DO NOT USE syscall numbers for *BSDs, none of the current BSD kernels
+# we know about promise stable syscall numbers (unlike Linux).
+# However, sysconf(3) constants are stable ABI on all safe to dump.
 eval 'exec perl -S $0 ${1+"$@"}' # no shebang
 	if 0; # running under some shell
-use strict;
-use v5.10.1;
+use v5.12;
 use File::Temp 0.19;
 use POSIX qw(uname);
+use Config;
 say '$machine='.(POSIX::uname())[-1];
-my $cc = $ENV{CC} // 'cc';
-my @cflags = split(/\s+/, $ENV{CFLAGS} // '-Wall');
+my $cc = $ENV{CC} // $Config{cc} // 'cc';
+my @cflags = split(/\s+/, $ENV{CFLAGS} // $Config{ccflags} // '-Wall');
 my $str = do { local $/; <DATA> };
-my $tmp = File::Temp->newdir('syscall-list-XXXX', TMPDIR => 1);
-my $f = "$tmp/sc.c";
-my $x = "$tmp/sc";
+$str =~ s/^\s*MAYBE\s*(\w+)\s*$/
+#ifdef $1
+	D($1);
+#endif
+/sgxm;
+my $tmp = File::Temp->newdir('sysdefs-list-XXXX', TMPDIR => 1);
+my $f = "$tmp/sysdefs.c";
+my $x = "$tmp/sysdefs";
 open my $fh, '>', $f or die "open $f $!";
 print $fh $str or die "print $f $!";
 close $fh or die "close $f $!";
-system($cc, '-o', $x, $f, @cflags) == 0 or die "cc failed \$?=$?";
+system($cc, '-o', $x, $f, @cflags) == 0 or die "$cc failed \$?=$?";
 exec($x);
 __DATA__
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+#  define _GNU_SOURCE
+#endif
 #include <signal.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
@@ -43,9 +49,7 @@ int main(void)
 #ifdef __linux__
 	D(SYS_epoll_create1);
 	D(SYS_epoll_ctl);
-#ifdef SYS_epoll_wait
-	D(SYS_epoll_wait);
-#endif
+	MAYBE SYS_epoll_wait
 	D(SYS_epoll_pwait);
 	D(SYS_signalfd4);
 	D(SYS_inotify_init1);
@@ -59,13 +63,12 @@ int main(void)
 	printf("FS_IOC_GETFLAGS=%#lx\nFS_IOC_SETFLAGS=%#lx\n",
 		(unsigned long)FS_IOC_GETFLAGS, (unsigned long)FS_IOC_SETFLAGS);
 #endif
-
-#ifdef SYS_renameat2
-	D(SYS_renameat2);
-#endif
+	MAYBE SYS_renameat2
 #endif /* Linux, any other OSes with stable syscalls? */
 	printf("size_t=%zu off_t=%zu pid_t=%zu\n",
 		 sizeof(size_t), sizeof(off_t), sizeof(pid_t));
 	D(SIGWINCH);
+	MAYBE _SC_NPROCESSORS_ONLN
+
 	return 0;
 }
