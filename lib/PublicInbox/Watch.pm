@@ -389,7 +389,7 @@ sub watch_atfork_child ($) {
 	my $sig = delete $self->{sig};
 	$sig->{CHLD} = 'DEFAULT';
 	@SIG{keys %$sig} = values %$sig;
-	PublicInbox::DS::sig_setmask($self->{oldset});
+	PublicInbox::DS::sig_setmask(PublicInbox::DS::allowset($sig));
 }
 
 sub watch_atfork_parent ($) { _done_for_now($_[0]) }
@@ -533,8 +533,7 @@ sub watch_nntp_init ($$) {
 }
 
 sub watch { # main entry point
-	my ($self, $sig, $oldset) = @_;
-	$self->{oldset} = $oldset;
+	my ($self, $sig) = @_;
 	my $first_sig;
 	$self->{sig} //= ($first_sig = $sig);
 	my $poll = {}; # intvl_seconds => [ uri1, uri2 ]
@@ -546,7 +545,7 @@ sub watch { # main entry point
 	}
 	watch_fs_init($self) if $self->{mdre};
 	local @PublicInbox::DS::post_loop_do = (sub { !$self->quit_done });
-	PublicInbox::DS::event_loop($first_sig, $oldset); # calls ->event_step
+	PublicInbox::DS::event_loop($first_sig); # calls ->event_step
 	_done_for_now($self);
 }
 

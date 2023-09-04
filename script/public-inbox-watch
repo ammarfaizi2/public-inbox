@@ -17,7 +17,7 @@ my $do_scan = 1;
 GetOptions('scan!' => \$do_scan, # undocumented, testing only
 	'help|h' => \(my $show_help)) or do { print STDERR $help; exit 1 };
 if ($show_help) { print $help; exit 0 };
-my $oldset = PublicInbox::DS::block_signals();
+PublicInbox::DS::block_signals();
 STDOUT->autoflush(1);
 STDERR->autoflush(1);
 local $0 = $0; # local since this script may be eval-ed
@@ -55,5 +55,5 @@ if ($watch) {
 
 	# --no-scan is only intended for testing atm, undocumented.
 	PublicInbox::DS::requeue($scan) if $do_scan;
-	$watch->watch($sig, $oldset) while ($watch);
+	$watch->watch($sig) while ($watch);
 }
