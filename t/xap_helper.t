@@ -95,21 +95,55 @@ my $test = sub {
 	my $stats = do { local $/; <$err_rd> };
 	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported');
 
-	if ($arg[-1] !~ /\('-j0'\)/) {
-		kill('KILL', $cinfo{pid});
+	return $ar if $cinfo{pid} == $pid;
+
+	# test worker management:
+	kill('TERM', $cinfo{pid});
+	my $tries = 0;
+	do {
 		$r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0]);
-		%info = map {
-			split(/=/, $_, 2)
-		} split(/ /, do { local $/; <$r> });
-		isnt($info{pid}, $cinfo{pid}, 'spawned new worker');
+		%info = map { split(/=/, $_, 2) }
+			split(/ /, do { local $/; <$r> });
+	} while ($info{pid} == $cinfo{pid} && ++$tries < 10);
+	isnt($info{pid}, $cinfo{pid}, 'spawned new worker');
+
+	my %pids;
+	$tries = 0;
+	my @ins = ($s, qw(test_inspect -d), $ibx_idx[0]);
+	kill('TTIN', $pid);
+	until (scalar(keys %pids) >= 2 || ++$tries > 10) {
+		tick;
+		my @r = map { $doreq->(@ins) } (0..5);
+		for my $fh (@r) {
+			my $buf = do { local $/; <$fh> } // die "read: $!";
+			$buf =~ /\bpid=(\d+)/ and $pids{$1} = undef;
+		}
 	}
+	is(scalar keys %pids, 2, 'have two pids');
+
+	kill('TTOU', $pid);
+	%pids = ();
+	my $delay = $tries * 0.11 * ($ENV{VALGRIND} ? 10 : 1);
+	$tries = 0;
+	diag 'waiting '.$delay.'s for SIGTTOU';
+	tick($delay);
+	until (scalar(keys %pids) == 1 || ++$tries > 100) {
+		%pids = ();
+		my @r = map { $doreq->(@ins) } (0..5);
+		for my $fh (@r) {
+			my $buf = do { local $/; <$fh> } // die "read: $!";
+			$buf =~ /\bpid=(\d+)/ and $pids{$1} = undef;
+		}
+	}
+	is(scalar keys %pids, 1, 'have one pid') or diag explain(\%pids);
+	is($info{pid}, (keys %pids)[0], 'kept oldest PID after TTOU');
+
 	$ar;
 };
-my $ar;
 
 my @NO_CXX = (1);
 unless ($ENV{TEST_XH_CXX_ONLY}) {
-	$ar = $test->(qw[-MPublicInbox::XapHelper -e
+	my $ar = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j0')]);
 	$ar = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j1')]);
@@ -119,10 +153,10 @@ SKIP: {
 		require PublicInbox::XapHelperCxx;
 		PublicInbox::XapHelperCxx::check_build();
 	};
-	skip "XapHelperCxx build: $@", 1 if $@;
+	skip "XapHelperCxx build: $@", 1 if $@ || $ENV{PI_NO_CXX};
 
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
-	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
+	my $ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
 			PublicInbox::XapHelperCxx::start('-j0')]);
 	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
 			PublicInbox::XapHelperCxx::start('-j1')]);
@@ -142,6 +176,7 @@ my @id2root;
 	close $fh;
 }
 
+my $ar;
 for my $n (@NO_CXX) {
 	local $ENV{PI_NO_CXX} = $n;
 	my ($xhc, $pid) = PublicInbox::XapClient::start_helper('-j0');

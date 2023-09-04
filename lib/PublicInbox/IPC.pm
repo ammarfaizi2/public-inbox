@@ -42,7 +42,7 @@ if ($enc && $dec) { # should be custom ops
 	*ipc_thaw = \&Storable::thaw;
 }
 
-my $recv_cmd = PublicInbox::Spawn->can('recv_cmd4');
+our $recv_cmd = PublicInbox::Spawn->can('recv_cmd4');
 our $send_cmd = PublicInbox::Spawn->can('send_cmd4') // do {
 	require PublicInbox::CmdIPC4;
 	$recv_cmd //= PublicInbox::CmdIPC4->can('recv_cmd4');

@@ -10,9 +10,11 @@ $GLP->configure(qw(require_order bundling no_ignore_case no_auto_abbrev));
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::CodeSearch;
 use PublicInbox::IPC;
+use PublicInbox::DS qw(awaitpid);
+use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
-our (%SRCH, %PIDS, $parent_pid);
+our (%SRCH, %WORKERS, $parent_pid, $alive, $nworker, $workerset);
 our $stderr = \*STDERR;
 
 # only short options for portability in C++ implementation
@@ -171,11 +173,17 @@ sub dispatch {
 sub recv_loop {
 	local $SIG{__WARN__} = sub { print $stderr @_ };
 	my $rbuf;
-	while (!defined($parent_pid) || getppid != $parent_pid) {
-		my $req = bless {}, __PACKAGE__;
-		my @fds = PublicInbox::IPC::recv_cmd(\*STDIN, $rbuf, 4096*33);
+	my $in = \*STDIN;
+	while (!defined($parent_pid) || getppid == $parent_pid) {
+		PublicInbox::DS::sig_setmask($workerset);
+		my @fds = $PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33);
 		scalar(@fds) or exit(66); # EX_NOINPUT
-		$fds[0] // die "recvmsg: $!";
+		if (!defined($fds[0])) {
+			next if $!{EINTR};
+			die "recvmsg: $!";
+		}
+		PublicInbox::DS::block_signals();
+		my $req = bless {}, __PACKAGE__;
 		my $i = 0;
 		for my $fd (@fds) {
 			open($req->{$i++}, '+<&=', $fd) and next;
@@ -195,38 +203,89 @@ sub recv_loop {
 	}
 }
 
+sub reap_worker { # awaitpid CB
+	my ($pid, $nr) = @_;
+	delete $WORKERS{$nr};
+	if (($? >> 8) == 66) { # EX_NOINPUT
+		$alive = undef;
+		PublicInbox::DS->SetLoopTimeout(1);
+	} elsif ($?) {
+		warn "worker[$nr] died \$?=$?\n";
+	}
+	PublicInbox::DS::requeue(\&start_workers) if $alive;
+}
+
 sub start_worker ($) {
 	my ($nr) = @_;
-	my $pid = fork // return warn("fork: $!");
+	my $pid = fork;
+	if (!defined($pid)) {
+		warn("fork: $!");
+		return undef;
+	};
 	if ($pid == 0) {
-		undef %PIDS;
+		undef %WORKERS;
+		PublicInbox::DS::Reset();
+		$SIG{TERM} = sub { $parent_pid = -1 };
+		$SIG{TTIN} = $SIG{TTOU} = 'IGNORE';
+		$SIG{CHLD} = 'DEFAULT'; # Xapian may use this
 		recv_loop();
 		exit(0);
 	} else {
-		$PIDS{$pid} = $nr;
+		$WORKERS{$nr} = $pid;
+		awaitpid($pid, \&reap_worker, $nr);
 	}
 }
 
+sub start_workers {
+	for my $nr (grep { !defined($WORKERS{$_}) } (0..($nworker - 1))) {
+		start_worker($nr) if $alive;
+	}
+}
+
+sub do_sigttou {
+	if ($alive && $nworker > 1) {
+		--$nworker;
+		my @nr = grep { $_ >= $nworker } keys %WORKERS;
+		kill('TERM', @WORKERS{@nr});
+	}
+}
+
+sub xh_alive { $alive || scalar(keys %WORKERS) }
+
 sub start (@) {
 	my (@argv) = @_;
-	local (%SRCH, %PIDS, $parent_pid);
+	local (%SRCH, %WORKERS);
+	local $alive = 1;
 	PublicInbox::Search::load_xapian();
 	$GLP->getoptionsfromarray(\@argv, my $opt = { j => 1 }, 'j=i') or
 		die 'bad args';
-	return recv_loop() if !$opt->{j};
-	die '-j must be >= 0' if $opt->{j} < 0;
-	start_worker($_) for (1..($opt->{j}));
-
-	my $quit;
-	until ($quit) {
-		my $p = waitpid(-1, 0) or return;
-		if (defined(my $nr = delete $PIDS{$p})) {
-			$quit = 1 if ($? >> 8) == 66; # EX_NOINPUT
-			start_worker($nr) if !$quit;
-		} else {
-			warn "W: unknown pid=$p reaped\n";
-		}
+	local $workerset = POSIX::SigSet->new;
+	$workerset->fillset or die "fillset: $!";
+	for (@PublicInbox::DS::UNBLOCKABLE) {
+		$workerset->delset($_) or die "delset($_): $!";
 	}
+
+	local $nworker = $opt->{j};
+	return recv_loop() if $nworker == 0;
+	die '-j must be >= 0' if $nworker < 0;
+	for (POSIX::SIGTERM, POSIX::SIGCHLD) {
+		$workerset->delset($_) or die "delset($_): $!";
+	}
+	local $parent_pid = $$;
+	my $sig = {
+		TTIN => sub {
+			if ($alive) {
+				++$nworker;
+				PublicInbox::DS::requeue(\&start_workers)
+			}
+		},
+		TTOU => \&do_sigttou,
+		CHLD => \&PublicInbox::DS::enqueue_reap,
+	};
+	PublicInbox::DS::block_signals();
+	start_workers();
+	@PublicInbox::DS::post_loop_do = \&xh_alive;
+	PublicInbox::DS::event_loop($sig);
 }
 
 1;
