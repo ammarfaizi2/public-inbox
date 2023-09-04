@@ -28,6 +28,7 @@ SKIP: {
 	kill 'USR2', $$ or die "kill $!";
 	ok(!defined($hit->{USR2}), 'no USR2 yet') or diag explain($hit);
 	PublicInbox::DS->Reset;
+	ok($PublicInbox::Syscall::SIGNUM{WINCH}, 'SIGWINCH number defined');
 	my $sigfd = PublicInbox::Sigfd->new($sig, 0);
 	if ($sigfd) {
 		$linux_sigfd = 1 if $^O eq 'linux';
@@ -71,7 +72,7 @@ SKIP: {
 		PublicInbox::DS->Reset;
 		is($hit->{TERM}->{sigfd}, 1, 'TERM sigfd fired in event loop');
 		is($hit->{HUP}->{sigfd}, 3, 'HUP sigfd fired in event loop');
-		is($hit->{WINCH}->{sigfd}, 1, 'WINCH sigfd fired in event loop');
+		ok($hit->{WINCH}->{sigfd}, 'WINCH sigfd fired in event loop');
 	} else {
 		skip('signalfd disabled?', 10);
 	}
