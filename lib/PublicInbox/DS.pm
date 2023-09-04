@@ -24,11 +24,11 @@ use strict;
 use v5.10.1;
 use parent qw(Exporter);
 use bytes qw(length substr); # FIXME(?): needed for PublicInbox::NNTP
-use POSIX qw(WNOHANG sigprocmask SIG_SETMASK);
+use POSIX qw(WNOHANG sigprocmask SIG_SETMASK SIG_UNBLOCK);
 use Fcntl qw(SEEK_SET :DEFAULT O_APPEND);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use Scalar::Util qw(blessed);
-use PublicInbox::Syscall qw(:epoll);
+use PublicInbox::Syscall qw(:epoll %SIGNUM);
 use PublicInbox::Tmpfile;
 use Errno qw(EAGAIN EINVAL ECHILD EINTR);
 use Carp qw(carp croak);
@@ -259,19 +259,41 @@ sub PostEventLoop () {
 			: 1
 }
 
+sub allowset ($) {
+	my ($sig) = @_; # { signame => whatever }
+	my $ret = POSIX::SigSet->new;
+	$ret->fillset or die "fillset: $!";
+	for my $s (keys %$sig) {
+		my $num = $SIGNUM{$s} // POSIX->can("SIG$s")->();
+		$ret->delset($num) or die "delset ($s => $num): $!";
+	}
+	for (@UNBLOCKABLE) { $ret->delset($_) or die "delset($_): $!" }
+	$ret;
+}
+
 # Start processing IO events. In most daemon programs this never exits. See
 # C<post_loop_do> for how to exit the loop.
 sub event_loop (;$$) {
 	my ($sig, $oldset) = @_;
 	$Epoll //= _InitPoller();
 	require PublicInbox::Sigfd if $sig;
-	my $sigfd = PublicInbox::Sigfd->new($sig, 1) if $sig;
+	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig, 1) : undef;
+	if ($sigfd && $sigfd->{is_kq}) {
+		my $tmp = allowset($sig);
+		local @SIG{keys %$sig} = values(%$sig);
+		sig_setmask($tmp, my $old = POSIX::SigSet->new);
+		# Unlike Linux signalfd, EVFILT_SIGNAL can't handle
+		# signals received before the filter is created,
+		# so we peek at signals here.
+		sig_setmask($old);
+	}
 	local @SIG{keys %$sig} = values(%$sig) if $sig && !$sigfd;
 	local $SIG{PIPE} = 'IGNORE';
 	if (!$sigfd && $sig) {
 		# wake up every second to accept signals if we don't
 		# have signalfd or IO::KQueue:
-		sig_setmask($oldset);
+		sig_setmask($oldset) if $oldset;
+		sigprocmask(SIG_UNBLOCK, allowset($sig)) or die "SIG_UNBLOCK: $!";
 		PublicInbox::DS->SetLoopTimeout(1000);
 	}
 	$_[0] = $sigfd = $sig = undef; # $_[0] == sig

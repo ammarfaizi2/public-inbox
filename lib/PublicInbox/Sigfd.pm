@@ -31,8 +31,9 @@ sub new {
 		$self->SUPER::new($io, EPOLLIN | EPOLLET);
 	} else { # master main loop
 		$self->{sock} = $io;
-		$self;
 	}
+	$self->{is_kq} = 1 if tied(*$io);
+	$self;
 }
 
 # PublicInbox::Daemon in master main loop (blocking)
