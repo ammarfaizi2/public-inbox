@@ -636,18 +636,17 @@ static bool recv_req(struct req *req, char *rbuf, size_t *len)
 			int fd = *fdp++;
 			const char *mode = NULL;
 			int fl = fd_ok ? fcntl(fd, F_GETFL) : 0;
-			switch (fl) {
-			case 0: break; // hit previous error
-			case -1:
+			if (fl == 0) {
+				continue; // hit previous error
+			} else if (fl == -1) {
 				warnx("invalid fd=%d", fd);
 				fd_ok = false;
-				break;
-			case O_WRONLY: mode = "w"; break;
-			case O_RDWR:
+			} else if (fl & O_WRONLY) {
+				mode = "w";
+			} else if (fl & O_RDWR) {
 				mode = "r+";
 				if (i == 0) req->has_input = true;
-				break;
-			default:
+			} else {
 				warnx("invalid mode from F_GETFL: 0x%x", fl);
 				fd_ok = false;
 			}
