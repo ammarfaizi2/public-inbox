@@ -134,7 +134,7 @@ sub require_mods {
 	while (my $mod = shift(@mods)) {
 		if ($mod eq 'lei') {
 			require_git(2.6, $maybe ? $maybe : ());
-			push @mods, qw(DBD::SQLite Search::Xapian);
+			push @mods, qw(DBD::SQLite Search::Xapian +SCM_RIGHTS);
 			$mod = 'json'; # fall-through
 		}
 		if ($mod eq 'json') {
@@ -153,6 +153,11 @@ sub require_mods {
 		if ($mod eq 'Search::Xapian') {
 			if (eval { require PublicInbox::Search } &&
 				PublicInbox::Search::load_xapian()) {
+				next;
+			}
+		} elsif ($mod eq '+SCM_RIGHTS') {
+			if (my $msg = need_scm_rights()) {
+				push @need, $msg;
 				next;
 			}
 		} elsif (index($mod, '||') >= 0) { # "Foo||Bar"
@@ -567,13 +572,13 @@ sub ignore_inline_c_missing {
 		grep(!/\bInline\b/, split(/^/m, $_[0])))));
 }
 
-sub no_scm_rights () {
+sub need_scm_rights () {
 	state $ok = PublicInbox::Spawn->can('send_cmd4') || do {
 			require PublicInbox::Syscall;
-			PublicInbox::Syscall->can('send_cmd4');
+			PublicInbox::Syscall->can('send_cmd4'); # Linux only
 		} || eval { require Socket::MsgHdr; 1 };
 	return if $ok;
-	'Inline::C unconfigured/missing '.
+	'need SCM_RIGHTS support: Inline::C unconfigured/missing '.
 	'(mkdir -p ~/.cache/public-inbox/inline-c) OR Socket::MsgHdr missing';
 }
 
@@ -601,8 +606,6 @@ SKIP: {
 	$ENV{LANG} = $ENV{LC_ALL} = 'C';
 	my (undef, $fn, $lineno) = caller(0);
 	my $t = "$fn:$lineno";
-	state $msg = no_scm_rights();
-	skip $msg, 1 if $msg;
 	$lei_opt = { 1 => \$lei_out, 2 => \$lei_err };
 	my ($daemon_pid, $for_destroy, $daemon_xrd);
 	my $tmpdir = $test_opt->{tmpdir};

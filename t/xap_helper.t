@@ -3,9 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
 use PublicInbox::TestCommon;
-require_mods(qw(DBD::SQLite Search::Xapian));
-my $msg = no_scm_rights;
-plan(skip_all => $msg) if $msg; # TODO: FIFO support?
+require_mods(qw(DBD::SQLite Search::Xapian +SCM_RIGHTS)); # TODO: FIFO support?
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM);
 require PublicInbox::AutoReap;
