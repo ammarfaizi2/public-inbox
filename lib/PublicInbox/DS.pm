@@ -193,10 +193,16 @@ sub RunTimers {
 
 sub sig_setmask { sigprocmask(SIG_SETMASK, @_) or die "sigprocmask: $!" }
 
+our @UNBLOCKABLE = map { # ensure we detect bugs, HW problems and user rlimits
+	my $cb = POSIX->can("SIG$_");
+	my $num = $cb ? $cb->() : undef;
+	$num ? ($num) : ();
+} qw(ABRT BUS FPE ILL SEGV XCPU XFSZ);
+
 sub block_signals { # anything in @_ stays unblocked
 	my $newset = POSIX::SigSet->new;
 	$newset->fillset or die "fillset: $!";
-	$newset->delset($_) for @_;
+	for (@_, @UNBLOCKABLE) { $newset->delset($_) or die "delset($_): $!" }
 	my $oldset = POSIX::SigSet->new;
 	sig_setmask($newset, $oldset);
 	$oldset;
