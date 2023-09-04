@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <search.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sysexits.h>
