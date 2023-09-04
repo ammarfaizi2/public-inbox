@@ -478,7 +478,11 @@ sub start_script {
 		}
 		$tail = tail_f(@paths);
 	}
-	my $pid = fork // die "fork: $!\n";
+	my $oset = PublicInbox::DS::block_signals();
+	require PublicInbox::OnDestroy;
+	my $tmp_mask = PublicInbox::OnDestroy->new(
+					\&PublicInbox::DS::sig_setmask, $oset);
+	my $pid = fork // die "fork: $!";
 	if ($pid == 0) {
 		eval { PublicInbox::DS->Reset };
 		for (@{delete($opt->{-CLOFORK}) // []}) {
@@ -504,8 +508,10 @@ sub start_script {
 		}
 		if ($opt->{-C}) { chdir($opt->{-C}) or die "chdir: $!" }
 		$0 = join(' ', @$cmd);
+		local @SIG{keys %SIG} = map { undef } values %SIG;
+		local $SIG{FPE} = 'IGNORE'; # Perl default
+		undef $tmp_mask;
 		if ($sub) {
-			eval { PublicInbox::DS->Reset };
 			_run_sub($sub, $key, \@argv);
 			POSIX::_exit($? >> 8);
 		} else {
@@ -513,6 +519,7 @@ sub start_script {
 			die "FAIL: ",join(' ', $key, @argv), ": $!\n";
 		}
 	}
+	undef $tmp_mask;
 	require PublicInbox::AutoReap;
 	my $td = PublicInbox::AutoReap->new($pid);
 	$td->{-extra} = $tail;
