@@ -54,6 +54,15 @@ sub build () {
 	my $cmd = "$pkg_config --libs --cflags xapian-core";
 	chomp(my $fl = `$cmd`);
 	die "$cmd failed: \$?=$?" if $?;
+
+	# Using rpath seems acceptable/encouraged in the NetBSD packaging world
+	# since /usr/pkg/lib isn't searched by the dynamic loader by default.
+	# Not sure if other OSes need this, but rpath seems fine for JAOT
+	# binaries (like this one) even if other distros discourage it for
+	# distributed packages.
+	$^O eq 'netbsd' and $fl =~ s/(\A|[ \t])\-L([^ \t]+)([ \t]|\z)/
+				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
+
 	my $cxx = $ENV{CXX} // 'c++';
 	$cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
 	system($cmd) and die "$cmd failed: \$?=$?";
