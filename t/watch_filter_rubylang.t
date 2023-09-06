@@ -99,6 +99,9 @@ EOF
 	}
 	$w->scan('full');
 
+	# ensure orderly destruction to avoid SQLite segfault:
+	PublicInbox::DS->Reset;
+
 	$cfg = PublicInbox::Config->new(\$orig);
 	$ibx = $cfg->lookup_name($v);
 	$ibx->{-no_fsync} = 1;
