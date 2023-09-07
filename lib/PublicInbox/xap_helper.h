@@ -1168,9 +1168,9 @@ int main(int argc, char *argv[])
 	if (!worker_pids) err(EXIT_FAILURE, "calloc");
 
 	if (pipe(pipefds)) err(EXIT_FAILURE, "pipe");
-	int fl = fcntl(F_GETFL, pipefds[1]);
+	int fl = fcntl(pipefds[1], F_GETFL);
 	if (fl == -1) err(EXIT_FAILURE, "F_GETFL");
-	if (fcntl(F_SETFL, pipefds[1], fl | O_NONBLOCK))
+	if (fcntl(pipefds[1], F_SETFL, fl | O_NONBLOCK))
 		err(EXIT_FAILURE, "F_SETFL");
 
 	CHECK(int, 0, sigdelset(&pset, SIGCHLD));
