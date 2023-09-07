@@ -80,13 +80,14 @@ my $do_test = sub { SKIP: {
 		socketpair($s1, $s2, AF_UNIX, $type, 0) or BAIL_OUT $!;
 		$s1->blocking(0);
 		my $nsent = 0;
+		my $srclen = length($src);
 		while (defined(my $n = $send->($s1, $sfds, $src, $flag))) {
 			$nsent += $n;
-			fail "sent 0 bytes" if $n == 0;
+			fail "sent $n bytes of $srclen" if $srclen != $n;
 		}
-		ok($!{EAGAIN} || $!{ETOOMANYREFS},
-			"hit EAGAIN || ETOOMANYREFS on send $desc") or
-			diag "send failed with: $!";
+		ok($!{EAGAIN} || $!{ETOOMANYREFS} || $!{EMSGSIZE},
+			"hit EAGAIN || ETOOMANYREFS || EMSGSIZE on send $desc")
+			or diag "send failed with: $! (nsent=$nsent)";
 		ok($nsent > 0, 'sent some bytes');
 
 		socketpair($s1, $s2, AF_UNIX, $type, 0) or BAIL_OUT $!;
