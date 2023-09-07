@@ -29,6 +29,7 @@ sub reopen_file ($) {
 	open my $fh, '<', $self->{fn} or return undef;
 	my @st = stat $fh or die "fstat($self->{fn}): $!";
 	$self->{ino_dev} = "@st[0, 1]";
+	$self->{inot}->watch($self->{fn}, $TAIL_MOD);
 	$self->{watch_fh} = $fh; # return value
 }
 
