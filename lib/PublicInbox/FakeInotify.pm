@@ -92,7 +92,8 @@ sub dir_adj ($) {
 	my ($old_ctime) = @_;
 	my $now = Time::HiRes::time;
 	my $diff = $now - $old_ctime;
-	($diff > -1 && $diff < 1) ? 1 : 0;
+	my $adj = $poll_intvl + 1;
+	($diff > -$adj && $diff < $adj) ? 1 : 0;
 }
 
 # behaves like non-blocking Linux::Inotify2->read

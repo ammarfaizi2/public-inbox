@@ -16,9 +16,11 @@ my $end = 3 + now;
 local @PublicInbox::DS::post_loop_do = (sub { scalar(@x) == 0 && now < $end });
 rmdir("$tmpdir/a/b") or xbail "rmdir $!";
 PublicInbox::DS::event_loop();
-is(scalar(@x), 1, 'got an rmdir event') and
+is(scalar(@x), 1, 'got an rmdir event') or xbail explain(\@x);
+if (@x) {
 	is($x[0]->[0]->fullname, "$tmpdir/a/b", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE, 'IN_DELETE set');
+}
 
 rmdir("$tmpdir/a") or xbail "rmdir $!";
 @x = ();
