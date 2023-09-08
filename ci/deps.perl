@@ -1,10 +1,10 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Helper script for installing/uninstalling packages for CI use
 # Intended for use on non-production chroots or VMs since it
 # changes installed packages
-use strict;
+use v5.12;
 my $usage = "$0 PKG_FMT PROFILE [PROFILE_MOD]";
 my $pkg_fmt = shift;
 @ARGV or die $usage, "\n";
@@ -38,7 +38,7 @@ my $profiles = {
 		Search::Xapian
 		Socket6
 		highlight.pm
-		xapian-compact
+		xapian-tools
 		) ],
 
 	# optional developer stuff
@@ -119,9 +119,9 @@ my $non_auto = {
 		rpm => [],
 	},
 
-	# we call xapian-compact(1) in public-inbox-compact(1)
-	'xapian-compact' => {
-		deb => 'xapian-tools',
+	# we call xapian-compact(1) in public-inbox-compact(1) and
+	# xapian-delve(1) in public-inbox-cindex(1)
+	'xapian-tools' => {
 		pkg => 'xapian-core',
 		rpm => 'xapian-core', # ???
 	},

@@ -111,10 +111,11 @@ Numerous optional modules are likely to be useful as well:
 * highlight                        deb: libhighlight-perl
                                    (for syntax highlighting with coderepo)
 
-* xapian-compact (tool)            deb: xapian-tools
+* xapian-tools                     deb: xapian-tools
                                    pkg: xapian-core
                                    rpm: xapian-core
-                                   (only for public-inbox-compact(1))
+                                   (for public-inbox-compact(1) and
+				    public-inbox-cindex(1))
 
 * curl (tool)                      deb, pkg, rpm: curl
                                    (for HTTP(S) externals with curl)

@@ -147,6 +147,8 @@ $xurls{'copydatabase(1)'} =
  'https://manpages.debian.org/stable/xapian-tools/copydatabase.1.en.html';
 $xurls{'xapian-compact(1)'} =
  'https://manpages.debian.org/stable/xapian-tools/xapian-compact.1.en.html';
+$xurls{'xapian-delve(1)'} =
+ 'https://manpages.debian.org/stable/xapian-tools/xapian-delve.1.en.html';
 $xurls{'gzip(1)'} = 'https://manpages.debian.org/stable/gzip/gzip.1.en.html';
 $xurls{'chmod(1)'} =
 	'https://manpages.debian.org/stable/coreutils/chmod.1.en.html';

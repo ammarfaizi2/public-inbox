@@ -79,7 +79,7 @@ ok(run_script([qw(-cindex -L medium --dangerous -q -d),
 
 
 SKIP: {
-	have_xapian_compact;
+	have_xapian_compact 2;
 	ok(run_script([qw(-compact -q), "$tmp/ext"]), 'compact on full');
 	ok(run_script([qw(-compact -q), "$tmp/med"]), 'compact on medium');
 }
@@ -159,7 +159,8 @@ EOM
 	is(scalar($mset->items), 1, 'same result after reindex');
 }
 
-if ('--prune') {
+SKIP: { # --prune
+	require_cmd($ENV{XAPIAN_DELVE} || 'xapian-delve', 1);
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	is(scalar($csrch->mset('s:hi')->items), 1, 'got hit');
 
@@ -188,7 +189,12 @@ ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", $zp]),
 
 ok(run_script([qw(-xcpdb), "$tmp/ext"]), 'xcpdb upgrade');
 ok(run_script([qw(-xcpdb -R4), "$tmp/ext"]), 'xcpdb reshard');
-ok(run_script([qw(-xcpdb -R2 --compact), "$tmp/ext"]), 'xcpdb reshard+compact');
-ok(run_script([qw(-xcpdb --compact), "$tmp/ext"]), 'xcpdb compact');
+
+SKIP: {
+	have_xapian_compact 2;
+	ok(run_script([qw(-xcpdb -R2 --compact), "$tmp/ext"]),
+		'xcpdb reshard+compact');
+	ok(run_script([qw(-xcpdb --compact), "$tmp/ext"]), 'xcpdb compact');
+};
 
 done_testing;
