@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Prints OS-specific package profiles to stdout (one per line) to use
@@ -7,7 +7,7 @@
 
 # set by os-release(5) or similar
 ID= VERSION_ID=
-case $(uname -o) in
+case $(uname -o 2>/dev/null || uname -s) in
 GNU/Linux)
 	for f in /etc/os-release /usr/lib/os-release
 	do
@@ -42,12 +42,22 @@ FreeBSD)
 		echo >&2 "ID=$ID $(uname -r) too old to support";
 		exit 1
 	}
+	;;
+OpenBSD)
+	ID=openbsd
+	VERSION_ID=$(uname -r | cut -d . -f 1)
+	test "$VERSION_ID" -lt 7 && {
+		echo >&2 "ID=$ID $(uname -r) too old to support";
+		exit 1
+	}
+	;;
 esac
 
 case $ID in
 freebsd) PKG_FMT=pkg ;;
 debian|ubuntu) PKG_FMT=deb ;;
 centos|redhat|fedora) PKG_FMT=rpm ;;
+openbsd) PKG_FMT=pkg_add ;; # unsure about name, but it's not FreeBSD `pkg'
 *) echo >&2 "PKG_FMT undefined for ID=$ID in $0"
 esac
 
@@ -74,6 +84,15 @@ centos-7) sed "s/^/$PKG_FMT /" <<EOF
 v2essential devtest
 essential devtest
 all Search::Xapian-
+EOF
+	;;
+openbsd-7) sed "s/^/$PKG_FMT /" <<EOF
+all devtest-
+all devtest Inline::C-
+all devtest Inline::C
+v2essential
+essential
+essential devtest-
 EOF
 	;;
 esac

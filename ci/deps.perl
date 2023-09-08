@@ -55,12 +55,15 @@ my $profiles = {
 };
 
 # account for granularity differences between package systems and OSes
-my @precious;
-if ($^O eq 'freebsd') {
-	@precious = qw(perl curl Socket6 IO::Compress);
-} elsif ($pkg_fmt eq 'rpm') {
-	@precious = qw(perl curl);
-}
+# curl, TimeDate (Date::Parse) and Socket6 are dependencies of git on
+# some/most OSes
+my @precious = do {
+	if ($^O eq 'freebsd') { qw(curl Socket6) }
+	elsif ($pkg_fmt eq 'rpm') { qw(curl) }
+	# OpenBSD git depends on Date::Parse (p5-Time-TimeDate) indirectly,
+	elsif ($^O eq 'openbsd') { qw(curl Socket6 Date::Parse) }
+	else { () }
+};
 
 if (@precious) {
 	my $re = join('|', map { quotemeta($_) } @precious);
@@ -76,11 +79,15 @@ $profiles->{v2essential} = [ @{$profiles->{essential}}, qw(DBD::SQLite DBI) ];
 
 # package names which can't be mapped automatically:
 my $non_auto = {
-	'perl' => { pkg => 'perl5' },
+	'perl' => {
+		pkg => 'perl5',
+		pkg_add => [], # Perl is part of OpenBSD base
+	},
 	'Date::Parse' => {
 		deb => 'libtimedate-perl',
 		pkg => 'p5-TimeDate',
 		rpm => 'perl-TimeDate',
+		pkg_add => 'p5-Time-TimeDate',
 	},
 	'Digest::SHA' => {
 		deb => 'perl', # libperl5.XX, but the XX varies
@@ -99,12 +106,18 @@ my $non_auto = {
 		pkg => 'perl5',
 	},
 	'Inline::C' => {
+		pkg_add => 'p5-Inline', # tested OpenBSD 7.3
 		rpm => 'perl-Inline', # for CentOS 7.x, at least
 	},
 	'DBD::SQLite' => { deb => 'libdbd-sqlite3-perl' },
 	'Plack::Test' => {
 		deb => 'libplack-perl',
 		pkg => 'p5-Plack',
+	},
+	'Search::Xapian' => {
+		pkg => [qw(xapian-core p5-Xapian)],
+		pkg_add => [qw(xapian-core xapian-bindings-perl)],
+		rpm => 'Search::Xapian', # 3rd-party repo
 	},
 	'Test::Simple' => {
 		deb => 'perl', # perl-modules-5.XX, but the XX varies
@@ -130,11 +143,30 @@ my $non_auto = {
 	},
 };
 
+# OpenBSD and FreeBSD both use "p5-".($CPAN_NAME =~ s/::/-/gr)
+if ($pkg_fmt eq 'pkg_add') {
+	for my $name (keys %$non_auto) {
+		my $fbsd_pkg = $non_auto->{$name}->{pkg};
+		$fbsd_pkg = [] if ($fbsd_pkg // '') eq 'perl5';
+		$non_auto->{$name}->{pkg_add} //= $fbsd_pkg if $fbsd_pkg;
+	}
+}
+
+my %inst_check = (
+	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
+	deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
+	pkg_add => sub { system(qw(pkg_info -q -e), "$_[0]->=0") == 0 },
+	rpm => sub { system("rpm -qs $_[0] >/dev/null 2>&1") == 0 },
+);
+
+our $INST_CHECK = $inst_check{$pkg_fmt} || die <<"";
+don't know how to check install status for $pkg_fmt
+
 my (@pkg_install, @pkg_remove, %all);
 for my $ary (values %$profiles) {
 	$all{$_} = \@pkg_remove for @$ary;
 }
-if ($^O eq 'freebsd') {
+if ($^O =~ /\A(?:free|open)bsd\z/) {
 	$all{'IO::KQueue'} = \@pkg_remove;
 }
 $profiles->{all} = [ keys %all ]; # pseudo-profile for all packages
@@ -154,6 +186,10 @@ while (my ($pkg, $dst_pkg_list) = each %all) {
 	push @$dst_pkg_list, list(pkg2ospkg($pkg, $pkg_fmt));
 }
 
+my %inst = map { $_ => 1 } @pkg_install;
+@pkg_remove = grep { !$inst{$_} } @pkg_remove;
+@pkg_install = grep { !$INST_CHECK->($_) } @pkg_install;
+
 my @apt_opts =
 	qw(-o APT::Install-Recommends=false -o APT::Install-Suggests=false);
 
@@ -167,9 +203,8 @@ if ($pkg_fmt eq 'deb') {
 		# remove it in an "install" sub-command:
 		map { "$_-" } @pkg_remove);
 	root('apt-get', @apt_opts, qw(autoremove --purge -y), @quiet);
-} elsif ($pkg_fmt eq 'pkg') {
+} elsif ($pkg_fmt eq 'pkg') { # FreeBSD
 	my @quiet = $ENV{V} ? () : ('-q');
-	# FreeBSD, maybe other *BSDs are similar?
 
 	# don't remove stuff that isn't installed:
 	exclude_uninstalled(\@pkg_remove);
@@ -182,6 +217,21 @@ if ($pkg_fmt eq 'deb') {
 	exclude_uninstalled(\@pkg_remove);
 	root(qw(yum remove -y), @quiet, @pkg_remove) if @pkg_remove;
 	root(qw(yum install -y), @quiet, @pkg_install) if @pkg_install;
+} elsif ($pkg_fmt eq 'pkg_add') { # OpenBSD
+	exclude_uninstalled(\@pkg_remove);
+	my @quiet = $ENV{V} ? ('-'.('v'x$ENV{V})) : qw(-x); # -x : no progress
+	if (@pkg_remove) {
+		my @lifo = qw(xapian-bindings-perl);
+		for my $dep (@lifo) {
+			grep(/\A\Q$dep\E\z/, @pkg_remove) or next;
+			root(qw(pkg_delete -I), @quiet, $dep);
+			@pkg_remove = grep(!/\A\Q$dep\E\z/, @pkg_remove);
+		}
+		root(qw(pkg_delete -I), @quiet, @pkg_remove);
+	}
+	root(qw(pkg_delete -a), @quiet);
+	@pkg_install = map { "$_--" } @pkg_install; # disambiguate w3m
+	root(qw(pkg_add), @quiet, @pkg_install) if @pkg_install;
 } else {
 	die "unsupported package format: $pkg_fmt\n";
 }
@@ -206,7 +256,7 @@ sub pkg2ospkg {
 		} elsif ($fmt eq 'rpm') {
 			$pkg =~ s/::/-/g;
 			return "perl-$pkg"
-		} elsif ($fmt eq 'pkg') {
+		} elsif ($fmt =~ /\Apkg(?:_add)?\z/) {
 			$pkg =~ s/::/-/g;
 			return "p5-$pkg"
 		} else {
@@ -232,18 +282,9 @@ sub profile2dst {
 
 sub exclude_uninstalled {
 	my ($list) = @_;
-	my %inst_check = (
-		pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
-		deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
-		rpm => sub { system("rpm -qs $_[0] >/dev/null 2>&1") == 0 },
-	);
-
-	my $cb = $inst_check{$pkg_fmt} || die <<"";
-don't know how to check install status for $pkg_fmt
-
-	my @tmp;
+	my (@tmp, %seen);
 	for my $pkg (@$list) {
-		push @tmp, $pkg if $cb->($pkg);
+		push @tmp, $pkg if !$seen{$pkg}++ && $INST_CHECK->($pkg);
 	}
 	@$list = @tmp;
 }
