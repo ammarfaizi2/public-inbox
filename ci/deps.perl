@@ -54,32 +54,18 @@ my $profiles = {
 		) ],
 };
 
-# account for granularity differences between package systems and OSes
-# curl, TimeDate (Date::Parse) and Socket6 are dependencies of git on
-# some/most OSes
-my @precious = do {
-	if ($^O eq 'freebsd') { qw(curl Socket6) }
-	elsif ($pkg_fmt eq 'rpm') { qw(curl) }
-	# OpenBSD git depends on Date::Parse (p5-Time-TimeDate) indirectly,
-	elsif ($^O eq 'openbsd') { qw(curl Socket6 Date::Parse) }
-	else { () }
-};
-
-if (@precious) {
-	my $re = join('|', map { quotemeta($_) } @precious);
-	for my $list (values %$profiles) {
-		@$list = grep(!/\A(?:$re)\z/, @$list);
-	}
-	push @{$profiles->{essential}}, @precious;
-}
-
-
 # bare minimum for v2
 $profiles->{v2essential} = [ @{$profiles->{essential}}, qw(DBD::SQLite DBI) ];
 
-# package names which can't be mapped automatically:
+# package names which can't be mapped automatically and explicit
+# dependencies to prevent essential package removal:
 my $non_auto = {
-	'perl' => {
+	git => {
+		pkg => [ qw(curl p5-Socket6 p5-TimeDate git) ],
+		rpm => [ qw(curl git) ],
+		pkg_add => [ qw(curl p5-Socket6 p5-Time-TimeDate git) ],
+	},
+	perl => {
 		pkg => 'perl5',
 		pkg_add => [], # Perl is part of OpenBSD base
 	},
@@ -88,22 +74,6 @@ my $non_auto = {
 		pkg => 'p5-TimeDate',
 		rpm => 'perl-TimeDate',
 		pkg_add => 'p5-Time-TimeDate',
-	},
-	'Digest::SHA' => {
-		deb => 'perl', # libperl5.XX, but the XX varies
-		pkg => 'perl5',
-	},
-	'Encode' => {
-		deb => 'perl', # libperl5.XX, but the XX varies
-		pkg => 'perl5',
-	},
-	'ExtUtils::MakeMaker' => {
-		deb => 'perl', # perl-modules-5.xx
-		pkg => 'perl5',
-	},
-	'IO::Compress' => {
-		deb => 'perl', # perl-modules-5.xx
-		pkg => 'perl5',
 	},
 	'Inline::C' => {
 		pkg_add => 'p5-Inline', # tested OpenBSD 7.3
@@ -118,10 +88,6 @@ my $non_auto = {
 		pkg => [qw(xapian-core p5-Xapian)],
 		pkg_add => [qw(xapian-core xapian-bindings-perl)],
 		rpm => 'Search::Xapian', # 3rd-party repo
-	},
-	'Test::Simple' => {
-		deb => 'perl', # perl-modules-5.XX, but the XX varies
-		pkg => 'perl5',
 	},
 	'highlight.pm' => {
 		deb => 'libhighlight-perl',
@@ -143,7 +109,14 @@ my $non_auto = {
 	},
 };
 
-# OpenBSD and FreeBSD both use "p5-".($CPAN_NAME =~ s/::/-/gr)
+# standard library stuff that CentOS 7.x (and presumably other RPM) split out:
+for (qw(Digest::SHA Encode ExtUtils::MakeMaker IO::Compress Test::Simple)) {
+	$non_auto->{$_} = {
+		deb => 'perl', # libperl5.XX, but the XX varies
+		pkg => 'perl5',
+	};
+}
+
 if ($pkg_fmt eq 'pkg_add') {
 	for my $name (keys %$non_auto) {
 		my $fbsd_pkg = $non_auto->{$name}->{pkg};
