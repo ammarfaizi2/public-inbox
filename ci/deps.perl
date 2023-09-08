@@ -31,7 +31,9 @@ my $profiles = {
 		DBD::SQLite
 		DBI
 		Inline::C
+		Mail::IMAPClient
 		Net::Server
+		Parse::RecDescent
 		Plack
 		Plack::Test
 		Plack::Middleware::ReverseProxy
