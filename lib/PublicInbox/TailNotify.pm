@@ -14,12 +14,14 @@ if ($^O eq 'linux' && eval { require PublicInbox::Inotify; 1 }) {
 		Linux::Inotify2::IN_MODIFY();
 	$ino_cls = 'PublicInbox::Inotify';
 } elsif (eval { require PublicInbox::KQNotify }) {
-	$TAIL_MOD = PublicInbox::KQNotify::MOVED_TO_OR_CREATE();
+	$TAIL_MOD = PublicInbox::KQNotify::MOVED_TO_OR_CREATE() |
+		IO::KQueue::NOTE_DELETE() | IO::KQueue::NOTE_RENAME();
 	$ino_cls = 'PublicInbox::KQNotify';
 } else {
 	require PublicInbox::FakeInotify;
 	$TAIL_MOD = PublicInbox::FakeInotify::MOVED_TO_OR_CREATE() |
-		PublicInbox::FakeInotify::IN_MODIFY();
+		PublicInbox::FakeInotify::IN_MODIFY() |
+		PublicInbox::FakeInotify::IN_DELETE();
 }
 require IO::Poll if $ino_cls;
 
@@ -49,6 +51,11 @@ sub new {
 	$self;
 }
 
+sub delete_self {
+	for (@_) { return 1 if $_->IN_DELETE_SELF }
+	undef;
+}
+
 sub getlines {
 	my ($self, $timeo) = @_;
 	my ($fh, $buf, $rfds, @ret, @events);
@@ -70,13 +77,12 @@ again:
 		}
 		select($rfds, undef, undef, $wait);
 	}
-	# XXX do we care about @events contents?
-	# use Data::Dumper; warn '# ',Dumper(\@events);
 	if ($fh = $self->{watch_fh}) {
 		sysread($fh, $buf, -s $fh) and
 			push @ret, split(/^/sm, $buf);
 		my @st = stat($self->{fn});
-		if (!@st || "@st[0, 1]" ne $self->{ino_dev}) {
+		if (!@st || "@st[0, 1]" ne $self->{ino_dev} ||
+				delete_self(@events)) {
 			delete @$self{qw(ino_dev watch_fh)};
 		}
 	}
