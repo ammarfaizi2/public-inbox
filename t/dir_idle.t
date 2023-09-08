@@ -14,14 +14,12 @@ $di->add_watches(["$tmpdir/a", "$tmpdir/c"], 1);
 PublicInbox::DS->SetLoopTimeout(1000);
 my $end = 3 + now;
 local @PublicInbox::DS::post_loop_do = (sub { scalar(@x) == 0 && now < $end });
-tick(0.011);
 rmdir("$tmpdir/a/b") or xbail "rmdir $!";
 PublicInbox::DS::event_loop();
-is(scalar(@x), 1, 'got an event') and
+is(scalar(@x), 1, 'got an rmdir event') and
 	is($x[0]->[0]->fullname, "$tmpdir/a/b", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE, 'IN_DELETE set');
 
-tick(0.011);
 rmdir("$tmpdir/a") or xbail "rmdir $!";
 @x = ();
 $end = 3 + now;
@@ -30,7 +28,6 @@ is(scalar(@x), 1, 'got an event') and
 	is($x[0]->[0]->fullname, "$tmpdir/a", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE_SELF, 'IN_DELETE_SELF set');
 
-tick(0.011);
 rename("$tmpdir/c", "$tmpdir/j") or xbail "rmdir $!";
 @x = ();
 $end = 3 + now;

@@ -5,46 +5,31 @@
 # using IO::KQueue on *BSD systems.
 package PublicInbox::KQNotify;
 use v5.12;
+use parent qw(PublicInbox::FakeInotify);
 use IO::KQueue;
 use PublicInbox::DSKQXS; # wraps IO::KQueue for fork-safe DESTROY
-use PublicInbox::FakeInotify qw(fill_dirlist on_dir_change);
-use Time::HiRes qw(stat);
+use Errno qw(ENOENT);
 
 # NOTE_EXTEND detects rename(2), NOTE_WRITE detects link(2)
 sub MOVED_TO_OR_CREATE () { NOTE_EXTEND|NOTE_WRITE }
 
 sub new {
 	my ($class) = @_;
-	bless { dskq => PublicInbox::DSKQXS->new, watch => {} }, $class;
+	bless { dskq => PublicInbox::DSKQXS->new }, $class;
 }
 
 sub watch {
 	my ($self, $path, $mask) = @_;
-	my ($fh, $watch);
-	if (-d $path) {
-		opendir($fh, $path) or return;
-		my @st = stat($fh);
-		$watch = bless [ $fh, $path, $st[10] ],
-			'PublicInbox::KQNotify::Watchdir';
-	} else {
-		open($fh, '<', $path) or return;
-		$watch = bless [ $fh, $path ], 'PublicInbox::KQNotify::Watch';
-	}
-	my $ident = fileno($fh);
+	my $dir_delete = $mask & NOTE_DELETE ? 1 : 0;
+	my $w = $self->watch_open($path, \$dir_delete) or return;
+	$w->[2] = pop @$w; # ctime is unused by this subclass
+	my $ident = fileno($w->[2]) // die "BUG: bad fileno $w->[2]: $!";
 	$self->{dskq}->{kq}->EV_SET($ident, # ident (fd)
 		EVFILT_VNODE, # filter
 		EV_ADD | EV_CLEAR, # flags
 		$mask, # fflags
-		0, 0); # data, udata
-	if ($mask & (MOVED_TO_OR_CREATE|NOTE_DELETE|NOTE_LINK|NOTE_REVOKE)) {
-		$self->{watch}->{$ident} = $watch;
-		if ($mask & (NOTE_DELETE|NOTE_LINK|NOTE_REVOKE)) {
-			fill_dirlist($self, $path, $fh)
-		}
-	} else {
-		die "TODO Not implemented: $mask";
-	}
-	$watch;
+		0, $dir_delete); # data, udata
+	$self->{watch}->{$ident} = $w;
 }
 
 # emulate Linux::Inotify::fileno
@@ -61,54 +46,31 @@ sub blocking {}
 # behave like Linux::Inotify2->read
 sub read {
 	my ($self) = @_;
-	my @kevents = $self->{dskq}->{kq}->kevent(0);
 	my $events = [];
-	my @gone;
-	my $watch = $self->{watch};
-	for my $kev (@kevents) {
+	for my $kev ($self->{dskq}->{kq}->kevent(0)) {
 		my $ident = $kev->[KQ_IDENT];
-		my $mask = $kev->[KQ_FFLAGS];
-		my ($dh, $path, $old_ctime) = @{$watch->{$ident}};
-		if (!defined($old_ctime)) {
-			push @$events,
-				bless(\$path, 'PublicInbox::FakeInotify::Event')
-		} elsif ($mask & (MOVED_TO_OR_CREATE|NOTE_DELETE|NOTE_LINK|
-				NOTE_REVOKE|NOTE_RENAME)) {
-			my @new_st = stat($path);
-			if (!@new_st && $!{ENOENT}) {
-				push @$events, bless(\$path,
-						'PublicInbox::FakeInotify::'.
-						'SelfGoneEvent');
-				push @gone, $ident;
-				delete $self->{dirlist}->{$path};
-				next;
-			}
-			if (!@new_st) {
-				warn "unhandled stat($path) error: $!\n";
-				next;
-			}
-			$watch->{$ident}->[3] = $new_st[10]; # ctime
-			rewinddir($dh);
-			on_dir_change($events, $dh, $path, $old_ctime,
-					$self->{dirlist});
+		my $w = $self->{watch}->{$ident} or next;
+		if (!@$w) { # cancelled
+			delete($self->{watch}->{$ident});
+			next;
+		}
+		my $dir_delete = $kev->[KQ_UDATA];
+		my ($old_dev, $old_ino, $fh, $path) = @$w;
+		my @new_st = stat($path);
+		warn "W: stat($path): $!\n" if !@new_st && $! != ENOENT;
+		if (!@new_st || "$old_dev $old_ino" ne "@new_st[0,1]") {
+			push(@$events, $self->gone($ident, $path));
+			next;
+		}
+		if (-d _) {
+			rewinddir($fh);
+			$self->on_dir_change($events, $fh, $path, $dir_delete);
+		} else {
+			push @$events, bless(\$path,
+					'PublicInbox::FakeInotify::Event');
 		}
 	}
-	delete @$watch{@gone};
 	@$events;
 }
-
-package PublicInbox::KQNotify::Watch;
-use v5.12;
-
-sub name { $_[0]->[1] }
-
-sub cancel { close $_[0]->[0] or die "close: $!" }
-
-package PublicInbox::KQNotify::Watchdir;
-use v5.12;
-
-sub name { $_[0]->[1] }
-
-sub cancel { closedir $_[0]->[0] or die "closedir: $!" }
 
 1;
