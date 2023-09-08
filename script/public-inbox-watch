@@ -52,6 +52,7 @@ if ($watch) {
 		CHLD => \&PublicInbox::DS::enqueue_reap,
 	};
 	$sig->{QUIT} = $sig->{TERM} = $sig->{INT} = $quit;
+	local @SIG{keys %$sig} = values(%$sig); # for non-signalfd/kqueue
 
 	# --no-scan is only intended for testing atm, undocumented.
 	PublicInbox::DS::requeue($scan) if $do_scan;
