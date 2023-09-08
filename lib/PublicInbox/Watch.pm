@@ -250,7 +250,7 @@ sub quit_done ($) {
 	$live == 0;
 }
 
-sub quit {
+sub quit { # may be called in IMAP/NNTP children
 	my ($self) = @_;
 	$self->{quit} = 1;
 	%{$self->{opendirs}} = ();
@@ -260,7 +260,7 @@ sub quit {
 		my $di = $PublicInbox::DS::DescriptorMap{$fd};
 		$di->close if $di && $di->can('add_watches');
 	}
-	if (my $idle_mic = delete $self->{idle_mic}) {
+	if (my $idle_mic = delete $self->{idle_mic}) { # IMAP child
 		return unless $idle_mic->IsConnected && $idle_mic->Socket;
 		eval { $idle_mic->done };
 		if ($@ && $idle_mic->IsConnected && $idle_mic->Socket) {
@@ -387,7 +387,8 @@ sub watch_atfork_child ($) {
 	delete $self->{opendirs};
 	PublicInbox::DS->Reset;
 	my $sig = delete $self->{sig};
-	$sig->{CHLD} = 'DEFAULT';
+	$sig->{CHLD} = $sig->{HUP} = $sig->{USR1} = 'DEFAULT';
+	# TERM/QUIT/INT call ->quit, which works in both parent+child
 	@SIG{keys %$sig} = values %$sig;
 	PublicInbox::DS::sig_setmask(PublicInbox::DS::allowset($sig));
 }

@@ -41,7 +41,7 @@ if ($watch) {
 		warn "# scanning\n";
 		$watch->trigger_scan('full');
 	};
-	my $quit = sub {
+	my $quit = sub { # may be called in IMAP/NNTP children
 		$watch->quit if $watch;
 		$watch = undef;
 		$0 .= ' quitting';
