@@ -259,17 +259,20 @@ sub PostEventLoop () {
 			: 1
 }
 
-sub allowset ($) {
-	my ($sig) = @_; # { signame => whatever }
+sub sigset_prep ($$$) {
+	my ($sig, $init, $each) = @_; # $sig: { signame => whatever }
 	my $ret = POSIX::SigSet->new;
-	$ret->fillset or die "fillset: $!";
+	$ret->$init or die "$init: $!";
 	for my $s (keys %$sig) {
 		my $num = $SIGNUM{$s} // POSIX->can("SIG$s")->();
-		$ret->delset($num) or die "delset ($s => $num): $!";
+		$ret->$each($num) or die "$each ($s => $num): $!";
 	}
-	for (@UNBLOCKABLE) { $ret->delset($_) or die "delset($_): $!" }
+	for (@UNBLOCKABLE) { $ret->$each($_) or die "$each ($_): $!" }
 	$ret;
 }
+
+sub allowset ($) { sigset_prep $_[0], 'fillset', 'delset' }
+sub unblockset ($) { sigset_prep $_[0], 'emptyset', 'addset' }
 
 # Start processing IO events. In most daemon programs this never exits. See
 # C<post_loop_do> for how to exit the loop.
@@ -293,7 +296,8 @@ sub event_loop (;$$) {
 		# wake up every second to accept signals if we don't
 		# have signalfd or IO::KQueue:
 		sig_setmask($oldset) if $oldset;
-		sigprocmask(SIG_UNBLOCK, allowset($sig)) or die "SIG_UNBLOCK: $!";
+		sigprocmask(SIG_UNBLOCK, unblockset($sig)) or
+			die "SIG_UNBLOCK: $!";
 		PublicInbox::DS->SetLoopTimeout(1000);
 	}
 	$_[0] = $sigfd = $sig = undef; # $_[0] == sig
