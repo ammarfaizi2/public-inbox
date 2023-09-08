@@ -11,7 +11,9 @@ my $pkg_fmt = shift;
 
 my @test_essential = qw(Test::Simple); # we actually use Test::More
 
-# package profiles
+# package profiles.  Note we specify packages at maximum granularity,
+# which is typically deb for most things, but rpm seems to have the
+# highest granularity for things in the Prl standard library.
 my $profiles = {
 	# the smallest possible profile for testing
 	essential => [ qw(
@@ -20,7 +22,7 @@ my $profiles = {
 		Digest::SHA
 		Encode
 		ExtUtils::MakeMaker
-		IO::Compress::Gzip
+		IO::Compress
 		URI
 		), @test_essential ],
 
@@ -55,7 +57,7 @@ my $profiles = {
 # account for granularity differences between package systems and OSes
 my @precious;
 if ($^O eq 'freebsd') {
-	@precious = qw(perl curl Socket6 IO::Compress::Gzip);
+	@precious = qw(perl curl Socket6 IO::Compress);
 } elsif ($pkg_fmt eq 'rpm') {
 	@precious = qw(perl curl);
 }
@@ -87,33 +89,26 @@ my $non_auto = {
 	'Encode' => {
 		deb => 'perl', # libperl5.XX, but the XX varies
 		pkg => 'perl5',
-		rpm => 'perl-Encode',
 	},
 	'ExtUtils::MakeMaker' => {
 		deb => 'perl', # perl-modules-5.xx
 		pkg => 'perl5',
-		rpm => 'perl-ExtUtils-MakeMaker',
 	},
-	'IO::Compress::Gzip' => {
+	'IO::Compress' => {
 		deb => 'perl', # perl-modules-5.xx
 		pkg => 'perl5',
-		rpm => 'perl-IO-Compress',
+	},
+	'Inline::C' => {
+		rpm => 'perl-Inline', # for CentOS 7.x, at least
 	},
 	'DBD::SQLite' => { deb => 'libdbd-sqlite3-perl' },
 	'Plack::Test' => {
 		deb => 'libplack-perl',
 		pkg => 'p5-Plack',
-		rpm => 'perl-Plack-Test',
-	},
-	'URI' => {
-		deb => 'liburi-perl',
-		pkg => 'p5-URI',
-		rpm => 'perl-URI',
 	},
 	'Test::Simple' => {
 		deb => 'perl', # perl-modules-5.XX, but the XX varies
 		pkg => 'perl5',
-		rpm => 'perl-Test-Simple',
 	},
 	'highlight.pm' => {
 		deb => 'libhighlight-perl',
@@ -131,7 +126,6 @@ my $non_auto = {
 	# OS-specific
 	'IO::KQueue' => {
 		deb => [],
-		pkg => 'p5-IO-KQueue',
 		rpm => [],
 	},
 };
