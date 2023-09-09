@@ -2,10 +2,11 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # manifest.js.gz generation and grok-pull integration test
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use IO::Uncompress::Gunzip qw(gunzip);
 require_mods(qw(json URI::Escape Plack::Builder HTTP::Tiny));
+require_cmd 'curl';
 require PublicInbox::WwwListing;
 require PublicInbox::ManifestJsGz;
 use PublicInbox::Config;
