@@ -67,6 +67,7 @@ my $non_auto = {
 	},
 	perl => {
 		pkg => 'perl5',
+		pkgin => 'perl',
 		pkg_add => [], # Perl is part of OpenBSD base
 	},
 	'Date::Parse' => {
@@ -87,11 +88,13 @@ my $non_auto = {
 	'Search::Xapian' => {
 		pkg => [qw(xapian-core p5-Xapian)],
 		pkg_add => [qw(xapian-core xapian-bindings-perl)],
+		pkgin => [qw(xapian p5-Xapian)],
 		rpm => 'Search::Xapian', # 3rd-party repo
 	},
 	'highlight.pm' => {
 		deb => 'libhighlight-perl',
 		pkg => [],
+		pkgin => 'p5-highlight',
 		rpm => [],
 	},
 
@@ -99,6 +102,7 @@ my $non_auto = {
 	# xapian-delve(1) in public-inbox-cindex(1)
 	'xapian-tools' => {
 		pkg => 'xapian-core',
+		pkgin => 'xapian',
 		rpm => 'xapian-core', # ???
 	},
 
@@ -114,14 +118,21 @@ for (qw(Digest::SHA Encode ExtUtils::MakeMaker IO::Compress Test::Simple)) {
 	$non_auto->{$_} = {
 		deb => 'perl', # libperl5.XX, but the XX varies
 		pkg => 'perl5',
+		pkg_add => [], # perl is in the OpenBSD base system
+		pkgin => 'perl',
 	};
 }
 
+# NetBSD and OpenBSD package names are similar to FreeBSD in most cases
 if ($pkg_fmt eq 'pkg_add') {
 	for my $name (keys %$non_auto) {
 		my $fbsd_pkg = $non_auto->{$name}->{pkg};
-		$fbsd_pkg = [] if ($fbsd_pkg // '') eq 'perl5';
 		$non_auto->{$name}->{pkg_add} //= $fbsd_pkg if $fbsd_pkg;
+	}
+} elsif ($pkg_fmt eq 'pkgin') {
+	for my $name (keys %$non_auto) {
+		my $fbsd_pkg = $non_auto->{$name}->{pkg};
+		$non_auto->{$name}->{pkgin} //= $fbsd_pkg if $fbsd_pkg;
 	}
 }
 
@@ -129,6 +140,7 @@ my %inst_check = (
 	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
 	deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
 	pkg_add => sub { system(qw(pkg_info -q -e), "$_[0]->=0") == 0 },
+	pkgin => sub { system(qw(pkg_info -q -e), $_[0]) == 0 },
 	rpm => sub { system("rpm -qs $_[0] >/dev/null 2>&1") == 0 },
 );
 
@@ -139,7 +151,7 @@ my (@pkg_install, @pkg_remove, %all);
 for my $ary (values %$profiles) {
 	$all{$_} = \@pkg_remove for @$ary;
 }
-if ($^O =~ /\A(?:free|open)bsd\z/) {
+if ($^O =~ /\A(?:free|net|open)bsd\z/) {
 	$all{'IO::KQueue'} = \@pkg_remove;
 }
 $profiles->{all} = [ keys %all ]; # pseudo-profile for all packages
@@ -184,6 +196,12 @@ if ($pkg_fmt eq 'deb') {
 	root(qw(pkg remove -y), @quiet, @pkg_remove) if @pkg_remove;
 	root(qw(pkg install -y), @quiet, @pkg_install) if @pkg_install;
 	root(qw(pkg autoremove -y), @quiet);
+} elsif ($pkg_fmt eq 'pkgin') { # NetBSD
+	my @quiet = $ENV{V} ? ('-'.('V'x$ENV{V})) : ();
+	exclude_uninstalled(\@pkg_remove);
+	root(qw(pkgin -y), @quiet, 'remove', @pkg_remove) if @pkg_remove;
+	root(qw(pkgin -y), @quiet, 'install', @pkg_install) if @pkg_install;
+	root(qw(pkgin -y), @quiet, 'autoremove');
 # TODO: yum / rpm support
 } elsif ($pkg_fmt eq 'rpm') {
 	my @quiet = $ENV{V} ? () : ('-q');
@@ -229,7 +247,7 @@ sub pkg2ospkg {
 		} elsif ($fmt eq 'rpm') {
 			$pkg =~ s/::/-/g;
 			return "perl-$pkg"
-		} elsif ($fmt =~ /\Apkg(?:_add)?\z/) {
+		} elsif ($fmt =~ /\Apkg(?:_add|in)?\z/) {
 			$pkg =~ s/::/-/g;
 			return "p5-$pkg"
 		} else {

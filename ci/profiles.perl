@@ -56,7 +56,8 @@ EOM
 }
 my $PKG_FMT = do {
 	if ($ID eq 'freebsd') { 'pkg' }
-	# *shrug*, as long as the name doesn't conflict with FreeBSD's
+	# *shrug*, as long as the (Net|Open)BSD names don't conflict w/ FreeBSD
+	elsif ($ID eq 'netbsd') { 'pkgin' }
 	elsif ($ID eq 'openbsd') { 'pkg_add' }
 	elsif ($ID =~ m!\A(?:debian|ubuntu)\z!) { 'deb' }
 	elsif ($ID =~ m!\A(?:centos|redhat|fedora)\z!) { 'rpm' }
@@ -65,7 +66,8 @@ my $PKG_FMT = do {
 
 # these package group names and '-' syntax are passed to ci/deps.perl
 my $TASKS = do {
-	if ($ID eq 'freebsd') { <<EOM
+	if ($ID =~ /\A(?:free|net|open)bsd\z/) { <<EOM
+all devtest Search::Xapian-
 all devtest IO::KQueue-
 all devtest IO::KQueue
 all devtest Inline::C-
@@ -83,12 +85,6 @@ EOM
 v2essential devtest
 essential devtest
 all Search::Xapian-
-EOM
-	} elsif ($ID eq 'openbsd') { <<EOM
-all devtest Inline::C-
-all devtest Inline::C
-all devtest IO::KQueue-
-all devtest IO::KQueue
 EOM
 	} else { die "TODO: support ID=$ID VERSION_ID=$VERSION_ID" }
 };
