@@ -451,12 +451,18 @@ sub DESTROY {
 	ipc_worker_stop($self);
 }
 
+# _SC_NPROCESSORS_ONLN = 84 on both Linux glibc and musl,
+# emitted using: $^X devel/sysdefs-list
+my %NPROCESSORS_ONLN = (
+	linux => 84,
+	freebsd => 58,
+	openbsd => 503,
+	netbsd => 1002
+);
+
 sub detect_nproc () {
-	# _SC_NPROCESSORS_ONLN = 84 on both Linux glibc and musl
-	return POSIX::sysconf(84) if $^O eq 'linux';
-	return POSIX::sysconf(58) if $^O eq 'freebsd';
-	return POSIX::sysconf(503) if $^O eq 'openbsd';
-	# TODO: more OSes
+	my $n = $NPROCESSORS_ONLN{$^O};
+	return POSIX::sysconf($n) if defined $n;
 
 	# getconf(1) is POSIX, but *NPROCESSORS* vars are not
 	for (qw(_NPROCESSORS_ONLN NPROCESSORS_ONLN)) {
