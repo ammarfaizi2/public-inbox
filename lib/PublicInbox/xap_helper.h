@@ -322,6 +322,9 @@ struct dump_roots_tmp {
 	int root2id_fd;
 };
 
+// n.b. __cleanup__ works fine with C++ exceptions, but not longjmp
+// Only clang and g++ are supported, as AFAIK there's no other
+// relevant Free(-as-in-speech) C++ compilers.
 #define CLEANUP_FBUF __attribute__((__cleanup__(fbuf_ensure)))
 static void fbuf_ensure(void *ptr)
 {
