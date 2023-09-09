@@ -14,6 +14,9 @@
 #ifndef _ALL_SOURCE
 #	define _ALL_SOURCE
 #endif
+#if defined(__NetBSD__) && !defined(_OPENBSD_SOURCE) // for reallocarray(3)
+#	define _OPENBSD_SOURCE
+#endif
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
