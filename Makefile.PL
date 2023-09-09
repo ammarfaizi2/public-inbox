@@ -196,7 +196,8 @@ WriteMakefile(
 );
 
 sub MY::postamble {
-	my $N = (`{ getconf _NPROCESSORS_ONLN || nproc; } 2>/dev/null` || 1);
+	my $N = (`{ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
+		gnproc || nproc; } 2>/dev/null` || 1);
 	$N += 1; # account for sleeps in some tests (and makes an IV)
 	<<EOF;
 PROVE = prove
