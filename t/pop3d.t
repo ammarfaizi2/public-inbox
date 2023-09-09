@@ -276,7 +276,7 @@ EOF
 		like($x, qr/\Adataready\0+\z/, 'got dataready accf for pop3s');
 		$x = getsockopt($stls, IPPROTO_TCP,
 				$PublicInbox::Daemon::SO_ACCEPTFILTER);
-		is($x, undef, 'no BSD accept filter for plain IMAP');
+		is($x, undef, 'no BSD accept filter for plain POP3');
 	};
 
 	$td->kill;

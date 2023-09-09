@@ -55,6 +55,7 @@ sub _refresh_ibx { # pi_cfg->each_inbox cb
 sub refresh_groups {
 	my ($self, $sig) = @_;
 	my $pi_cfg = PublicInbox::Config->new;
+	require PublicInbox::IMAPsearchqp;
 	$self->{mailboxes} = $pi_cfg->{-imap_mailboxes} // do {
 		my $mailboxes = $self->{mailboxes} = {};
 		my $cache = eval { $pi_cfg->ALL->misc->nntpd_cache_load } // {};

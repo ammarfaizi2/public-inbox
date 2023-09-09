@@ -39,7 +39,6 @@ use PublicInbox::DS qw(now);
 use PublicInbox::GitAsyncCat;
 use Text::ParseWords qw(parse_line);
 use Errno qw(EAGAIN);
-use PublicInbox::IMAPsearchqp;
 
 my $Address;
 for my $mod (qw(Email::Address::XS Mail::Address)) {
@@ -1088,6 +1087,7 @@ sub search_uid_range { # long_response
 
 sub parse_imap_query ($$) {
 	my ($self, $query) = @_;
+	# IMAPsearchqp gets loaded in IMAPD->refresh_groups
 	my $q = PublicInbox::IMAPsearchqp::parse($self, $query);
 	if (ref($q)) {
 		my $max = $self->{ibx}->over(1)->max;
