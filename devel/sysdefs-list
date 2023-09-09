@@ -27,25 +27,57 @@ open my $fh, '>', $f or die "open $f $!";
 print $fh $str or die "print $f $!";
 close $fh or die "close $f $!";
 system($cc, '-o', $x, $f, @cflags) == 0 or die "$cc failed \$?=$?";
+say '%Config', map { " $_=$Config{$_}" } qw(ptrsize sizesize lseeksize);
 exec($x);
 __DATA__
 #ifndef _GNU_SOURCE
 #  define _GNU_SOURCE
 #endif
+#include <assert.h>
 #include <signal.h>
+#include <stddef.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #ifdef __linux__
-#include <linux/fs.h>
+#	include <linux/fs.h>
+#	include <sys/epoll.h>
+#	include <sys/inotify.h>
+#	include <sys/socket.h> // we don't care about this on *BSD
+#	include <sys/vfs.h>
 #endif
 #include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
+
+#define STRUCT_BEGIN(t) do { t x; printf(#t" => %zu bytes\n", sizeof(x))
+#define STRUCT_END } while (0)
+
+// prints the struct field name, @offset, and signed/unsigned bit size
+#define PR_NUM(f) do { \
+	x.f = ~0; \
+	printf("\t.%s @%zu %c%zu\n", #f, \
+		offsetof(typeof(x),f), \
+		x.f > 0 ? 'u' : 's', \
+		sizeof(x.f) * 8); \
+} while (0)
+
+#define PR_PTR(f) do { \
+	assert(sizeof(x.f) == sizeof(void *)); \
+	printf("\t.%s @%zu ptr\n", #f, offsetof(typeof(x),f)); \
+} while (0)
+
+#define PR_OFF(f) do { \
+	printf("\t.%s @%zu\n", #f, offsetof(typeof(x),f)); \
+} while (0)
 
 #define D(x) printf("$" #x " = %ld;\n", (long)x)
 
 int main(void)
 {
+	// verify Config{(ptr|size|lseek)size} entries match:
+	printf("sizeof ptr=%zu size_t=%zu off_t=%zu\n",
+		sizeof(void *), sizeof(size_t), sizeof(off_t));
 #ifdef __linux__
 	D(SYS_epoll_create1);
 	D(SYS_epoll_ctl);
@@ -64,11 +96,54 @@ int main(void)
 		(unsigned long)FS_IOC_GETFLAGS, (unsigned long)FS_IOC_SETFLAGS);
 #endif
 	MAYBE SYS_renameat2
+
+	STRUCT_BEGIN(struct epoll_event);
+		PR_NUM(events);
+		PR_NUM(data.u64);
+	STRUCT_END;
+
+	STRUCT_BEGIN(struct inotify_event);
+		PR_NUM(wd);
+		PR_NUM(mask);
+		PR_NUM(cookie);
+		PR_NUM(len);
+		PR_OFF(name);
+	STRUCT_END;
+
+	/*
+	 * msghdr and cmsghdr are portable, but we only care about its layout
+	 * on OSes like Linux with stable syscall numbers
+	 */
+	STRUCT_BEGIN(struct msghdr);
+		PR_PTR(msg_name);
+		PR_NUM(msg_namelen);
+		PR_PTR(msg_iov);
+		PR_NUM(msg_iovlen);
+		PR_PTR(msg_control);
+		PR_NUM(msg_controllen);
+		PR_NUM(msg_flags);
+	STRUCT_END;
+
+	STRUCT_BEGIN(struct cmsghdr);
+		PR_NUM(cmsg_len);
+		PR_NUM(cmsg_level);
+		PR_NUM(cmsg_type);
+	STRUCT_END;
+
+	STRUCT_BEGIN(struct statfs);
+		PR_NUM(f_type);
+	STRUCT_END;
 #endif /* Linux, any other OSes with stable syscalls? */
-	printf("size_t=%zu off_t=%zu pid_t=%zu\n",
-		 sizeof(size_t), sizeof(off_t), sizeof(pid_t));
 	D(SIGWINCH);
 	MAYBE _SC_NPROCESSORS_ONLN
+
+	STRUCT_BEGIN(struct flock);
+		PR_NUM(l_start);
+		PR_NUM(l_len);
+		PR_NUM(l_pid);
+		PR_NUM(l_type);
+		PR_NUM(l_whence);
+	STRUCT_END;
 
 	return 0;
 }
