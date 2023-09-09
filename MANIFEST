@@ -113,7 +113,7 @@ certs/.gitignore
 certs/create-certs.perl
 ci/README
 ci/deps.perl
-ci/profiles.sh
+ci/profiles.perl
 ci/run.sh
 contrib/completion/lei-completion.bash
 contrib/css/216dark.css

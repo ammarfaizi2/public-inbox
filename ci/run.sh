@@ -13,7 +13,7 @@ fi
 NPROC=${NPROC-$({ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
 	gnproc || nproc || echo 2; } 2>/dev/null)}
 
-./ci/profiles.sh | while read args
+$PERL -w ci/profiles.perl | while read args
 do
 	$DO $SUDO $PERL -w ci/deps.perl $args
 	$DO $PERL Makefile.PL
