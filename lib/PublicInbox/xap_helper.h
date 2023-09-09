@@ -78,6 +78,7 @@ static FILE *orig_err = stderr;
 static int orig_err_fd = -1;
 static void *srch_tree; // tsearch + tdelete + twalk
 static pid_t *worker_pids; // nr => pid
+#define WORKER_MAX USHRT_MAX
 static unsigned long nworker, nworker_hwm;
 static int pipefds[2];
 
@@ -1063,6 +1064,10 @@ static void do_sigchld(void)
 static void do_sigttin(void)
 {
 	if (!alive) return;
+	if (nworker >= WORKER_MAX) {
+		warnx("workers cannot exceed %zu", (size_t)WORKER_MAX);
+		return;
+	}
 	void *p = reallocarray(worker_pids, nworker + 1, sizeof(pid_t));
 	if (!p) {
 		warn("reallocarray");
@@ -1117,7 +1122,7 @@ int main(int argc, char *argv[])
 #ifdef _SC_NPROCESSORS_ONLN
 	long j = sysconf(_SC_NPROCESSORS_ONLN);
 	if (j > 0)
-		nworker = j > UCHAR_MAX ? UCHAR_MAX : j;
+		nworker = j > WORKER_MAX ? WORKER_MAX : j;
 #endif // _SC_NPROCESSORS_ONLN
 
 	// make warn/warnx/err multi-process friendly:
@@ -1130,7 +1135,7 @@ int main(int argc, char *argv[])
 		switch (c) {
 		case 'j':
 			nworker = strtoul(optarg, &end, 10);
-			if (*end != 0 || nworker > USHRT_MAX)
+			if (*end != 0 || nworker > WORKER_MAX)
 				errx(EXIT_FAILURE, "-j %s invalid", optarg);
 			break;
 		case ':':
