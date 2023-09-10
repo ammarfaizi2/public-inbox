@@ -49,9 +49,12 @@ $VERSION_ID //= 0; # numeric? could be 'sid', actually...
 my %MIN_VER = (freebsd => v11, openbsd => v7.3, netbsd => v9.3);
 
 if (defined(my $min_ver = $MIN_VER{$^O})) {
-	my $vstr = eval "v$VERSION_ID";
+	my $vid = $VERSION_ID;
+	$vid =~ s/-.*\z//s; # no dashes in v-strings
+	my $vstr = eval "v$vid";
+	die "can't convert VERSION_ID=$VERSION_ID to v-string" if $@;
 	die <<EOM if $vstr lt $min_ver;
-ID=$ID release=$release ($version) too old to support
+ID=$ID VERSION_ID=$VERSION_ID release=$release ($version) too old to support
 EOM
 }
 my $PKG_FMT = do {
