@@ -1,6 +1,7 @@
 /*
  * Copyright (C) all contributors <meta@public-inbox.org>
- * License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+ * License: GPL-2.0+ <https://www.gnu.org/licenses/gpl-2.0.txt>
+ * Note: GPL-2+ since it'll incorporate approxidate from git someday
  *
  * Standalone helper process using C and minimal C++ for Xapian,
  * this is not linked to Perl in any way.
