@@ -186,11 +186,9 @@ sub RunTimers {
 
 sub sig_setmask { sigprocmask(SIG_SETMASK, @_) or die "sigprocmask: $!" }
 
-our @UNBLOCKABLE = map { # ensure we detect bugs, HW problems and user rlimits
-	my $cb = POSIX->can("SIG$_");
-	my $num = $cb ? $cb->() : undef;
-	$num ? ($num) : ();
-} qw(ABRT BUS FPE ILL SEGV XCPU XFSZ);
+# ensure we detect bugs, HW problems and user rlimits
+our @UNBLOCKABLE = (POSIX::SIGABRT, POSIX::SIGBUS, POSIX::SIGFPE,
+	POSIX::SIGILL, POSIX::SIGSEGV, POSIX::SIGXCPU, POSIX::SIGXFSZ);
 
 sub block_signals { # anything in @_ stays unblocked
 	my $newset = POSIX::SigSet->new;
