@@ -92,18 +92,23 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	sigset_t set, old;
 	int ret, perrnum;
 	volatile int cerrnum = 0; /* shared due to vfork */
-	int chld_is_member;
+	int chld_is_member; /* needed due to shared memory w/ vfork */
 	I32 max_fd = av_len(redir);
 
 	AV2C_COPY(argv, cmd);
 	AV2C_COPY(envp, env);
 
 	if (sigfillset(&set)) return -1;
+	if (sigdelset(&set, SIGABRT)) return -1;
+	if (sigdelset(&set, SIGBUS)) return -1;
+	if (sigdelset(&set, SIGFPE)) return -1;
+	if (sigdelset(&set, SIGILL)) return -1;
+	if (sigdelset(&set, SIGSEGV)) return -1;
+	/* no XCPU/XFSZ here */
 	if (sigprocmask(SIG_SETMASK, &set, &old)) return -1;
 	chld_is_member = sigismember(&old, SIGCHLD);
 	if (chld_is_member < 0) return -1;
-	if (chld_is_member > 0)
-		sigdelset(&old, SIGCHLD);
+	if (chld_is_member > 0 && sigdelset(&old, SIGCHLD)) return -1;
 
 	pid = vfork();
 	if (pid == 0) {

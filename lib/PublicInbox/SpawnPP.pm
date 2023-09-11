@@ -15,6 +15,10 @@ sub pi_fork_exec ($$$$$$$) {
 	my $old = POSIX::SigSet->new();
 	my $set = POSIX::SigSet->new();
 	$set->fillset or die "sigfillset: $!";
+	for (POSIX::SIGABRT, POSIX::SIGBUS, POSIX::SIGFPE,
+			POSIX::SIGILL, POSIX::SIGSEGV) {
+		$set->delset($_) or die "delset($_): $!";
+	}
 	sigprocmask(SIG_SETMASK, $set, $old) or die "SIG_SETMASK(set): $!";
 	my $syserr;
 	pipe(my ($r, $w)) or die "pipe: $!";
