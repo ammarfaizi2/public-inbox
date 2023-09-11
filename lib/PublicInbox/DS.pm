@@ -31,6 +31,7 @@ use Scalar::Util qw(blessed);
 use PublicInbox::Syscall qw(%SIGNUM
 	EPOLLIN EPOLLOUT EPOLLONESHOT EPOLLEXCLUSIVE);
 use PublicInbox::Tmpfile;
+use PublicInbox::DSPoll;
 use Errno qw(EAGAIN EINVAL ECHILD EINTR);
 use Carp qw(carp croak);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
@@ -42,7 +43,7 @@ my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
 our (
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
-     $Epoll,  # global Epoll, DSPoll, or DSKQXS ref
+     $Poller, # global Epoll, DSPoll, or DSKQXS ref
 
      @post_loop_do,              # subref + args to call at the end of each loop
 
@@ -75,13 +76,14 @@ sub Reset {
 		my @q = delete @Stack{keys %Stack};
 		for my $q (@q) { @$q = () }
 		$AWAIT_PIDS = $nextq = $ToClose = undef;
-		$Epoll = undef; # may call DSKQXS::DESTROY
+		$Poller = undef; # may call DSKQXS::DESTROY
 	} while (@Timers || keys(%Stack) || $nextq || $AWAIT_PIDS ||
 		$ToClose || keys(%DescriptorMap) ||
 		@post_loop_do || keys(%UniqTimer));
 
 	$reap_armed = undef;
 	$LoopTimeout = -1;  # no timeout by default
+	$Poller = PublicInbox::DSPoll->new;
 }
 
 =head2 C<< CLASS->SetLoopTimeout( $timeout ) >>
@@ -123,7 +125,7 @@ sub add_uniq_timer { # ($name, $secs, $coderef, @args) = @_;
 	$UniqTimer{$_[0]} //= _add_named_timer(@_);
 }
 
-# caller sets return value to $Epoll
+# caller sets return value to $Poller
 sub _InitPoller () {
 	my @try = ($^O eq 'linux' ? 'Epoll' : 'DSKQXS');
 	my $cls;
@@ -269,7 +271,7 @@ sub unblockset ($) { sigset_prep $_[0], 'emptyset', 'addset' }
 # C<post_loop_do> for how to exit the loop.
 sub event_loop (;$$) {
 	my ($sig, $oldset) = @_;
-	$Epoll //= _InitPoller();
+	$Poller //= _InitPoller();
 	require PublicInbox::Sigfd if $sig;
 	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig) : undef;
 	if ($sigfd && $sigfd->{is_kq}) {
@@ -298,7 +300,7 @@ sub event_loop (;$$) {
 		my $timeout = RunTimers();
 
 		# get up to 1000 events
-		$Epoll->ep_wait(1000, $timeout, \@events);
+		$Poller->ep_wait(1000, $timeout, \@events);
 		for my $fd (@events) {
 			# it's possible epoll_wait returned many events,
 			# including some at the end that ones in the front
@@ -334,9 +336,9 @@ sub new {
     $self->{sock} = $sock;
     my $fd = fileno($sock);
 
-    $Epoll //= _InitPoller();
+    $Poller //= _InitPoller();
 retry:
-    if ($Epoll->ep_add($sock, $ev)) {
+    if ($Poller->ep_add($sock, $ev)) {
         if ($! == EINVAL && ($ev & EPOLLEXCLUSIVE)) {
             $ev &= ~EPOLLEXCLUSIVE;
             goto retry;
@@ -390,7 +392,7 @@ sub close {
 
     # if we're using epoll, we have to remove this from our epoll fd so we stop getting
     # notifications about it
-    $Epoll->ep_del($sock) and croak("EPOLL_CTL_DEL($self/$sock): $!");
+    $Poller->ep_del($sock) and croak("EPOLL_CTL_DEL($self/$sock): $!");
 
     # we explicitly don't delete from DescriptorMap here until we
     # actually close the socket, as we might be in the middle of
@@ -609,7 +611,7 @@ sub msg_more ($$) {
 
 sub epwait ($$) {
 	my ($io, $ev) = @_;
-	$Epoll->ep_mod($io, $ev) and croak("EPOLL_CTL_MOD($io): $!");
+	$Poller->ep_mod($io, $ev) and croak("EPOLL_CTL_MOD($io): $!");
 }
 
 # return true if complete, false if incomplete (or failure)

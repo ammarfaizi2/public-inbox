@@ -93,7 +93,7 @@ my $test = sub {
 	my $stats = do { local $/; <$err_rd> };
 	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported');
 
-	return $ar if $cinfo{pid} == $pid;
+	return wantarray ? ($ar, $s) : $ar if $cinfo{pid} == $pid;
 
 	# test worker management:
 	kill('TERM', $cinfo{pid});
@@ -136,15 +136,16 @@ my $test = sub {
 	is(scalar keys %pids, 1, 'have one pid') or diag explain(\%pids);
 	is($info{pid}, (keys %pids)[0], 'kept oldest PID after TTOU');
 
-	$ar;
+	wantarray ? ($ar, $s) : $ar;
 };
 
 my @NO_CXX = (1);
 unless ($ENV{TEST_XH_CXX_ONLY}) {
 	my $ar = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j0')]);
-	$ar = $test->(qw[-MPublicInbox::XapHelper -e
+	($ar, my $s) = $test->(qw[-MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j1')]);
+	no_pollerfd($ar->{pid});
 }
 SKIP: {
 	eval {

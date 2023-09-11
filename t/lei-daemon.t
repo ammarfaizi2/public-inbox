@@ -21,6 +21,7 @@ test_lei({ daemon_only => 1 }, sub {
 	is($lei_err, '', 'no error from daemon-pid');
 	like($lei_out, qr/\A[0-9]+\n\z/s, 'pid returned') or BAIL_OUT;
 	chomp(my $pid = $lei_out);
+	no_pollerfd($pid);
 	ok(kill(0, $pid), 'pid is valid');
 	ok(-S $sock, 'sock created');
 	is(-s $err_log, 0, 'nothing in errors.log');

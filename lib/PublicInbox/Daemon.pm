@@ -556,6 +556,7 @@ sub start_worker ($) {
 	} elsif ($pid == 0) {
 		undef %WORKERS;
 		PublicInbox::DS::Reset();
+		local $PublicInbox::DS::Poller; # allow epoll/kqueue
 		srand($seed);
 		eval { Net::SSLeay::randomize() };
 		$set_user->() if $set_user;
@@ -677,6 +678,7 @@ sub daemon_loop () {
 		$WORKER_SIG{USR2} = sub { worker_quit() if upgrade() };
 		$refresh->();
 	}
+	local $PublicInbox::DS::Poller; # allow epoll/kqueue
 	worker_loop();
 }
 

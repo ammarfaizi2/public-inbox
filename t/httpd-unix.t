@@ -135,6 +135,7 @@ SKIP: {
 		check_sock($unix);
 		ok(-s $pid_file, "$w pid file written");
 		my $pid = $read_pid->($pid_file);
+		no_pollerfd($pid) if $w eq '-W1';
 		is(kill('TERM', $pid), 1, "signaled daemonized $w process");
 		vec(my $rvec = '', fileno($p0), 1) = 1;
 		delete $td->{-extra}; # drop tail(1) process

@@ -25,7 +25,7 @@ BEGIN {
 		create_coderepo no_scm_rights
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
-		ignore_inline_c_missing);
+		ignore_inline_c_missing no_pollerfd);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -843,7 +843,24 @@ sub test_httpd ($$;$$) {
 	}
 };
 
-
+sub no_pollerfd ($) {
+	my ($pid) = @_;
+	my ($re, @cmd);
+	$^O eq 'linux' and
+		($re, @cmd) = (qr/\Q[eventpoll]\E/, qw(lsof -p), $pid);
+	# n.b. *BSDs uses kqueue to emulate signalfd and/or inotify,
+	# and we can't distinguish which is which easily.
+	SKIP: {
+		(@cmd && $re) or
+			skip 'open poller test is Linux-only', 1;
+		my $bin = require_cmd($cmd[0], 1) or skip "$cmd[0] missing", 1;
+		$cmd[0] = $bin;
+		my @of = xqx(\@cmd, {}, {2 => \(my $e)});
+		my $err = $?;
+		skip "$bin broken? (\$?=$err) ($e)", 1 if $err;
+		is(grep(/$re/, @of), 0, "no $re FDs") or diag explain(\@of);
+	}
+}
 package PublicInbox::TestCommon::InboxWakeup;
 use strict;
 sub on_inbox_unlock { ${$_[0]}->($_[1]) }
