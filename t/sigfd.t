@@ -29,7 +29,7 @@ SKIP: {
 	ok(!defined($hit->{USR2}), 'no USR2 yet') or diag explain($hit);
 	PublicInbox::DS->Reset;
 	ok($PublicInbox::Syscall::SIGNUM{WINCH}, 'SIGWINCH number defined');
-	my $sigfd = PublicInbox::Sigfd->new($sig, 0);
+	my $sigfd = PublicInbox::Sigfd->new($sig);
 	if ($sigfd) {
 		$linux_sigfd = 1 if $^O eq 'linux';
 		$has_sigfd = 1;
@@ -57,7 +57,7 @@ SKIP: {
 		PublicInbox::DS->Reset;
 		$sigfd = undef;
 
-		my $nbsig = PublicInbox::Sigfd->new($sig, 1);
+		my $nbsig = PublicInbox::Sigfd->new($sig);
 		ok($nbsig, 'Sigfd->new SFD_NONBLOCK works');
 		is($nbsig->wait_once, undef, 'nonblocking ->wait_once');
 		ok($! == Errno::EAGAIN, 'got EAGAIN');

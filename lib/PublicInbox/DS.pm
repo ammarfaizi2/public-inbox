@@ -280,7 +280,7 @@ sub event_loop (;$$) {
 	my ($sig, $oldset) = @_;
 	$Epoll //= _InitPoller();
 	require PublicInbox::Sigfd if $sig;
-	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig, 1) : undef;
+	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig) : undef;
 	if ($sigfd && $sigfd->{is_kq}) {
 		my $tmp = allowset($sig);
 		local @SIG{keys %$sig} = values(%$sig);

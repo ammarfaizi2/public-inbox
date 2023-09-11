@@ -12,26 +12,22 @@ use POSIX ();
 # returns a coderef to unblock signals if neither signalfd or kqueue
 # are available.
 sub new {
-	my ($class, $sig, $nonblock) = @_;
+	my ($class, $sig) = @_;
 	my %signo = map {;
 		# $num => [ $cb, $signame ];
 		($SIGNUM{$_} // POSIX->can("SIG$_")->()) => [ $sig->{$_}, $_ ]
 	} keys %$sig;
 	my $self = bless { sig => \%signo }, $class;
 	my $io;
-	my $fd = signalfd([keys %signo], $nonblock);
+	my $fd = signalfd([keys %signo]);
 	if (defined $fd && $fd >= 0) {
 		open($io, '+<&=', $fd) or die "open: $!";
 	} elsif (eval { require PublicInbox::DSKQXS }) {
-		$io = PublicInbox::DSKQXS->signalfd([keys %signo], $nonblock);
+		$io = PublicInbox::DSKQXS->signalfd([keys %signo]);
 	} else {
 		return; # wake up every second to check for signals
 	}
-	if ($nonblock) { # it can go into the event loop
-		$self->SUPER::new($io, EPOLLIN | EPOLLET);
-	} else { # master main loop
-		$self->{sock} = $io;
-	}
+	$self->SUPER::new($io, EPOLLIN | EPOLLET);
 	$self->{is_kq} = 1 if tied(*$io);
 	$self;
 }

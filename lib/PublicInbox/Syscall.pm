@@ -327,15 +327,15 @@ sub epoll_wait_mod8 {
 	}
 }
 
-sub signalfd ($$) {
-	my ($signos, $nonblock) = @_;
+sub signalfd ($) {
+	my ($signos) = @_;
 	if ($SYS_signalfd4) {
 		my $set = POSIX::SigSet->new(@$signos);
 		syscall($SYS_signalfd4, -1, "$$set",
 			# $Config{sig_count} is NSIG, so this is NSIG/8:
 			int($Config{sig_count}/8),
 			# SFD_NONBLOCK == O_NONBLOCK for every architecture
-			($nonblock ? O_NONBLOCK : 0) |$SFD_CLOEXEC);
+			O_NONBLOCK|$SFD_CLOEXEC);
 	} else {
 		$! = ENOSYS;
 		undef;

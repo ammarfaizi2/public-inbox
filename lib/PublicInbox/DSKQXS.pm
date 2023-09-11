@@ -47,16 +47,15 @@ sub new {
 # It's wasteful in that it uses another FD, but it simplifies
 # our epoll-oriented code.
 sub signalfd {
-	my ($class, $signo, $nonblock) = @_;
+	my ($class, $signo) = @_;
 	my $sym = gensym;
-	tie *$sym, $class, $signo, $nonblock; # calls TIEHANDLE
+	tie *$sym, $class, $signo; # calls TIEHANDLE
 	$sym
 }
 
 sub TIEHANDLE { # similar to signalfd()
-	my ($class, $signo, $nonblock) = @_;
+	my ($class, $signo) = @_;
 	my $self = $class->new;
-	$self->{timeout} = $nonblock ? 0 : -1;
 	my $kq = $self->{kq};
 	$kq->EV_SET($_, EVFILT_SIGNAL, EV_ADD) for @$signo;
 	$self;
@@ -65,7 +64,6 @@ sub TIEHANDLE { # similar to signalfd()
 sub READ { # called by sysread() for signalfd compatibility
 	my ($self, undef, $len, $off) = @_; # $_[1] = buf
 	die "bad args for signalfd read" if ($len % 128) // defined($off);
-	my $timeout = $self->{timeout};
 	my $sigbuf = $self->{sigbuf} //= [];
 	my $nr = $len / 128;
 	my $r = 0;
@@ -78,13 +76,13 @@ sub READ { # called by sysread() for signalfd compatibility
 			$r += 128;
 		}
 		return $r if $r;
-		my @events = eval { $self->{kq}->kevent($timeout) };
+		my @events = eval { $self->{kq}->kevent(0) };
 		# workaround https://rt.cpan.org/Ticket/Display.html?id=116615
 		if ($@) {
 			next if $@ =~ /Interrupted system call/;
 			die;
 		}
-		if (!scalar(@events) && $timeout == 0) {
+		if (!scalar(@events)) {
 			$! = EAGAIN;
 			return;
 		}

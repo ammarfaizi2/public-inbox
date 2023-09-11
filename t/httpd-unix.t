@@ -2,8 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Tests for binding Unix domain sockets
-use strict;
-use Test::More;
+use v5.12;
 use PublicInbox::TestCommon;
 use Errno qw(EADDRINUSE);
 use Cwd qw(abs_path);
@@ -12,6 +11,7 @@ use Fcntl qw(FD_CLOEXEC F_SETFD);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
 use IO::Socket::UNIX;
 use POSIX qw(mkfifo);
+require PublicInbox::Sigfd;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $unix = "$tmpdir/unix.sock";
 my $psgi = './t/httpd-corner.psgi';
@@ -99,16 +99,17 @@ check_sock($unix);
 
 # portable Perl can delay or miss signal dispatches due to races,
 # so disable some tests on systems lacking signalfd(2) or EVFILT_SIGNAL
-my $has_sigfd = PublicInbox::Sigfd->new({}, 0) ? 1 : $ENV{TEST_UNRELIABLE};
+my $has_sigfd = PublicInbox::Sigfd->new({}) ? 1 : $ENV{TEST_UNRELIABLE};
+PublicInbox::DS::Reset() if $has_sigfd;
 
 sub delay_until {
-	my $cond = shift;
+	my ($cond, $msg) = @_;
 	my $end = time + 30;
 	do {
 		return if $cond->();
 		tick(0.012);
 	} until (time > $end);
-	Carp::confess('condition failed');
+	Carp::confess($msg // 'condition failed');
 }
 
 SKIP: {
@@ -140,6 +141,8 @@ SKIP: {
 		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
 		is(my $undef = <$p0>, undef, 'process closed pipe writer at exit');
 		ok(!-e $pid_file, "$w pid file unlinked at exit");
+		delay_until(sub { !kill(0, $pid) },
+			"daemonized $w really not running");
 	}
 
 	my $httpd = abs_path('blib/script/public-inbox-httpd');
@@ -181,6 +184,9 @@ SKIP: {
 		delay_until(sub {
 			$pid == (eval { $read_pid->($pid_file) } // 0)
 		});
+
+		delay_until(sub { !kill(0, $new_pid) }, 'new PID really died');
+
 		is($read_pid->($pid_file), $pid, 'old PID file restored');
 		ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
 
@@ -196,7 +202,7 @@ SKIP: {
 
 		# drop the old parent
 		kill('QUIT', $old_pid) or die "QUIT failed: $!";
-		delay_until(sub { !kill(0, $old_pid) }); # UGH
+		delay_until(sub { !kill(0, $old_pid) }, 'old PID really died');
 
 		ok(!-f "$pid_file.oldbin", '.oldbin PID file gone');
 
@@ -209,6 +215,7 @@ SKIP: {
 		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
 
 		ok(!-f $pid_file, 'PID file is gone');
+		delay_until(sub { !kill(0, $new_pid) }, 'new PID really died');
 	}
 
 	if ('try USR2 without workers (-W0)') {
@@ -234,6 +241,7 @@ SKIP: {
 		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
 		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
 		ok(!-f $pid_file, 'PID file is gone');
+		delay_until(sub { !kill(0, $pid) }, '-W0 daemon is gone');
 	}
 }
 
