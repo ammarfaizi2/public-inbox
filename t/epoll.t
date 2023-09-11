@@ -1,25 +1,22 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use Test::More;
-use PublicInbox::Syscall qw(:epoll);
+use autodie;
+use PublicInbox::Syscall qw(EPOLLOUT);
 plan skip_all => 'not Linux' if $^O ne 'linux';
-my $epfd = epoll_create();
-ok($epfd >= 0, 'epoll_create');
-open(my $hnd, '+<&=', $epfd); # for autoclose
-
-pipe(my ($r, $w)) or die "pipe: $!";
-is(epoll_ctl($epfd, EPOLL_CTL_ADD, fileno($w), EPOLLOUT), 0,
-    'epoll_ctl socket EPOLLOUT');
+require_ok 'PublicInbox::Epoll';
+my $ep = PublicInbox::Epoll->new;
+pipe(my $r, my $w);
+is($ep->ep_add($w, EPOLLOUT), 0, 'epoll_ctl pipe EPOLLOUT');
 
 my @events;
-epoll_wait($epfd, 100, 10000, \@events);
+$ep->ep_wait(100, 10000, \@events);
 is(scalar(@events), 1, 'got one event');
 is($events[0], fileno($w), 'got expected FD');
 close $w;
-epoll_wait($epfd, 100, 0, \@events);
+$ep->ep_wait(100, 0, \@events);
 is(scalar(@events), 0, 'epoll_wait timeout');
 
 done_testing;

@@ -12,13 +12,10 @@
 # It also implements signalfd(2) emulation via "tie".
 package PublicInbox::DSKQXS;
 use v5.12;
-use parent qw(Exporter);
 use Symbol qw(gensym);
 use IO::KQueue;
 use Errno qw(EAGAIN);
-use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET
-	EPOLL_CTL_ADD EPOLL_CTL_MOD EPOLL_CTL_DEL);
-our @EXPORT_OK = qw(epoll_ctl epoll_wait);
+use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET);
 
 sub EV_DISPATCH () { 0x0080 }
 
@@ -97,30 +94,29 @@ sub READ { # called by sysread() for signalfd compatibility
 # for fileno() calls in PublicInbox::DS
 sub FILENO { ${$_[0]->{kq}} }
 
-sub epoll_ctl {
-	my ($self, $op, $fd, $ev) = @_;
-	my $kq = $self->{kq};
-	if ($op == EPOLL_CTL_MOD) {
-		$kq->EV_SET($fd, EVFILT_READ, kq_flag(EPOLLIN, $ev));
-		eval { $kq->EV_SET($fd, EVFILT_WRITE, kq_flag(EPOLLOUT, $ev)) };
-	} elsif ($op == EPOLL_CTL_DEL) {
-		$kq // return; # called in cleanup
-		$kq->EV_SET($fd, EVFILT_READ, EV_DISABLE);
-		eval { $kq->EV_SET($fd, EVFILT_WRITE, EV_DISABLE) };
-	} else { # EPOLL_CTL_ADD
-		$kq->EV_SET($fd, EVFILT_READ, EV_ADD|kq_flag(EPOLLIN, $ev));
+sub _ep_mod_add ($$$$) {
+	my ($kq, $fd, $ev, $add) = @_;
+	$kq->EV_SET($fd, EVFILT_READ, $add|kq_flag(EPOLLIN, $ev));
 
-		# we call this blindly for read-only FDs such as tied
-		# DSKQXS (signalfd emulation) and Listeners
-		eval {
-			$kq->EV_SET($fd, EVFILT_WRITE, EV_ADD |
-							kq_flag(EPOLLOUT, $ev));
-		};
-	}
+	# we call this blindly for read-only FDs such as tied
+	# DSKQXS (signalfd emulation) and Listeners
+	eval { $kq->EV_SET($fd, EVFILT_WRITE, $add|kq_flag(EPOLLOUT, $ev)) };
 	0;
 }
 
-sub epoll_wait {
+sub ep_add { _ep_mod_add($_[0]->{kq}, fileno($_[1]), $_[2], EV_ADD) };
+sub ep_mod { _ep_mod_add($_[0]->{kq}, fileno($_[1]), $_[2], 0) };
+
+sub ep_del {
+	my ($self, $io, $ev) = @_;
+	my $kq = $_[0]->{kq} // return; # called in cleanup
+	my $fd = fileno($io);
+	$kq->EV_SET($fd, EVFILT_READ, EV_DISABLE);
+	eval { $kq->EV_SET($fd, EVFILT_WRITE, EV_DISABLE) };
+	0;
+}
+
+sub ep_wait {
 	my ($self, $maxevents, $timeout_msec, $events) = @_;
 	@$events = eval { $self->{kq}->kevent($timeout_msec) };
 	if (my $err = $@) {

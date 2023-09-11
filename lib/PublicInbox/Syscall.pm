@@ -29,12 +29,6 @@ our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
                   EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
                   EPOLLONESHOT EPOLLEXCLUSIVE
                   signalfd rename_noreplace %SIGNUM);
-our %EXPORT_TAGS = (epoll => [qw(epoll_ctl epoll_create epoll_wait
-                             EPOLLIN EPOLLOUT
-                             EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
-                             EPOLLONESHOT EPOLLEXCLUSIVE)],
-                );
-
 use constant {
 	EPOLLIN => 1,
 	EPOLLOUT => 4,

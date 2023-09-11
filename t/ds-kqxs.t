@@ -1,9 +1,9 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # Licensed the same as Danga::Socket (and Perl5)
 # License: GPL-1.0+ or Artistic-1.0-Perl
 #  <https://www.gnu.org/licenses/gpl-1.0.txt>
 #  <https://dev.perl.org/licenses/artistic.html>
-use strict;
+use v5.12;
 use Test::More;
 unless (eval { require IO::KQueue }) {
 	my $m = $^O !~ /bsd/ ? 'DSKQXS is only for *BSD systems'

@@ -184,6 +184,7 @@ lib/PublicInbox/EOFpipe.pm
 lib/PublicInbox/Emergency.pm
 lib/PublicInbox/Eml.pm
 lib/PublicInbox/EmlContentFoo.pm
+lib/PublicInbox/Epoll.pm
 lib/PublicInbox/ExtMsg.pm
 lib/PublicInbox/ExtSearch.pm
 lib/PublicInbox/ExtSearchIdx.pm

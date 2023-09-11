@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # Licensed the same as Danga::Socket (and Perl5)
 # License: GPL-1.0+ or Artistic-1.0-Perl
 #  <https://www.gnu.org/licenses/gpl-1.0.txt>
@@ -9,28 +9,13 @@
 # an all encompassing emulation of epoll via IO::Poll, but just to
 # support cases public-inbox-nntpd/httpd care about.
 package PublicInbox::DSPoll;
-use strict;
-use warnings;
-use parent qw(Exporter);
+use v5.12;
 use IO::Poll;
-use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLL_CTL_DEL);
-our @EXPORT_OK = qw(epoll_ctl epoll_wait);
+use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
 
-sub new { bless {}, $_[0] } # fd => events
+sub new { bless {}, __PACKAGE__ } # fd => events
 
-sub epoll_ctl {
-	my ($self, $op, $fd, $ev) = @_;
-
-	# not wasting time on error checking
-	if ($op != EPOLL_CTL_DEL) {
-		$self->{$fd} = $ev;
-	} else {
-		delete $self->{$fd};
-	}
-	0;
-}
-
-sub epoll_wait {
+sub ep_wait {
 	my ($self, $maxevents, $timeout_msec, $events) = @_;
 	my @pset;
 	while (my ($fd, $events) = each %$self) {
@@ -53,5 +38,11 @@ sub epoll_wait {
 		}
 	}
 }
+
+sub ep_del { delete($_[0]->{fileno($_[1])}); 0 }
+sub ep_add { $_[0]->{fileno($_[1])} = $_[2]; 0 }
+
+no warnings 'once';
+*ep_mod = \&ep_add;
 
 1;
