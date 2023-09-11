@@ -7,7 +7,7 @@ URL and anchor naming
 /$INBOX/?r=$GIT_COMMIT                 -> HTML only
 /$INBOX/new.atom                       -> Atom feed
 
-#### Optional, relies on Search::Xapian (or Xapian SWIG binding)
+#### Optional, relies on Xapian
 /$INBOX/$MESSAGE_ID/t/                 -> HTML content of thread (nested)
 /$INBOX/$MESSAGE_ID/T/                 -> HTML content of thread (flat)
 	anchors:

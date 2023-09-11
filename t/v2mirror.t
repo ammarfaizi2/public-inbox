@@ -14,7 +14,7 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 
 # Integration tests for HTTP cloning + mirroring
 require_mods(qw(Plack::Util Plack::Builder
-		HTTP::Date HTTP::Status Search::Xapian DBD::SQLite));
+		HTTP::Date HTTP::Status Xapian DBD::SQLite));
 use_ok 'PublicInbox::V2Writable';
 use PublicInbox::InboxWritable;
 use PublicInbox::Eml;

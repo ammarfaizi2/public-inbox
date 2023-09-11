@@ -10,7 +10,7 @@ use PublicInbox::Import;
 use File::Path qw(remove_tree);
 require PublicInbox::InboxWritable;
 
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::Over';
 
 my ($tmpdir, $for_destroy) = tmpdir();

@@ -59,7 +59,7 @@ use PublicInbox::Smsg;
 use PublicInbox::Over;
 our $QP_FLAGS;
 our %X = map { $_ => 0 } qw(BoolWeight Database Enquire QueryParser Stem Query);
-our $Xap; # 'Search::Xapian' or 'Xapian'
+our $Xap; # 'Xapian' or 'Search::Xapian'
 our $NVRP; # '$Xap::'.('NumberValueRangeProcessor' or 'NumberRangeProcessor')
 
 # ENQ_DESCENDING and ENQ_ASCENDING weren't in SWIG Xapian.pm prior to 1.4.16,
@@ -78,10 +78,8 @@ our @MAIL_NRP;
 
 sub load_xapian () {
 	return 1 if defined $Xap;
-	# n.b. PI_XAPIAN is intended for development use only.  We still
-	# favor Search::Xapian since that's what's available in current
-	# Debian stable (10.x) and derived distros.
-	for my $x (($ENV{PI_XAPIAN} // 'Search::Xapian'), 'Xapian') {
+	# n.b. PI_XAPIAN is intended for development use only
+	for my $x (($ENV{PI_XAPIAN} // 'Xapian'), 'Search::Xapian') {
 		eval "require $x";
 		next if $@;
 
@@ -94,8 +92,7 @@ sub load_xapian () {
 
 		# NumberRangeProcessor was added in Xapian 1.3.6,
 		# NumberValueRangeProcessor was removed for 1.5.0+,
-		# favor the older /Value/ variant since that's what our
-		# (currently) preferred Search::Xapian supports
+		# continue with the older /Value/ variant for now...
 		$NVRP = $x.'::'.($x eq 'Xapian' && $xver ge v1.5 ?
 			'NumberRangeProcessor' : 'NumberValueRangeProcessor');
 		$X{$_} = $Xap.'::'.$_ for (keys %X);

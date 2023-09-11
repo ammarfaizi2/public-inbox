@@ -7,7 +7,7 @@ use PublicInbox::Config;
 use PublicInbox::InboxWritable;
 use Fcntl qw(:seek);
 require_git(2.6);
-require_mods(qw(json DBD::SQLite Search::Xapian));
+require_mods(qw(json DBD::SQLite Xapian));
 require PublicInbox::Search;
 use_ok 'PublicInbox::ExtSearch';
 use_ok 'PublicInbox::ExtSearchIdx';

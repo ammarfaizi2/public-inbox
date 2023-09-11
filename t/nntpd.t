@@ -328,18 +328,20 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 	}
 	my $noerr = { 2 => \(my $null) };
 	SKIP: {
-		if ($INC{'Search/Xapian.pm'} && ($ENV{TEST_RUN_MODE}//2)) {
-			skip 'Search/Xapian.pm pre-loaded (by t/run.perl?)', 1;
+		if ($INC{'Search/Xapian.pm'} || $INC{'Xapian.pm'} &&
+				($ENV{TEST_RUN_MODE} // 2)) {
+			skip 'Xapian.pm pre-loaded (by t/run.perl?)', 1;
 		}
 		$lsof or skip 'lsof missing', 1;
 		my @of = xqx([$lsof, '-p', $td->{pid}], undef, $noerr);
 		skip('lsof broken', 1) if (!scalar(@of) || $?);
-		my @xap = grep m!Search/Xapian!, @of;
-		is_deeply(\@xap, [], 'Xapian not loaded in nntpd');
+		my @xap = grep m!\bXapian\b!, @of;
+		is_deeply(\@xap, [], 'Xapian not loaded in nntpd') or
+			diag explain(\@of);
 	}
 	# -compact requires Xapian
 	SKIP: {
-		require_mods('Search::Xapian', 2);
+		require_mods('Xapian', 2);
 		have_xapian_compact or skip 'xapian-compact missing', 2;
 		is(xsys(qw(git config), "--file=$home/.public-inbox/config",
 				"publicinbox.$group.indexlevel", 'medium'),

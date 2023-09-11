@@ -19,7 +19,7 @@ mkpath($many_root);
 $many_root = abs_path($many_root);
 $many_root =~ m!\A\Q$cwd\E/! and BAIL_OUT "$many_root must not be in $cwd";
 require_git 2.6;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::V2Writable';
 my $nr_inbox = $ENV{NR_INBOX} // 10;
 my $nproc = $ENV{NPROC} || PublicInbox::IPC::detect_nproc() || 2;

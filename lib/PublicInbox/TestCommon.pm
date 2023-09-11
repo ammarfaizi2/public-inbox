@@ -134,7 +134,7 @@ sub require_mods {
 	while (my $mod = shift(@mods)) {
 		if ($mod eq 'lei') {
 			require_git(2.6, $maybe ? $maybe : ());
-			push @mods, qw(DBD::SQLite Search::Xapian +SCM_RIGHTS);
+			push @mods, qw(DBD::SQLite Xapian +SCM_RIGHTS);
 			$mod = 'json'; # fall-through
 		}
 		if ($mod eq 'json') {
@@ -150,7 +150,7 @@ sub require_mods {
 			push @mods, qw(DBD::SQLite);
 			next;
 		}
-		if ($mod eq 'Search::Xapian') {
+		if ($mod eq 'Xapian') {
 			if (eval { require PublicInbox::Search } &&
 				PublicInbox::Search::load_xapian()) {
 				next;

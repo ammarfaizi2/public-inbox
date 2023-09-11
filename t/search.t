@@ -4,7 +4,7 @@
 use strict;
 use v5.10;
 use PublicInbox::TestCommon;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 require PublicInbox::SearchIdx;
 require PublicInbox::Inbox;
 require PublicInbox::InboxWritable;

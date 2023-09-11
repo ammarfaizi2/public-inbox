@@ -69,7 +69,7 @@ test_psgi($app, sub {
 });
 
 SKIP: {
-	require_mods(qw(DBD::SQLite Search::Xapian IO::Uncompress::Gunzip), 3);
+	require_mods(qw(DBD::SQLite Xapian IO::Uncompress::Gunzip), 3);
 	require_ok 'PublicInbox::SearchIdx';
 	PublicInbox::SearchIdx->new($ibx, 1)->index_sync;
 	test_psgi($app, sub {

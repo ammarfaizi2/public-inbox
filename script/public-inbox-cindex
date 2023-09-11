@@ -46,7 +46,7 @@ require PublicInbox::Admin;
 PublicInbox::Admin::do_chdir(delete $opt->{C});
 my $cfg = PublicInbox::Config->new;
 my $cidx_dir = $opt->{d};
-PublicInbox::Admin::require_or_die('Search::Xapian');
+PublicInbox::Admin::require_or_die('Xapian');
 PublicInbox::Admin::progress_prepare($opt);
 my $env = PublicInbox::Admin::index_prepare($opt, $cfg);
 %ENV = (%ENV, %$env) if $env;

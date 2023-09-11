@@ -13,7 +13,7 @@ public-inbox-extindex [OPTIONS] [EXTINDEX_DIR] --all
 public-inbox-extindex creates and updates an external search and
 overview database used by the read-only public-inbox PSGI (HTTP),
 NNTP, and IMAP interfaces.  This requires either the
-L<Search::Xapian> XS bindings OR the L<Xapian> SWIG bindings,
+L<Xapian> SWIG bindings OR or L<Search::Xapian> XS bindings
 along with L<DBD::SQLite> and L<DBI> Perl modules.
 
 =head1 OPTIONS

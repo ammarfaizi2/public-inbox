@@ -5,7 +5,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::Msgmap';
 use_ok 'PublicInbox::SearchIdx';
 my ($tmpdir, $for_destroy) = tmpdir();

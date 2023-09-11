@@ -11,7 +11,7 @@ use PublicInbox::Eml;
 require_git(2.6);
 
 my $V = 2;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::V2Writable';
 my ($tmpdir, $for_destroy) = tmpdir();
 my $ibx = {

@@ -5,7 +5,7 @@ use strict;
 use v5.10.1;
 use Test::More;
 use PublicInbox::TestCommon;
-require_mods(qw(Search::Xapian DBD::SQLite));
+require_mods(qw(Xapian DBD::SQLite));
 use_ok 'PublicInbox::MiscSearch';
 use_ok 'PublicInbox::MiscIdx';
 

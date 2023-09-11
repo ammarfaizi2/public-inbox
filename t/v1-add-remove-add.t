@@ -6,7 +6,7 @@ use Test::More;
 use PublicInbox::Import;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 require PublicInbox::SearchIdx;
 my ($inboxdir, $for_destroy) = tmpdir();
 my $ibx = {

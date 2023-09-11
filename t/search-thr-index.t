@@ -7,7 +7,7 @@ use Test::More;
 use PublicInbox::TestCommon;
 use PublicInbox::MID qw(mids);
 use PublicInbox::Eml;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 require PublicInbox::SearchIdx;
 require PublicInbox::Smsg;
 require PublicInbox::Inbox;

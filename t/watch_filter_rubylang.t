@@ -6,7 +6,7 @@ use PublicInbox::TestCommon;
 use Test::More;
 use PublicInbox::Eml;
 use PublicInbox::Config;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::Watch';
 use_ok 'PublicInbox::Emergency';
 my ($tmpdir, $for_destroy) = tmpdir();

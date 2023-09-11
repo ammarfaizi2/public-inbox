@@ -9,7 +9,7 @@ require_git(2.6);
 use PublicInbox::Eml;
 use PublicInbox::Config;
 use PublicInbox::MID qw(mids);
-require_mods(qw(DBD::SQLite Search::Xapian HTTP::Request::Common Plack::Test
+require_mods(qw(DBD::SQLite Xapian HTTP::Request::Common Plack::Test
 		URI::Escape Plack::Builder HTTP::Date));
 use_ok($_) for (qw(HTTP::Request::Common Plack::Test));
 use_ok 'PublicInbox::WWW';

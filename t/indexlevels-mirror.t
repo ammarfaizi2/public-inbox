@@ -168,7 +168,7 @@ my $import_index_incremental = sub {
 $import_index_incremental->($PI_TEST_VERSION, 'basic', $mime);
 
 SKIP: {
-	require_mods(qw(Search::Xapian), 2);
+	require_mods(qw(Xapian), 2);
 	foreach my $l (qw(medium full)) {
 		$import_index_incremental->($PI_TEST_VERSION, $l, $mime);
 	}

@@ -125,8 +125,8 @@ C<basic> only requires L<DBD::SQLite(3pm)> and provides all
 NNTP functionality along with thread-awareness in the WWW
 interface.
 
-C<medium> requires L<Search::Xapian(3pm)> to provide full-text
-term search functionality in the WWW UI.
+C<medium> requires L<Xapian(3pm)> or L<Search::Xapian(3pm)> to provide
+full-text term search functionality in the WWW UI.
 
 C<full> also includes positional information used by Xapian to
 allow for searching for phrases using quoted text.

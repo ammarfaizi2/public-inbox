@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::View;
 use PublicInbox::WwwAtomStream;
-use PublicInbox::Smsg; # this loads w/o Search::Xapian
+use PublicInbox::Smsg; # this loads w/o Xapian
 
 sub generate_i {
 	my ($ctx) = @_;

@@ -7,7 +7,7 @@ use PublicInbox::Eml;
 use PublicInbox::Config;
 use PublicInbox::TestCommon;
 require_git(2.6);
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::V2Writable';
 my ($tmpdir, $for_destroy) = tmpdir();
 my $pi_config = "$tmpdir/pi_config";

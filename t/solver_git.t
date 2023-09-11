@@ -7,7 +7,7 @@ use Cwd qw(abs_path);
 require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(popen_rd);
-require_mods(qw(DBD::SQLite Search::Xapian URI::Escape));
+require_mods(qw(DBD::SQLite Xapian URI::Escape));
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
 my $git_dir = xqx([qw(git rev-parse --git-common-dir)], undef, $rdr);

@@ -48,7 +48,7 @@ that inbox.  The instructions are roughly:
 
   # Optional but strongly recommended for hosting HTTP
   # (and required for NNTP)
-  # enable overview (requires DBD::SQLite) and, if Search::Xapian is
+  # enable overview (requires DBD::SQLite) and, if Xapian is
   # available, search:
   public-inbox-index INBOX_DIR
 

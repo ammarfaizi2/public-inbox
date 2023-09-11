@@ -19,11 +19,11 @@ sub check_editable ($) {
 		}
 
 		# Undefined indexlevel, so `full'...
-		# Search::Xapian exists and the DB can be read, at least, fine
+		# Xapian exists and the DB can be read, at least, fine
 		$ibx->search and next;
 
 		# it's possible for a Xapian directory to exist,
-		# but Search::Xapian to go missing/broken.
+		# but Xapian to go missing/broken.
 		# Make sure it's purged in that case:
 		$ibx->over or die "no over.sqlite3 in $ibx->{inboxdir}\n";
 

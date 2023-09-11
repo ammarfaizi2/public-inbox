@@ -4,7 +4,7 @@
 use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 require_git('2.6');
 use PublicInbox::Eml;
 require PublicInbox::Search;

@@ -187,7 +187,7 @@ test_replace(2, 'basic', $opt = { %$opt, post => \&pad_msgs });
 test_replace(2, 'basic', $opt = { %$opt, rotate_bytes => 1 });
 
 SKIP: {
-	require_mods(qw(Search::Xapian), 8);
+	require_mods(qw(Xapian), 8);
 	for my $l (qw(medium)) {
 		test_replace(2, $l, {});
 		$opt = { pre => \&pad_msgs };

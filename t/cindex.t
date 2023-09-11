@@ -5,7 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use Cwd qw(getcwd abs_path);
 use List::Util qw(sum);
-require_mods(qw(json Search::Xapian));
+require_mods(qw(json Xapian));
 use_ok 'PublicInbox::CodeSearchIdx';
 require PublicInbox::Import;
 my ($tmp, $for_destroy) = tmpdir();

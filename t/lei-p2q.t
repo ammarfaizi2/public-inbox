@@ -3,7 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 require_git 2.6;
-require_mods(qw(json DBD::SQLite Search::Xapian));
+require_mods(qw(json DBD::SQLite Xapian));
 
 test_lei(sub {
 	ok(!lei(qw(p2q this-better-cause-format-patch-to-fail)),

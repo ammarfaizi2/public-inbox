@@ -117,7 +117,7 @@ Per-inbox classes
 
 * PublicInbox::Search - Xapian read-only interface
   Common abbreviation: $srch, $ibx->search
-  Used everywhere if Search::Xapian (or Xapian.pm) is available.
+  Used everywhere if Xapian is available.
 
   Each indexed inbox has one of these, see
   public-inbox-v1-format(5) and public-inbox-v2-format(5)

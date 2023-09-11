@@ -4,7 +4,7 @@
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use Fcntl qw(SEEK_SET);
 require_git 2.6;
-require_mods(qw(json DBD::SQLite Search::Xapian));
+require_mods(qw(json DBD::SQLite Xapian));
 use POSIX qw(WTERMSIG WIFSIGNALED SIGPIPE);
 
 my @onions = map { "http://$_.onion/meta/" } qw(

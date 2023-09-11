@@ -21,7 +21,7 @@ my $first_range = '0';
 
 my $level = 'basic';
 SKIP: {
-	require_mods('Search::Xapian', 1);
+	require_mods('Xapian', 1);
 	$level = 'medium';
 };
 

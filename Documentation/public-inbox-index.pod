@@ -13,8 +13,8 @@ public-inbox-index [OPTIONS] --all
 public-inbox-index creates and updates the search, overview and
 NNTP article number database used by the read-only public-inbox
 HTTP and NNTP interfaces.  Currently, this requires
-L<DBD::SQLite> and L<DBI> Perl modules.  L<Search::Xapian>
-is optional, only to support the PSGI search interface.
+L<DBD::SQLite> and L<DBI> Perl modules.  L<Xapian> (or L<Search::Xapian>)
+are optional, only to support the PSGI search interface.
 
 Once the initial indices are created by public-inbox-index,
 L<public-inbox-mda(1)> and L<public-inbox-watch(1)> will

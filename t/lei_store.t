@@ -5,7 +5,7 @@ use strict;
 use v5.10.1;
 use Test::More;
 use PublicInbox::TestCommon;
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 require_git 2.6;
 require_ok 'PublicInbox::LeiStore';
 require_ok 'PublicInbox::ExtSearch';

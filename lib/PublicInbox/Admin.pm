@@ -185,13 +185,13 @@ my @over_mod = qw(DBD::SQLite DBI);
 my %mod_groups = (
 	-index => [ @base_mod, @over_mod ],
 	-base => \@base_mod,
-	-search => [ @base_mod, @over_mod, 'Search::Xapian' ],
+	-search => [ @base_mod, @over_mod, 'Xapian' ],
 );
 
 sub scan_ibx_modules ($$) {
 	my ($mods, $ibx) = @_;
 	if (!$ibx->{indexlevel} || $ibx->{indexlevel} ne 'basic') {
-		$mods->{'Search::Xapian'} = 1;
+		$mods->{'Xapian'} = 1;
 	} else {
 		$mods->{$_} = 1 foreach @over_mod;
 	}
@@ -203,10 +203,10 @@ sub check_require {
 	while (my $mod = shift @mods) {
 		if (my $groups = $mod_groups{$mod}) {
 			push @mods, @$groups;
-		} elsif ($mod eq 'Search::Xapian') {
+		} elsif ($mod eq 'Xapian') {
 			require PublicInbox::Search;
 			PublicInbox::Search::load_xapian() or
-				$err->{'Search::Xapian || Xapian'} = $@;
+				$err->{'Xapian || Search::Xapian'} = $@;
 		} else {
 			eval "require $mod";
 			$err->{$mod} = $@ if $@;

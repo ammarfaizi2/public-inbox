@@ -70,7 +70,7 @@ my $PKG_FMT = do {
 # these package group names and '-' syntax are passed to ci/deps.perl
 my $TASKS = do {
 	if ($ID =~ /\A(?:free|net|open)bsd\z/) { <<EOM
-all devtest Search::Xapian-
+all devtest Xapian-
 all devtest IO::KQueue-
 all devtest IO::KQueue
 all devtest Inline::C-
@@ -78,7 +78,7 @@ all devtest Inline::C
 EOM
 	} elsif ($ID eq 'debian') { <<EOM
 all devtest
-all devtest Search::Xapian-
+all devtest Xapian-
 all devtest-
 v2essential
 essential
@@ -87,7 +87,7 @@ EOM
 	} elsif ($ID eq 'centos') { <<EOM
 v2essential devtest
 essential devtest
-all Search::Xapian-
+all Xapian-
 EOM
 	} else { die "TODO: support ID=$ID VERSION_ID=$VERSION_ID" }
 };

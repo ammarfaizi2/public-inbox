@@ -39,7 +39,7 @@ my $profiles = {
 		Plack
 		Plack::Test
 		Plack::Middleware::ReverseProxy
-		Search::Xapian
+		Xapian
 		Socket6
 		highlight.pm
 		xapian-tools
@@ -85,7 +85,8 @@ my $non_auto = {
 		deb => 'libplack-perl',
 		pkg => 'p5-Plack',
 	},
-	'Search::Xapian' => {
+	'Xapian' => {
+		deb => 'libsearch-xapian-perl',
 		pkg => [qw(xapian-core p5-Xapian)],
 		pkg_add => [qw(xapian-core xapian-bindings-perl)],
 		pkgin => [qw(xapian p5-Xapian)],

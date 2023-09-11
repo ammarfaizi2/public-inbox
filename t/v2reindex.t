@@ -5,7 +5,7 @@ use PublicInbox::Eml;
 use PublicInbox::ContentHash qw(content_digest);
 use File::Path qw(remove_tree);
 require_git(2.6);
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::V2Writable';
 use_ok 'PublicInbox::OverIdx';
 my ($inboxdir, $for_destroy) = tmpdir();

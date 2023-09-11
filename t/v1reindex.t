@@ -8,7 +8,7 @@ use File::Path qw(remove_tree);
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 require_git(2.6);
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::SearchIdx';
 use_ok 'PublicInbox::Import';
 use_ok 'PublicInbox::OverIdx';

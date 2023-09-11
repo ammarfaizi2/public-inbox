@@ -7,7 +7,7 @@ use PublicInbox::Eml;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 require_git(2.6);
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 have_xapian_compact;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $ibx = create_inbox 'v1', indexlevel => 'medium', tmpdir => "$tmpdir/v1",

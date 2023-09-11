@@ -8,7 +8,7 @@ use PublicInbox::ContentHash qw(content_digest content_hash);
 use PublicInbox::TestCommon;
 use Cwd qw(abs_path);
 require_git(2.6);
-require_mods(qw(DBD::SQLite Search::Xapian));
+require_mods(qw(DBD::SQLite Xapian));
 local $ENV{HOME} = abs_path('t');
 use_ok 'PublicInbox::V2Writable';
 umask 007;
