@@ -6,7 +6,7 @@ package PublicInbox::TestCommon;
 use strict;
 use parent qw(Exporter);
 use v5.10.1;
-use Fcntl qw(F_SETFD :seek);
+use Fcntl qw(F_SETFD F_GETFD FD_CLOEXEC :seek);
 use POSIX qw(dup2);
 use IO::Socket::INET;
 use File::Spec;
@@ -326,7 +326,7 @@ sub run_script ($;$$) {
 			die "unable to deal with $ref $redir";
 		}
 	}
-	my $tail = @tail_paths ? tail_f(@tail_paths) : undef;
+	my $tail = @tail_paths ? tail_f(@tail_paths, $opt) : undef;
 	if ($key =~ /-(index|cindex|extindex|convert|xcpdb)\z/) {
 		unshift @argv, '--no-fsync';
 	}
@@ -442,11 +442,23 @@ sub xqx {
 }
 
 sub tail_f (@) {
+	my @f = grep(defined, @_);
 	$tail_cmd or return; # "tail -F" or "tail -f"
-	for (@_) { open(my $fh, '>>', $_) or die $! };
-	my $cmd = [ split(/ /, $tail_cmd), @_ ];
+	my $opt = (ref($f[-1]) eq 'HASH') ? pop(@f) : {};
+	my $clofork = $opt->{-CLOFORK} // [];
+	use autodie qw(fcntl open);
+	my @cfmap = map {
+		my $fl = fcntl($_, F_GETFD, 0);
+		fcntl($_, F_SETFD, $fl | FD_CLOEXEC) unless $fl & FD_CLOEXEC;
+		($_, $fl);
+	} @$clofork;
+	for (@f) { open(my $fh, '>>', $_) };
+	my $cmd = [ split(/ /, $tail_cmd), @f ];
 	require PublicInbox::Spawn;
 	my $pid = PublicInbox::Spawn::spawn($cmd, undef, { 1 => 2 });
+	while (my ($io, $fl) = splice(@cfmap, 0, 2)) {
+		fcntl($io, F_SETFD, $fl);
+	}
 	wait_for_tail($pid, scalar @_);
 	require PublicInbox::AutoReap;
 	PublicInbox::AutoReap->new($pid, \&wait_for_tail);
@@ -476,7 +488,7 @@ sub start_script {
 				}
 			}
 		}
-		$tail = tail_f(@paths);
+		$tail = tail_f(@paths, $opt);
 	}
 	my $oset = PublicInbox::DS::block_signals();
 	require PublicInbox::OnDestroy;
