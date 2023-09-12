@@ -4,8 +4,7 @@
 # backend for a git-cat-file-workalike based on libgit2,
 # other libgit2 stuff may go here, too.
 package PublicInbox::Gcf2;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::Spawn qw(which popen_rd); # may set PERL_INLINE_DIRECTORY
 use Fcntl qw(LOCK_EX SEEK_SET);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
@@ -29,40 +28,41 @@ BEGIN {
 	my ($dir) = (__FILE__ =~ m!\A(.+?)/[^/]+\z!);
 	my $ef = "$inline_dir/.public-inbox.pkg-config.err";
 	open my $err, '+>', $ef or die "open($ef): $!";
-	for my $x (qw(libgit2)) {
-		my $rdr = { 2 => $err };
-		my ($l, $pid) = popen_rd([$pc, '--libs', $x], undef, $rdr);
-		$l = do { local $/; <$l> };
-		waitpid($pid, 0);
-		next if $?;
-		(my $c, $pid) = popen_rd([$pc, '--cflags', $x], undef, $rdr);
-		$c = do { local $/; <$c> };
-		waitpid($pid, 0);
-		next if $?;
-
+	my $vals = {};
+	my $rdr = { 2 => $err };
+	my @switches = qw(modversion cflags libs);
+	for my $k (@switches) {
+		my $rd = popen_rd([$pc, "--$k", 'libgit2'], undef, $rdr);
+		chomp(my $val = do { local $/; <$rd> });
+		close($rd) or last; # checks for error and sets $?
+		$vals->{$k} = $val;
+	}
+	if (!$?) {
 		# note: we name C source files .h to prevent
 		# ExtUtils::MakeMaker from automatically trying to
 		# build them.
-		my $f = "$dir/gcf2_$x.h";
+		my $f = "$dir/gcf2_libgit2.h";
 		open(my $src, '<', $f) or die "E: open($f): $!";
-		chomp($l, $c);
 		local $/;
 		defined($c_src = <$src>) or die "read $f: $!";
-		$CFG{LIBS} = $l;
-		$CFG{CCFLAGSEX} = $c;
-		last;
 	}
 	unless ($c_src) {
 		seek($err, 0, SEEK_SET);
 		$err = do { local $/; <$err> };
 		die "E: libgit2 not installed: $err\n";
 	}
+	# append pkg-config results to the source to ensure Inline::C
+	# can rebuild if there's changes (it doesn't seem to detect
+	# $CFG{CCFLAGSEX} nor $CFG{CPPFLAGS} changes)
+	$c_src .= "/* $pc --$_ libgit2 => $vals->{$_} */\n" for @switches;
 	open my $oldout, '>&', \*STDOUT or die "dup(1): $!";
 	open my $olderr, '>&', \*STDERR or die "dup(2): $!";
 	open STDOUT, '>&', $fh or die "1>$f: $!";
 	open STDERR, '>&', $fh or die "2>$f: $!";
 	STDERR->autoflush(1);
 	STDOUT->autoflush(1);
+	$CFG{CCFLAGSEX} = $vals->{cflags};
+	$CFG{LIBS} = $vals->{libs};
 
 	# we use Capitalized and ALLCAPS for compatibility with old Inline::C
 	eval <<'EOM';
