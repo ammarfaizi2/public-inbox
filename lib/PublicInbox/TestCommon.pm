@@ -62,8 +62,12 @@ sub tcp_server () {
 	);
 	eval {
 		die 'IPv4-only' if $ENV{TEST_IPV4_ONLY};
-		require IO::Socket::INET6;
-		IO::Socket::INET6->new(%opt, LocalAddr => '[::1]')
+		my $pkg;
+		for (qw(IO::Socket::IP IO::Socket::INET6)) {
+			eval "require $_" or next;
+			$pkg = $_ and last;
+		}
+		$pkg->new(%opt, LocalAddr => '[::1]');
 	} || eval {
 		die 'IPv6-only' if $ENV{TEST_IPV6_ONLY};
 		IO::Socket::INET->new(%opt, LocalAddr => '127.0.0.1')
