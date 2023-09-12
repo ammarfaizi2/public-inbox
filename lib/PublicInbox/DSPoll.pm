@@ -13,33 +13,34 @@ use v5.12;
 use IO::Poll;
 use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
 
-sub new { bless { poll => IO::Poll->new }, __PACKAGE__ } # fd => events
+sub new { bless {}, __PACKAGE__ } # fd => events
 
 sub ep_wait {
 	my ($self, $maxevents, $timeout_msec, $events) = @_;
-	$self->{poll}->poll($timeout_msec/1000) > 0 or return (@$events = ());
-	my @io = $self->{poll}->handles(POLLIN|POLLOUT);
-	@$events = map { fileno($_) } @io;
-	for (@$events) {
-		my $io = shift @io;
-		$self->{poll}->remove($io) if delete($self->{oneshot}->{$_});
+	my @pset;
+	while (my ($fd, $events) = each %$self) {
+		my $pevents = $events & EPOLLIN ? POLLIN : 0;
+		$pevents |= $events & EPOLLOUT ? POLLOUT : 0;
+		push(@pset, $fd, $pevents);
+	}
+	@$events = ();
+	my $n = IO::Poll::_poll($timeout_msec, @pset);
+	if ($n >= 0) {
+		for (my $i = 0; $i < @pset; ) {
+			my $fd = $pset[$i++];
+			my $revents = $pset[$i++] or next;
+			delete($self->{$fd}) if $self->{$fd} & EPOLLONESHOT;
+			push @$events, $fd;
+		}
+		my $nevents = scalar @$events;
+		if ($n != $nevents) {
+			warn "BUG? poll() returned $n, but got $nevents";
+		}
 	}
 }
 
-sub ep_del {
-	my ($self, $io) = @_;
-	delete $self->{oneshot}->{fileno($io)};
-	$self->{poll}->remove($io);
-	0;
-}
-
-sub ep_add {
-	my ($self, $io, $ev) = @_;
-	$self->{oneshot}->{fileno($io)} = 1 if $ev & EPOLLONESHOT;
-	$self->{poll}->mask($io, ($ev & EPOLLIN ? POLLIN : 0) |
-				($ev & EPOLLOUT ? POLLOUT : 0));
-	0;
-}
+sub ep_del { delete($_[0]->{fileno($_[1])}); 0 }
+sub ep_add { $_[0]->{fileno($_[1])} = $_[2]; 0 }
 
 no warnings 'once';
 *ep_mod = \&ep_add;
