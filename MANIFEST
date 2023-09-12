@@ -331,6 +331,7 @@ lib/PublicInbox/SearchIdxShard.pm
 lib/PublicInbox/SearchQuery.pm
 lib/PublicInbox/SearchThread.pm
 lib/PublicInbox/SearchView.pm
+lib/PublicInbox/Select.pm
 lib/PublicInbox/SharedKV.pm
 lib/PublicInbox/Sigfd.pm
 lib/PublicInbox/Smsg.pm
@@ -578,6 +579,7 @@ t/run.perl
 t/search-amsg.eml
 t/search-thr-index.t
 t/search.t
+t/select.t
 t/sha.t
 t/shared_kv.t
 t/sigfd.t

@@ -31,7 +31,7 @@ use Scalar::Util qw(blessed);
 use PublicInbox::Syscall qw(%SIGNUM
 	EPOLLIN EPOLLOUT EPOLLONESHOT EPOLLEXCLUSIVE);
 use PublicInbox::Tmpfile;
-use PublicInbox::DSPoll;
+use PublicInbox::Select;
 use Errno qw(EAGAIN EINVAL ECHILD EINTR);
 use Carp qw(carp croak);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
@@ -43,7 +43,7 @@ my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
 our (
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
-     $Poller, # global Epoll, DSPoll, or DSKQXS ref
+     $Poller, # global Select, Epoll, DSPoll, or DSKQXS ref
 
      @post_loop_do,              # subref + args to call at the end of each loop
 
@@ -83,7 +83,7 @@ sub Reset {
 
 	$reap_armed = undef;
 	$LoopTimeout = -1;  # no timeout by default
-	$Poller = PublicInbox::DSPoll->new;
+	$Poller = PublicInbox::Select->new;
 }
 
 =head2 C<< CLASS->SetLoopTimeout( $timeout ) >>
