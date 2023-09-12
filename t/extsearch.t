@@ -480,7 +480,7 @@ SKIP: {
 	for my $i (2..3) {
 		is(grep(m!/ei[0-9]+/$i\z!, @dirs), 0, "no shard [$i]");
 	}
-	skip 'xapian-compact missing', 4 unless have_xapian_compact;
+	have_xapian_compact 1;
 	ok(run_script([qw(-compact), $d], undef, $o), 'compact');
 	# n.b. stderr contains xapian-compact output
 

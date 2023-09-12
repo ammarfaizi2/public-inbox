@@ -43,7 +43,7 @@ my $XapianDatabase = do {
 for my $R (qw(2 4 1 3 3)) {
 	delete $ibx->{search}; # release old handles
 	my $cmd = [@xcpdb, "-R$R", $ibx->{inboxdir}];
-	push @$cmd, '--compact' if $R == 1 && have_xapian_compact;
+	push @$cmd, '--compact' if $R == 1 && have_xapian_compact(1);
 	ok(run_script($cmd, $env), "xcpdb -R$R");
 	my @new_shards = grep(m!/\d+\z!, glob("$ibx->{inboxdir}/xap*/*"));
 	is(scalar(@new_shards), $R, 'resharded to two shards');

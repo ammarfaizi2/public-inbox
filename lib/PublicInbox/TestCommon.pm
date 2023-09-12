@@ -105,7 +105,8 @@ sub require_cmd ($;$) {
 	my $bin = $CACHE{$cmd} //= PublicInbox::Spawn::which($cmd);
 	return $bin if $bin;
 	return plan(skip_all => "$cmd missing from PATH for $0") if !$nr;
-	defined(wantarray) ? undef : skip("$cmd missing, skipping $nr tests")
+	defined(wantarray) ? undef :
+		skip("$cmd missing, skipping $nr tests", $nr);
 }
 
 sub have_xapian_compact (;$) {
