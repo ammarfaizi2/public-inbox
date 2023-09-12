@@ -7,8 +7,9 @@
 # The resulting executable is not linked to Perl in any way.
 package PublicInbox::XapHelperCxx;
 use v5.12;
-use PublicInbox::Spawn;
+use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::Search;
+use Fcntl qw(SEEK_SET);
 my $dir = ($ENV{PERL_INLINE_DIRECTORY} //
 	die('BUG: PERL_INLINE_DIRECTORY unset')) . '/cxx';
 my $bin = "$dir/xap_helper";
@@ -20,11 +21,33 @@ $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
 my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -O0') . ' ' .
 	($ENV{LDFLAGS} // $ldflags) .
 	qq{ -DTHREADID=}.PublicInbox::Search::THREADID;
+my $xap_modversion;
 
-sub xflags_chg () {
+sub xap_cfg (@) {
+	open my $err, '+>', undef or die "open(undef): $!";
+	my $cmd = [ $ENV{PKG_CONFIG} // 'pkg-config', @_, 'xapian-core' ];
+	my $rd = popen_rd($cmd, undef, { 2 => $err });
+	chomp(my $ret = do { local $/; <$rd> });
+	return $ret if close($rd);
+	seek($err, 0, SEEK_SET) or die "seek: $!";
+	$err = do { local $/; <$err> };
+	die <<EOM;
+@$cmd failed: Xapian devlopment files missing? (\$?=$?)
+$err
+EOM
+}
+
+sub needs_rebuild () {
 	open my $fh, '<', "$dir/XFLAGS" or return 1;
 	chomp(my $prev = <$fh>);
-	$prev ne $xflags;
+	return 1 if $prev ne $xflags;
+
+	open $fh, '<', "$dir/xap_modversion" or return 1;
+	chomp($prev = <$fh>);
+	$prev or return 1;
+
+	$xap_modversion = xap_cfg('--modversion');
+	$xap_modversion ne $prev;
 }
 
 sub build () {
@@ -37,7 +60,6 @@ sub build () {
 	require File::Temp;
 	require PublicInbox::CodeSearch;
 	my ($prog) = ($bin =~ m!/([^/]+)\z!);
-	my $pkg_config = $ENV{PKG_CONFIG} // 'pkg-config';
 	my $tmp = File::Temp->newdir(DIR => $dir) // die "newdir: $!";
 	my $src = "$tmp/$prog.cpp";
 	open my $fh, '>', $src;
@@ -51,9 +73,9 @@ sub build () {
 	print $fh PublicInbox::CodeSearch::generate_cxx();
 	close $fh;
 
-	my $cmd = "$pkg_config --libs --cflags xapian-core";
-	chomp(my $fl = `$cmd`);
-	die "$cmd failed: \$?=$?" if $?;
+	# xap_modversion may be set by needs_rebuild
+	$xap_modversion //= xap_cfg('--modversion');
+	my $fl = xap_cfg(qw(--libs --cflags));
 
 	# Using rpath seems acceptable/encouraged in the NetBSD packaging world
 	# since /usr/pkg/lib isn't searched by the dynamic loader by default.
@@ -64,14 +86,18 @@ sub build () {
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
 
 	my $cxx = $ENV{CXX} // 'c++';
-	$cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
+	my $cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
 	system($cmd) and die "$cmd failed: \$?=$?";
-	my $cf = "$tmp/XFLAGS";
-	open $fh, '>', $cf;
+	open $fh, '>', "$tmp/XFLAGS";
 	say $fh $xflags;
 	close $fh;
+
+	open $fh, '>', "$tmp/xap_modversion";
+	say $fh $xap_modversion;
+	close $fh;
+	undef $xap_modversion; # do we ever build() twice?
 	# not quite atomic, but close enough :P
-	rename("$tmp/$_", "$dir/$_") for ($prog, 'XFLAGS');
+	rename("$tmp/$_", "$dir/$_") for ($prog, qw(XFLAGS xap_modversion));
 }
 
 sub check_build () {
@@ -85,7 +111,7 @@ sub check_build () {
 			return build() if $ctime > $bin[10];
 		}
 	}
-	xflags_chg() ? build() : 0;
+	needs_rebuild() ? build() : 0;
 }
 
 sub start (@) {
