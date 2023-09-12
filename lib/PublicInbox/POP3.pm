@@ -41,6 +41,7 @@ use PublicInbox::IMAP; # for UID slice stuff
 
 use constant {
 	LINE_MAX => 512, # XXX unsure
+	UID_SLICE => PublicInbox::IMAP::UID_SLICE,
 };
 
 # XXX FIXME: duplicated stuff from NNTP.pm and IMAP.pm
@@ -70,20 +71,25 @@ sub cmd_user ($$) {
 	my $user = $1;
 	$user =~ tr/-//d; # most have dashes, some (dbus-uuidgen) don't
 	$user =~ m!\A[a-f0-9]{32}\z!i or return \"-ERR user has no UUID\r\n";
-	my $slice;
-	$mailbox =~ s/\.([0-9]+)\z// and $slice = $1 + 0;
+
+	my $limit = UID_SLICE;
+	$mailbox =~ s/\?limit=([0-9]+)\z// and
+		$limit = $1 > UID_SLICE ? UID_SLICE : $1;
+
+	my $slice = $mailbox =~ s/\.([0-9]+)\z// ? $1 + 0 : undef;
+
 	my $ibx = $self->{pop3d}->{pi_cfg}->lookup_newsgroup($mailbox) //
 		return \"-ERR $mailbox does not exist\r\n";
 	my $uidmax = $ibx->mm(1)->num_highwater // 0;
 	if (defined $slice) {
-		my $max = int($uidmax / PublicInbox::IMAP::UID_SLICE);
+		my $max = int($uidmax / UID_SLICE);
 		my $tip = "$mailbox.$max";
 		return \"-ERR $mailbox.$slice does not exist ($tip does)\r\n"
 			if $slice > $max;
-		$self->{uid_base} = $slice * PublicInbox::IMAP::UID_SLICE;
+		$self->{uid_base} = ($slice * UID_SLICE) + UID_SLICE - $limit;
 		$self->{slice} = $slice;
-	} else { # latest 50K messages
-		my $base = $uidmax - PublicInbox::IMAP::UID_SLICE;
+	} else { # latest $limit messages
+		my $base = $uidmax - $limit;
 		$self->{uid_base} = $base < 0 ? 0 : $base;
 		$self->{slice} = -1;
 	}

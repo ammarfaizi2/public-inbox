@@ -53,7 +53,7 @@ delivery maildir $tmpdir/md
 account default
 host ${\$sock->sockhost}
 port ${\$sock->sockport}
-user $uuid\@$newsgroup
+user $uuid\@$newsgroup?limit=10000
 auth user
 password anonymous
 received_header off
@@ -65,7 +65,7 @@ EOM
 	my $pid = spawn($cmd, undef, { 1 => 2 });
 	$pids{$pid} = $cmd;
 }
-
+diag "mpop is writing to $tmpdir/md ...";
 while (scalar keys %pids) {
 	my $pid = waitpid(-1, 0) or next;
 	my $cmd = delete $pids{$pid} or next;
