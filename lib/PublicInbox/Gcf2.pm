@@ -12,29 +12,28 @@ use IO::Handle; # autoflush
 use PublicInbox::Git;
 
 BEGIN {
+	use autodie;
 	my (%CFG, $c_src);
 	# PublicInbox::Spawn will set PERL_INLINE_DIRECTORY
 	# to ~/.cache/public-inbox/inline-c if it exists and Inline::C works
 	my $inline_dir = $ENV{PERL_INLINE_DIRECTORY} //
 		die 'PERL_INLINE_DIRECTORY not defined';
-	my $f = "$inline_dir/.public-inbox.lock";
-	open my $fh, '+>', $f or die "open($f): $!";
+	open my $fh, '+>', "$inline_dir/.public-inbox.lock";
 
 	# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
-	flock($fh, LOCK_EX) or die "LOCK_EX($f): $!\n";
+	flock($fh, LOCK_EX);
 
 	my $pc = which($ENV{PKG_CONFIG} // 'pkg-config') //
 		die "pkg-config missing for libgit2";
 	my ($dir) = (__FILE__ =~ m!\A(.+?)/[^/]+\z!);
-	my $ef = "$inline_dir/.public-inbox.pkg-config.err";
-	open my $err, '+>', $ef or die "open($ef): $!";
+	open my $err, '+>', "$inline_dir/.public-inbox.pkg-config.err";
 	my $vals = {};
 	my $rdr = { 2 => $err };
 	my @switches = qw(modversion cflags libs);
 	for my $k (@switches) {
 		my $rd = popen_rd([$pc, "--$k", 'libgit2'], undef, $rdr);
 		chomp(my $val = do { local $/; <$rd> });
-		close($rd) or last; # checks for error and sets $?
+		CORE::close($rd) or last; # checks for error and sets $?
 		$vals->{$k} = $val;
 	}
 	if (!$?) {
@@ -42,9 +41,9 @@ BEGIN {
 		# ExtUtils::MakeMaker from automatically trying to
 		# build them.
 		my $f = "$dir/gcf2_libgit2.h";
-		open(my $src, '<', $f) or die "E: open($f): $!";
+		open my $src, '<', $f;
 		local $/;
-		defined($c_src = <$src>) or die "read $f: $!";
+		$c_src = <$src> // die "read $f: $!";
 	}
 	unless ($c_src) {
 		seek($err, 0, SEEK_SET);
@@ -55,23 +54,23 @@ BEGIN {
 	# can rebuild if there's changes (it doesn't seem to detect
 	# $CFG{CCFLAGSEX} nor $CFG{CPPFLAGS} changes)
 	$c_src .= "/* $pc --$_ libgit2 => $vals->{$_} */\n" for @switches;
-	open my $oldout, '>&', \*STDOUT or die "dup(1): $!";
-	open my $olderr, '>&', \*STDERR or die "dup(2): $!";
-	open STDOUT, '>&', $fh or die "1>$f: $!";
-	open STDERR, '>&', $fh or die "2>$f: $!";
+	open my $oldout, '>&', \*STDOUT;
+	open my $olderr, '>&', \*STDERR;
+	open STDOUT, '>&', $fh;
+	open STDERR, '>&', $fh;
 	STDERR->autoflush(1);
 	STDOUT->autoflush(1);
 	$CFG{CCFLAGSEX} = $vals->{cflags};
 	$CFG{LIBS} = $vals->{libs};
 
 	# we use Capitalized and ALLCAPS for compatibility with old Inline::C
-	eval <<'EOM';
+	CORE::eval <<'EOM';
 use Inline C => Config => %CFG, BOOT => q[git_libgit2_init();];
 use Inline C => $c_src, BUILD_NOISY => 1;
 EOM
 	$err = $@;
-	open(STDERR, '>&', $olderr) or warn "restore stderr: $!";
-	open(STDOUT, '>&', $oldout) or warn "restore stdout: $!";
+	open(STDERR, '>&', $olderr);
+	open(STDOUT, '>&', $oldout);
 	if ($err) {
 		seek($fh, 0, SEEK_SET);
 		my @msg = <$fh>;
