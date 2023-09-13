@@ -4,14 +4,16 @@
 eval 'exec perl -S $0 ${1+"$@"}' # no shebang
 if 0; # running under some shell
 use v5.12;
-my $help = <<EOM;
+my $help = <<EOM; # make sure this fits in 80x24 terminals
 usage: $^X $0 [-f PKG_FMT] [--allow-remove] PROFILE [PROFILE_MOD]
 
   -f PKG_FMT      package format (`deb', `pkg', `pkg_add', `pkgin' or `rpm')
-  --allow-remove  allow removing packages (for development use only)
+  --allow-remove  allow removing packages (DANGEROUS, non-production use only)
   --dry-run | -n  show commands that would be run
+  --yes | -y      non-interactive mode / assume yes to package manager
 
-PROFILE is typically `all'.  Other profiles are subject to change.
+PROFILE is typically `www-search', `lei', or `nntpd'
+Some profile names are intended for developer use only and subject to change.
 PROFILE_MOD is only for developers checking dependencies
 
 OS package installation typically requires administrative privileges
@@ -19,7 +21,8 @@ EOM
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 BEGIN { require './install/os.perl' };
 my $opt = {};
-GetOptions($opt, qw(pkg-fmt|f=s allow-remove dry-run|n help|h)) or die $help;
+GetOptions($opt, qw(pkg-fmt|f=s allow-remove dry-run|n yes|y help|h))
+	or die $help;
 if ($opt->{help}) { print $help; exit }
 my $pkg_fmt = $opt->{'pkg-fmt'} // do {
 	my $fmt = pkg_fmt;
@@ -31,7 +34,7 @@ my @test_essential = qw(Test::Simple); # we actually use Test::More
 
 # package profiles.  Note we specify packages at maximum granularity,
 # which is typically deb for most things, but rpm seems to have the
-# highest granularity for things in the Prl standard library.
+# highest granularity for things in the Perl standard library.
 my $profiles = {
 	# the smallest possible profile for testing
 	essential => [ qw(
@@ -47,10 +50,10 @@ my $profiles = {
 
 	# everything optional for normal use
 	optional => [ qw(
+		curl
 		Date::Parse
 		BSD::Resource
 		DBD::SQLite
-		DBI
 		Inline::C
 		Mail::IMAPClient
 		Net::Server
@@ -66,14 +69,44 @@ my $profiles = {
 	# optional developer stuff
 	devtest => [ qw(
 		XML::TreePP
-		curl
 		w3m
 		Plack::Test::ExternalServer
 		) ],
 };
 
+# only for distro-agnostic dependencies which are always true:
+my $always_deps = {
+	'DBD::SQLite' => [ qw(DBI) ],
+	'Mail::IMAPClient' => [ qw(Parse::RecDescent) ],
+	'Plack::Middleware::ReverseProxy' => [ qw(Plack) ],
+};
+
 # bare minimum for v2
-$profiles->{v2essential} = [ @{$profiles->{essential}}, qw(DBD::SQLite DBI) ];
+$profiles->{v2essential} = [ @{$profiles->{essential}}, qw(DBD::SQLite) ];
+
+# for old v1 installs
+$profiles->{'www-v1'} = [ @{$profiles->{essential}}, qw(Plack) ];
+$profiles->{'www-thread'} = [ @{$profiles->{v2essential}}, qw(Plack) ];
+
+# common profile for PublicInbox::WWW
+$profiles->{'www-search'} = [ @{$profiles->{'www-thread'}}, qw(Xapian) ];
+
+# bare mininum for lei
+$profiles->{'lei-core'} = [ @{$profiles->{v2essential}}, qw(Xapian) ];
+push @{$profiles->{'lei-core'}}, 'Inline::C' if $^O ne 'linux';
+
+# common profile for lei:
+$profiles->{lei} = [ @{$profiles->{'lei-core'}}, qw(Mail::IMAPClient curl) ];
+
+$profiles->{nntpd} = [ @{$profiles->{v2essential}} ];
+$profiles->{pop3d} = [ @{$profiles->{v2essential}} ];
+$profiles->{'imapd-bare'} = [ @{$profiles->{v2essential}},
+				qw(Parse::RecDescent) ];
+$profiles->{imapd} = [ @{$profiles->{'imapd-bare'}}, qw(Xapian) ];
+$profiles->{pop3d} = [ @{$profiles->{v2essential}} ];
+$profiles->{watch} = [ @{$profiles->{v2essential}}, qw(Mail::IMAPClient) ];
+$profiles->{'watch-v1'} = [ @{$profiles->{essential}} ];
+$profiles->{'watch-maildir'} = [ @{$profiles->{v2essential}} ];
 
 # package names which can't be mapped automatically and explicit
 # dependencies to prevent essential package removal:
@@ -169,6 +202,12 @@ don't know how to check install status for $pkg_fmt
 
 my (@pkg_install, @pkg_remove, %all);
 for my $ary (values %$profiles) {
+	my @extra;
+	for my $pkg (@$ary) {
+		my $deps = $always_deps->{$pkg} // next;
+		push @extra, @$deps;
+	}
+	push @$ary, @extra;
 	$all{$_} = \@pkg_remove for @$ary;
 }
 if ($^O =~ /\A(?:free|net|open)bsd\z/) {
@@ -177,7 +216,8 @@ if ($^O =~ /\A(?:free|net|open)bsd\z/) {
 $profiles->{all} = [ keys %all ]; # pseudo-profile for all packages
 
 # parse the profile list from the command-line
-for my $profile (@ARGV) {
+my @profiles = @ARGV;
+while (defined(my $profile = shift @profiles)) {
 	if ($profile =~ s/-\z//) {
 		# like apt-get, trailing "-" means remove
 		profile2dst($profile, \@pkg_remove);
@@ -191,57 +231,54 @@ while (my ($pkg, $dst_pkg_list) = each %all) {
 	push @$dst_pkg_list, list(pkg2ospkg($pkg, $pkg_fmt));
 }
 
-my %inst = map { $_ => 1 } @pkg_install;
-@pkg_remove = $opt->{'allow-remove'} ? grep { !$inst{$_} } @pkg_remove : ();
-@pkg_install = grep { !$INST_CHECK->($_) } @pkg_install;
-
-my @apt_opts =
-	qw(-o APT::Install-Recommends=false -o APT::Install-Suggests=false);
+my (%add, %rm); # uniquify lists
+@pkg_install = grep { !$add{$_}++ && !$INST_CHECK->($_) } @pkg_install;
+@pkg_remove = $opt->{'allow-remove'} ? grep {
+		!$add{$_} && !$rm{$_}++ && $INST_CHECK->($_)
+	} @pkg_remove : ();
 
 # OS-specific cleanups appreciated
 if ($pkg_fmt eq 'deb') {
-	my @quiet = $ENV{V} ? () : ('-q');
-	root('apt-get', @apt_opts, qw(install --purge -y), @quiet,
+	my @apt_opt = qw(-o APT::Install-Recommends=false
+			-o APT::Install-Suggests=false);
+	push @apt_opt, '-y' if $opt->{yes};
+	root('apt-get', @apt_opt, qw(install),
 		@pkg_install,
 		# apt-get lets you suffix a package with "-" to
 		# remove it in an "install" sub-command:
 		map { "$_-" } @pkg_remove);
-	root('apt-get', @apt_opts, qw(autoremove --purge -y), @quiet);
+	root('apt-get', @apt_opt, qw(autoremove)) if $opt->{'allow-remove'};
 } elsif ($pkg_fmt eq 'pkg') { # FreeBSD
-	my @quiet = $ENV{V} ? () : ('-q');
+	my @pkg_opt = $opt->{yes} ? qw(-y) : ();
 
 	# don't remove stuff that isn't installed:
-	exclude_uninstalled(\@pkg_remove);
-	root(qw(pkg remove -y), @quiet, @pkg_remove) if @pkg_remove;
-	root(qw(pkg install -y), @quiet, @pkg_install) if @pkg_install;
-	root(qw(pkg autoremove -y), @quiet);
+	root(qw(pkg remove), @pkg_opt, @pkg_remove) if @pkg_remove;
+	root(qw(pkg install), @pkg_opt, @pkg_install) if @pkg_install;
+	root(qw(pkg autoremove), @pkg_opt) if $opt->{'allow-remove'};
 } elsif ($pkg_fmt eq 'pkgin') { # NetBSD
-	my @quiet = $ENV{V} ? ('-'.('V'x$ENV{V})) : ();
-	exclude_uninstalled(\@pkg_remove);
-	root(qw(pkgin -y), @quiet, 'remove', @pkg_remove) if @pkg_remove;
-	root(qw(pkgin -y), @quiet, 'install', @pkg_install) if @pkg_install;
-	root(qw(pkgin -y), @quiet, 'autoremove');
+	my @pkg_opt = $opt->{yes} ? qw(-y) : ();
+	root(qw(pkgin), @pkg_opt, 'remove', @pkg_remove) if @pkg_remove;
+	root(qw(pkgin), @pkg_opt, 'install', @pkg_install) if @pkg_install;
+	root(qw(pkgin), @pkg_opt, 'autoremove') if $opt->{'allow-remove'};
 # TODO: yum / rpm support
 } elsif ($pkg_fmt eq 'rpm') {
-	my @quiet = $ENV{V} ? () : ('-q');
-	exclude_uninstalled(\@pkg_remove);
-	root(qw(yum remove -y), @quiet, @pkg_remove) if @pkg_remove;
-	root(qw(yum install -y), @quiet, @pkg_install) if @pkg_install;
+	my @pkg_opt = $opt->{yes} ? qw(-y) : ();
+	root(qw(yum remove), @pkg_opt, @pkg_remove) if @pkg_remove;
+	root(qw(yum install), @pkg_opt, @pkg_install) if @pkg_install;
 } elsif ($pkg_fmt eq 'pkg_add') { # OpenBSD
-	exclude_uninstalled(\@pkg_remove);
-	my @quiet = $ENV{V} ? ('-'.('v'x$ENV{V})) : qw(-x); # -x : no progress
+	my @pkg_opt = $opt->{yes} ? qw(-I) : (); # -I means non-interactive
 	if (@pkg_remove) {
 		my @lifo = qw(xapian-bindings-perl);
 		for my $dep (@lifo) {
 			grep(/\A\Q$dep\E\z/, @pkg_remove) or next;
-			root(qw(pkg_delete -I), @quiet, $dep);
+			root(qw(pkg_delete), @pkg_opt, $dep);
 			@pkg_remove = grep(!/\A\Q$dep\E\z/, @pkg_remove);
 		}
-		root(qw(pkg_delete -I), @quiet, @pkg_remove);
+		root(qw(pkg_delete), @pkg_opt, @pkg_remove);
 	}
-	root(qw(pkg_delete -a), @quiet);
+	root(qw(pkg_delete -a), @pkg_opt); # autoremove unspecified
 	@pkg_install = map { "$_--" } @pkg_install; # disambiguate w3m
-	root(qw(pkg_add), @quiet, @pkg_install) if @pkg_install;
+	root(qw(pkg_add), @pkg_opt, @pkg_install) if @pkg_install;
 } else {
 	die "unsupported package format: $pkg_fmt\n";
 }
@@ -288,15 +325,6 @@ sub profile2dst {
 	} else {
 		die "unrecognized profile or package: $profile\n";
 	}
-}
-
-sub exclude_uninstalled {
-	my ($list) = @_;
-	my (@tmp, %seen);
-	for my $pkg (@$list) {
-		push @tmp, $pkg if !$seen{$pkg}++ && $INST_CHECK->($pkg);
-	}
-	@$list = @tmp;
 }
 
 sub root {

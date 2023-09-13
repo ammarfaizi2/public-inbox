@@ -1,6 +1,7 @@
 #!/bin/sh
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+# Beware, this alters system-wide package installation.
 set -e
 SUDO=${SUDO-'sudo'} PERL=${PERL-'perl'} MAKE=${MAKE-'make'}
 DO=${DO-''}
@@ -15,7 +16,7 @@ NPROC=${NPROC-$({ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
 
 $PERL -w ci/profiles.perl | while read args
 do
-	$DO $SUDO $PERL -w install/deps.perl --allow-remove $args
+	$DO $SUDO $PERL -w install/deps.perl -y --allow-remove $args
 	$DO $PERL Makefile.PL
 	$DO $MAKE -j${BUILD_JOBS-$NPROC}
 	$DO $MAKE -j${TEST_JOBS-1} ${TEST_TARGET-test}
