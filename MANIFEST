@@ -112,7 +112,6 @@ TODO
 certs/.gitignore
 certs/create-certs.perl
 ci/README
-ci/deps.perl
 ci/profiles.perl
 ci/run.sh
 contrib/completion/lei-completion.bash
@@ -153,6 +152,9 @@ examples/unsubscribe-psgi@.service
 examples/unsubscribe.milter
 examples/unsubscribe.psgi
 examples/varnish-4.vcl
+install/README
+install/deps.perl
+install/os.perl
 lei.sh
 lib/PublicInbox/Address.pm
 lib/PublicInbox/AddressPP.pm

@@ -1,14 +1,32 @@
-#!/usr/bin/perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-# Helper script for installing/uninstalling packages for CI use
-# Intended for use on non-production chroots or VMs since it
-# changes installed packages
+# Helper script for mass installing/uninstalling with the OS package manager
+eval 'exec perl -S $0 ${1+"$@"}' # no shebang
+if 0; # running under some shell
 use v5.12;
-my $usage = "$0 PKG_FMT PROFILE [PROFILE_MOD]";
-my $pkg_fmt = shift;
-@ARGV or die $usage, "\n";
+my $help = <<EOM;
+usage: $^X $0 [-f PKG_FMT] [--allow-remove] PROFILE [PROFILE_MOD]
 
+  -f PKG_FMT      package format (`deb', `pkg', `pkg_add', `pkgin' or `rpm')
+  --allow-remove  allow removing packages (for development use only)
+  --dry-run | -n  show commands that would be run
+
+PROFILE is typically `all'.  Other profiles are subject to change.
+PROFILE_MOD is only for developers checking dependencies
+
+OS package installation typically requires administrative privileges
+EOM
+use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
+BEGIN { require './install/os.perl' };
+my $opt = {};
+GetOptions($opt, qw(pkg-fmt|f=s allow-remove dry-run|n help|h)) or die $help;
+if ($opt->{help}) { print $help; exit }
+my $pkg_fmt = $opt->{'pkg-fmt'} // do {
+	my $fmt = pkg_fmt;
+	warn "# using detected --pkg-fmt=$fmt on $ID/$VERSION_ID\n";
+	$fmt;
+};
+@ARGV or die $help;
 my @test_essential = qw(Test::Simple); # we actually use Test::More
 
 # package profiles.  Note we specify packages at maximum granularity,
@@ -125,19 +143,14 @@ for (qw(Digest::SHA Encode ExtUtils::MakeMaker IO::Compress Test::Simple)) {
 }
 
 # NetBSD and OpenBSD package names are similar to FreeBSD in most cases
-if ($pkg_fmt eq 'pkg_add') {
+if ($pkg_fmt =~ /\A(?:pkg_add|pkgin)\z/) {
 	for my $name (keys %$non_auto) {
 		my $fbsd_pkg = $non_auto->{$name}->{pkg};
-		$non_auto->{$name}->{pkg_add} //= $fbsd_pkg if $fbsd_pkg;
-	}
-} elsif ($pkg_fmt eq 'pkgin') {
-	for my $name (keys %$non_auto) {
-		my $fbsd_pkg = $non_auto->{$name}->{pkg};
-		$non_auto->{$name}->{pkgin} //= $fbsd_pkg if $fbsd_pkg;
+		$non_auto->{$name}->{$pkg_fmt} //= $fbsd_pkg if $fbsd_pkg;
 	}
 }
 
-my %inst_check = (
+my %inst_check = ( # subs which return true if a package is intalled
 	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
 	deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
 	pkg_add => sub { system(qw(pkg_info -q -e), "$_[0]->=0") == 0 },
@@ -173,14 +186,13 @@ while (my ($pkg, $dst_pkg_list) = each %all) {
 }
 
 my %inst = map { $_ => 1 } @pkg_install;
-@pkg_remove = grep { !$inst{$_} } @pkg_remove;
+@pkg_remove = $opt->{'allow-remove'} ? grep { !$inst{$_} } @pkg_remove : ();
 @pkg_install = grep { !$INST_CHECK->($_) } @pkg_install;
 
 my @apt_opts =
 	qw(-o APT::Install-Recommends=false -o APT::Install-Suggests=false);
 
 # OS-specific cleanups appreciated
-
 if ($pkg_fmt eq 'deb') {
 	my @quiet = $ENV{V} ? () : ('-q');
 	root('apt-get', @apt_opts, qw(install --purge -y), @quiet,
@@ -282,10 +294,10 @@ sub exclude_uninstalled {
 }
 
 sub root {
-	print join(' ', @_), "\n";
-	return if $ENV{DRY_RUN};
+	warn "# @_\n";
+	return if $opt->{'dry-run'};
 	return if system(@_) == 0;
-	warn 'command failed: ', join(' ', @_), "\n";
+	warn "E: command failed: @_\n";
 	exit($? >> 8);
 }
 

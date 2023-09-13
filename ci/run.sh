@@ -15,7 +15,7 @@ NPROC=${NPROC-$({ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
 
 $PERL -w ci/profiles.perl | while read args
 do
-	$DO $SUDO $PERL -w ci/deps.perl $args
+	$DO $SUDO $PERL -w install/deps.perl --allow-remove $args
 	$DO $PERL Makefile.PL
 	$DO $MAKE -j${BUILD_JOBS-$NPROC}
 	$DO $MAKE -j${TEST_JOBS-1} ${TEST_TARGET-test}
