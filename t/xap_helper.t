@@ -54,9 +54,8 @@ my $doreq = sub {
 	push @fds, fileno($err) if $err;
 	my $n = PublicInbox::IPC::send_cmd($s, \@fds, $buf, 0);
 	$n // xbail "send: $!";
-	my $arg = "@arg";
-	$arg =~ s/\Q$tmp\E/\$TMP/gs;
-	is(length($buf), $n, "req $arg sent");
+	my $exp = length($buf);
+	$exp == $n or xbail "req @arg sent short ($n != $exp)";
 	$x;
 };
 
@@ -109,15 +108,16 @@ my $test = sub {
 	$tries = 0;
 	my @ins = ($s, qw(test_inspect -d), $ibx_idx[0]);
 	kill('TTIN', $pid);
-	until (scalar(keys %pids) >= 2 || ++$tries > 10) {
+	until (scalar(keys %pids) >= 2 || ++$tries > 100) {
 		tick;
-		my @r = map { $doreq->(@ins) } (0..5);
+		my @r = map { $doreq->(@ins) } (0..100);
 		for my $fh (@r) {
 			my $buf = do { local $/; <$fh> } // die "read: $!";
 			$buf =~ /\bpid=(\d+)/ and $pids{$1} = undef;
 		}
 	}
-	is(scalar keys %pids, 2, 'have two pids');
+	is(scalar keys %pids, 2, 'have two pids') or
+		diag 'pids='.explain(\%pids);
 
 	kill('TTOU', $pid);
 	%pids = ();
@@ -127,7 +127,7 @@ my $test = sub {
 	tick($delay);
 	until (scalar(keys %pids) == 1 || ++$tries > 100) {
 		%pids = ();
-		my @r = map { $doreq->(@ins) } (0..5);
+		my @r = map { $doreq->(@ins) } (0..100);
 		for my $fh (@r) {
 			my $buf = do { local $/; <$fh> } // die "read: $!";
 			$buf =~ /\bpid=(\d+)/ and $pids{$1} = undef;
