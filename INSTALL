@@ -5,17 +5,17 @@ This is for folks who want to set up their own public-inbox instance.
 Clients should use normal git-clone/git-fetch, IMAP or NNTP clients
 if they want to import mail into their personal inboxes.
 
-As of 2022, public-inbox is packaged by several OS distributions,
+As of 2023, public-inbox is packaged by several OS distributions,
 listed in alphabetical order: Debian, GNU Guix, NixOS, and Void Linux.
 
 public-inbox is developed on Debian GNU/Linux systems and will
 never depend on packages outside of the "main" component of
-the "stable" distribution, currently Debian 10.x ("buster"),
-but older versions of Debian remain supported.
+the "oldstable" distribution, currently Debian 11.x ("bullseye"),
+but older versions of Debian remain supported (as are newer ones).
 
-Most packages are available in other GNU/Linux distributions
-and FreeBSD.  CentOS 7.x users will likely want newer git and
-Xapian packages for better performance and v2 inbox support:
+Most packages are available in other GNU/Linux distributions,
+FreeBSD, NetBSD, and OpenBSD.  CentOS 7.x users will likely want
+newer git and Xapian for better performance and v2 inbox support:
 https://public-inbox.org/meta/20210421151308.yz5hzkgm75klunpe@nitro.local/
 
 TODO: this still needs to be documented better,
@@ -57,7 +57,7 @@ but required for older releases:
                                    (for broken, mostly historical emails)
 
 Where "deb" indicates package names for Debian-derived distributions,
-"pkg" is for the FreeBSD package (maybe other common BSDs, too), and
+"pkg" is for the FreeBSD package (and some other common BSDs, too), and
 "rpm" is for RPM-based distributions (only known to work on Fedora).
 
 Numerous optional modules are likely to be useful as well:
@@ -71,7 +71,7 @@ Numerous optional modules are likely to be useful as well:
                                    pkg: p5-Xapian (FreeBSD, NetBSD)
                                         xapian-bindings-perl (OpenBSD)
                                    rpm: perl-Search-Xapian
-                                   (HTTP and IMAP search)
+                                   (lei; HTTP and IMAP search)
 
 - Inline::C                        deb: libinline-c-perl
                                    pkg: p5-Inline-C
@@ -94,7 +94,8 @@ Numerous optional modules are likely to be useful as well:
 - Mail::IMAPClient                 deb: libmail-imapclient-perl
                                    pkg: p5-Mail-IMAPClient
                                    rpm: perl-Mail-IMAPClient
-                                   (only for lei and public-inbox-watch)
+                                   (only for lei and public-inbox-watch
+                                    when reading from IMAP)
 
 - BSD::Resource                    deb: libbsd-resource-perl
                                    pkg: p5-BSD-Resource
@@ -115,10 +116,11 @@ Numerous optional modules are likely to be useful as well:
                                    pkg: xapian-core
                                    rpm: xapian-core
                                    (for public-inbox-compact(1) and
-				    public-inbox-cindex(1))
+                                    public-inbox-cindex(1))
 
 * curl (tool)                      deb, pkg, rpm: curl
-                                   (for HTTP(S) externals with curl)
+                                   (for lei HTTP(S) externals with curl and
+                                    public-inbox-clone(1))
 
 - Linux::Inotify2                  deb: liblinux-inotify2-perl
                                    rpm: perl-Linux-Inotify2
