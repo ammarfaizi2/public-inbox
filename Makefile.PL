@@ -150,15 +150,14 @@ WriteMakefile(
 
 		# perl-modules-5.xx or libperl5.xx in Debian-based
 		# part of "perl5" on FreeBSD
-		'autodie' => 0,
-		'Compress::Raw::Zlib' => 0,
-		'Compress::Zlib' => 0,
-		'Data::Dumper' => 0,
+		'autodie' => 0, # rpm: perl-autodie
+		'Compress::Raw::Zlib' => 0, # rpm: perl-Compress-Raw-Zlib
+		'Compress::Zlib' => 0, # rpm: perl-IO-Compress
+		'Data::Dumper' => 0, # rpm: perl-Data-Dumper
 		'Digest::SHA' => 0, # rpm: perl-Digest-SHA
-		'Encode' => 2.35, # 2.35 shipped with 5.10.1
-		'IO::Compress::Gzip' => 0,
-		'IO::Uncompress::Gunzip' => 0,
-		'Storable' => 0, # rpm: perl-Storable
+		'IO::Compress::Gzip' => 0, # rpm: perl-IO-Compress
+		'IO::Uncompress::Gunzip' => 0, # rpm: perl-IO-Compress
+		'Sys::Syslog' => 0, # rpm: perl-Sys-Syslog
 		'Text::ParseWords' => 0, # rpm: perl-Text-ParseWords
 
 		# Plack is needed for public-inbox-httpd and PublicInbox::WWW
@@ -170,12 +169,16 @@ WriteMakefile(
 		# users to install them.  See INSTALL
 
 		# All Perl installs I know about have these, but RH-based
-		# distros make them separate even though 'perl' pulls them in
+		# distros can separate these even if `perl' depends on them:
+		'constant' => 0, # rpm: perl-constant
+		'Encode' => 2.35, # rpm: perl-Encode # 2.35 shipped with 5.10.1
 		'File::Path' => 0,
 		'File::Temp' => '0.19', # for ->tmpdir support
-		'Getopt::Long' => 0,
-		'Exporter' => 0,
+		'Getopt::Long' => 0, # rpm: perl-Getopt-Long
+		'Exporter' => 0, # rpm: perl-Exporter
 		'IO::Poll' => 0,
+		'Storable' => 0, # rpm: perl-Storable
+		'Time::HiRes' => 0, # rpm: perl-Time-HiRes
 		# ExtUtils::MakeMaker # this file won't run w/o it...
 	},
 	MAN3PODS => \%man3,

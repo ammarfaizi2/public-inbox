@@ -35,12 +35,13 @@ my @test_essential = qw(Test::Simple); # we actually use Test::More
 my $profiles = {
 	# the smallest possible profile for testing
 	essential => [ qw(
+		autodie
 		git
 		perl
 		Digest::SHA
-		Encode
 		ExtUtils::MakeMaker
 		IO::Compress
+		Text::ParseWords
 		URI
 		), @test_essential ],
 
@@ -58,7 +59,6 @@ my $profiles = {
 		Plack::Test
 		Plack::Middleware::ReverseProxy
 		Xapian
-		Socket6
 		highlight.pm
 		xapian-tools
 		) ],
@@ -79,9 +79,9 @@ $profiles->{v2essential} = [ @{$profiles->{essential}}, qw(DBD::SQLite DBI) ];
 # dependencies to prevent essential package removal:
 my $non_auto = {
 	git => {
-		pkg => [ qw(curl p5-Socket6 p5-TimeDate git) ],
+		pkg => [ qw(curl p5-TimeDate git) ],
 		rpm => [ qw(curl git) ],
-		pkg_add => [ qw(curl p5-Socket6 p5-Time-TimeDate git) ],
+		pkg_add => [ qw(curl p5-Time-TimeDate git) ],
 	},
 	perl => {
 		pkg => 'perl5',
@@ -132,8 +132,14 @@ my $non_auto = {
 	},
 };
 
-# standard library stuff that CentOS 7.x (and presumably other RPM) split out:
-for (qw(Digest::SHA Encode ExtUtils::MakeMaker IO::Compress Test::Simple)) {
+# standard library stuff that CentOS 7.x (and presumably other RPM)
+# split out and can be removed without removing the `perl' RPM:
+for (qw(autodie Digest::SHA ExtUtils::MakeMaker IO::Compress Sys::Syslog
+		Test::Simple Text::ParseWords)) {
+	# n.b.: Compress::Raw::Zlib is pulled in by IO::Compress
+	# qw(constant Encode Getopt::Long Exporter Storable Time::HiRes)
+	# don't need to be here since it's impossible to have `perl'
+	# on CentOS 7.x without them.
 	$non_auto->{$_} = {
 		deb => 'perl', # libperl5.XX, but the XX varies
 		pkg => 'perl5',

@@ -208,9 +208,8 @@ RPM-based distros split them out into separate packages:
 * autodie                          rpm: perl-autodie
 * Digest::SHA                      rpm: perl-Digest-SHA
 * Data::Dumper                     rpm: perl-Data-Dumper
-* Encode                           rpm: perl-Encode
 * IO::Compress                     rpm: perl-IO-Compress
-* Storable                         rpm: perl-Storable
+* Sys::Syslog                      rpm: perl-Sys-Syslog
 * Text::ParseWords                 rpm: perl-Text-Parsewords
 
 Copyright
