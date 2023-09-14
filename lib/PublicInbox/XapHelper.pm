@@ -10,6 +10,7 @@ $GLP->configure(qw(require_order bundling no_ignore_case no_auto_abbrev));
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::CodeSearch;
 use PublicInbox::IPC;
+use Socket qw(SOL_SOCKET SO_TYPE SOCK_SEQPACKET AF_UNIX);
 use PublicInbox::DS qw(awaitpid);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
@@ -254,6 +255,9 @@ sub xh_alive { $alive || scalar(keys %WORKERS) }
 
 sub start (@) {
 	my (@argv) = @_;
+	my $c = getsockopt(STDIN, SOL_SOCKET, SO_TYPE) or die "getsockopt: $!";
+	unpack('i', $c) == SOCK_SEQPACKET or die 'stdin is not SOCK_SEQPACKET';
+
 	local (%SRCH, %WORKERS);
 	local $alive = 1;
 	PublicInbox::Search::load_xapian();

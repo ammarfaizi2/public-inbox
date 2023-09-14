@@ -1108,6 +1108,12 @@ static size_t living_workers(void)
 int main(int argc, char *argv[])
 {
 	int c;
+	socklen_t slen = (socklen_t)sizeof(c);
+
+	if (getsockopt(sock_fd, SOL_SOCKET, SO_TYPE, &c, &slen))
+		err(EXIT_FAILURE, "getsockopt");
+	if (c != SOCK_SEQPACKET)
+		errx(EXIT_FAILURE, "stdin is not SOCK_SEQPACKET");
 
 	mail_nrp_init();
 	code_nrp_init();
