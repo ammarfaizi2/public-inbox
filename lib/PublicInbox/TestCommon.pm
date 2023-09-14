@@ -365,7 +365,8 @@ sub run_script ($;$$) {
 			chdir $d or die "chdir $d: $!";
 		}
 		_run_sub($sub, $key, \@argv);
-		eval { PublicInbox::Inbox::cleanup_task() };
+		# n.b. all our uses of PublicInbox::DS should be fine
+		# with this and we can't Reset here.
 		die "fchdir(restore): $!" if $cwdfh && !chdir($cwdfh);
 		_undo_redirects($orig_io);
 		select STDOUT;
