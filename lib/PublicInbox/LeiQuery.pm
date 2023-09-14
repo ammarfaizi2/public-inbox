@@ -65,6 +65,8 @@ sub qstr_add { # PublicInbox::InputPipe::consume callback for --stdin
 	return $lei->{mset_opt}->{qstr} .= $_[1] if $_[1] ne '';
 	eval {
 		$lei->fchdir;
+		local %ENV = %{$lei->{env}};
+		local $PublicInbox::LEI::current_lei = $lei;
 		$lei->{mset_opt}->{q_raw} = $lei->{mset_opt}->{qstr};
 		$lei->{lse}->query_approxidate($lei->{lse}->git,
 						$lei->{mset_opt}->{qstr});

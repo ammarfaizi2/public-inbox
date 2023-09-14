@@ -128,6 +128,8 @@ sub _stdin { # PublicInbox::InputPipe::consume callback for --stdin
 	return $lei->{mset_opt}->{qstr} .= $_[1] if $_[1] ne '';
 	eval {
 		$lei->fchdir;
+		local %ENV = %{$lei->{env}};
+		local $PublicInbox::LEI::current_lei = $lei;
 		my @argv = split(/\s+/, $lei->{mset_opt}->{qstr});
 		$lei->{mset_opt}->{qstr} = extract_all($lei, @argv) or return;
 		$lei->_start_query;

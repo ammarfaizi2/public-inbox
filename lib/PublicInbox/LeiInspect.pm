@@ -255,6 +255,9 @@ sub ins_add { # InputPipe->consume callback
 	my ($lei) = @_; # $_[1] = $rbuf
 	if (defined $_[1]) {
 		$_[1] eq '' and return eval {
+			$lei->fchdir;
+			local %ENV = %{$lei->{env}};
+			local $PublicInbox::LEI::current_lei = $lei;
 			my $str = delete $lei->{istr};
 			$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
 			my $eml = PublicInbox::Eml->new(\$str);
