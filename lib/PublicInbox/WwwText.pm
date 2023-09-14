@@ -293,6 +293,9 @@ The POP3 password is: anonymous
 The POP3 username is: \$(uuidgen)\@$ctx->{ibx}->{newsgroup}
 where \$(uuidgen) in the output of the `uuidgen' command on your system.
 The UUID in the username functions as a private cookie (don't share it).
+By default, only 1000 messages are retrieved.  You may download more
+by appending `?limit=NUM' (without quotes) to the username, where
+`NUM' is an integer between 1 and 50000.
 Idle accounts will expire periodically.
 EOM
 	}

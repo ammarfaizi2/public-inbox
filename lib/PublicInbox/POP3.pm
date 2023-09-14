@@ -72,7 +72,7 @@ sub cmd_user ($$) {
 	$user =~ tr/-//d; # most have dashes, some (dbus-uuidgen) don't
 	$user =~ m!\A[a-f0-9]{32}\z!i or return \"-ERR user has no UUID\r\n";
 
-	my $limit = UID_SLICE;
+	my $limit;
 	$mailbox =~ s/\?limit=([0-9]+)\z// and
 		$limit = $1 > UID_SLICE ? UID_SLICE : $1;
 
@@ -86,10 +86,11 @@ sub cmd_user ($$) {
 		my $tip = "$mailbox.$max";
 		return \"-ERR $mailbox.$slice does not exist ($tip does)\r\n"
 			if $slice > $max;
+		$limit //= UID_SLICE;
 		$self->{uid_base} = ($slice * UID_SLICE) + UID_SLICE - $limit;
 		$self->{slice} = $slice;
-	} else { # latest $limit messages
-		my $base = $uidmax - $limit;
+	} else { # latest $limit messages, 1k if unspecified
+		my $base = $uidmax - ($limit // 1000);
 		$self->{uid_base} = $base < 0 ? 0 : $base;
 		$self->{slice} = -1;
 	}
