@@ -27,7 +27,8 @@ test_lei({ tmpdir => $tmpdir }, sub {
 		"mirror of $http/t1/\n", 'description set');
 	ok(-f "$t1/Makefile", 'convenience Makefile added (v1)');
 	my $make = which('make');
-	xsys_e([$make, 'help'], undef, { -C => $t1, 1 => \(my $help) });
+	is(xsys([$make, 'help'], undef, { -C => $t1, 1 => \(my $help) }), 0,
+		'make help');
 	ok(-f "$t1/inbox.config.example", 'inbox.config.example downloaded');
 	isnt($help, '', 'make help worked');
 	is((stat(_))[9], $created{v1},
