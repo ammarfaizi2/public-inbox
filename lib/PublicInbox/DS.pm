@@ -55,6 +55,9 @@ our (
 
 Reset();
 
+# clobber everything explicitly to avoid DESTROY ordering problems w/ DBI
+END { Reset() }
+
 #####################################################################
 ### C L A S S   M E T H O D S
 #####################################################################
