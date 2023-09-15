@@ -1318,6 +1318,9 @@ sub lazy_start {
 		USR1 => \&noop,
 		USR2 => \&noop,
 	};
+	# for EVFILT_SIGNAL and signalfd behavioral difference:
+	my @kq_ign = eval { require PublicInbox::DSKQXS } ? keys(%$sig) : ();
+
 	require PublicInbox::DirIdle;
 	local $dir_idle = PublicInbox::DirIdle->new(sub {
 		# just rely on wakeup to hit post_loop_do
@@ -1356,13 +1359,22 @@ sub lazy_start {
 		$current_lei ? err($current_lei, @_) : warn(
 		  strftime('%Y-%m-%dT%H:%M:%SZ', gmtime(time))," $$ ", @_);
 	};
+	local $SIG{PIPE} = 'IGNORE';
 	open STDERR, '>&STDIN' or die "redirect stderr failed: $!";
 	open STDOUT, '>&STDIN' or die "redirect stdout failed: $!";
 	# $daemon pipe to `lei' closed, main loop begins:
 	eval { PublicInbox::DS::event_loop($sig, $oldset) };
 	warn "event loop error: $@\n" if $@;
+
+	# EVFILT_SIGNAL will get a duplicate of all the signals it was sent
+	local @SIG{@kq_ign} = map 'IGNORE', @kq_ign;
+	PublicInbox::DS::sig_setmask($oldset) if @kq_ign;
+
 	# exit() may trigger waitpid via various DESTROY, ensure interruptible
-	PublicInbox::DS::sig_setmask($oldset);
+	local @SIG{TERM} = sub { exit(POSIX::SIGTERM + 128) };
+	local @SIG{INT} = sub { exit(POSIX::SIGINT + 128) };
+	local @SIG{QUIT} = sub { exit(POSIX::SIGQUIT + 128) };
+	PublicInbox::DS::sig_setmask($oldset) if !@kq_ign;
 	dump_and_clear_log();
 	exit($exit_code // 0);
 }
