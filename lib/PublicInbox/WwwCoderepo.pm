@@ -114,7 +114,6 @@ sub _refs_tags_link {
 		@snap_fmt = map {
 			qq{ <a href="${upfx}snapshot/$snap_pfx$v.$_">$_</a>}
 		} @snap_fmt;
-		substr($snap_fmt[0], 0, 1) = "\t";
 	}
 	("<a\nhref=$upfx$oid/s/>", ascii_html($ref),
 		"</a>$align ", ascii_html($s), " ($cd)", @snap_fmt, "\n");
