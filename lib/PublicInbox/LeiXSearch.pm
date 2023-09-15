@@ -186,7 +186,8 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	}
 	my $first_ids;
 	do {
-		$mset = $srch->mset($mo->{qstr}, $mo);
+		$mset = eval { $srch->mset($mo->{qstr}, $mo) };
+		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
 		mset_progress($lei, $dir, $mo->{offset} + $mset->size,
 				$mset->get_matches_estimated);
 		wait_startq($lei); # wait for keyword updates
@@ -249,7 +250,8 @@ sub query_combined_mset { # non-parallel for non-"--threads" users
 	}
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
 	do {
-		$mset = $self->mset($mo->{qstr}, $mo);
+		$mset = eval { $self->mset($mo->{qstr}, $mo) };
+		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
 		mset_progress($lei, 'xsearch', $mo->{offset} + $mset->size,
 				$mset->get_matches_estimated);
 		wait_startq($lei); # wait for keyword updates

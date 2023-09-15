@@ -147,6 +147,11 @@ my $test_fail = sub {
 	lei_ok('q', "foo\n");
 	like($lei_err, qr/trailing `\\n' removed/s, "noted `\\n' removal");
 
+	lei(qw(q from:infinity..));
+	is($? >> 8, 22, 'combined query fails on invalid range op');
+	lei(qw(q -t from:infinity..));
+	is($? >> 8, 22, 'single query fails on invalid range op');
+
 	for my $lk (qw(ei inbox)) {
 		my $d = "$home/newline\n$lk";
 		my $all = $lk eq 'ei' ? 'ALL' : 'all';
