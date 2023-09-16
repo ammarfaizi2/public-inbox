@@ -11,13 +11,13 @@ use v5.12;
 use File::Temp 0.19;
 use POSIX qw(uname);
 use Config;
-say '$machine='.(POSIX::uname())[-1];
+print STDERR '# $machine='.(POSIX::uname())[-1]."\n";
 my $cc = $ENV{CC} // $Config{cc} // 'cc';
 my @cflags = split(/\s+/, $ENV{CFLAGS} // $Config{ccflags} // '-Wall');
 my $str = do { local $/; <DATA> };
-$str =~ s/^\s*MAYBE\s*(\w+)\s*$/
-#ifdef $1
-	D($1);
+$str =~ s/^\s*MAYBE\s*([DX])\((\w+)\)/
+#ifdef $2
+	$1($2);
 #endif
 /sgxm;
 my $tmp = File::Temp->newdir('sysdefs-list-XXXX', TMPDIR => 1);
@@ -27,8 +27,9 @@ open my $fh, '>', $f or die "open $f $!";
 print $fh $str or die "print $f $!";
 close $fh or die "close $f $!";
 system($cc, '-o', $x, $f, @cflags) == 0 or die "$cc failed \$?=$?";
-say '%Config', map { " $_=$Config{$_}" } qw(ptrsize sizesize lseeksize);
-exec($x);
+print STDERR '# %Config',
+	(map { " $_=$Config{$_}" } qw(ptrsize sizesize lseeksize)), "\n";
+exit(system($x)); # exit is to ensure File::Temp::Dir->DESTROY fires
 __DATA__
 #ifndef _GNU_SOURCE
 #  define _GNU_SOURCE
@@ -50,8 +51,8 @@ __DATA__
 #include <unistd.h>
 #include <stdio.h>
 
-#define STRUCT_BEGIN(t) do { t x; printf(#t" => %zu bytes\n", sizeof(x))
-#define STRUCT_END } while (0)
+#define STRUCT_BEGIN(t) do { t x; printf("'"#t"' => '%zu bytes\n", sizeof(x))
+#define STRUCT_END puts("',"); } while (0)
 
 // prints the struct field name, @offset, and signed/unsigned bit size
 #define PR_NUM(f) do { \
@@ -71,17 +72,20 @@ __DATA__
 	printf("\t.%s @%zu\n", #f, offsetof(typeof(x),f)); \
 } while (0)
 
-#define D(x) printf("$" #x " = %ld;\n", (long)x)
+#define D(x) printf(#x " => %ld,\n", (long)x)
+#define X(x) printf(#x " => 0x%lx,\n", (unsigned long)x)
 
 int main(void)
 {
 	// verify Config{(ptr|size|lseek)size} entries match:
-	printf("sizeof ptr=%zu size_t=%zu off_t=%zu\n",
-		sizeof(void *), sizeof(size_t), sizeof(off_t));
+	printf("'sizeof(ptr)' => %zu,\n", sizeof(void *));
+	printf("'sizeof(size_t)' => %zu,\n", sizeof(size_t));
+	printf("'sizeof(off_t)' => %zu,\n", sizeof(off_t));
+
 #ifdef __linux__
 	D(SYS_epoll_create1);
 	D(SYS_epoll_ctl);
-	MAYBE SYS_epoll_wait
+	MAYBE D(SYS_epoll_wait);
 	D(SYS_epoll_pwait);
 	D(SYS_signalfd4);
 	D(SYS_inotify_init1);
@@ -91,11 +95,11 @@ int main(void)
 	D(SYS_fstatfs);
 	D(SYS_sendmsg);
 	D(SYS_recvmsg);
-#ifdef FS_IOC_GETFLAGS
-	printf("FS_IOC_GETFLAGS=%#lx\nFS_IOC_SETFLAGS=%#lx\n",
-		(unsigned long)FS_IOC_GETFLAGS, (unsigned long)FS_IOC_SETFLAGS);
-#endif
-	MAYBE SYS_renameat2
+
+	MAYBE X(FS_IOC_GETFLAGS);
+	MAYBE X(FS_IOC_SETFLAGS);
+
+	MAYBE D(SYS_renameat2);
 
 	STRUCT_BEGIN(struct epoll_event);
 		PR_NUM(events);
@@ -135,7 +139,10 @@ int main(void)
 	STRUCT_END;
 #endif /* Linux, any other OSes with stable syscalls? */
 	D(SIGWINCH);
-	MAYBE _SC_NPROCESSORS_ONLN
+	MAYBE D(_SC_NPROCESSORS_ONLN);
+	MAYBE D(_SC_AVPHYS_PAGES);
+	MAYBE D(_SC_PAGE_SIZE);
+	MAYBE D(_SC_PAGESIZE);
 
 	STRUCT_BEGIN(struct flock);
 		PR_NUM(l_start);
