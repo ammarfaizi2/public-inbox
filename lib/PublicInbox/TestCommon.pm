@@ -11,6 +11,7 @@ use POSIX qw(dup2);
 use IO::Socket::INET;
 use File::Spec;
 use Scalar::Util qw(isvstring);
+use Carp ();
 our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
@@ -25,7 +26,7 @@ BEGIN {
 		create_coderepo no_scm_rights
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
-		ignore_inline_c_missing no_pollerfd);
+		ignore_inline_c_missing no_pollerfd no_coredump);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -298,8 +299,31 @@ sub _run_sub ($$$) {
 	}
 }
 
+sub no_coredump (@) {
+	my @dirs = @_;
+	my $cwdfh;
+	if (@dirs) { opendir($cwdfh, '.') or die "opendir(.): $!" }
+	my @found;
+	for (@dirs, '.') {
+		chdir $_;
+		my @cores = glob('core.* *.core');
+		push @cores, 'core' if -d 'core';
+		push(@found, "@cores found in $_") if @cores;
+		chdir $cwdfh if $cwdfh;
+	}
+	return if !@found; # keep it quiet.
+	is(scalar(@found), 0, 'no core dumps found');
+	diag(join("\n", @found) . Carp::longmess());
+	if (-t STDIN) {
+		diag 'press ENTER to continue, (q) to quit';
+		chomp(my $line = <STDIN>);
+		xbail 'user quit' if $line =~ /\Aq/;
+	}
+}
+
 sub run_script ($;$$) {
 	my ($cmd, $env, $opt) = @_;
+	no_coredump($opt->{-C} ? ($opt->{-C}) : ());
 	my ($key, @argv) = @$cmd;
 	my $run_mode = $ENV{TEST_RUN_MODE} // $opt->{run_mode} // 1;
 	my $sub = $run_mode == 0 ? undef : key2sub($key);
@@ -383,6 +407,7 @@ sub run_script ($;$$) {
 		local $/;
 		$$redir = <$fh>;
 	}
+	no_coredump($opt->{-C} ? ($opt->{-C}) : ());
 	$? == 0;
 }
 
@@ -656,6 +681,7 @@ SKIP: {
 			File::Path::rmtree([glob("$home/*")]);
 			File::Path::rmtree("$home/.config");
 		} else {
+			no_coredump $tmpdir;
 			lei_ok(qw(daemon-pid), \"daemon-pid after $t");
 			chomp($daemon_pid = $lei_out);
 			if (!$daemon_pid) {
@@ -672,6 +698,7 @@ SKIP: {
 			tick;
 		}
 		ok(!kill(0, $daemon_pid), "$t daemon stopped");
+		no_coredump $tmpdir;
 		my $f = "$daemon_xrd/lei/errors.log";
 		open my $fh, '<', $f or BAIL_OUT "$f: $!";
 		my @l = <$fh>;

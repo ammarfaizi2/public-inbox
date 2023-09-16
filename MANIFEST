@@ -620,6 +620,7 @@ t/x-unknown-alpine.eml
 t/xap_helper.t
 t/xcpdb-reshard.t
 version-gen.perl
+xt/check-debris.t
 xt/cmp-msgstr.t
 xt/create-many-inboxes.t
 xt/eml_check_limits.t

@@ -235,11 +235,13 @@ check-each :: pure_all
 	\$(EATMYDATA) \$(PROVE) --state=save -bvw -j\$(N)
 	-@\$(check_manifest)
 
-# lightly-tested way to run tests, relies "--state=save" in check-each
-# for best performance
+# this relies "--state=save" in check-each for best performance
 check-run :: pure_all check-man
 	\$(EATMYDATA) \$(PROVE) -bvw t/run.perl :: -j\$(N)
 	-@\$(check_manifest)
+
+check-debris :: pure_all
+	PERL5LIB="\$\$PWD"/blib/lib \$(PROVE) -bvw xt/\$@.t
 
 check :: check-each
 

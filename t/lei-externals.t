@@ -48,6 +48,7 @@ SKIP: {
 		$tp->join;
 		ok(WIFSIGNALED($?), "signaled @$out");
 		is(WTERMSIG($?), SIGPIPE, "got SIGPIPE @$out");
+		no_coredump;
 		seek($err, 0, 0);
 		my @err = <$err>;
 		is_deeply(\@err, [], "no errors @$out");
@@ -66,6 +67,7 @@ SKIP: {
 			tick();
 		}
 		ok(!$alive, 'daemon-kill worked');
+		no_coredump;
 	}
 } # /SKIP
 }; # /sub
