@@ -50,7 +50,6 @@ my $profiles = {
 
 	# everything optional for normal use
 	optional => [ qw(
-		curl
 		Date::Parse
 		BSD::Resource
 		DBD::SQLite
@@ -62,7 +61,11 @@ my $profiles = {
 		Plack::Test
 		Plack::Middleware::ReverseProxy
 		Xapian
+		curl
 		highlight.pm
+		libxapian
+		pkg-config
+		sqlite3
 		xapian-tools
 		) ],
 
@@ -76,9 +79,14 @@ my $profiles = {
 
 # only for distro-agnostic dependencies which are always true:
 my $always_deps = {
-	'DBD::SQLite' => [ qw(DBI) ],
-	'Mail::IMAPClient' => [ qw(Parse::RecDescent) ],
-	'Plack::Middleware::ReverseProxy' => [ qw(Plack) ],
+	# we only load DBI explicitly
+	'DBD::SQLite' => [ qw(DBI libsqlite3) ],
+	'Mail::IMAPClient' => 'Parse::RecDescent',
+	'Plack::Middleware::ReverseProxy' => 'Plack',
+	'Xapian' => 'libxapian',
+	'xapian-tools' => 'libxapian',
+	'libxapian-dev' => [ qw(pkg-config libxapian) ],
+	'libgit2-dev' => 'pkg-config',
 };
 
 # bare minimum for v2
@@ -110,7 +118,7 @@ $profiles->{'watch-maildir'} = [ @{$profiles->{v2essential}} ];
 
 # package names which can't be mapped automatically and explicit
 # dependencies to prevent essential package removal:
-my $non_auto = {
+my $non_auto = { # git and perl are essential
 	git => {
 		pkg => [ qw(curl p5-TimeDate git) ],
 		rpm => [ qw(curl git) ],
@@ -121,6 +129,7 @@ my $non_auto = {
 		pkgin => 'perl',
 		pkg_add => [], # Perl is part of OpenBSD base
 	},
+	# optional stuff:
 	'Date::Parse' => {
 		deb => 'libtimedate-perl',
 		pkg => 'p5-TimeDate',
@@ -138,9 +147,8 @@ my $non_auto = {
 	},
 	'Xapian' => {
 		deb => 'libsearch-xapian-perl',
-		pkg => [qw(xapian-core p5-Xapian)],
-		pkg_add => [qw(xapian-core xapian-bindings-perl)],
-		pkgin => [qw(xapian p5-Xapian)],
+		pkg => 'p5-Xapian',
+		pkg_add => 'xapian-bindings-perl',
 		rpm => 'Search::Xapian', # 3rd-party repo
 	},
 	'highlight.pm' => {
@@ -148,6 +156,40 @@ my $non_auto = {
 		pkg => [],
 		pkgin => 'p5-highlight',
 		rpm => [],
+	},
+
+	# `libgit2' is the project name (since git has libgit)
+	'libgit2-dev' => {
+		pkg => 'libgit2',
+		rpm => 'libgit2-devel',
+	},
+
+	# some distros have both sqlite 2 and 3, we've only ever used 3
+	'libsqlite3' => {
+		pkg => 'sqlite3',
+		rpm => [], # `sqlite' is not removable due to yum/systemd
+		deb => [], # libsqlite3-0, but no need to specify
+	},
+
+	# only one version of Xapian distros
+	'libxapian' => { # avoid .so version numbers in our deps
+		deb => [], # libxapian30 atm, but no need to specify
+		pkg => 'xapian-core',
+		pkgin => 'xapian',
+		rpm => 'xapian-core',
+	},
+	'libxapian-dev' => {
+		pkg => 'xapian-core',
+		pkgin => 'xapian',
+		rpm => 'xapian-core-devel',
+	},
+	'pkg-config' => {
+		pkg_add => [], # part of the OpenBSD base system
+		pkg => 'pkgconf', # pkg-config is a symlink to pkgconf
+		pkgin => 'pkg-config',
+	},
+	'sqlite3' => { # this is just the executable binary on deb
+		rpm => [], # `sqlite' is not removable due to yum/systemd
 	},
 
 	# we call xapian-compact(1) in public-inbox-compact(1) and
@@ -205,7 +247,7 @@ for my $ary (values %$profiles) {
 	my @extra;
 	for my $pkg (@$ary) {
 		my $deps = $always_deps->{$pkg} // next;
-		push @extra, @$deps;
+		push @extra, list($deps);
 	}
 	push @$ary, @extra;
 	$all{$_} = \@pkg_remove for @$ary;
@@ -267,15 +309,6 @@ if ($pkg_fmt eq 'deb') {
 	root(qw(yum install), @pkg_opt, @pkg_install) if @pkg_install;
 } elsif ($pkg_fmt eq 'pkg_add') { # OpenBSD
 	my @pkg_opt = $opt->{yes} ? qw(-I) : (); # -I means non-interactive
-	if (@pkg_remove) {
-		my @lifo = qw(xapian-bindings-perl);
-		for my $dep (@lifo) {
-			grep(/\A\Q$dep\E\z/, @pkg_remove) or next;
-			root(qw(pkg_delete), @pkg_opt, $dep);
-			@pkg_remove = grep(!/\A\Q$dep\E\z/, @pkg_remove);
-		}
-		root(qw(pkg_delete), @pkg_opt, @pkg_remove);
-	}
 	root(qw(pkg_delete -a), @pkg_opt); # autoremove unspecified
 	@pkg_install = map { "$_--" } @pkg_install; # disambiguate w3m
 	root(qw(pkg_add), @pkg_opt, @pkg_install) if @pkg_install;
