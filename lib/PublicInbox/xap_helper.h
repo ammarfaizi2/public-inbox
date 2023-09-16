@@ -578,12 +578,27 @@ static bool cmd_dump_roots(struct req *req)
 	return true;
 }
 
-// internal usage only
+// for test usage only, we need to ensure the compiler supports
+// __cleanup__ when exceptions are thrown
+struct inspect { struct req *req; };
+
+static void inspect_ensure(struct inspect *x)
+{
+	fprintf(x->req->fp[0], "pid=%d has_threadid=%d",
+		(int)getpid(), has_threadid(x->req->srch) ? 1 : 0);
+}
+
 static bool cmd_test_inspect(struct req *req)
 {
-	fprintf(req->fp[0], "pid=%d has_threadid=%d",
-		(int)getpid(), has_threadid(req->srch) ? 1 : 0);
-	return true;
+	__attribute__((__cleanup__(inspect_ensure))) struct inspect x;
+	x.req = req;
+	try {
+		throw Xapian::InvalidArgumentError("test");
+	} catch (Xapian::InvalidArgumentError) {
+		return true;
+	}
+	fputs("this should not be printed", req->fp[0]);
+	return false;
 }
 
 #define CMD(n) { .fn_len = sizeof(#n) - 1, .fn_name = #n, .fn = cmd_##n }
