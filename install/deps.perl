@@ -48,7 +48,8 @@ my $profiles = {
 		URI
 		), @test_essential ],
 
-	# everything optional for normal use
+	# Everything else is optional for normal use.  Only specify
+	# the minimum to pull in dependencies here:
 	optional => [ qw(
 		Date::Parse
 		BSD::Resource
@@ -63,11 +64,14 @@ my $profiles = {
 		Xapian
 		curl
 		highlight.pm
-		libxapian
-		pkg-config
+		libgit2-dev
+		libxapian-dev
 		sqlite3
 		xapian-tools
 		) ],
+		# no pkg-config, libsqlite3, libxapian, libz, etc. since
+		# they'll get pulled in lib*-dev, DBD::SQlite and
+		# Xapian(.pm)  respectively
 
 	# optional developer stuff
 	devtest => [ qw(
@@ -279,6 +283,8 @@ my (%add, %rm); # uniquify lists
 		!$add{$_} && !$rm{$_}++ && $INST_CHECK->($_)
 	} @pkg_remove : ();
 
+(@pkg_remove || @pkg_install) or warn "# no packages to install nor remove\n";
+
 # OS-specific cleanups appreciated
 if ($pkg_fmt eq 'deb') {
 	my @apt_opt = qw(-o APT::Install-Recommends=false
@@ -288,7 +294,7 @@ if ($pkg_fmt eq 'deb') {
 		@pkg_install,
 		# apt-get lets you suffix a package with "-" to
 		# remove it in an "install" sub-command:
-		map { "$_-" } @pkg_remove);
+		map { "$_-" } @pkg_remove) if (@pkg_remove || @pkg_install);
 	root('apt-get', @apt_opt, qw(autoremove)) if $opt->{'allow-remove'};
 } elsif ($pkg_fmt eq 'pkg') { # FreeBSD
 	my @pkg_opt = $opt->{yes} ? qw(-y) : ();
@@ -309,9 +315,10 @@ if ($pkg_fmt eq 'deb') {
 	root(qw(yum install), @pkg_opt, @pkg_install) if @pkg_install;
 } elsif ($pkg_fmt eq 'pkg_add') { # OpenBSD
 	my @pkg_opt = $opt->{yes} ? qw(-I) : (); # -I means non-interactive
-	root(qw(pkg_delete -a), @pkg_opt); # autoremove unspecified
+	root(qw(pkg_delete), @pkg_opt, @pkg_remove) if @pkg_remove;
 	@pkg_install = map { "$_--" } @pkg_install; # disambiguate w3m
 	root(qw(pkg_add), @pkg_opt, @pkg_install) if @pkg_install;
+	root(qw(pkg_delete -a), @pkg_opt) if $opt->{'allow-remove'};
 } else {
 	die "unsupported package format: $pkg_fmt\n";
 }
