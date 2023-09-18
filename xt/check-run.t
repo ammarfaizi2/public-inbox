@@ -8,8 +8,8 @@
 #
 # *.t files run by this should not rely on global state.
 #
-# Usage: $PERL -I lib -w t/run.perl -j4
-# Or via prove(1): prove -lvw t/run.perl :: -j4
+# Usage: $PERL -I lib -w xt/check-run.t -j4
+# Or via prove(1): prove -lvw xt/check-run.t :: -j4
 use v5.12;
 use IO::Handle; # ->autoflush
 use PublicInbox::TestCommon;

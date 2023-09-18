@@ -235,13 +235,16 @@ check-each :: pure_all
 	\$(EATMYDATA) \$(PROVE) --state=save -bvw -j\$(N)
 	-@\$(check_manifest)
 
-# this relies "--state=save" in check-each for best performance
-check-run :: pure_all check-man
-	\$(EATMYDATA) \$(PROVE) -bvw t/run.perl :: -j\$(N)
-	-@\$(check_manifest)
+# check-run relies "--state=save" in check-each for best performance
+check-run :: check-man
 
-check-debris :: pure_all
-	PERL5LIB="\$\$PWD"/blib/lib \$(PROVE) -bvw xt/\$@.t
+# n.b. while `-' isn't specified as an allowed make(1posix) macro name,
+# GNU and *BSD both allow it.
+check-run_T_ARGS = -j\$(N)
+
+check-debris check-run :: pure_all
+	\$(EATMYDATA) \$(PROVE) -bvw xt/\$@.t :: \$(\$\@_T_ARGS)
+	-@\$(check_manifest)
 
 check :: check-each
 

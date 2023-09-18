@@ -330,7 +330,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 	SKIP: {
 		if ($INC{'Search/Xapian.pm'} || $INC{'Xapian.pm'} &&
 				($ENV{TEST_RUN_MODE} // 2)) {
-			skip 'Xapian.pm pre-loaded (by t/run.perl?)', 1;
+			skip 'Xapian.pm pre-loaded (by xt/check-run.t?)', 1;
 		}
 		$lsof or skip 'lsof missing', 1;
 		my @of = xqx([$lsof, '-p', $td->{pid}], undef, $noerr);

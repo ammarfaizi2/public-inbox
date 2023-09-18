@@ -577,7 +577,6 @@ t/reindex-time-range.t
 t/rename_noreplace.t
 t/replace.t
 t/reply.t
-t/run.perl
 t/search-amsg.eml
 t/search-thr-index.t
 t/search.t
@@ -621,6 +620,7 @@ t/xap_helper.t
 t/xcpdb-reshard.t
 version-gen.perl
 xt/check-debris.t
+xt/check-run.t
 xt/cmp-msgstr.t
 xt/create-many-inboxes.t
 xt/eml_check_limits.t
