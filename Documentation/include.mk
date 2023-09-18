@@ -6,6 +6,8 @@ RSYNC = rsync
 RSYNC_DEST = public-inbox.org:/srv/public-inbox/
 AWK = awk
 MAN = man
+
+# part of `man-db' on Debian, not sure about other distros
 LEXGROG = lexgrog
 
 # this is "xml" on FreeBSD and maybe some other distros:

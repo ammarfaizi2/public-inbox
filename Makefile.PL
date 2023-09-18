@@ -126,7 +126,7 @@ my %man3 = map {; # semi-colon tells Perl this is a BLOCK (and not EXPR)
 	"lib/PublicInbox/$_" => "blib/man3/PublicInbox::$mod.\$(MAN3EXT)"
 } qw(Git.pm Import.pm WWW.pod SaPlugin/ListMirror.pod);
 my $warn_no_pod = @no_pod ? "\n\t\@echo W: missing .pod: @no_pod\n" : '';
-chomp(my $lexgrog = `which lexgrog 2>/dev/null`);
+chomp(my $lexgrog = `command -v lexgrog 2>/dev/null`);
 my $check_lexgrog = $lexgrog ? 'check-lexgrog' : '';
 
 WriteMakefile(
