@@ -14,11 +14,12 @@ fi
 NPROC=${NPROC-$({ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
 	gnproc || nproc || echo 2; } 2>/dev/null)}
 
+TEST_JOBS=${TEST_JOBS-1}
 $PERL -w ci/profiles.perl | while read args
 do
 	$DO $SUDO $PERL -w install/deps.perl -y --allow-remove $args
 	$DO $PERL Makefile.PL
 	$DO $MAKE -j${BUILD_JOBS-$NPROC}
-	$DO $MAKE -j${TEST_JOBS-1} ${TEST_TARGET-test}
+	$DO $MAKE ${TEST_TARGET-check} N=${N-$TEST_JOBS}
 	$DO $MAKE clean >/dev/null
 done
