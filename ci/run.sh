@@ -12,7 +12,7 @@ then
 	$DO $MAKE clean >/dev/null
 fi
 NPROC=${NPROC-$({ getconf _NPROCESSORS_ONLN || getconf NPROCESSORS_ONLN ||
-	gnproc || nproc || echo 2; } 2>/dev/null)}
+		echo 2; } 2>/dev/null)}
 
 TEST_JOBS=${TEST_JOBS-1}
 $PERL -w ci/profiles.perl | while read args

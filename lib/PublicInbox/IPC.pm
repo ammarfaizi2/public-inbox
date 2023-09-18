@@ -464,16 +464,13 @@ sub detect_nproc () {
 	my $n = $NPROCESSORS_ONLN{$^O};
 	return POSIX::sysconf($n) if defined $n;
 
-	# getconf(1) is POSIX, but *NPROCESSORS* vars are not
+	# getconf(1) is POSIX, but *NPROCESSORS* vars are not even if
+	# glibc, {Free,Net,Open}BSD all support them.
 	for (qw(_NPROCESSORS_ONLN NPROCESSORS_ONLN)) {
 		`getconf $_ 2>/dev/null` =~ /^(\d+)$/ and return $1;
 	}
-	for my $nproc (qw(nproc gnproc)) { # GNU coreutils nproc
-		`$nproc 2>/dev/null` =~ /^(\d+)$/ and return $1;
-	}
-
-	# should we bother with `sysctl hw.ncpu`?  Those only give
-	# us total processor count, not online processor count.
+	# note: GNU nproc(1) checks CPU affinity, which is nice but
+	# isn't remotely portable
 	undef
 }
 
