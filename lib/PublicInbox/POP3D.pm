@@ -13,7 +13,7 @@ use PublicInbox::POP3;
 use PublicInbox::Syscall;
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use Fcntl qw(F_SETLK F_UNLCK F_WRLCK SEEK_SET);
-my @FLOCK;
+my ($FLOCK_TMPL, @FLOCK_ORDER);
 # are all BSDs the same "struct flock"? tested Free+Net+Open...
 if ($^O eq 'linux' || $^O =~ /bsd/) {
 	require Config;
@@ -26,15 +26,15 @@ if ($^O eq 'linux' || $^O =~ /bsd/) {
 
 	if (defined($off_t)) {
 		if ($^O eq 'linux') {
-			@FLOCK = ("ss\@8$off_t$off_t\@32",
-				qw(l_type l_whence l_start l_len));
+			$FLOCK_TMPL = "ss\@8$off_t$off_t\@32";
+			@FLOCK_ORDER = qw(l_type l_whence l_start l_len);
 		} elsif ($^O =~ /bsd/) { # @32 may be enough
-			@FLOCK = ("${off_t}${off_t}lss\@256",
-				qw(l_start l_len l_pid l_type l_whence));
+			$FLOCK_TMPL = "${off_t}${off_t}lss\@256";
+			@FLOCK_ORDER = qw(l_start l_len l_pid l_type l_whence);
 		}
 	}
 }
-@FLOCK or eval { require File::FcntlLock } or
+@FLOCK_ORDER or eval { require File::FcntlLock } or
 	die "File::FcntlLock required for POP3 on $^O: $@\n";
 
 sub new {
@@ -141,9 +141,9 @@ sub _setlk ($%) {
 	my ($self, %lk) = @_;
 	$lk{l_pid} = 0; # needed for *BSD
 	$lk{l_whence} = SEEK_SET;
-	if (@FLOCK) {
+	if (@FLOCK_ORDER) {
 		fcntl($self->{txn_fh}, F_SETLK,
-			pack($FLOCK[0], @lk{@FLOCK[1..$#FLOCK]}));
+			pack($FLOCK_TMPL, @lk{@FLOCK_ORDER}));
 	} else {
 		my $fs = File::FcntlLock->new(%lk);
 		$fs->lock($self->{txn_fh}, F_SETLK);
