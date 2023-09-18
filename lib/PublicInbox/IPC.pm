@@ -16,9 +16,8 @@ use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
 use PublicInbox::OnDestroy;
 use PublicInbox::WQWorker;
-use Socket qw(AF_UNIX SOCK_STREAM);
+use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET);
 my $MY_MAX_ARG_STRLEN = 4096 * 33; # extra 4K for serialization
-my $SEQPACKET = eval { Socket::SOCK_SEQPACKET() }; # portable enough?
 our @EXPORT_OK = qw(ipc_freeze ipc_thaw nproc_shards);
 my ($enc, $dec);
 # ->imports at BEGIN turns sereal_*_with_object into custom ops on 5.14+
@@ -374,7 +373,7 @@ sub wq_nonblock_do { # always async
 sub _wq_worker_start {
 	my ($self, $oldset, $fields, $one, @cb_args) = @_;
 	my ($bcast1, $bcast2);
-	$one or socketpair($bcast1, $bcast2, AF_UNIX, $SEQPACKET, 0) or
+	$one or socketpair($bcast1, $bcast2, AF_UNIX, SOCK_SEQPACKET, 0) or
 							die "socketpair: $!";
 	my $seed = rand(0xffffffff);
 	my $pid = fork // die "fork: $!";
@@ -409,11 +408,11 @@ sub _wq_worker_start {
 # starts workqueue workers if Sereal or Storable is installed
 sub wq_workers_start {
 	my ($self, $ident, $nr_workers, $oldset, $fields, @cb_args) = @_;
-	($send_cmd && $recv_cmd && defined($SEQPACKET)) or return;
+	($send_cmd && $recv_cmd) or return;
 	return if $self->{-wq_s1}; # idempotent
 	$self->{-wq_s1} = $self->{-wq_s2} = undef;
-	socketpair($self->{-wq_s1}, $self->{-wq_s2}, AF_UNIX, $SEQPACKET, 0) or
-		die "socketpair: $!";
+	socketpair($self->{-wq_s1}, $self->{-wq_s2}, AF_UNIX, SOCK_SEQPACKET, 0)
+		or die "socketpair: $!";
 	$self->ipc_atfork_prepare;
 	$nr_workers //= $self->{-wq_nr_workers}; # was set earlier
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
