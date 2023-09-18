@@ -213,7 +213,7 @@ $VARS
 -include Documentation/include.mk
 $TGTS
 
-check-man :: $check_lexgrog$warn_no_pod
+check-man : $check_lexgrog$warn_no_pod
 
 # syntax checks are currently GNU make only:
 %.syntax :: %
@@ -231,24 +231,24 @@ check-manifest : MANIFEST
 	\$(check_manifest)
 
 # the traditional way running per-*.t processes:
-check-each :: pure_all
+check-each : pure_all
 	\$(EATMYDATA) \$(PROVE) --state=save -bvw -j\$(N)
 	-@\$(check_manifest)
 
 # check-run relies "--state=save" in check-each for best performance
-check-run :: check-man
+check-run : check-man
 
 # n.b. while `-' isn't specified as an allowed make(1posix) macro name,
 # GNU and *BSD both allow it.
 check-run_T_ARGS = -j\$(N)
 
-check-debris check-run :: pure_all
+check-debris check-run : pure_all
 	\$(EATMYDATA) \$(PROVE) -bvw xt/\$@.t :: \$(\$\@_T_ARGS)
 	-@\$(check_manifest)
 
-check :: check-each
+check : check-each
 
-lib/PublicInbox/UserContent.pm :: contrib/css/216dark.css
+lib/PublicInbox/UserContent.pm : contrib/css/216dark.css
 	\$(PERL) -I lib \$@ \$?
 
 # Ensure new .pm files will always be installed by updating
@@ -269,7 +269,7 @@ symlink-install : lib/PublicInbox.pm
 		ln -sf "\$\$lei" \$\$(basename "\$\$x"); \\
 	done
 
-pure_all :: lib/PublicInbox.pm
+pm_to_blib : lib/PublicInbox.pm
 lib/PublicInbox.pm : FORCE
 	VERSION=\$(VERSION) \$(PERL) -w ./version-gen.perl
 

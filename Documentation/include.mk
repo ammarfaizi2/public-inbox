@@ -47,14 +47,14 @@ install-man: man
 
 doc_install :: install-man
 
-check :: check-man
+check : check-man
 check_man = $(AWK) \
 	'{gsub(/\b./,"")}$$0 !~ /\.onion/&&length>80{print;e=1}END{exit(e)}' \
 	>&2
 
-check-man :: $(check_80)
+check-man : $(check_80)
 
-check-lexgrog :: $(check_lexgrog)
+check-lexgrog : $(check_lexgrog)
 
 all :: $(docs)
 
@@ -86,7 +86,7 @@ NEWS NEWS.atom NEWS.html : $(news_deps)
 	$(PERL) -I lib -w Documentation/mknews.perl $@ $(RELEASES)
 
 # check for internal API changes:
-check :: NEWS .NEWS.atom.check NEWS.html
+check : NEWS .NEWS.atom.check NEWS.html
 
 .NEWS.atom.check: NEWS.atom
 	$(XMLSTARLET) val NEWS.atom || \
