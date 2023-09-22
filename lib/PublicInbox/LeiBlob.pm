@@ -158,7 +158,7 @@ sub lei_blob {
 	if ($lxs->remotes) {
 		require PublicInbox::LeiRemote;
 		$lei->{curl} //= which('curl') or return
-			$lei->fail('curl needed for', $lxs->remotes);
+			$lei->fail('curl needed for '.join(', ',$lxs->remotes));
 		$lei->_lei_store(1)->write_prepare($lei);
 	}
 	require PublicInbox::SolverGit;

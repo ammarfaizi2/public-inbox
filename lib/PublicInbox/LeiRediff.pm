@@ -268,7 +268,7 @@ sub lei_rediff {
 	if ($lxs->remotes) {
 		require PublicInbox::LeiRemote;
 		$lei->{curl} //= which('curl') or return
-			$lei->fail('curl needed for', $lxs->remotes);
+			$lei->fail('curl needed for '.join(', ',$lxs->remotes));
 	}
 	$lei->ale->refresh_externals($lxs, $lei);
 	my $self = bless {
