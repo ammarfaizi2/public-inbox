@@ -3,8 +3,7 @@
 
 # pretends to be like LeiDedupe and also PublicInbox::Inbox
 package PublicInbox::LeiSavedSearch;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::Lock);
 use PublicInbox::Git;
 use PublicInbox::OverIdx;
@@ -14,6 +13,8 @@ use PublicInbox::Spawn qw(run_die);
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::MID qw(mids_for_index);
 use PublicInbox::SHA qw(sha256_hex);
+use File::Temp ();
+use IO::Handle ();
 our $LOCAL_PFX = qr!\A(?:maildir|mh|mbox.+|mmdf|v2):!i; # TODO: put in LeiToMail?
 
 # move this to PublicInbox::Config if other things use it:
@@ -76,20 +77,17 @@ sub list {
 	my $lss_dir = $lei->share_path.'/saved-searches';
 	return () unless -d $lss_dir;
 	# TODO: persist the cache?  Use another format?
-	my $f = $lei->cache_dir."/saved-tmp.$$.".time.'.config';
-	open my $fh, '>', $f or die "open $f: $!";
+	my $fh = File::Temp->new(TEMPLATE => 'lss_list-XXXX', TMPDIR => 1) or
+		die "File::Temp->new: $!";
 	print $fh "[include]\n";
 	for my $p (glob("$lss_dir/*/lei.saved-search")) {
 		print $fh "\tpath = ", cquote_val($p), "\n";
 	}
-	close $fh or die "close $f: $!";
-	my $cfg = $lei->cfg_dump($f);
-	unlink($f);
+	$fh->flush or die "flush: $fh";
+	my $cfg = $lei->cfg_dump($fh->filename);
 	my $out = $cfg ? $cfg->get_all('lei.q.output') : [];
-	map {;
-		s!$LOCAL_PFX!!;
-		$_;
-	} @$out
+	s!$LOCAL_PFX!! for @$out;;
+	@$out;
 }
 
 sub translate_dedupe ($$) {
