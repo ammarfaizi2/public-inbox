@@ -151,10 +151,9 @@ sub git_to_mail { # git->cat_async callback
 }
 
 sub reap_compress { # awaitpid callback
-	my ($pid, $lei) = @_;
-	my $cmd = delete $lei->{"pid.$pid"};
-	return if $? == 0;
-	$lei->fail($?, "@$cmd failed");
+	my ($pid, $lei, $cmd, $old_out) = @_;
+	$lei->{1} = $old_out;
+	$lei->fail($?, "@$cmd failed") if $?;
 }
 
 sub _post_augment_mbox { # open a compressor process from top-level process
@@ -165,9 +164,8 @@ sub _post_augment_mbox { # open a compressor process from top-level process
 	my $rdr = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2}, pgid => 0 };
 	my $pid = spawn($cmd, undef, $rdr);
 	my $pp = gensym;
-	my $dup = bless { "pid.$pid" => $cmd }, ref($lei);
-	$dup->{$_} = $lei->{$_} for qw(2 sock);
-	tie *$pp, 'PublicInbox::ProcessPipe', $pid, $w, \&reap_compress, $dup;
+	tie *$pp, 'PublicInbox::ProcessPipe', $pid, $w,
+			\&reap_compress, $lei, $cmd, $lei->{1};
 	$lei->{1} = $pp;
 }
 
