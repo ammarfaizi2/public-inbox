@@ -1,7 +1,7 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::Inbox;
 require_mods(qw(-httpd lei DBD::SQLite));
 require_cmd('curl');
@@ -26,11 +26,14 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	is(PublicInbox::Git::try_cat("$t1/description"),
 		"mirror of $http/t1/\n", 'description set');
 	ok(-f "$t1/Makefile", 'convenience Makefile added (v1)');
-	my $make = which('make');
-	is(xsys([$make, 'help'], undef, { -C => $t1, 1 => \(my $help) }), 0,
-		'make help');
+	SKIP: {
+		my $make = require_cmd('make', 1);
+		delete local @ENV{qw(MFLAGS MAKEFLAGS MAKELEVEL)};
+		is(xsys([$make, 'help'], undef, { -C => $t1, 1 => \(my $help) }),
+			0, "$make handled Makefile without errors");
+		isnt($help, '', 'make help worked');
+	}
 	ok(-f "$t1/inbox.config.example", 'inbox.config.example downloaded');
-	isnt($help, '', 'make help worked');
 	is((stat(_))[9], $created{v1},
 		'inbox.config.example mtime is ->created_at');
 	is((stat(_))[2] & 0222, 0, 'inbox.config.example not writable');
