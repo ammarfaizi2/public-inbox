@@ -29,6 +29,7 @@ use File::Path ();
 use File::Spec;
 use Carp ();
 use Sys::Syslog qw(openlog syslog closelog);
+use Scalar::Util qw(looks_like_number);
 our $quit = \&CORE::exit;
 our ($current_lei, $errors_log, $listener, $oldset, $dir_idle);
 my $GLP = Getopt::Long::Parser->new;
@@ -518,13 +519,17 @@ sub sigpipe_handler { # handles SIGPIPE from @WQ_KEYS workers
 	fail_handler($_[0], 13, delete $_[0]->{1});
 }
 
-sub fail ($$;$) {
-	my ($self, $msg, $exit_code) = @_;
-	local $current_lei = $self;
-	$self->{failed}++;
-	warn(substr($msg, -1, 1) eq "\n" ? $msg : "$msg\n") if defined $msg;
-	$self->{pkt_op_p}->pkt_do('fail_handler') if $self->{pkt_op_p};
-	x_it($self, ($exit_code // 1) << 8);
+sub fail ($;@) {
+	my ($lei, @msg) = @_;
+	my $exit_code = looks_like_number($msg[0]) ? shift(@msg) : undef;
+	local $current_lei = $lei;
+	$lei->{failed}++;
+	if (@msg) {
+		push @msg, "\n" if substr($msg[-1], -1, 1);
+		warn @msg;
+	}
+	$lei->{pkt_op_p}->pkt_do('fail_handler') if $lei->{pkt_op_p};
+	x_it($lei, $exit_code // (1 << 8));
 	undef;
 }
 

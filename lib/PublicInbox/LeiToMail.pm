@@ -154,7 +154,7 @@ sub reap_compress { # awaitpid callback
 	my ($pid, $lei) = @_;
 	my $cmd = delete $lei->{"pid.$pid"};
 	return if $? == 0;
-	$lei->fail("@$cmd failed", $? >> 8);
+	$lei->fail($?, "@$cmd failed");
 }
 
 sub _post_augment_mbox { # open a compressor process from top-level process
