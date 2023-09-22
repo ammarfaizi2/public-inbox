@@ -157,6 +157,7 @@ sub lock_mailbox {
 	my ($user_id, $ngid, $mbid, $txn_id);
 	my $uuid = delete $pop3->{uuid};
 	$dbh->begin_work;
+	my $creat = 0;
 
 	# 1. make sure the user exists, update `last_seen'
 	my $sth = $dbh->prepare_cached(<<'');
@@ -219,13 +220,13 @@ SELECT mailbox_id FROM mailboxes WHERE newsgroup_id = ? AND slice = ?
 	$sth = $dbh->prepare_cached(<<'');
 INSERT OR IGNORE INTO deletes (user_id,mailbox_id) VALUES (?,?)
 
-	if ($sth->execute($user_id, $mbid) == 0) {
+	if ($sth->execute($user_id, $mbid) == 0) { # fetching into existing
 		$sth = $dbh->prepare_cached(<<'', undef, 1);
 SELECT txn_id,uid_dele FROM deletes WHERE user_id = ? AND mailbox_id = ?
 
 		$sth->execute($user_id, $mbid);
 		($txn_id, $pop3->{uid_dele}) = $sth->fetchrow_array;
-	} else {
+	} else { # new user/mailbox combo
 		$txn_id = $dbh->last_insert_id(undef, undef,
 						'deletes', 'txn_id');
 	}

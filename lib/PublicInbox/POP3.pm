@@ -62,7 +62,7 @@ sub new {
 	(bless { pop3d => $pop3d }, $cls)->greet($sock)
 }
 
-# POP user is $UUID1@$NEWSGROUP.$SLICE
+# POP user is $UUID1@$NEWSGROUP[.$SLICE][?QUERY_ARGS]
 sub cmd_user ($$) {
 	my ($self, $mailbox) = @_;
 	$self->{salt} // return \"-ERR already authed\r\n";
@@ -72,26 +72,25 @@ sub cmd_user ($$) {
 	$user =~ tr/-//d; # most have dashes, some (dbus-uuidgen) don't
 	$user =~ m!\A[a-f0-9]{32}\z!i or return \"-ERR user has no UUID\r\n";
 
-	my $limit;
-	$mailbox =~ s/\?limit=([0-9]+)\z// and
-		$limit = $1 > UID_SLICE ? UID_SLICE : $1;
-
+	my %l;
+	if ($mailbox =~ s/\?(.*)\z//) { # query args
+		for (split(/&+/, $1)) {
+			/\A(initial_limit|limit)=([0-9]+)\z/ and $l{$1} = $2;
+		}
+		$self->{limits} = \%l;
+	}
 	my $slice = $mailbox =~ s/\.([0-9]+)\z// ? $1 + 0 : undef;
 
 	my $ibx = $self->{pop3d}->{pi_cfg}->lookup_newsgroup($mailbox) //
 		return \"-ERR $mailbox does not exist\r\n";
-	my $uidmax = $ibx->mm(1)->num_highwater // 0;
+	my $uidmax = $self->{uidmax} = $ibx->mm(1)->num_highwater // 0;
 	if (defined $slice) {
 		my $max = int($uidmax / UID_SLICE);
 		my $tip = "$mailbox.$max";
 		return \"-ERR $mailbox.$slice does not exist ($tip does)\r\n"
 			if $slice > $max;
-		$limit //= UID_SLICE;
-		$self->{uid_base} = ($slice * UID_SLICE) + UID_SLICE - $limit;
 		$self->{slice} = $slice;
-	} else { # latest $limit messages, 1k if unspecified
-		my $base = $uidmax - ($limit // 1000);
-		$self->{uid_base} = $base < 0 ? 0 : $base;
+	} else { # latest messages:
 		$self->{slice} = -1;
 	}
 	$self->{ibx} = $ibx;
@@ -102,12 +101,27 @@ sub cmd_user ($$) {
 
 sub _login_ok ($) {
 	my ($self) = @_;
-	if ($self->{pop3d}->lock_mailbox($self)) {
-		$self->{uid_max} = $self->{ibx}->over(1)->max;
-		\"+OK logged in\r\n";
-	} else {
-		\"-ERR [IN-USE] unable to lock maildrop\r\n";
+	$self->{pop3d}->lock_mailbox($self) or
+		return \"-ERR [IN-USE] unable to lock maildrop\r\n";
+
+	my $l = delete $self->{limits};
+	$l = defined($self->{uid_dele}) ? $l->{limit}
+					: ($l->{initial_limit} // $l->{limit});
+	my $uidmax = delete $self->{uidmax};
+	if ($self->{slice} >= 0) {
+		$self->{uid_base} = $self->{slice} * UID_SLICE;
+		if (defined $l) { # n.b: the last slice is not full:
+			my $max = int($uidmax/UID_SLICE) == $self->{slice} ?
+					($uidmax % UID_SLICE) : UID_SLICE;
+			my $off = $max - $l;
+			$self->{uid_base} += $off if $off > 0;
+		}
+	} else { # latest $l messages, or 1k if unspecified
+		my $base = $uidmax - ($l // 1000);
+		$self->{uid_base} = $base < 0 ? 0 : $base;
 	}
+	$self->{uid_max} = $self->{ibx}->over(1)->max;
+	\"+OK logged in\r\n";
 }
 
 sub cmd_apop {

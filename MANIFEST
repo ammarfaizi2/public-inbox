@@ -558,6 +558,7 @@ t/plack-2-txt-bodies.eml
 t/plack-attached-patch.eml
 t/plack-qp.eml
 t/plack.t
+t/pop3d-limit.t
 t/pop3d.t
 t/precheck.t
 t/psgi_attach.eml
