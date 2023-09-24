@@ -398,10 +398,13 @@ no warnings 'once';
 	my ($sock, $fds, undef, $flags) = @_;
 	my $iov = pack('P'.TMPL_size_t,
 			$_[2] // NUL, length($_[2] // NUL) || 1);
+	my $fd_space = scalar(@$fds) * SIZEOF_int;
+	my $msg_controllen = CMSG_SPACE($fd_space);
 	my $cmsghdr = pack(TMPL_size_t . # cmsg_len
 			'LL' .  # cmsg_level, cmsg_type,
-			('i' x scalar(@$fds)),
-			CMSG_LEN(scalar(@$fds) * SIZEOF_int), # cmsg_len
+			('i' x scalar(@$fds)) . # CMSG_DATA
+			'@'.($msg_controllen - 1).'x1', # pad to space, not len
+			CMSG_LEN($fd_space), # cmsg_len
 			SOL_SOCKET, SCM_RIGHTS, # cmsg_{level,type}
 			@$fds); # CMSG_DATA
 	my $mh = pack('PL' . # msg_name, msg_namelen (socklen_t (U32))
@@ -413,7 +416,7 @@ no warnings 'once';
 			@BYTES_4_hole,
 			$iov, 1, # msg_iov, msg_iovlen
 			$cmsghdr, # msg_control
-			CMSG_SPACE(scalar(@$fds) * SIZEOF_int), # msg_controllen
+			$msg_controllen,
 			0); # msg_flags
 	my $sent;
 	my $try = 0;
