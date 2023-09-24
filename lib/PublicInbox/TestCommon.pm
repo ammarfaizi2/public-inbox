@@ -129,6 +129,7 @@ my %IPv6_VERSION = (
 	'Net::NNTP' => 3.00,
 	'Mail::IMAPClient' => 3.40,
 	'HTTP::Tiny' => 0.042,
+	'Net::POP3' => 2.32,
 );
 
 sub require_mods {

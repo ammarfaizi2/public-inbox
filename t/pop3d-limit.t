@@ -75,7 +75,7 @@ my $login_d = ('d'x32)."\@$group?limit=100000";
 my $login_d0 = ('d'x32)."\@$group.0?limit=100000";
 
 for my $login ($login_a, $login_a0) {
-	my $np3 = Net::POP3->new(@np3args);
+	my $np3 = Net::POP3->new(@np3args) or xbail "Net::POP3 $!";
 	$np3->login($login, 'anonymous') or xbail "login $login ($!)";
 	my @msg = $fetch_delete->($np3);
 	$np3->quit;
