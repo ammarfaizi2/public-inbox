@@ -97,7 +97,7 @@ my $do_test = sub { SKIP: {
 
 		my $nr = 2 * 1024 * 1024;
 		while (1) {
-			vec(my $vec = '', $nr * 8 - 1, 1) = 1;
+			vec(my $vec = '', $nr - 1, 8) = 1;
 			my $n = $send->($s1, [], $vec, $flag);
 			if (defined($n)) {
 				$n == length($vec) or

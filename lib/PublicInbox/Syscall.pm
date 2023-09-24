@@ -283,7 +283,7 @@ sub epoll_wait_mod4 {
 	# resize our static buffer if maxevents bigger than we've ever done
 	if ($maxevents > $epoll_wait_size) {
 		$epoll_wait_size = $maxevents;
-		vec($epoll_wait_events, $maxevents * 12 * 8 - 1, 1) = 0;
+		vec($epoll_wait_events, $maxevents * 12 - 1, 8) = 0;
 	}
 	@$events = ();
 	my $ct = syscall($SYS_epoll_wait, $epfd, $epoll_wait_events,
@@ -304,7 +304,7 @@ sub epoll_wait_mod8 {
 	# resize our static buffer if maxevents bigger than we've ever done
 	if ($maxevents > $epoll_wait_size) {
 		$epoll_wait_size = $maxevents;
-		vec($epoll_wait_events, $maxevents * 16 * 8 - 1, 1) = 0;
+		vec($epoll_wait_events, $maxevents * 16 - 1, 8) = 0;
 	}
 	@$events = ();
 	my $ct = syscall($SYS_epoll_wait, $epfd, $epoll_wait_events,
@@ -429,7 +429,7 @@ no warnings 'once';
 
 *recv_cmd4 = sub ($$$) {
 	my ($sock, undef, $len) = @_;
-	vec($_[1] //= '', ($len + 1) * 8, 1) = 0;
+	vec($_[1] //= '', $len - 1, 8) = 0;
 	my $cmsghdr = "\0" x msg_controllen; # 10 * sizeof(int)
 	my $iov = pack('P'.TMPL_size_t, $_[1], $len);
 	my $mh = pack('PL' . # msg_name, msg_namelen (socklen_t (U32))
