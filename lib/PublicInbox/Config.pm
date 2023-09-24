@@ -151,8 +151,11 @@ sub config_fh_parse ($$$) {
 	local $/ = $rs;
 	while (defined($line = <$fh>)) { # perf critical with giant configs
 		$i = index($line, $fs);
+		# $i may be -1 if $fs not found and it's a key-only entry
+		# (meaning boolean true).  Either way the -1 will drop the
+		# $rs either from $k or $v.
 		$k = substr($line, 0, $i);
-		$v = substr($line, $i + 1, -1); # chop off $fs
+		$v = $i >= 0 ? substr($line, $i + 1, -1) : 1;
 		$section = substr($k, 0, rindex($k, '.'));
 		$seen{$section} //= push(@section_order, $section);
 

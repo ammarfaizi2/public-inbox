@@ -7,6 +7,25 @@ use_ok 'PublicInbox';
 ok(defined(eval('$PublicInbox::VERSION')), 'VERSION defined');
 use_ok 'PublicInbox::Config';
 my ($tmpdir, $for_destroy) = tmpdir();
+use autodie qw(open close);
+my $validate_git_behavior = $ENV{TEST_VALIDATE_GIT_BEHAVIOR};
+
+{
+	my $f = "$tmpdir/bool_config";
+	open my $fh, '>', $f;
+	print $fh <<EOM;
+[imap]
+	debug
+	port = 2
+EOM
+	close $fh;
+	my $cfg = PublicInbox::Config->git_config_dump($f);
+	$validate_git_behavior and
+		is(xqx([qw(git config -f), $f, qw(--bool imap.debug)]),
+			"true\n", 'git handles key-only as truth');
+	ok($cfg->git_bool($cfg->{'imap.debug'}), 'key-only value handled');
+	is($cfg->{'imap.port'}, 2, 'normal k=v read after key-only');
+}
 
 {
 	PublicInbox::Import::init_bare($tmpdir);
