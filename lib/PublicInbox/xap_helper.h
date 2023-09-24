@@ -35,7 +35,10 @@
 #include <limits.h>
 #include <search.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
 #include <unistd.h>
@@ -1084,9 +1087,9 @@ static void do_sigttin(void)
 		warnx("workers cannot exceed %zu", (size_t)WORKER_MAX);
 		return;
 	}
-	void *p = reallocarray(worker_pids, nworker + 1, sizeof(pid_t));
+	void *p = realloc(worker_pids, (nworker + 1) * sizeof(pid_t));
 	if (!p) {
-		warn("reallocarray");
+		warn("realloc worker_pids");
 	} else {
 		worker_pids = (pid_t *)p;
 		worker_pids[nworker++] = 0;
