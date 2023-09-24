@@ -5,20 +5,17 @@
 # This receives what script/lei receives, but isn't connected
 # to an interactive terminal so I'm not sure what to do with it...
 package PublicInbox::LeiSelfSocket;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::DS);
 use Data::Dumper;
 $Data::Dumper::Useqq = 1; # should've been the Perl default :P
 use PublicInbox::Syscall qw(EPOLLIN);
-use PublicInbox::Spawn;
 use PublicInbox::IPC;
 
 sub new {
 	my ($cls, $r) = @_;
-	my $self = bless { sock => $r }, $cls;
+	my $self = bless {}, $cls;
 	$r->blocking(0);
-	no warnings 'once';
 	$self->SUPER::new($r, EPOLLIN);
 }
 
