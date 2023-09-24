@@ -72,12 +72,11 @@ sub new {
 	my $self = bless { %{$lei->{opt}}, -colored => \&uncolored }, $cls;
 	$self->{-quote_reply} = 1 if $fmt eq 'reply';
 	return $self unless $self->{color} //= -t $lei->{1};
-	my $cmd = [ qw(git config -z --includes -l) ];
-	my ($r, $pid) = popen_rd($cmd, undef, { 2 => $lei->{2} });
+	my @cmd = qw(git config -z --includes -l); # reuse normal git config
+	my $r = popen_rd(\@cmd, undef, { 2 => $lei->{2} });
 	my $cfg = PublicInbox::Config::config_fh_parse($r, "\0", "\n");
-	waitpid($pid, 0);
-	if ($?) {
-		warn "# git-config failed, no color (non-fatal)\n";
+	if (!close($r)) {
+		warn "# @cmd failed, no color (non-fatal \$?=$?)\n";
 		return $self;
 	}
 	$self->{-colored} = \&my_colored;
