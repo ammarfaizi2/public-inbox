@@ -14,7 +14,7 @@ sub lei_rm_watch {
 	my $self = bless { missing_ok => 1 }, __PACKAGE__;
 	$self->prepare_inputs($lei, \@argv) or return;
 	for my $w (@{$self->{inputs}}) {
-		$lei->_config('--remove-section', "watch.$w");
+		$lei->_config('--remove-section', "watch.$w") or return;
 	}
 	delete $lei->{cfg}; # force reload
 	$lei->refresh_watches;

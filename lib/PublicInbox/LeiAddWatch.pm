@@ -26,13 +26,14 @@ sub lei_add_watch {
 	for my $w (@{$self->{inputs}}) {
 		# clobber existing, allow multiple
 		if (defined($vmd0)) {
-			$lei->_config("watch.$w.vmd", '--replace-all', $vmd0);
+			$lei->_config("watch.$w.vmd", '--replace-all', $vmd0)
+				or return;
 			for my $v (@vmd) {
-				$lei->_config("watch.$w.vmd", $v);
+				$lei->_config("watch.$w.vmd", $v) or return;
 			}
 		}
 		next if defined $cfg->{"watch.$w.state"};
-		$lei->_config("watch.$w.state", $state);
+		$lei->_config("watch.$w.state", $state) or return;
 	}
 	$lei->_lei_store(1); # create
 	$lei->lms(1)->lms_write_prepare->add_folders(@{$self->{inputs}});

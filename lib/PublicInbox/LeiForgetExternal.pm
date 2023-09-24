@@ -16,8 +16,7 @@ sub lei_forget_external {
 			next if $seen{$l}++;
 			my $key = "external.$l.boost";
 			delete($cfg->{$key});
-			$lei->_config('--unset', $key);
-			if ($? == 0) {
+			if ($lei->_config('+e', '--unset', $key)) {
 				$lei->qerr("# $l forgotten ");
 			} elsif (($? >> 8) == 5) {
 				warn("# $l not found\n");

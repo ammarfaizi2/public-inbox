@@ -776,9 +776,8 @@ EOM
 		/\A([^=\.]+\.[^=]+)(?:=(.*))?\z/ or return fail($self, <<EOM);
 `-c $_' is not of the form -c <name>=<value>'
 EOM
-		my $name = $1;
-		my $value = $2 // 1;
-		_config($self, '--add', $name, $value);
+		my ($name, $value) = ($1, $2 // 1);
+		_config($self, '--add', $name, $value) or return;
 		if (defined(my $v = $tmp->{$name})) {
 			if (ref($v) eq 'ARRAY') {
 				push @$v, $value;
@@ -894,13 +893,17 @@ sub _lei_store ($;$) {
 	};
 }
 
+# returns true on success, undef
+# argv[0] eq `+e' means errors do not ->fail # (like `sh +e')
 sub _config {
 	my ($self, @argv) = @_;
+	my $err_ok = ($argv[0] // '') eq '+e' ? shift(@argv) : undef;
 	my %env = (%{$self->{env}}, GIT_CONFIG => undef);
 	my $cfg = _lei_cfg($self, 1);
 	my $cmd = [ qw(git config -f), $cfg->{'-f'}, @argv ];
 	my %rdr = map { $_ => $self->{$_} } (0..2);
 	waitpid(spawn($cmd, \%env, \%rdr), 0);
+	$? == 0 ? 1 : ($err_ok ? undef : fail($self, $?));
 }
 
 sub lei_daemon_pid { puts shift, $$ }
