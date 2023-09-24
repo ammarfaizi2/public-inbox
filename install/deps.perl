@@ -1,6 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Helper script for mass installing/uninstalling with the OS package manager
+# TODO: figure out how to handle 3rd-party repo packages for CentOS 7.x
 eval 'exec perl -S $0 ${1+"$@"}' # no shebang
 if 0; # running under some shell
 use v5.12;
@@ -122,7 +123,7 @@ $profiles->{'watch-maildir'} = [ @{$profiles->{v2essential}} ];
 
 # package names which can't be mapped automatically and explicit
 # dependencies to prevent essential package removal:
-my $non_auto = { # git and perl are essential
+my $non_auto = { # git and perl (+autodie) are essential
 	git => {
 		pkg => [ qw(curl p5-TimeDate git) ],
 		rpm => [ qw(curl git) ],
@@ -153,7 +154,7 @@ my $non_auto = { # git and perl are essential
 		deb => 'libsearch-xapian-perl',
 		pkg => 'p5-Xapian',
 		pkg_add => 'xapian-bindings-perl',
-		rpm => 'Search::Xapian', # 3rd-party repo
+		rpm => [], # xapian14-bindings-perl in 3rd-party repo
 	},
 	'highlight.pm' => {
 		deb => 'libhighlight-perl',
@@ -219,11 +220,14 @@ for (qw(autodie Digest::SHA ExtUtils::MakeMaker IO::Compress Sys::Syslog
 	# qw(constant Encode Getopt::Long Exporter Storable Time::HiRes)
 	# don't need to be here since it's impossible to have `perl'
 	# on CentOS 7.x without them.
+	my $rpm = $_;
+	$rpm =~ s/::/-/g;
 	$non_auto->{$_} = {
 		deb => 'perl', # libperl5.XX, but the XX varies
 		pkg => 'perl5',
 		pkg_add => [], # perl is in the OpenBSD base system
 		pkgin => 'perl',
+		rpm => "perl-$rpm",
 	};
 }
 
