@@ -1381,9 +1381,9 @@ sub lazy_start {
 	PublicInbox::DS::sig_setmask($oldset) if @kq_ign;
 
 	# exit() may trigger waitpid via various DESTROY, ensure interruptible
-	local @SIG{TERM} = sub { exit(POSIX::SIGTERM + 128) };
-	local @SIG{INT} = sub { exit(POSIX::SIGINT + 128) };
-	local @SIG{QUIT} = sub { exit(POSIX::SIGQUIT + 128) };
+	local $SIG{TERM} = sub { exit(POSIX::SIGTERM + 128) };
+	local $SIG{INT} = sub { exit(POSIX::SIGINT + 128) };
+	local $SIG{QUIT} = sub { exit(POSIX::SIGQUIT + 128) };
 	PublicInbox::DS::sig_setmask($oldset) if !@kq_ign;
 	dump_and_clear_log();
 	exit($exit_code // 0);
