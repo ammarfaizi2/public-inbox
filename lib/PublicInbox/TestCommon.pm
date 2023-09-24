@@ -519,6 +519,7 @@ sub start_script {
 		}
 		$tail = tail_f(@paths, $opt);
 	}
+	require PublicInbox::DS;
 	my $oset = PublicInbox::DS::block_signals();
 	require PublicInbox::OnDestroy;
 	my $tmp_mask = PublicInbox::OnDestroy->new(
