@@ -4,6 +4,8 @@ package PublicInbox::LeiConfig;
 use strict;
 use v5.10.1;
 use PublicInbox::PktOp;
+use Fcntl qw(SEEK_SET);
+use autodie qw(open seek);
 
 sub cfg_do_edit ($;$) {
 	my ($self, $reason) = @_;
@@ -22,8 +24,14 @@ sub cfg_do_edit ($;$) {
 sub cfg_edit_done { # PktOp
 	my ($self) = @_;
 	eval {
-		my $cfg = $self->{lei}->cfg_dump($self->{-f}, $self->{lei}->{2})
-			// return cfg_do_edit($self, "\n");
+		open my $fh, '+>', undef or die "open($!)";
+		my $cfg = do {
+			local $self->{lei}->{2} = $fh;
+			$self->{lei}->cfg_dump($self->{-f});
+		} or do {
+			seek($fh, 0, SEEK_SET);
+			return cfg_do_edit($self, do { local $/; <$fh> });
+		};
 		$self->cfg_verify($cfg) if $self->can('cfg_verify');
 	};
 	$self->{lei}->fail($@) if $@;

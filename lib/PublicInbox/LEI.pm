@@ -1098,7 +1098,7 @@ sub pgr_err {
 	my ($self, @msg) = @_;
 	return warn(@msg) unless $self->{sock} && -t $self->{2};
 	start_pager($self, { LESS => 'RX' }); # no 'F' so we prompt
-	print { $self->{2} } @msg;
+	say { $self->{2} } @msg, '# -quit pager to continue-';
 	$self->{2}->autoflush(1);
 	stop_pager($self);
 	send($self->{sock}, 'wait', 0); # wait for user to quit pager
