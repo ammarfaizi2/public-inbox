@@ -444,7 +444,10 @@ no warnings 'once';
 			msg_controllen,
 			0); # msg_flags
 	my $r = syscall($SYS_recvmsg, fileno($sock), $mh, 0);
-	return (undef) if $r < 0; # $! set
+	if ($r < 0) { # $! is set
+		$_[1] = '';
+		return (undef);
+	}
 	substr($_[1], $r, length($_[1]), '');
 	my @ret;
 	if ($r > 0) {

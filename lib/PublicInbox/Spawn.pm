@@ -259,10 +259,12 @@ void recv_cmd4(PerlIO *s, SV *buf, STRLEN n)
 	msg.msg_controllen = CMSG_SPACE(SEND_FD_SPACE);
 
 	i = recvmsg(PerlIO_fileno(s), &msg, 0);
-	if (i < 0)
-		Inline_Stack_Push(&PL_sv_undef);
-	else
+	if (i >= 0) {
 		SvCUR_set(buf, i);
+	} else {
+		Inline_Stack_Push(&PL_sv_undef);
+		SvCUR_set(buf, 0);
+	}
 	if (i > 0 && cmsg.hdr.cmsg_level == SOL_SOCKET &&
 			cmsg.hdr.cmsg_type == SCM_RIGHTS) {
 		size_t len = cmsg.hdr.cmsg_len;

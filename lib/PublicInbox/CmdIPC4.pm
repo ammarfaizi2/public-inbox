@@ -31,7 +31,10 @@ no warnings 'once';
 *recv_cmd4 = sub ($$$) {
 	my ($s, undef, $len) = @_; # $_[1] = destination buffer
 	my $mh = Socket::MsgHdr->new(buflen => $len, controllen => 256);
-	my $r = Socket::MsgHdr::recvmsg($s, $mh, 0) // return (undef);
+	my $r = Socket::MsgHdr::recvmsg($s, $mh, 0) // do {
+		$_[1] = '';
+		return (undef);
+	};
 	$_[1] = $mh->buf;
 	return () if $r == 0;
 	my (undef, undef, $data) = $mh->cmsghdr;

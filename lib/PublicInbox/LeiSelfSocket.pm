@@ -25,7 +25,6 @@ sub event_step {
 	if (scalar(@fds) == 1 && !defined($fds[0])) {
 		return if $!{EAGAIN};
 		die "recvmsg: $!" unless $!{ECONNRESET};
-		$buf = '';
 	} else { # just in case open so perl can auto-close them:
 		for (@fds) { open my $fh, '+<&=', $_ };
 	}

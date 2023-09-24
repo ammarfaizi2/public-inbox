@@ -47,6 +47,7 @@ my $do_test = sub { SKIP: {
 		$s2->blocking(0);
 		@fds = $recv->($s2, $buf, length($src) + 1);
 		ok($!{EAGAIN}, "EAGAIN set by ($desc)");
+		is($buf, '', "recv buffer emptied on EAGAIN ($desc)");
 		is_deeply(\@fds, [ undef ], "EAGAIN $desc");
 		$s2->blocking(1);
 
