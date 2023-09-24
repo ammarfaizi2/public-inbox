@@ -22,7 +22,7 @@ sub _array ($) { ref($_[0]) eq 'ARRAY' ? $_[0] : [ $_[0] ] }
 # returns key-value pairs of config directives in a hash
 # if keys may be multi-value, the value is an array ref containing all values
 sub new {
-	my ($class, $file, $errfh) = @_;
+	my ($class, $file, $lei) = @_;
 	$file //= default_file();
 	my $self;
 	my $set_dedupe;
@@ -36,7 +36,7 @@ sub new {
 			$self = $DEDUPE->{$file} and return $self;
 			$set_dedupe = 1;
 		}
-		$self = git_config_dump($class, $file, $errfh);
+		$self = git_config_dump($class, $file, $lei);
 		$self->{'-f'} = $file;
 	}
 	# caches
@@ -174,13 +174,34 @@ sub config_fh_parse ($$$) {
 	\%rv;
 }
 
+sub tmp_cmd_opt ($$) {
+	my ($env, $opt) = @_;
+	# quiet global and system gitconfig if supported by installed git,
+	# but normally harmless if too noisy (NOGLOBAL no longer exists)
+	$env->{GIT_CONFIG_NOSYSTEM} = 1;
+	$env->{GIT_CONFIG_GLOBAL} = '/dev/null'; # git v2.32+
+	$opt->{-C} = '/'; # avoid $worktree/.git/config on MOST systems :P
+}
+
 sub git_config_dump {
-	my ($class, $file, $errfh) = @_;
-	return bless {}, $class unless -e $file;
-	my $cmd = [ qw(git config -z -l --includes), "--file=$file" ];
-	my $fh = popen_rd($cmd, undef, { 2 => $errfh // 2 });
+	my ($class, $file, $lei) = @_;
+	my @opt_c = map { ('-c', $_) } @{$lei->{opt}->{c} // []};
+	$file = undef if !-e $file;
+	# XXX should we set {-f} if !-e $file?
+	return bless {}, $class if (!@opt_c && !defined($file));
+	my %env;
+	my $opt = { 2 => $lei->{2} // 2 };
+	if (@opt_c) {
+		unshift(@opt_c, '-c', "include.path=$file") if defined($file);
+		tmp_cmd_opt(\%env, $opt);
+	}
+	my @cmd = ('git', @opt_c, qw(config -z -l --includes));
+	push(@cmd, '-f', $file) if !@opt_c && defined($file);
+	my $fh = popen_rd(\@cmd, \%env, $opt);
 	my $rv = config_fh_parse($fh, "\0", "\n");
-	close $fh or die "@$cmd failed: \$?=$?\n";
+	close $fh or die "@cmd failed: \$?=$?\n";
+	$rv->{-opt_c} = \@opt_c if @opt_c; # for ->urlmatch
+	$rv->{-f} = $file;
 	bless $rv, $class;
 }
 
@@ -544,14 +565,23 @@ sub _fill_ei ($$) {
 	$es;
 }
 
+sub config_cmd {
+	my ($self, $env, $opt) = @_;
+	my $f = $self->{-f} // default_file();
+	my @opt_c = @{$self->{-opt_c} // []};
+	my @cmd = ('git', @opt_c, 'config');
+	@opt_c ? tmp_cmd_opt($env, $opt) : push(@cmd, '-f', $f);
+	\@cmd;
+}
+
 sub urlmatch {
 	my ($self, $key, $url, $try_git) = @_;
 	state $urlmatch_broken; # requires git 1.8.5
 	return if $urlmatch_broken;
-	my $file = $self->{'-f'} // default_file();
-	my $cmd = [qw/git config -z --includes --get-urlmatch/,
-		"--file=$file", $key, $url ];
-	my $fh = popen_rd($cmd);
+	my (%env, %opt);
+	my $cmd = $self->config_cmd(\%env, \%opt);
+	push @$cmd, qw(-z --includes --get-urlmatch), $key, $url;
+	my $fh = popen_rd($cmd, \%env, \%opt);
 	local $/ = "\0";
 	my $val = <$fh>;
 	if (!close($fh)) {

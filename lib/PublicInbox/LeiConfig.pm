@@ -1,8 +1,7 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-package PublicInbox::LeiConfig;
-use strict;
-use v5.10.1;
+package PublicInbox::LeiConfig; # subclassed by LeiEditSearch
+use v5.12;
 use PublicInbox::PktOp;
 use Fcntl qw(SEEK_SET);
 use autodie qw(open seek);
@@ -41,10 +40,18 @@ sub lei_config {
 	my ($lei, @argv) = @_;
 	$lei->{opt}->{'config-file'} and return $lei->fail(
 		"config file switches not supported by `lei config'");
-	return $lei->_config(@argv) unless $lei->{opt}->{edit};
-	my $f = $lei->_lei_cfg(1)->{-f};
-	my $self = bless { lei => $lei, -f => $f }, __PACKAGE__;
-	cfg_do_edit($self);
+	if ($lei->{opt}->{edit}) {
+		@argv and return $lei->fail(
+'--edit must be used without other arguments');
+		$lei->{opt}->{c} and return $lei->fail(
+"`-c $lei->{opt}->{c}->[0]' not allowed with --edit");
+		my $f = $lei->_lei_cfg(1)->{-f};
+		cfg_do_edit(bless { lei => $lei, -f => $f }, __PACKAGE__);
+	} elsif (@argv) { # let git-config do error-checking
+		$lei->_config(@argv);
+	} else {
+		$lei->_help('no options given');
+	}
 }
 
 1;

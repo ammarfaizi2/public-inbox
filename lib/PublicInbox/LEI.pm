@@ -281,7 +281,8 @@ our %CMD = ( # sorted in order of importance/use:
 	"use a patch to generate a query for `lei q --stdin'",
 	qw(stdin| in-format|F=s want|w=s@ uri debug), @net_opt, @c_opt ],
 'config' => [ '[...]', sub {
-		'git-config(1) wrapper for '._config_path($_[0]);
+		'git-config(1) wrapper for '._config_path($_[0]). "\n" .
+	'-l/--list and other common git-config uses are supported'
 	}, qw(config-file|system|global|file|f=s), # for conflict detection
 	 qw(edit|e c=s@ C=s@), pass_through('git config') ],
 'inspect' => [ 'ITEMS...|--stdin', 'inspect lei/store and/or local external',
@@ -456,6 +457,7 @@ my %OPTDESC = (
 'z|0' => 'use NUL \\0 instead of newline (CR) to delimit lines',
 
 'signal|s=s' => [ 'SIG', 'signal to send lei-daemon (default: TERM)' ],
+'edit|e	config' => 'open an editor to modify the lei config file',
 ); # %OPTDESC
 
 my %CONFIG_KEYS = (
@@ -760,36 +762,6 @@ sub optparse ($$$) {
 	$err ? fail($self, "usage: lei $cmd $proto\nE: $err") : 1;
 }
 
-sub _tmp_cfg { # for lei -c <name>=<value> ...
-	my ($self) = @_;
-	my $cfg = _lei_cfg($self, 1);
-	require File::Temp;
-	my $ft = File::Temp->new(TEMPLATE => 'lei_cfg-XXXX', TMPDIR => 1);
-	my $tmp = { '-f' => $ft->filename, -tmp => $ft };
-	$ft->autoflush(1);
-	print $ft <<EOM or return fail($self, "$tmp->{-f}: $!");
-[include]
-	path = $cfg->{-f}
-EOM
-	$tmp = $self->{cfg} = bless { %$cfg, %$tmp }, ref($cfg);
-	for (@{$self->{opt}->{c}}) {
-		/\A([^=\.]+\.[^=]+)(?:=(.*))?\z/ or return fail($self, <<EOM);
-`-c $_' is not of the form -c <name>=<value>'
-EOM
-		my ($name, $value) = ($1, $2 // 1);
-		_config($self, '--add', $name, $value) or return;
-		if (defined(my $v = $tmp->{$name})) {
-			if (ref($v) eq 'ARRAY') {
-				push @$v, $value;
-			} else {
-				$tmp->{$name} = [ $v, $value ];
-			}
-		} else {
-			$tmp->{$name} = $value;
-		}
-	}
-}
-
 sub lazy_cb ($$$) { # $pfx is _complete_ or lei_
 	my ($self, $cmd, $pfx) = @_;
 	my $ucmd = $cmd;
@@ -819,7 +791,6 @@ sub dispatch {
 	}
 	if (my $cb = lazy_cb(__PACKAGE__, $cmd, 'lei_')) {
 		optparse($self, $cmd, \@argv) or return;
-		$self->{opt}->{c} and (_tmp_cfg($self) // return);
 		if (my $chdir = $self->{opt}->{C}) {
 			for my $d (@$chdir) {
 				next if $d eq ''; # same as git(1)
@@ -844,17 +815,20 @@ sub _lei_cfg ($;$) {
 	my $f = _config_path($self);
 	my @st = stat($f);
 	my $cur_st = @st ? pack('dd', $st[10], $st[7]) : ''; # 10:ctime, 7:size
-	my ($sto, $sto_dir, $watches, $lne);
-	if (my $cfg = $PATH2CFG{$f}) { # reuse existing object in common case
-		return ($self->{cfg} = $cfg) if $cur_st eq $cfg->{-st};
+	my ($sto, $sto_dir, $watches, $lne, $cfg);
+	if ($cfg = $PATH2CFG{$f}) { # reuse existing object in common case
+		($cur_st eq $cfg->{-st} && !$self->{opt}->{c}) and
+			return ($self->{cfg} = $cfg);
+		# reuse some fields below if they match:
 		($sto, $sto_dir, $watches, $lne) =
 				@$cfg{qw(-lei_store leistore.dir -watches
 					-lei_note_event)};
 	}
 	if (!@st) {
-		unless ($creat) {
-			delete $self->{cfg};
-			return bless {}, 'PublicInbox::Config';
+		unless ($creat) { # any commands which write to cfg must creat
+			$cfg = PublicInbox::Config->git_config_dump(
+							'/dev/null', $self);
+			return ($self->{cfg} = $cfg);
 		}
 		my ($cfg_dir) = ($f =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($cfg_dir);
@@ -863,9 +837,8 @@ sub _lei_cfg ($;$) {
 		$cur_st = pack('dd', $st[10], $st[7]);
 		qerr($self, "# $f created") if $self->{cmd} ne 'config';
 	}
-	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{2});
+	$cfg = PublicInbox::Config->git_config_dump($f, $self);
 	$cfg->{-st} = $cur_st;
-	$cfg->{'-f'} = $f;
 	if ($sto && canonpath_harder($sto_dir // store_path($self))
 			eq canonpath_harder($cfg->{'leistore.dir'} //
 						store_path($self))) {
@@ -877,7 +850,7 @@ sub _lei_cfg ($;$) {
 		# FIXME: use inotify/EVFILT_VNODE to detect unlinked configs
 		delete(@PATH2CFG{grep(!-f, keys %PATH2CFG)});
 	}
-	$self->{cfg} = $PATH2CFG{$f} = $cfg;
+	$self->{cfg} = $self->{opt}->{c} ? $cfg : ($PATH2CFG{$f} = $cfg);
 	refresh_watches($self);
 	$cfg;
 }
@@ -898,11 +871,41 @@ sub _lei_store ($;$) {
 sub _config {
 	my ($self, @argv) = @_;
 	my $err_ok = ($argv[0] // '') eq '+e' ? shift(@argv) : undef;
-	my %env = (%{$self->{env}}, GIT_CONFIG => undef);
+	my %env;
+	my %opt = map { $_ => $self->{$_} } (0..2);
 	my $cfg = _lei_cfg($self, 1);
-	my $cmd = [ qw(git config -f), $cfg->{'-f'}, @argv ];
-	my %rdr = map { $_ => $self->{$_} } (0..2);
-	waitpid(spawn($cmd, \%env, \%rdr), 0);
+	my $opt_c = delete local $cfg->{-opt_c};
+	my @file_arg;
+	if ($opt_c) {
+		my ($set, $get, $nondash);
+		for (@argv) { # order matters for git-config
+			if (!$nondash) {
+				if (/\A--(?:add|rename-section|remove-section|
+						replace-all|
+						unset-all|unset)\z/x) {
+					++$set;
+				} elsif ($_ eq '-l' || $_ eq '--list' ||
+						/\A--get/) {
+					++$get;
+				} elsif (/\A-/) { # -z and such
+				} else {
+					++$nondash;
+				}
+			} else {
+				++$nondash;
+			}
+		}
+		if ($set || ($nondash//0) > 1 && !$get) {
+			@file_arg = ('-f', $cfg->{-f});
+			$env{GIT_CONFIG} = $file_arg[1];
+		} else { # OK, we can use `-c n=v' for read-only
+			$cfg->{-opt_c} = $opt_c;
+			$env{GIT_CONFIG} = undef;
+		}
+	}
+	my $cmd = $cfg->config_cmd(\%env, \%opt);
+	push @$cmd, @file_arg, @argv;
+	waitpid(spawn($cmd, \%env, \%opt), 0);
 	$? == 0 ? 1 : ($err_ok ? undef : fail($self, $?));
 }
 
@@ -1545,7 +1548,7 @@ sub sto_done_request {
 
 sub cfg_dump ($$) {
 	my ($lei, $f) = @_;
-	my $ret = eval { PublicInbox::Config->git_config_dump($f, $lei->{2}) };
+	my $ret = eval { PublicInbox::Config->git_config_dump($f, $lei) };
 	return $ret if !$@;
 	warn($@);
 	undef;

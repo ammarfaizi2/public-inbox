@@ -193,7 +193,8 @@ sub _write_inbox_config {
 	} elsif (!$!{EEXIST}) {
 		die "open($f): $!";
 	}
-	my $cfg = PublicInbox::Config->git_config_dump($f, $self->{lei}->{2});
+	my $cfg = PublicInbox::Config->git_config_dump($f,
+						{ 2 => $self->{lei}->{2} });
 	my $ibx = $self->{ibx} = {}; # for indexing
 	for my $sec (grep(/\Apublicinbox\./, @{$cfg->{-section_order}})) {
 		for (qw(address newsgroup nntpmirror)) {
@@ -238,7 +239,7 @@ sub index_cloned_inbox {
 		}
 		# force synchronous awaitpid for v2:
 		local $PublicInbox::DS::in_loop = 0;
-		my $cfg = PublicInbox::Config->new(undef, $lei->{2});
+		my $cfg = PublicInbox::Config->new(undef, { 2 => $lei->{2} });
 		my $env = PublicInbox::Admin::index_prepare($opt, $cfg);
 		local %ENV = (%ENV, %$env) if $env;
 		PublicInbox::Admin::progress_prepare($opt, $lei->{2});

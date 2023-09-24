@@ -40,10 +40,21 @@ my $test_help = sub {
 	lei_ok(qw(config -h));
 	like($lei_out, qr! \Q$home\E/\.config/lei/config\b!,
 		'actual path shown in config -h');
+	my $exp_help = qr/\Q$lei_out\E/s;
+	ok(!lei('config'), 'config w/o args fails');
+	like($lei_err, $exp_help, 'config w/o args shows our help in stderr');
 	lei_ok(qw(config -h), { XDG_CONFIG_HOME => '/XDC' },
 		\'config with XDG_CONFIG_HOME');
 	like($lei_out, qr! /XDC/lei/config\b!, 'XDG_CONFIG_HOME in config -h');
 	is($lei_err, '', 'no errors from config -h');
+
+	lei_ok(qw(-c foo.bar config dash.c works));
+	lei_ok(qw(config dash.c));
+	is($lei_out, "works\n", 'config set w/ -c');
+
+	lei_ok(qw(-c foo.bar config --add dash.c add-works));
+	lei_ok(qw(config --get-all dash.c));
+	is($lei_out, "works\nadd-works\n", 'config --add w/ -c');
 };
 
 my $ok_err_info = sub {
@@ -101,9 +112,11 @@ my $test_config = sub {
 	is($lei_out, "tr00\n", "-c string value passed as-is");
 	lei_ok(qw(-c imap.debug=a -c imap.debug=b config --get-all imap.debug));
 	is($lei_out, "a\nb\n", '-c and --get-all work together');
-
-	lei_ok([qw(config -e)], { VISUAL => 'cat', EDITOR => 'cat' });
+	my $env = { VISUAL => 'cat', EDITOR => 'cat' };
+	lei_ok([qw(config -e)], $env);
 	is($lei_out, "[a]\n\tb = c\n", '--edit works');
+	ok(!lei([qw(-c a.b=c config -e)], $env), '-c conflicts with -e');
+	like($lei_err, qr/not allowed/, 'error message shown');
 };
 
 my $test_completion = sub {
