@@ -1,10 +1,8 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
+use v5.12;
 use PublicInbox::Eml;
 use Cwd;
-use PublicInbox::Config;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 require_git(2.6);
@@ -38,13 +36,15 @@ ok(POSIX::mkfifo("$maildir/cur/fifo", 0777),
 my $sem = PublicInbox::Emergency->new($spamdir); # create dirs
 
 my $orig = <<EOF;
-$cfgpfx.address=$addr
-$cfgpfx.inboxdir=$inboxdir
-$cfgpfx.watch=maildir:$maildir
-$cfgpfx.filter=PublicInbox::Filter::Vger
-publicinboxlearn.watchspam=maildir:$spamdir
+[publicinbox "test"]
+	address = $addr
+	inboxdir = $inboxdir
+	watch = maildir:$maildir
+	filter = PublicInbox::Filter::Vger
+[publicinboxlearn]
+	watchspam = maildir:$spamdir
 EOF
-my $cfg = PublicInbox::Config->new(\$orig);
+my $cfg = cfg_new $tmpdir, $orig;
 my $ibx = $cfg->lookup_name('test');
 ok($ibx, 'found inbox by name');
 $ibx->{-no_fsync} = 1;
@@ -147,12 +147,13 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	my $v1pfx = "publicinbox.v1";
 	my $v1addr = 'v1-public@example.com';
 	PublicInbox::Import::init_bare($v1repo);
-	my $raw = <<EOF;
-$orig$v1pfx.address=$v1addr
-$v1pfx.inboxdir=$v1repo
-$v1pfx.watch=maildir:$maildir
+	my $cfg = cfg_new $tmpdir, <<EOF;
+$orig
+[publicinbox "v1"]
+	address = $v1addr
+	inboxdir = $v1repo
+	watch = maildir:$maildir
 EOF
-	my $cfg = PublicInbox::Config->new(\$raw);
 	my $both = <<EOF;
 From: user\@example.com
 To: $addr, $v1addr
@@ -185,19 +186,22 @@ List-Id: <do.not.want>
 X-Mailing-List: no@example.com
 Message-ID: <do.not.want@example.com>
 EOF
-	my $raw = $orig."$cfgpfx.listid=i.want.you.to.want.me\n";
 	PublicInbox::Emergency->new($maildir)->prepare(\$want);
 	PublicInbox::Emergency->new($maildir)->prepare(\$do_not_want);
-	my $cfg = PublicInbox::Config->new(\$raw);
+	my $raw = <<EOM;
+$orig
+[publicinbox "test"]
+	listid = i.want.you.to.want.me
+EOM
+	my $cfg = cfg_new $tmpdir, $raw;
 	PublicInbox::Watch->new($cfg)->scan('full');
 	$ibx = $cfg->lookup_name('test');
 	my $num = $ibx->mm->num_for('do.want@example.com');
 	ok(defined $num, 'List-ID matched for watch');
 	$num = $ibx->mm->num_for('do.not.want@example.com');
 	is($num, undef, 'unaccepted List-ID matched for watch');
-
-	$raw = $orig."$cfgpfx.watchheader=X-Mailing-List:no\@example.com\n";
-	$cfg = PublicInbox::Config->new(\$raw);
+	$raw .= "\twatchheader = X-Mailing-List:no\@example.com\n";
+	$cfg = cfg_new $tmpdir, $raw;
 	PublicInbox::Watch->new($cfg)->scan('full');
 	$ibx = $cfg->lookup_name('test');
 	$num = $ibx->mm->num_for('do.not.want@example.com');

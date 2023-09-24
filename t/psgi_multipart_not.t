@@ -1,11 +1,9 @@
 #!perl -w
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-use PublicInbox::Config;
 require_git 2.6;
 my @mods = qw(DBD::SQLite Xapian HTTP::Request::Common
               Plack::Test URI::Escape Plack::Builder Plack::Test);
@@ -28,12 +26,12 @@ Freed^Wmultipart ain't what it used to be
 EOF
 
 };
-my $cfgpfx = "publicinbox.v2test";
-my $cfg = <<EOF;
-$cfgpfx.address=$ibx->{-primary_address}
-$cfgpfx.inboxdir=$ibx->{inboxdir}
+my $tmpdir = tmpdir;
+my $www = PublicInbox::WWW->new(cfg_new($tmpdir, <<EOF));
+[publicinbox "v2test"]
+	address = $ibx->{-primary_address}
+	inboxdir = $ibx->{inboxdir}
 EOF
-my $www = PublicInbox::WWW->new(PublicInbox::Config->new(\$cfg));
 my ($res, $raw);
 test_psgi(sub { $www->call(@_) }, sub {
 	my ($cb) = @_;

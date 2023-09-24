@@ -1,16 +1,18 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
-use PublicInbox::Config;
+use v5.12;
+use PublicInbox::TestCommon;
 # see t/imapd*.t for tests against a live IMAP server
 
 use_ok 'PublicInbox::Watch';
-my $cfg = PublicInbox::Config->new(\<<EOF);
-publicinbox.i.address=i\@example.com
-publicinbox.i.inboxdir=/nonexistent
-publicinbox.i.watch=imap://example.com/INBOX.a
-publicinboxlearn.watchspam=imap://example.com/INBOX.spam
+my $tmpdir = tmpdir;
+my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "i"]
+	address = i\@example.com
+	inboxdir = /nonexistent
+	watch = imap://example.com/INBOX.a
+[publicinboxlearn]
+	watchspam = imap://example.com/INBOX.spam
 EOF
 my $watch = PublicInbox::Watch->new($cfg);
 is($watch->{imap}->{'imap://example.com/INBOX.a'}->[0]->{name}, 'i',

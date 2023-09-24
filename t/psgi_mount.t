@@ -1,14 +1,11 @@
 #!perl -w
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::Eml;
 use PublicInbox::TestCommon;
-use PublicInbox::Config;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $v1dir = "$tmpdir/v1.git";
-my $cfgpfx = "publicinbox.test";
 my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape
 	Plack::Builder Plack::App::URLMap);
 require_mods(@mods);
@@ -27,9 +24,10 @@ Date: Thu, 01 Jan 1970 00:00:00 +0000
 zzzzzz
 EOF
 };
-my $cfg = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=$ibx->{-primary_address}
-$cfgpfx.inboxdir=$v1dir
+my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = $ibx->{-primary_address}
+	inboxdir = $v1dir
 EOF
 my $www = PublicInbox::WWW->new($cfg);
 my $app = builder(sub {

@@ -1,8 +1,6 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C)  all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use Test::More;
-use PublicInbox::Config;
+use v5.12;
 use PublicInbox::TestCommon;
 require_git(2.6);
 require_mods(qw(Xapian DBD::SQLite));
@@ -54,14 +52,15 @@ PublicInbox::Emergency->new($maildir)->prepare(\$msg_to);
 PublicInbox::Emergency->new($maildir)->prepare(\$msg_cc);
 PublicInbox::Emergency->new($maildir)->prepare(\$msg_none);
 
-my $raw = <<EOF;
-$cfgpfx.address=$addr
-$cfgpfx.inboxdir=$inboxdir
-$cfgpfx.watch=maildir:$maildir
-$cfgpfx.watchheader=To:$addr
-$cfgpfx.watchheader=Cc:$addr
+my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = $addr
+	inboxdir = $inboxdir
+	watch = maildir:$maildir
+	watchheader = To:$addr
+	watchheader = Cc:$addr
 EOF
-my $cfg = PublicInbox::Config->new(\$raw);
+
 PublicInbox::Watch->new($cfg)->scan('full');
 my $ibx = $cfg->lookup_name('test');
 ok($ibx, 'found inbox by name');

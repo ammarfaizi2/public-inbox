@@ -7,9 +7,9 @@ use PublicInbox::Eml;
 my @use = qw(HTTP::Request::Common Plack::Test);
 my @req = qw(URI::Escape DBD::SQLite);
 require_git v2.6;
-require_mods(@use, @req, qw(PublicInbox::WWW PublicInbox::Config));
+require_mods(@use, @req, qw(PublicInbox::WWW));
 $_->import for @use;
-my $cfg = '';
+my $cfgtxt = '';
 foreach my $i (1..2) {
 	my $ibx = create_inbox "test-$i", version => 2, indexlevel => 'basic',
 	sub {
@@ -24,13 +24,15 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 hello world
 EOF
 	};
-	my $cfgpfx = "publicinbox.test-$i";
-	$cfg .= "$cfgpfx.address=$ibx->{-primary_address}\n";
-	$cfg .= "$cfgpfx.inboxdir=$ibx->{inboxdir}\n";
-	$cfg .= "$cfgpfx.url=http://example.com/$i\n";
-
+	$cfgtxt .= <<EOM;
+[publicinbox "test-$i"]
+	address = $ibx->{-primary_address}
+	inboxdir = $ibx->{inboxdir}
+	url = http://example.com/$i
+EOM
 }
-my $www = PublicInbox::WWW->new(PublicInbox::Config->new(\$cfg));
+my $tmpdir = tmpdir;
+my $www = PublicInbox::WWW->new(cfg_new($tmpdir, $cfgtxt));
 
 test_psgi(sub { $www->call(@_) }, sub {
 	my ($cb) = @_;

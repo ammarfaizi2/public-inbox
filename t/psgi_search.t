@@ -1,12 +1,10 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use IO::Uncompress::Gunzip qw(gunzip);
 use PublicInbox::Eml;
-use PublicInbox::Config;
 use PublicInbox::Inbox;
 my @mods = qw(DBD::SQLite Xapian HTTP::Request::Common Plack::Test
 		URI::Escape Plack::Builder);
@@ -53,10 +51,10 @@ To: git@vger.kernel.org
 EOF
 };
 
-my $cfgpfx = "publicinbox.test";
-my $cfg = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=git\@vger.kernel.org
-$cfgpfx.inboxdir=$ibx->{inboxdir}
+my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = git\@vger.kernel.org
+	inboxdir = $ibx->{inboxdir}
 EOF
 my $www = PublicInbox::WWW->new($cfg);
 test_psgi(sub { $www->call(@_) }, sub {

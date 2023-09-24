@@ -82,28 +82,30 @@ EOM
 
 
 {
-	my $cfgpfx = "publicinbox.test";
 	my @altid = qw(serial:gmane:file=a serial:enamg:file=b);
-	my $config = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=test\@example.com
-$cfgpfx.mainrepo=/path/to/non/existent
-$cfgpfx.altid=serial:gmane:file=a
-$cfgpfx.altid=serial:enamg:file=b
+	my $config = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+	altid=serial:gmane:file=a
+	altid=serial:enamg:file=b
 EOF
 	my $ibx = $config->lookup_name('test');
 	is_deeply($ibx->{altid}, [ @altid ]);
 
-	$config = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=test\@example.com
-$cfgpfx.mainrepo=/path/to/non/existent
+	$config = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
 EOF
 	$ibx = $config->lookup_name('test');
 	is($ibx->{inboxdir}, '/path/to/non/existent', 'mainrepo still works');
 
-	$config = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=test\@example.com
-$cfgpfx.inboxdir=/path/to/non/existent
-$cfgpfx.mainrepo=/path/to/deprecated
+	$config = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+	mainrepo = /path/to/deprecated
 EOF
 	$ibx = $config->lookup_name('test');
 	is($ibx->{inboxdir}, '/path/to/non/existent',
@@ -111,28 +113,29 @@ EOF
 }
 
 {
-	my $pfx = "publicinbox.test";
-	my $str = <<EOF;
-$pfx.address=test\@example.com
-$pfx.inboxdir=/path/to/non/existent
-$pfx.newsgroup=inbox.test
-publicinbox.nntpserver=news.example.com
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+	newsgroup = inbox.test
+[publicinbox]
+	nntpserver = news.example.com
 EOF
-	my $cfg = PublicInbox::Config->new(\$str);
 	my $ibx = $cfg->lookup_name('test');
 	is_deeply($ibx->nntp_url({ www => { pi_cfg => $cfg }}),
 		[ 'nntp://news.example.com/inbox.test' ],
 		'nntp_url uses global NNTP server');
 
-	$str = <<EOF;
-$pfx.address=test\@example.com
-$pfx.inboxdir=/path/to/non/existent
-$pfx.newsgroup=inbox.test
-$pfx.nntpserver=news.alt.example.com
-publicinbox.nntpserver=news.example.com
-publicinbox.imapserver=imaps://mail.example.com
+	$cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+	newsgroup = inbox.test
+	nntpserver = news.alt.example.com
+[publicinbox]
+	nntpserver = news.example.com
+	imapserver = imaps://mail.example.com
 EOF
-	$cfg = PublicInbox::Config->new(\$str);
 	$ibx = $cfg->lookup_name('test');
 	is_deeply($ibx->nntp_url({ www => { pi_cfg => $cfg }}),
 		[ 'nntp://news.alt.example.com/inbox.test' ],
@@ -144,17 +147,18 @@ EOF
 
 # no obfuscate domains
 {
-	my $pfx = "publicinbox.test";
-	my $pfx2 = "publicinbox.foo";
-	my $str = <<EOF;
-$pfx.address=test\@example.com
-$pfx.inboxdir=/path/to/non/existent
-$pfx2.address=foo\@example.com
-$pfx2.inboxdir=/path/to/foo
-publicinbox.noobfuscate=public-inbox.org \@example.com z\@EXAMPLE.com
-$pfx.obfuscate=true
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+[publicinbox "foo"]
+	address = foo\@example.com
+	inboxdir = /path/to/foo
+[publicinbox]
+	noobfuscate = public-inbox.org \@example.com z\@EXAMPLE.com
+[publicinbox "test"]
+	obfuscate = true
 EOF
-	my $cfg = PublicInbox::Config->new(\$str);
 	my $ibx = $cfg->lookup_name('test');
 	my $re = $ibx->{-no_obfuscate_re};
 	like('meta@public-inbox.org', $re,
@@ -226,20 +230,21 @@ for my $s (@valid) {
 }
 
 {
-	my $pfx1 = "publicinbox.test1";
-	my $pfx2 = "publicinbox.test2";
-	my $str = <<EOF;
-$pfx1.address=test\@example.com
-$pfx1.inboxdir=/path/to/non/existent
-$pfx2.address=foo\@example.com
-$pfx2.inboxdir=/path/to/foo
-$pfx1.coderepo=project
-$pfx2.coderepo=project
-coderepo.project.dir=/path/to/project.git
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test1"]
+	address = test\@example.com
+	inboxdir = /path/to/non/existent
+	coderepo = project
+[publicinbox "test2"]
+	address = foo\@example.com
+	inboxdir = /path/to/foo
+	coderepo = project
+[coderepo "project"]
+	dir = /path/to/project.git
 EOF
-	my $cfg = PublicInbox::Config->new(\$str);
 	my $t1 = $cfg->lookup_name('test1');
 	my $t2 = $cfg->lookup_name('test2');
+	ok $cfg->repo_objs($t1)->[0], 'coderepo parsed';
 	is($cfg->repo_objs($t1)->[0], $cfg->repo_objs($t2)->[0],
 		'inboxes share ::Git object');
 }
@@ -263,16 +268,11 @@ EOF
 
 SKIP: {
 	# XXX wildcard match requires git 2.26+
-	require_git('1.8.5', 2);
-	my $f = "$tmpdir/urlmatch";
-	open my $fh, '>', $f or BAIL_OUT $!;
-	print $fh <<EOF or BAIL_OUT $!;
+	require_git v1.8.5, 2;
+	my $cfg = cfg_new $tmpdir, <<EOF;
 [imap "imap://mail.example.com"]
 	pollInterval = 9
 EOF
-	close $fh or BAIL_OUT;
-	local $ENV{PI_CONFIG} = $f;
-	my $cfg = PublicInbox::Config->new;
 	my $url = 'imap://mail.example.com/INBOX';
 	is($cfg->urlmatch('imap.pollInterval', $url), 9, 'urlmatch hit');
 	is($cfg->urlmatch('imap.idleInterval', $url), undef, 'urlmatch miss');

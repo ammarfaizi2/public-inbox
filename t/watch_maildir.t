@@ -4,7 +4,6 @@
 use v5.12;
 use PublicInbox::Eml;
 use Cwd;
-use PublicInbox::Config;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 my ($tmpdir, $for_destroy) = tmpdir();
@@ -13,7 +12,6 @@ my $maildir = "$tmpdir/md";
 my $spamdir = "$tmpdir/spam";
 use_ok 'PublicInbox::Watch';
 use_ok 'PublicInbox::Emergency';
-my $cfgpfx = "publicinbox.test";
 my $addr = 'test-public@example.com';
 my $default_branch = PublicInbox::Import::default_branch;
 PublicInbox::Import::init_bare($git_dir);
@@ -35,11 +33,13 @@ my $sem = PublicInbox::Emergency->new($spamdir); # create dirs
 {
 	my @w;
 	local $SIG{__WARN__} = sub { push @w, @_ };
-	my $cfg = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=$addr
-$cfgpfx.inboxdir=$git_dir
-$cfgpfx.watch=maildir:$spamdir
-publicinboxlearn.watchspam=maildir:$spamdir
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = $addr
+	inboxdir = $git_dir
+	watch = maildir:$spamdir
+[publicinboxlearn]
+	watchspam = maildir:$spamdir
 EOF
 	my $wm = PublicInbox::Watch->new($cfg);
 	is(scalar grep(/is a spam folder/, @w), 1, 'got warning about spam');
@@ -47,10 +47,7 @@ EOF
 		'only got the spam folder to watch');
 }
 
-my $cfg_path = "$tmpdir/config";
-{
-	open my $fh, '>', $cfg_path or BAIL_OUT $!;
-	print $fh <<EOF or BAIL_OUT $!;
+my $cfg = cfg_new $tmpdir, <<EOF;
 [publicinbox "test"]
 	address = $addr
 	inboxdir = $git_dir
@@ -59,10 +56,7 @@ my $cfg_path = "$tmpdir/config";
 [publicinboxlearn]
 	watchspam = maildir:$spamdir
 EOF
-	close $fh or BAIL_OUT $!;
-}
-
-my $cfg = PublicInbox::Config->new($cfg_path);
+my $cfg_path = $cfg->{-f};
 PublicInbox::Watch->new($cfg)->scan('full');
 my $git = PublicInbox::Git->new($git_dir);
 my @list = $git->qx('rev-list', $default_branch);

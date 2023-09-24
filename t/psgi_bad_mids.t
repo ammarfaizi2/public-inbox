@@ -1,11 +1,9 @@
 #!perl -w
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-use PublicInbox::Config;
 my @mods = qw(DBD::SQLite HTTP::Request::Common Plack::Test
 		URI::Escape Plack::Builder);
 require_git 2.6;
@@ -37,12 +35,12 @@ Date: Fri, 02 Oct 1993 00:00:0$i +0000
 	}
 };
 
-my $cfgpfx = "publicinbox.bad-mids";
-my $cfg = <<EOF;
-$cfgpfx.address=$ibx->{-primary_address}
-$cfgpfx.inboxdir=$ibx->{inboxdir}
-EOF
-my $config = PublicInbox::Config->new(\$cfg);
+my $tmpdir = tmpdir;
+my $config = cfg_new $tmpdir, <<EOM;
+[publicinbox "bad-mids"]
+	address = $ibx->{-primary_address}
+	inboxdir = $ibx->{inboxdir}
+EOM
 my $www = PublicInbox::WWW->new($config);
 test_psgi(sub { $www->call(@_) }, sub {
 	my ($cb) = @_;

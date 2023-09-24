@@ -26,7 +26,7 @@ BEGIN {
 		create_coderepo no_scm_rights
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
-		ignore_inline_c_missing no_pollerfd no_coredump);
+		ignore_inline_c_missing no_pollerfd no_coredump cfg_new);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -46,11 +46,9 @@ sub eml_load ($) {
 sub tmpdir (;$) {
 	my ($base) = @_;
 	require File::Temp;
-	unless (defined $base) {
-		($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
-	}
+	($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!) unless defined $base;
 	my $tmpdir = File::Temp->newdir("pi-$base-$$-XXXX", TMPDIR => 1);
-	($tmpdir->dirname, $tmpdir);
+	wantarray ? ($tmpdir->dirname, $tmpdir) : $tmpdir;
 }
 
 sub tcp_server () {
@@ -894,6 +892,18 @@ sub no_pollerfd ($) {
 		is(grep(/$re/, @of), 0, "no $re FDs") or diag explain(\@of);
 	}
 }
+
+sub cfg_new ($;@) {
+	my ($tmpdir, @body) = @_;
+	use autodie;
+	require PublicInbox::Config;
+	my $f = "$tmpdir/tmp_cfg";
+	open my $fh, '>', $f;
+	print $fh @body;
+	close $fh;
+	PublicInbox::Config->new($f);
+}
+
 package PublicInbox::TestCommon::InboxWakeup;
 use strict;
 sub on_inbox_unlock { ${$_[0]}->($_[1]) }

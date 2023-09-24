@@ -1,11 +1,8 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
+use v5.12;
 use PublicInbox::TestCommon;
-use Test::More;
 use PublicInbox::Eml;
-use PublicInbox::Config;
 require_mods(qw(DBD::SQLite Xapian));
 use_ok 'PublicInbox::Watch';
 use_ok 'PublicInbox::Emergency';
@@ -25,7 +22,6 @@ SKIP: {
 for my $v (@v) {
 	my @warn;
 	local $SIG{__WARN__} = sub { push @warn, @_ };
-	my $cfgpfx = "publicinbox.$v";
 	my $inboxdir = "$tmpdir/$v";
 	my $maildir = "$tmpdir/md-$v";
 	my $spamdir = "$tmpdir/spam-$v";
@@ -60,16 +56,16 @@ Date: Sat, 05 Jan 2019 04:19:17 +0000
 spam
 EOF
 	PublicInbox::Emergency->new($maildir)->prepare(\"$spam");
-
-	my $orig = <<EOF;
-$cfgpfx.address=$addr
-$cfgpfx.inboxdir=$inboxdir
-$cfgpfx.watch=maildir:$maildir
-$cfgpfx.filter=PublicInbox::Filter::RubyLang
-$cfgpfx.altid=serial:alerts:file=msgmap.sqlite3
-publicinboxwatch.watchspam=maildir:$spamdir
-EOF
-	my $cfg = PublicInbox::Config->new(\$orig);
+	my $cfg = cfg_new $tmpdir, <<EOM;
+[publicinbox "$v"]
+	address = $addr
+	inboxdir = $inboxdir
+	watch = maildir:$maildir
+	filter = PublicInbox::Filter::RubyLang
+	altid = serial:alerts:file=msgmap.sqlite3
+[publicinboxwatch]
+	watchspam = maildir:$spamdir
+EOM
 	my $ibx = $cfg->lookup_name($v);
 	$ibx->{-no_fsync} = 1;
 	ok($ibx, 'found inbox by name');
@@ -102,7 +98,7 @@ EOF
 	# ensure orderly destruction to avoid SQLite segfault:
 	PublicInbox::DS->Reset;
 
-	$cfg = PublicInbox::Config->new(\$orig);
+	$cfg = PublicInbox::Config->new($cfg->{-f});
 	$ibx = $cfg->lookup_name($v);
 	$ibx->{-no_fsync} = 1;
 	is($ibx->search->reopen->mset('b:spam')->size, 0, 'spam removed');

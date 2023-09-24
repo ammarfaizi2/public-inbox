@@ -1,8 +1,6 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
-use Test::More;
+use v5.12;
 use PublicInbox::Eml;
 use PublicInbox::TestCommon;
 my ($tmpdir, $for_destroy) = tmpdir();
@@ -13,13 +11,12 @@ my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape Plack::Builder);
 require_mods(@mods, 'IO::Uncompress::Gunzip');
 use_ok $_ foreach @mods;
 use PublicInbox::Import;
-use PublicInbox::Git;
-use PublicInbox::Config;
 use_ok 'PublicInbox::WWW';
 use_ok 'PublicInbox::WwwText';
-my $config = PublicInbox::Config->new(\<<EOF);
-$cfgpfx.address=$addr
-$cfgpfx.inboxdir=$maindir
+my $config = cfg_new $tmpdir, <<EOF;
+[publicinbox "test"]
+	address = $addr
+	inboxdir = $maindir
 EOF
 PublicInbox::Import::init_bare($maindir);
 my $www = PublicInbox::WWW->new($config);
@@ -43,11 +40,7 @@ test_psgi(sub { $www->call(@_) }, sub {
 	$res = $cb->($req);
 	$content = $res->content;
 	my $olen = $res->header('Content-Length');
-	my $f = "$tmpdir/cfg";
-	open my $fh, '>', $f or die;
-	print $fh $content or die;
-	close $fh or die;
-	my $cfg = PublicInbox::Config->new($f);
+	my $cfg = cfg_new $tmpdir, $content;
 	is($cfg->{"$cfgpfx.address"}, $addr, 'got expected address in config');
 
 	$req->header('Accept-Encoding' => 'gzip');

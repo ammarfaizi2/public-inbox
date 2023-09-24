@@ -1,10 +1,8 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
-use PublicInbox::Config;
 require_git 2.6;
 require_mods(qw(DBD::SQLite));
 require PublicInbox::SearchIdx;
@@ -26,10 +24,11 @@ for my $V (1, 2) {
 		$sidx->idx_release; # allow watching on lockfile
 	};
 	my $obj = InboxIdleTestObj->new;
-	my $pi_cfg = PublicInbox::Config->new(\<<EOF);
-publicinbox.inbox-idle.inboxdir=$inboxdir
-publicinbox.inbox-idle.indexlevel=basic
-publicinbox.inbox-idle.address=$ibx->{-primary_address}
+	my $pi_cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "inbox-idle"]
+	inboxdir = $inboxdir
+	indexlevel = basic
+	address = $ibx->{-primary_address}
 EOF
 	my $ident = 'whatever';
 	$pi_cfg->each_inbox(sub { shift->subscribe_unlock($ident, $obj) });
