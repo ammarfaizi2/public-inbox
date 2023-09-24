@@ -1,22 +1,20 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
-use Test::More;
+use v5.12;
 use PublicInbox::TestCommon;
-use Socket qw(AF_UNIX SOCK_STREAM);
-pipe(my ($r, $w)) or BAIL_OUT;
+use autodie;
+use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET);
+pipe(my $r, my $w);
 my ($send, $recv);
 require_ok 'PublicInbox::Spawn';
-my $SOCK_SEQPACKET = eval { Socket::SOCK_SEQPACKET() } // undef;
+require POSIX;
 
 my $do_test = sub { SKIP: {
 	my ($type, $flag, $desc) = @_;
-	defined $type or skip 'SOCK_SEQPACKET missing', 7;
 	my ($s1, $s2);
 	my $src = 'some payload' x 40;
-	socketpair($s1, $s2, AF_UNIX, $type, 0) or BAIL_OUT $!;
+	socketpair($s1, $s2, AF_UNIX, $type, 0);
 	my $sfds = [ fileno($r), fileno($w), fileno($s1) ];
 	$send->($s1, $sfds, $src, $flag);
 	my (@fds) = $recv->($s2, my $buf, length($src) + 1);
@@ -37,7 +35,7 @@ my $do_test = sub { SKIP: {
 	@exp = stat $s1;
 	@cur = stat $s1a;
 	is("$exp[0]\0$exp[1]", "$cur[0]\0$cur[1]", '$s1 dev/ino matches');
-	if (defined($SOCK_SEQPACKET) && $type == $SOCK_SEQPACKET) {
+	if ($type == SOCK_SEQPACKET) {
 		$r1 = $w1 = $s1a = undef;
 		$src = (',' x 1023) . '-' .('.' x 1024);
 		$send->($s1, $sfds, $src, $flag);
@@ -52,17 +50,16 @@ my $do_test = sub { SKIP: {
 		is_deeply(\@fds, [ undef ], "EAGAIN $desc");
 		$s2->blocking(1);
 
-		if ($ENV{TEST_ALRM}) {
+		if ('test ALRM') {
 			my $alrm = 0;
 			local $SIG{ALRM} = sub { $alrm++ };
 			my $tgt = $$;
-			my $pid = fork // xbail "fork: $!";
+			my $pid = fork;
 			if ($pid == 0) {
 				# need to loop since Perl signals are racy
 				# (the interpreter doesn't self-pipe)
-				while (tick(0.01)) {
-					kill 'ALRM', $tgt;
-				}
+				CORE::kill('ALRM', $tgt) while (tick(0.05));
+				POSIX::_exit(1);
 			}
 			@fds = $recv->($s2, $buf, length($src) + 1);
 			ok($!{EINTR}, "EINTR set by ($desc)");
@@ -77,7 +74,7 @@ my $do_test = sub { SKIP: {
 		is_deeply(\@fds, [], "no FDs on EOF $desc");
 		is($buf, '', "buffer cleared on EOF ($desc)");
 
-		socketpair($s1, $s2, AF_UNIX, $type, 0) or BAIL_OUT $!;
+		socketpair($s1, $s2, AF_UNIX, $type, 0);
 		$s1->blocking(0);
 		my $nsent = 0;
 		my $srclen = length($src);
@@ -90,7 +87,7 @@ my $do_test = sub { SKIP: {
 			or diag "send failed with: $! (nsent=$nsent)";
 		ok($nsent > 0, 'sent some bytes');
 
-		socketpair($s1, $s2, AF_UNIX, $type, 0) or BAIL_OUT $!;
+		socketpair($s1, $s2, AF_UNIX, $type, 0);
 		is($send->($s1, [], $src, $flag), length($src), 'sent w/o FDs');
 		$buf = 'nope';
 		@fds = $recv->($s2, $buf, length($src));
@@ -123,7 +120,7 @@ SKIP: {
 	$send = $send_ic;
 	$recv = $recv_ic;
 	$do_test->(SOCK_STREAM, 0, 'Inline::C stream');
-	$do_test->($SOCK_SEQPACKET, 0, 'Inline::C seqpacket');
+	$do_test->(SOCK_SEQPACKET, 0, 'Inline::C seqpacket');
 }
 
 SKIP: {
@@ -132,13 +129,13 @@ SKIP: {
 	$send = PublicInbox::CmdIPC4->can('send_cmd4');
 	$recv = PublicInbox::CmdIPC4->can('recv_cmd4');
 	$do_test->(SOCK_STREAM, 0, 'MsgHdr stream');
-	$do_test->($SOCK_SEQPACKET, 0, 'MsgHdr seqpacket');
+	$do_test->(SOCK_SEQPACKET, 0, 'MsgHdr seqpacket');
 	SKIP: {
 		($send_ic && $recv_ic) or
 			skip 'Inline::C not installed/enabled', 12;
 		$recv = $recv_ic;
 		$do_test->(SOCK_STREAM, 0, 'Inline::C -> MsgHdr stream');
-		$do_test->($SOCK_SEQPACKET, 0, 'Inline::C -> MsgHdr seqpacket');
+		$do_test->(SOCK_SEQPACKET, 0, 'Inline::C -> MsgHdr seqpacket');
 	}
 }
 
@@ -150,7 +147,7 @@ SKIP: {
 	$recv = PublicInbox::Syscall->can('recv_cmd4') or
 		skip 'recv_cmd4 not defined for arch';
 	$do_test->(SOCK_STREAM, 0, 'PP Linux stream');
-	$do_test->($SOCK_SEQPACKET, 0, 'PP Linux seqpacket');
+	$do_test->(SOCK_SEQPACKET, 0, 'PP Linux seqpacket');
 }
 
 done_testing;
