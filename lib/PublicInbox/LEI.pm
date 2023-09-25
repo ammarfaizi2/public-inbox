@@ -1316,7 +1316,6 @@ sub lazy_start {
 			# closing eof_p triggers \&noop wakeup
 			$listener = $eof_p = $pil = $path = undef;
 			$lis->close; # DS::close
-			PublicInbox::DS->SetLoopTimeout(1000);
 		};
 	};
 	my $sig = {

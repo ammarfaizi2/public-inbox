@@ -209,7 +209,6 @@ sub reap_worker { # awaitpid CB
 	delete $WORKERS{$nr};
 	if (($? >> 8) == 66) { # EX_NOINPUT
 		$alive = undef;
-		PublicInbox::DS->SetLoopTimeout(1);
 	} elsif ($?) {
 		warn "worker[$nr] died \$?=$?\n";
 	}

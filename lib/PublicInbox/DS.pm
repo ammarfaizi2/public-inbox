@@ -216,12 +216,15 @@ sub await_cb ($;@) {
 sub reap_pids {
 	$reap_armed = undef;
 	while (1) {
-		my $pid = waitpid(-1, WNOHANG) // last;
-		last if $pid <= 0;
+		my $pid = waitpid(-1, WNOHANG) or return;
 		if (defined(my $cb_args = delete $AWAIT_PIDS->{$pid})) {
 			await_cb($pid, @$cb_args) if $cb_args;
-		} else {
+		} elsif ($pid == -1 && $! == ECHILD) {
+			return requeue(\&dflush); # force @post_loop_do to run
+		} elsif ($pid > 0) {
 			warn "W: reaped unknown PID=$pid: \$?=$?\n";
+		} else { # does this happen?
+			return warn("W: waitpid(-1, WNOHANG) => $pid ($!)");
 		}
 	}
 }
