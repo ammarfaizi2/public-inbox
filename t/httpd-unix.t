@@ -7,7 +7,7 @@ use PublicInbox::TestCommon;
 use Errno qw(EADDRINUSE);
 use Cwd qw(abs_path);
 use Carp qw(croak);
-use Fcntl qw(FD_CLOEXEC F_SETFD);
+use autodie qw(close);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
 use IO::Socket::UNIX;
 use POSIX qw(mkfifo);
@@ -125,11 +125,10 @@ SKIP: {
 	};
 
 	for my $w (qw(-W0 -W1)) {
-		pipe(my ($p0, $p1)) or xbail "pipe: $!";
-		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
+		my ($p0, $p1) = quit_waiter_pipe;
 		# wait for daemonization
 		$spawn_httpd->("-l$unix", '-D', '-P', $pid_file, $w);
-		close $p1 or xbail "close: $!";
+		close $p1;
 		$td->join;
 		is($?, 0, "daemonized $w process");
 		check_sock($unix);
@@ -137,13 +136,9 @@ SKIP: {
 		my $pid = $read_pid->($pid_file);
 		no_pollerfd($pid) if $w eq '-W1';
 		is(kill('TERM', $pid), 1, "signaled daemonized $w process");
-		vec(my $rvec = '', fileno($p0), 1) = 1;
 		delete $td->{-extra}; # drop tail(1) process
-		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
-		is(my $undef = <$p0>, undef, 'process closed pipe writer at exit');
+		wait_for_eof($p0, "httpd $w quit pipe");
 		ok(!-e $pid_file, "$w pid file unlinked at exit");
-		delay_until(sub { !kill(0, $pid) },
-			"daemonized $w really not running");
 	}
 
 	my $httpd = abs_path('blib/script/public-inbox-httpd');
@@ -152,11 +147,9 @@ SKIP: {
 	my @args = ("-l$unix", '-D', '-P', $pid_file, -1, $out, -2, $err);
 
 	if ('USR2 upgrades with workers') {
-		pipe(my ($p0, $p1)) or xbail "pipe: $!";
-		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
-
+		my ($p0, $p1) = quit_waiter_pipe;
 		$td = start_script([$httpd, @args, $psgi], undef, $opt);
-		close($p1) or xbail "close: $!";
+		close $p1;
 		$td->join;
 		is($?, 0, "daemonized process again");
 		check_sock($unix);
@@ -211,19 +204,14 @@ SKIP: {
 		check_sock($unix);
 		kill('QUIT', $new_pid) or die "QUIT failed: $!";
 
-		vec(my $rvec = '', fileno($p0), 1) = 1;
-		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
-		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
-
+		wait_for_eof($p0, 'new process');
 		ok(!-f $pid_file, 'PID file is gone');
-		delay_until(sub { !kill(0, $new_pid) }, 'new PID really died');
 	}
 
 	if ('try USR2 without workers (-W0)') {
-		pipe(my ($p0, $p1)) or xbail "pipe: $!";
-		fcntl($p1, F_SETFD, 0) or xbail "fcntl: $!"; # clear FD_CLOEXEC
+		my ($p0, $p1) = quit_waiter_pipe;
 		$td = start_script([$httpd, @args, '-W0', $psgi], undef, $opt);
-		close $p1 or xbail "close: $!";
+		close $p1;
 		$td->join;
 		is($?, 0, 'daemonized w/o workers');
 		$register_exit_fifo->($unix, $f1);
@@ -238,11 +226,8 @@ SKIP: {
 		$pid = $read_pid->($pid_file);
 		kill('QUIT', $pid) or xbail "USR2 failed: $!";
 
-		vec(my $rvec = '', fileno($p0), 1) = 1;
-		is(select($rvec, undef, undef, 1), 1, 'timeout for pipe HUP');
-		is(my $u = <$p0>, undef, 'process closed pipe writer at exit');
+		wait_for_eof($p0, '-W0 USR2 test pipe');
 		ok(!-f $pid_file, 'PID file is gone');
-		delay_until(sub { !kill(0, $pid) }, '-W0 daemon is gone');
 	}
 }
 

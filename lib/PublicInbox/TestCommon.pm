@@ -24,6 +24,7 @@ BEGIN {
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
 		create_coderepo no_scm_rights
+		quit_waiter_pipe wait_for_eof
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new);
@@ -632,12 +633,28 @@ sub need_scm_rights () {
 	'(mkdir -p ~/.cache/public-inbox/inline-c) OR Socket::MsgHdr missing';
 }
 
+# returns a pipe with FD_CLOEXEC disabled on the write-end
+sub quit_waiter_pipe () {
+	use autodie qw(fcntl pipe);
+	pipe(my $r, my $w);
+	fcntl($w, F_SETFD, fcntl($w, F_GETFD, 0) & ~FD_CLOEXEC);
+	($r, $w);
+}
+
+sub wait_for_eof ($$;$) {
+	my ($io, $msg, $sec) = @_;
+	vec(my $rset = '', fileno($io), 1) = 1;
+	ok(select($rset, undef, undef, $sec // 9), "$msg (select)");
+	is(my $line = <$io>, undef, "$msg EOF");
+}
+
 sub test_lei {
 SKIP: {
 	my ($cb) = pop @_;
 	my $test_opt = shift // {};
 	local $lei_cwdfh;
-	opendir $lei_cwdfh, '.' or xbail "opendir .: $!";
+	use autodie qw(mkdir open opendir);
+	opendir $lei_cwdfh, '.';
 	require_git(2.6, 1);
 	my $mods = $test_opt->{mods} // [ 'lei' ];
 	require_mods(@$mods, 2);
@@ -661,22 +678,25 @@ SKIP: {
 	my $tmpdir = $test_opt->{tmpdir};
 	File::Path::mkpath($tmpdir) if defined $tmpdir;
 	($tmpdir, $for_destroy) = tmpdir unless $tmpdir;
+	my ($dead_r, $dead_w);
 	state $persist_xrd = $ENV{TEST_LEI_DAEMON_PERSIST_DIR};
 	SKIP: {
 		$ENV{TEST_LEI_ONESHOT} and
 			xbail 'TEST_LEI_ONESHOT no longer supported';
 		my $home = "$tmpdir/lei-daemon";
-		mkdir($home, 0700) or BAIL_OUT "mkdir: $!";
+		mkdir($home, 0700);
 		local $ENV{HOME} = $home;
 		my $persist;
 		if ($persist_xrd && !$test_opt->{daemon_only}) {
 			$persist = $daemon_xrd = $persist_xrd;
 		} else {
 			$daemon_xrd = "$home/xdg_run";
-			mkdir($daemon_xrd, 0700) or BAIL_OUT "mkdir: $!";
+			mkdir($daemon_xrd, 0700);
+			($dead_r, $dead_w) = quit_waiter_pipe;
 		}
 		local $ENV{XDG_RUNTIME_DIR} = $daemon_xrd;
-		$cb->();
+		$cb->(); # likely shares $dead_w with lei-daemon
+		undef $dead_w; # so select() wakes up when daemon dies
 		if ($persist) { # remove before ~/.local gets removed
 			File::Path::rmtree([glob("$home/*")]);
 			File::Path::rmtree("$home/.config");
@@ -693,14 +713,10 @@ SKIP: {
 		}
 	}; # SKIP for lei_daemon
 	if ($daemon_pid) {
-		for (0..10) {
-			kill(0, $daemon_pid) or last;
-			tick;
-		}
-		ok(!kill(0, $daemon_pid), "$t daemon stopped");
+		wait_for_eof($dead_r, 'daemon quit pipe');
 		no_coredump $tmpdir;
 		my $f = "$daemon_xrd/lei/errors.log";
-		open my $fh, '<', $f or BAIL_OUT "$f: $!";
+		open my $fh, '<', $f;
 		my @l = <$fh>;
 		is_xdeeply(\@l, [],
 			"$t daemon XDG_RUNTIME_DIR/lei/errors.log empty");
