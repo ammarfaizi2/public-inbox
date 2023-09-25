@@ -9,7 +9,7 @@ use Socket qw(SOCK_STREAM IPPROTO_TCP SOL_SOCKET);
 require_mods(qw(-nntpd));
 require PublicInbox::InboxWritable;
 require PublicInbox::SearchIdx;
-use PublicInbox::Syscall qw(:epoll);
+use PublicInbox::Syscall;
 use PublicInbox::DS;
 my $version = 2; # v2 needs newer git
 require_git('2.6') if $version >= 2;
@@ -163,7 +163,7 @@ done_testing();
 package NNTPC;
 use v5.12;
 use parent qw(PublicInbox::DS);
-use PublicInbox::Syscall qw(EPOLLIN EPOLLOUT EPOLLONESHOT);
+use PublicInbox::Syscall qw(EPOLLOUT EPOLLONESHOT);
 use Data::Dumper;
 
 # return true if complete, false if incomplete (or failure)
