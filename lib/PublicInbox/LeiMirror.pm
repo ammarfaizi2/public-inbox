@@ -7,7 +7,7 @@ use v5.12;
 use parent qw(PublicInbox::IPC);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
-use PublicInbox::Spawn qw(popen_rd spawn run_die);
+use PublicInbox::Spawn qw(popen_rd spawn run_wait run_die);
 use File::Path ();
 use File::Temp ();
 use File::Spec ();
@@ -251,8 +251,7 @@ sub index_cloned_inbox {
 sub run_reap {
 	my ($lei, $cmd, $opt) = @_;
 	$lei->qerr("# @$cmd");
-	waitpid(spawn($cmd, undef, $opt), 0) // die "waitpid: $!";
-	my $ret = $?;
+	my $ret = run_wait($cmd, undef, $opt);
 	$? = 0; # don't let it influence normal exit
 	$ret;
 }
@@ -424,8 +423,7 @@ sub fgrp_fetch_all {
 			my $c = [ @$cmd, '--unset-all', $_ ];
 			$self->{lei}->qerr("# @$c");
 			next if $self->{dry_run};
-			my $pid = spawn($c, undef, $opt);
-			waitpid($pid, 0) // die "waitpid: $!";
+			run_wait($c, undef, $opt);
 			die "E: @$c \$?=$?" if ($? && ($? >> 8) != 5);
 		}
 

@@ -20,8 +20,9 @@ use parent qw(Exporter);
 use Symbol qw(gensym);
 use Fcntl qw(LOCK_EX SEEK_SET);
 use IO::Handle ();
+use Carp qw(croak);
 use PublicInbox::ProcessPipe;
-our @EXPORT_OK = qw(which spawn popen_rd run_die);
+our @EXPORT_OK = qw(which spawn popen_rd run_die run_wait);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
 
 BEGIN {
@@ -375,11 +376,15 @@ sub popen_rd {
 	$s;
 }
 
+sub run_wait ($;$$) {
+	my ($cmd, $env, $opt) = @_;
+	waitpid(spawn($cmd, $env, $opt), 0);
+	$?
+}
+
 sub run_die ($;$$) {
 	my ($cmd, $env, $rdr) = @_;
-	my $pid = spawn($cmd, $env, $rdr);
-	waitpid($pid, 0) == $pid or die "@$cmd did not finish";
-	$? == 0 or die "@$cmd failed: \$?=$?\n";
+	run_wait($cmd, $env, $rdr) and croak "E: @$cmd failed: \$?=$?";
 }
 
 1;

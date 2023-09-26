@@ -4,7 +4,7 @@
 # Default spam filter class for wrapping spamc(1)
 package PublicInbox::Spamcheck::Spamc;
 use v5.12;
-use PublicInbox::Spawn qw(popen_rd spawn);
+use PublicInbox::Spawn qw(popen_rd run_wait);
 use IO::Handle;
 use Fcntl qw(SEEK_SET);
 
@@ -47,9 +47,7 @@ sub _learn {
 	$rdr->{0} = _msg_to_fh($self, $msg);
 	$rdr->{1} ||= $self->_devnull;
 	$rdr->{2} ||= $self->_devnull;
-	my $pid = spawn($self->{$field}, undef, $rdr);
-	waitpid($pid, 0);
-	!$?;
+	0 == run_wait($self->{$field}, undef, $rdr);
 }
 
 sub _devnull {

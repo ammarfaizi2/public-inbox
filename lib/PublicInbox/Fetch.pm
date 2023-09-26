@@ -5,7 +5,7 @@ package PublicInbox::Fetch;
 use v5.12;
 use parent qw(PublicInbox::IPC);
 use URI ();
-use PublicInbox::Spawn qw(popen_rd run_die spawn);
+use PublicInbox::Spawn qw(popen_rd run_wait);
 use PublicInbox::Admin;
 use PublicInbox::LEI;
 use PublicInbox::LeiCurl;
@@ -133,9 +133,8 @@ sub do_fetch { # main entry point
 				warn "W: $edir missing remote.*.url\n";
 				my $o = { -C => $edir };
 				$o->{1} = $o->{2} = $lei->{2};
-				my $pid = spawn([qw(git config -l)], undef, $o);
-				waitpid($pid, 0);
-				$lei->child_error($?) if $?;
+				run_wait([qw(git config -l)], undef, $o) and
+					$lei->child_error($?);
 			}
 		}
 		@epochs = grep { !$skip->{$_} } @epochs if $skip;

@@ -18,7 +18,7 @@ use IO::Handle ();
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Config;
 use PublicInbox::Syscall qw(EPOLLIN);
-use PublicInbox::Spawn qw(spawn popen_rd);
+use PublicInbox::Spawn qw(run_wait popen_rd);
 use PublicInbox::Lock;
 use PublicInbox::Eml;
 use PublicInbox::Import;
@@ -905,8 +905,7 @@ sub _config {
 	}
 	my $cmd = $cfg->config_cmd(\%env, \%opt);
 	push @$cmd, @file_arg, @argv;
-	waitpid(spawn($cmd, \%env, \%opt), 0);
-	$? == 0 ? 1 : ($err_ok ? undef : fail($self, $?));
+	run_wait($cmd, \%env, \%opt) ? ($err_ok ? undef : fail($self, $?)) : 1;
 }
 
 sub lei_daemon_pid { puts shift, $$ }

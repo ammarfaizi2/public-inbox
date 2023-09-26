@@ -22,7 +22,7 @@ use POSIX qw(strftime);
 use Fcntl qw(SEEK_SET);
 use Time::Local qw(timegm);
 use PublicInbox::OverIdx;
-use PublicInbox::Spawn qw(spawn);
+use PublicInbox::Spawn qw(run_wait);
 use PublicInbox::Git qw(git_unquote);
 use PublicInbox::MsgTime qw(msg_timestamp msg_datestamp);
 use PublicInbox::Address;
@@ -1010,9 +1010,7 @@ sub is_ancestor ($$$) {
 	return 0 unless $git->check($cur);
 	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
 		qw(merge-base --is-ancestor), $cur, $tip ];
-	my $pid = spawn($cmd);
-	waitpid($pid, 0) == $pid or die join(' ', @$cmd) .' did not finish';
-	$? == 0;
+	run_wait($cmd) == 0;
 }
 
 sub need_update ($$$$) {

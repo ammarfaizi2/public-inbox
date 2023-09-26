@@ -367,11 +367,7 @@ sub run_script ($;$$) {
 			$cmd->[0] = File::Spec->rel2abs($cmd->[0]);
 			$spawn_opt->{'-C'} = $d;
 		}
-		my $pid = PublicInbox::Spawn::spawn($cmd, $env, $spawn_opt);
-		if (defined $pid) {
-			my $r = waitpid($pid, 0) // die "waitpid: $!";
-			$r == $pid or die "waitpid: expected $pid, got $r";
-		}
+		PublicInbox::Spawn::run_wait($cmd, $env, $spawn_opt);
 	} else { # localize and run everything in the same process:
 		# note: "local *STDIN = *STDIN;" and so forth did not work in
 		# old versions of perl

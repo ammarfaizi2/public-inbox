@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
 use File::Temp 0.19 (); # 0.19 for ->newdir
-use PublicInbox::Spawn qw(spawn which);
+use PublicInbox::Spawn qw(run_wait spawn which);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff;
 use PublicInbox::LeiBlob;
@@ -136,9 +136,8 @@ EOM
 	$lei->qerr("# git @$cmd");
 	push @$cmd, qw(A B);
 	unshift @$cmd, 'git', "--git-dir=$rw->{git_dir}";
-	$pid = spawn($cmd, $lei->{env}, { 2 => $lei->{2}, 1 => $lei->{1} });
-	waitpid($pid, 0);
-	$lei->child_error($?) if $?; # for git diff --exit-code
+	run_wait($cmd, $lei->{env}, { 2 => $lei->{2}, 1 => $lei->{1} }) and
+		$lei->child_error($?); # for git diff --exit-code
 	undef;
 }
 

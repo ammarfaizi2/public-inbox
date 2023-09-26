@@ -6,7 +6,7 @@
 package PublicInbox::LeiMailDiff;
 use v5.12;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput PublicInbox::MailDiff);
-use PublicInbox::Spawn qw(spawn which);
+use PublicInbox::Spawn qw(run_wait);
 use File::Path ();
 require PublicInbox::LeiRediff;
 
@@ -20,9 +20,7 @@ sub diff_a ($$) {
 	push @$cmd, qw(-- a), "N$self->{nr}";
 	my $rdr = { -C => "$self->{tmp}" };
 	@$rdr{1, 2} = @$lei{1, 2};
-	my $pid = spawn($cmd, $lei->{env}, $rdr);
-	waitpid($pid, 0);
-	$lei->child_error($?) if $?; # for git diff --exit-code
+	run_wait($cmd, $lei->{env}, $rdr) and $lei->child_error($?);
 	File::Path::remove_tree($self->{curdir});
 }
 

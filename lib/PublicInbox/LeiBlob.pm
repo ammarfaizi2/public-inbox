@@ -7,7 +7,7 @@ package PublicInbox::LeiBlob;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
-use PublicInbox::Spawn qw(spawn popen_rd which);
+use PublicInbox::Spawn qw(run_wait popen_rd which);
 use PublicInbox::DS;
 
 sub get_git_dir ($$) {
@@ -43,8 +43,7 @@ sub solver_user_cb { # called by solver when done
 
 	my $cmd = [ 'git', "--git-dir=$gd", 'show', $oid ];
 	my $rdr = { 1 => $lei->{1}, 2 => $lei->{2} };
-	waitpid(spawn($cmd, $lei->{env}, $rdr), 0);
-	$lei->child_error($?) if $?;
+	run_wait($cmd, $lei->{env}, $rdr) and $lei->child_error($?);
 }
 
 sub do_solve_blob { # via wq_do
@@ -125,12 +124,9 @@ sub lei_blob {
 			require PublicInbox::Eml;
 			my $buf = do { local $/; <$fh> };
 			return extract_attach($lei, $blob, \$buf) if close($fh);
-		} else {
-			$rdr->{1} = $lei->{1};
-			waitpid(spawn($cmd, $lei->{env}, $rdr), 0);
 		}
-		my $ce = $?;
-		return if $ce == 0;
+		$rdr->{1} = $lei->{1};
+		my $cerr = run_wait($cmd, $lei->{env}, $rdr) or return;
 		my $lms = $lei->lms;
 		if (my $bref = $lms ? $lms->local_blob($blob, 1) : undef) {
 			defined($lei->{-attach_idx}) and
@@ -139,7 +135,7 @@ sub lei_blob {
 		} elsif ($opt->{mail}) {
 			my $eh = $rdr->{2};
 			seek($eh, 0, 0);
-			return $lei->child_error($ce, do { local $/; <$eh> });
+			return $lei->child_error($cerr, do { local $/; <$eh> });
 		} # else: fall through to solver below
 	}
 
