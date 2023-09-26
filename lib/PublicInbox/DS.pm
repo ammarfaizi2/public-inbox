@@ -32,7 +32,7 @@ use PublicInbox::Syscall qw(%SIGNUM
 	EPOLLIN EPOLLOUT EPOLLONESHOT EPOLLEXCLUSIVE);
 use PublicInbox::Tmpfile;
 use PublicInbox::Select;
-use Errno qw(EAGAIN EINVAL ECHILD EINTR);
+use Errno qw(EAGAIN EINVAL ECHILD);
 use Carp qw(carp croak);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
@@ -713,16 +713,13 @@ sub awaitpid {
 	$AWAIT_PIDS->{$pid} = \@cb_args if @cb_args;
 	# provide synchronous API
 	if (defined(wantarray) || (!$in_loop && !@cb_args)) {
-		my $ret;
-again:
-		$ret = waitpid($pid, 0) // -2;
+		my $ret = waitpid($pid, 0);
 		if ($ret == $pid) {
 			my $cb_args = delete $AWAIT_PIDS->{$pid};
 			@cb_args = @$cb_args if !@cb_args && $cb_args;
 			await_cb($pid, @cb_args);
 		} else {
-			goto again if $! == EINTR;
-			carp "waitpid($pid): $!";
+			carp "waitpid($pid) => $ret ($!)";
 			delete $AWAIT_PIDS->{$pid};
 		}
 		return $ret;
