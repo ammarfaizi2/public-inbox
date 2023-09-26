@@ -21,10 +21,9 @@ sub get_git_dir ($$) {
 	} else { # implicit --cwd, quiet errors
 		open $opt->{2}, '>', '/dev/null' or die "open /dev/null: $!";
 	}
-	my ($r, $pid) = popen_rd($cmd, {GIT_DIR => undef}, $opt);
+	my $r = popen_rd($cmd, {GIT_DIR => undef}, $opt);
 	chomp(my $gd = do { local $/; <$r> });
-	waitpid($pid, 0) == $pid or die "BUG: waitpid @$cmd ($!)";
-	$? == 0 ? $gd : undef;
+	close($r) ? $gd : undef;
 }
 
 sub solver_user_cb { # called by solver when done
