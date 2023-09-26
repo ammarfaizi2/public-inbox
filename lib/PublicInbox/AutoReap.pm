@@ -3,8 +3,7 @@
 
 # automatically kill + reap children when this goes out-of-scope
 package PublicInbox::AutoReap;
-use v5.10.1;
-use strict;
+use v5.12;
 
 sub new {
 	my (undef, $pid, $cb) = @_;
@@ -21,8 +20,8 @@ sub join {
 	my $pid = delete $self->{pid} or return;
 	$self->{cb}->() if defined $self->{cb};
 	CORE::kill($sig, $pid) if defined $sig;
-	my $ret = waitpid($pid, 0) // die "waitpid($pid): $!";
-	$ret == $pid or die "BUG: waitpid($pid) != $ret";
+	my $r = waitpid($pid, 0);
+	$r == $pid or die "BUG? waitpid($pid) => $r (\$?=$? \$!=$!)";
 }
 
 sub DESTROY {
