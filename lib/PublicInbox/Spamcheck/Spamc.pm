@@ -21,14 +21,13 @@ sub spamcheck {
 	my ($self, $msg, $out) = @_;
 
 	my $rdr = { 0 => _msg_to_fh($self, $msg) };
-	my ($fh, $pid) = popen_rd($self->{checkcmd}, undef, $rdr);
+	my $fh = popen_rd($self->{checkcmd}, undef, $rdr);
 	unless (ref $out) {
 		my $buf = '';
 		$out = \$buf;
 	}
 	$$out = do { local $/; <$fh> };
-	close $fh or die "close failed: $!";
-	waitpid($pid, 0);
+	close $fh; # PublicInbox::ProcessPipe::CLOSE
 	($? || $$out eq '') ? 0 : 1;
 }
 
