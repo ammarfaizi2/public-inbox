@@ -131,8 +131,9 @@ sub do_fetch { # main entry point
 				$epoch = $nr;
 			} else {
 				warn "W: $edir missing remote.*.url\n";
-				my $pid = spawn([qw(git config -l)], undef,
-					{ 1 => $lei->{2}, 2 => $lei->{2} });
+				my $o = { -C => $edir };
+				$o->{1} = $o->{2} = $lei->{2};
+				my $pid = spawn([qw(git config -l)], undef, $o);
 				waitpid($pid, 0);
 				$lei->child_error($?) if $?;
 			}
