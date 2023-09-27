@@ -1,10 +1,10 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# reader for mbox variants we support
+# reader for mbox variants we support (and also sets up commands for writing)
 package PublicInbox::MboxReader;
 use strict;
-use v5.10.1;
+use v5.10.1; # check regexps before v5.12
 use Data::Dumper;
 $Data::Dumper::Useqq = 1; # should've been the default, for bad data
 
@@ -141,10 +141,9 @@ sub reads {
 
 # all of these support -c for stdout and -d for decompression,
 # mutt is commonly distributed with hooks for gz, bz2 and xz, at least
-# { foo => '' } means "--foo" is passed to the command-line,
-# otherwise { foo => '--bar' } passes "--bar"
+# { foo => '' } means "--foo" is passed to the command-line
 my %zsfx2cmd = (
-	gz => [ qw(GZIP pigz gzip) ],
+	gz => [ qw(GZIP pigz gzip), { rsyncable => '' } ],
 	bz2 => [ 'bzip2', {} ],
 	xz => [ 'xz', {} ],
 	# don't add new entries here unless MUA support is widely available
@@ -173,28 +172,9 @@ sub zsfx2cmd ($$$) {
 	}
 	$cmd[0] // die join(' or ', @info)." missing for .$zsfx";
 
-	# not all gzip support --rsyncable, FreeBSD gzip doesn't even exit
-	# with an error code
-	if (!$decompress && $cmd[0] =~ m!/gzip\z! && !defined($cmd_opt)) {
-		pipe(my ($r, $w)) or die "pipe: $!";
-		open my $null, '+>', '/dev/null' or die "open: $!";
-		my $rdr = { 0 => $null, 1 => $null, 2 => $w };
-		my $tst = [ $cmd[0], '--rsyncable' ];
-		my $pid = PublicInbox::Spawn::spawn($tst, undef, $rdr);
-		close $w;
-		my $err = do { local $/; <$r> };
-		waitpid($pid, 0) == $pid or die "BUG: waitpid: $!";
-		$cmd_opt = $err ? {} : { rsyncable => '' };
-		push(@$x, $cmd_opt);
-	}
-	for my $bool (keys %$cmd_opt) {
-		my $switch = $cmd_opt->{$bool} // next;
-		push @cmd, '--'.($switch || $bool);
-	}
-	for my $key (qw(rsyncable)) { # support compression level?
-		my $switch = $cmd_opt->{$key} // next;
-		my $val = $lei->{opt}->{$key} // next;
-		push @cmd, $switch, $val;
+	# only for --rsyncable.  TODO: support compression level?
+	for my $key (keys %$cmd_opt) {
+		push @cmd, '--'.$key if $lei->{opt}->{$key};
 	}
 	\@cmd;
 }

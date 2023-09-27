@@ -275,7 +275,8 @@ our %CMD = ( # sorted in order of importance/use:
 	qw(all:s mode=s), @net_opt, @c_opt ],
 'convert' => [ 'LOCATION...|--stdin',
 	'one-time conversion from URL or filesystem to another format',
-	qw(stdin| in-format|F=s out-format|f=s output|mfolder|o=s lock=s@ kw!),
+	qw(stdin| in-format|F=s out-format|f=s output|mfolder|o=s lock=s@ kw!
+		rsyncable),
 	@net_opt, @c_opt ],
 'p2q' => [ 'LOCATION_OR_COMMIT...|--stdin',
 	"use a patch to generate a query for `lei q --stdin'",

@@ -1,12 +1,13 @@
 #!perl -w
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::MboxReader;
 use PublicInbox::MdirReader;
 use PublicInbox::NetReader;
 use PublicInbox::Eml;
 use IO::Uncompress::Gunzip;
+use autodie qw(open);
 require_mods(qw(lei -imapd -nntpd Mail::IMAPClient Net::NNTP));
 my ($tmpdir, $for_destroy) = tmpdir;
 my $sock = tcp_server;
@@ -125,5 +126,27 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	like($md[0], qr/:2,S\z/, "`seen' flag set in Maildir");
 	lei_ok(qw(convert -o mboxrd:/dev/stdout), "$d/md2");
 	like($lei_out, qr/^Status: RO/sm, "`seen' flag preserved");
+
+	SKIP: {
+		my $ok;
+		for my $x (($ENV{GZIP}//''), qw(pigz gzip)) {
+			$x && `$x -h 2>&1` =~ /--rsyncable\b/s or next;
+			$ok = $x;
+			last;
+		}
+		skip 'pigz || gzip do not support --rsyncable' if !$ok;
+		lei_ok qw(convert --rsyncable), "mboxrd:$d/qp.gz",
+			'-o', "mboxcl2:$d/qp2.gz";
+		undef $fh; # necessary to make IO::Uncompress::Gunzip happy
+		open $fh, '<', "$d/qp2.gz";
+		$fh = IO::Uncompress::Gunzip->new($fh, MultiStream => 1);
+		my @tmp;
+		PublicInbox::MboxReader->mboxcl2($fh, sub {
+			my ($eml) = @_;
+			$eml->header_set($_) for qw(Content-Length Lines);
+			push @tmp, $eml;
+		});
+		is_deeply(\@tmp, \@bar, 'read rsyncable-gzipped mboxcl2');
+	}
 });
 done_testing;

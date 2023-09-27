@@ -155,7 +155,7 @@ sub reap_compress { # awaitpid callback
 	$lei->fail($?, "@$cmd failed") if $?;
 }
 
-sub _post_augment_mbox { # open a compressor process from top-level process
+sub _post_augment_mbox { # open a compressor process from top-level lei-daemon
 	my ($self, $lei) = @_;
 	my $zsfx = $self->{zsfx} or return;
 	my $cmd = PublicInbox::MboxReader::zsfx2cmd($zsfx, undef, $lei);
