@@ -117,7 +117,7 @@ $clone may not be valid after migrating to v2, not copying
 }
 my $state = '';
 my $head = $old->{ref_head} || 'HEAD';
-my ($rd, $pid) = $old->git->popen(qw(fast-export --use-done-feature), $head);
+my $rd = $old->git->popen(qw(fast-export --use-done-feature), $head);
 $v2w->idx_init($opt);
 my $im = $v2w->importer;
 my ($r, $w) = $im->gfi_start;
@@ -164,9 +164,7 @@ while (<$rd>) {
 	last if $_ eq "done\n";
 	print $w $_ or $im->wfail;
 }
-close $rd or die "close fast-export: $!\n";
-waitpid($pid, 0) or die "waitpid failed: $!\n";
-$? == 0 or die "fast-export failed: $?\n";
+close $rd or die "fast-export: \$?=$? \$!=$!\n";
 $r = $w = undef; # v2w->done does the actual close and error checking
 $v2w->done;
 if (my $old_mm = $old->mm) {
