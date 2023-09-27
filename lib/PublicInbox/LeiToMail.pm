@@ -9,7 +9,6 @@ use parent qw(PublicInbox::IPC);
 use PublicInbox::Eml;
 use PublicInbox::ProcessPipe;
 use PublicInbox::Spawn qw(spawn);
-use Symbol qw(gensym);
 use IO::Handle; # ->autoflush
 use Fcntl qw(SEEK_SET SEEK_END O_CREAT O_EXCL O_WRONLY);
 use PublicInbox::Syscall qw(rename_noreplace);
@@ -163,10 +162,8 @@ sub _post_augment_mbox { # open a compressor process from top-level process
 	my ($r, $w) = @{delete $lei->{zpipe}};
 	my $rdr = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2}, pgid => 0 };
 	my $pid = spawn($cmd, undef, $rdr);
-	my $pp = gensym;
-	tie *$pp, 'PublicInbox::ProcessPipe', $pid, $w,
-			\&reap_compress, $lei, $cmd, $lei->{1};
-	$lei->{1} = $pp;
+	$lei->{1} = PublicInbox::ProcessPipe->maybe_new($pid, $w, {
+			cb_arg => [\&reap_compress, $lei, $cmd, $lei->{1} ] });
 }
 
 # --augment existing output destination, with deduplication

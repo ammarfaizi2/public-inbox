@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # The "lei rediff" sub-command, regenerates diffs with new options
@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
 use File::Temp 0.19 (); # 0.19 for ->newdir
-use PublicInbox::Spawn qw(run_wait spawn which);
+use PublicInbox::Spawn qw(run_wait popen_wr which);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff;
 use PublicInbox::LeiBlob;
@@ -121,15 +121,11 @@ EOM
 		close $fh or die "close $f: $!";
 		$rw = PublicInbox::Git->new($d);
 	}
-	pipe(my ($r, $w)) or die "pipe: $!";
-	my $pid = spawn(['git', "--git-dir=$rw->{git_dir}",
+	my $w = popen_wr(['git', "--git-dir=$rw->{git_dir}",
 			qw(fast-import --quiet --done --date-format=raw)],
-			$lei->{env}, { 2 => $lei->{2}, 0 => $r });
-	close $r or die "close r fast-import: $!";
+			$lei->{env}, { 2 => $lei->{2} });
 	print $w $ta, "\n", $tb, "\ndone\n" or die "print fast-import: $!";
-	close $w or die "close w fast-import: $!";
-	waitpid($pid, 0);
-	die "fast-import failed: \$?=$?" if $?;
+	close $w or die "close w fast-import: \$?=$? \$!=$!";
 
 	my $cmd = [ 'diff' ];
 	_lei_diff_prepare($lei, $cmd);
@@ -141,7 +137,7 @@ EOM
 	undef;
 }
 
-sub wait_requote ($$$) { # OnDestroy callback
+sub wait_requote { # OnDestroy callback
 	my ($lei, $pid, $old_1) = @_;
 	$lei->{1} = $old_1; # closes stdin of `perl -pE 's/^/> /'`
 	waitpid($pid, 0) == $pid or die "BUG(?) waitpid: \$!=$! \$?=$?";
@@ -150,13 +146,12 @@ sub wait_requote ($$$) { # OnDestroy callback
 
 sub requote ($$) {
 	my ($lei, $pfx) = @_;
-	pipe(my($r, $w)) or die "pipe: $!";
-	my $rdr = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2} };
-	# $^X (perl) is overkill, but maybe there's a weird system w/o sed
-	my $pid = spawn([$^X, '-pE', "s/^/$pfx/"], $lei->{env}, $rdr);
 	my $old_1 = $lei->{1};
+	my $opt = { 1 => $old_1, 2 => $lei->{2} };
+	# $^X (perl) is overkill, but maybe there's a weird system w/o sed
+	my ($w, $pid) = popen_wr([$^X, '-pE', "s/^/$pfx/"], $lei->{env}, $opt);
 	$w->autoflush(1);
-	binmode $w, ':utf8';
+	binmode $w, ':utf8'; # incompatible with ProcessPipe due to syswrite
 	$lei->{1} = $w;
 	PublicInbox::OnDestroy->new(\&wait_requote, $lei, $pid, $old_1);
 }

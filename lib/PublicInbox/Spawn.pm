@@ -17,12 +17,11 @@
 package PublicInbox::Spawn;
 use v5.12;
 use parent qw(Exporter);
-use Symbol qw(gensym);
 use Fcntl qw(LOCK_EX SEEK_SET);
 use IO::Handle ();
 use Carp qw(croak);
 use PublicInbox::ProcessPipe;
-our @EXPORT_OK = qw(which spawn popen_rd run_die run_wait);
+our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
 
 BEGIN {
@@ -332,7 +331,6 @@ sub spawn ($;$$) {
 	my ($cmd, $env, $opts) = @_;
 	my $f = which($cmd->[0]) // die "$cmd->[0]: command not found\n";
 	my @env;
-	$opts ||= {};
 	my %env = (%ENV, $env ? %$env : ());
 	while (my ($k, $v) = each %env) {
 		push @env, "$k=$v" if defined($v);
@@ -366,14 +364,14 @@ sub spawn ($;$$) {
 
 sub popen_rd {
 	my ($cmd, $env, $opt) = @_;
-	pipe(my ($r, $w)) or die "pipe: $!\n";
-	$opt ||= {};
-	$opt->{1} = fileno($w);
-	my $pid = spawn($cmd, $env, $opt);
-	return ($r, $pid) if wantarray;
-	my $s = gensym;
-	tie *$s, 'PublicInbox::ProcessPipe', $pid, $r, @{$opt->{cb_arg} // []};
-	$s;
+	pipe(my $r, local $opt->{1}) or die "pipe: $!\n";
+	PublicInbox::ProcessPipe->maybe_new(spawn($cmd, $env, $opt), $r, $opt)
+}
+
+sub popen_wr {
+	my ($cmd, $env, $opt) = @_;
+	pipe(local $opt->{0}, my $w) or die "pipe: $!\n";
+	PublicInbox::ProcessPipe->maybe_new(spawn($cmd, $env, $opt), $w, $opt)
 }
 
 sub run_wait ($;$$) {

@@ -8,6 +8,15 @@
 package PublicInbox::ProcessPipe;
 use v5.12;
 use PublicInbox::DS qw(awaitpid);
+use Symbol qw(gensym);
+
+sub maybe_new {
+	my ($cls, $pid, $fh, $opt) = @_;
+	return ($fh, $pid) if wantarray;
+	my $s = gensym;
+	tie *$s, $cls, $pid, $fh, @{$opt->{cb_arg} // []};
+	$s;
+}
 
 sub waitcb { # awaitpid callback
 	my ($pid, $err_ref, $cb, @args) = @_;
