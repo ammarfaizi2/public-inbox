@@ -8,6 +8,8 @@ my ($dir, $for_destroy) = tmpdir();
 use PublicInbox::Import;
 use POSIX qw(strftime);
 use PublicInbox::Git;
+is(PublicInbox::Git::MAX_INFLIGHT,
+	int(PublicInbox::Git::MAX_INFLIGHT), 'MAX_INFLIGHT is an integer');
 
 {
 	PublicInbox::Import::init_bare($dir, 'master');

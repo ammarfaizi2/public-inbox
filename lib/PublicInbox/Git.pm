@@ -35,10 +35,10 @@ my @MODIFIED_DATE = qw[for-each-ref --sort=-committerdate
 			--format=%(committerdate:raw) --count=1];
 
 # 512: POSIX PIPE_BUF minimum (see pipe(7))
-# 3: @$inflight is flattened [ $OID, $cb, $arg ]
 # 65: SHA-256 hex size + "\n" in preparation for git using non-SHA1
+# 3: @$inflight is flattened [ $OID, $cb, $arg ]
 use constant {
-	MAX_INFLIGHT => 512 * 3 / (65 + length('contents ')),
+	MAX_INFLIGHT => int(512 / (65 + length('contents '))) * 3,
 	BATCH_CMD_VER => v2.36.0, # git 2.36+
 };
 
