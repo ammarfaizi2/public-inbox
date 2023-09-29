@@ -136,24 +136,20 @@ sub object_format {
 
 sub last_check_err {
 	my ($self) = @_;
-	my $fh = $self->{err_c} or return;
-	sysseek($fh, 0, 0) or $self->fail("sysseek failed: $!");
-	defined(sysread($fh, my $buf, -s $fh)) or
-			$self->fail("sysread failed: $!");
+	my $fh = $self->{err_c} or return '';
+	sysseek($fh, 0, 0) or $self->fail("sysseek: $!");
+	my $size = -s $fh or return '';
+	sysread($fh, my $buf, $size) // $self->fail("sysread: $!");
+	truncate($fh, 0) or $self->fail("truncate: $!");
 	$buf;
 }
 
 sub _bidi_pipe {
 	my ($self, $batch, $in, $out, $pid, $err) = @_;
-	if ($self->{$pid}) {
-		if (defined $err) { # "err_c"
-			my $fh = $self->{$err};
-			sysseek($fh, 0, 0) or $self->fail("sysseek failed: $!");
-			truncate($fh, 0) or $self->fail("truncate failed: $!");
-		}
+	if (defined $self->{$pid}) {
+		Carp::cluck("BUG: self->{$pid} exists unexpectedly");
 		return;
 	}
-
 	pipe(my ($out_r, $out_w)) or $self->fail("pipe failed: $!");
 	my $rdr = { 0 => $out_r, pgid => 0 };
 	my $gd = $self->{git_dir};
@@ -169,9 +165,8 @@ sub _bidi_pipe {
 			'cat-file', "--$batch");
 	if ($err) {
 		my $id = "git.$self->{git_dir}.$batch.err";
-		my $fh = tmpfile($id) or $self->fail("tmpfile($id): $!");
-		$self->{$err} = $fh;
-		$rdr->{2} = $fh;
+		$self->{$err} = $rdr->{2} = tmpfile($id, undef, 1) or
+						$self->fail("tmpfile($id): $!");
 	}
 	# see lib/PublicInbox/ProcessPipe.pm for why we don't use that here
 	my ($in_r, $p) = popen_rd(\@cmd, undef, $rdr);
