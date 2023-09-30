@@ -223,25 +223,21 @@ sub my_readline ($$) {
 }
 
 sub cat_async_retry ($$) {
-	my ($self, $inflight) = @_;
+	my ($self, $old_inflight) = @_;
 
 	# {inflight} may be non-existent, but if it isn't we delete it
 	# here to prevent cleanup() from waiting:
 	delete $self->{inflight};
 	cleanup($self);
+	batch_prepare($self, my $new_inflight = []);
 
-	batch_prepare($self, $inflight);
-	my $buf = '';
-	for (my $i = 0; $i < @$inflight; $i += 3) {
-		$buf .= "$inflight->[$i]\n";
+	while (my ($oid, $cb, $arg) = splice(@$old_inflight, 0, 3)) {
+		write_all($self, $self->{out}, $oid."\n",
+				\&cat_async_step, $new_inflight);
+		$oid = \$oid if !@$new_inflight; # to indicate oid retried
+		push @$new_inflight, $oid, $cb, $arg;
 	}
-	$self->{out}->blocking(1); # brand new pipe, should never block
-	print { $self->{out} } $buf or $self->fail("write error: $!");
-	$self->{out}->blocking(0);
-	my $req = shift @$inflight;
-	unshift(@$inflight, \$req); # \$ref to indicate retried
-
-	cat_async_step($self, $inflight); # take one step
+	cat_async_step($self, $new_inflight); # take one step
 }
 
 # returns true if prefetch is successful
