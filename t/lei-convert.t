@@ -132,7 +132,7 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	SKIP: {
 		my $ok;
 		for my $x (($ENV{GZIP}//''), qw(pigz gzip)) {
-			$x && `$x -h 2>&1` =~ /--rsyncable\b/s or next;
+			$x && (`$x -h 2>&1`//'') =~ /--rsyncable\b/s or next;
 			$ok = $x;
 			last;
 		}
