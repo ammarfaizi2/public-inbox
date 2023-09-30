@@ -33,9 +33,11 @@ sub misc {
 # same as per-inbox ->over, for now...
 sub over {
 	my ($self) = @_;
-	$self->{over} //= do {
+	$self->{over} // eval {
 		PublicInbox::Inbox::_cleanup_later($self);
-		PublicInbox::Over->new("$self->{xpfx}/over.sqlite3");
+		my $over = PublicInbox::Over->new("$self->{xpfx}/over.sqlite3");
+		$over->dbh; # may die
+		$self->{over} = $over;
 	};
 }
 

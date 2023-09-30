@@ -7,6 +7,8 @@ use PublicInbox::MdirReader;
 use PublicInbox::NetReader;
 use PublicInbox::Eml;
 use IO::Uncompress::Gunzip;
+use File::Path qw(remove_tree);
+use PublicInbox::Spawn qw(which);
 use autodie qw(open);
 require_mods(qw(lei -imapd -nntpd Mail::IMAPClient Net::NNTP));
 my ($tmpdir, $for_destroy) = tmpdir;
@@ -147,6 +149,44 @@ test_lei({ tmpdir => $tmpdir }, sub {
 			push @tmp, $eml;
 		});
 		is_deeply(\@tmp, \@bar, 'read rsyncable-gzipped mboxcl2');
+	}
+	my $cp = which('cp') or xbail 'cp(1) not available (WTF?)';
+	for my $v (1, 2) {
+		my $ibx_dir = "$ro_home/t$v";
+		lei_ok qw(convert -f mboxrd), $ibx_dir,
+				\"dump v$v inbox to mboxrd";
+		my $out = $lei_out;
+		lei_ok qw(convert -f mboxrd), "v$v:$ibx_dir",
+				\"dump v$v inbox to mboxrd w/ v$v:// prefix";
+		is $out, $lei_out, "v$v:// prefix accepted";
+		open my $fh, '<', \$out;
+		my (@mb, @md, @md2);
+		PublicInbox::MboxReader->mboxrd($fh, sub {
+			$_[0]->header_set('Status');
+			push @mb, $_[0]->as_string;
+		});
+		undef $out;
+		ok(scalar(@mb), 'got messages output');
+		my $mdir = "$d/v$v-mdir";
+		lei_ok qw(convert -o), $mdir, $ibx_dir,
+			\"dump v$v inbox to Maildir";
+		PublicInbox::MdirReader->new->maildir_each_eml($mdir, sub {
+			push @md, $_[2]->as_string;
+		});
+		@md = sort { $a cmp $b } @md;
+		@mb = sort { $a cmp $b } @mb;
+		is_deeply(\@mb, \@md, 'got matching inboxes');
+		xsys_e([$cp, '-Rp', $ibx_dir, "$d/tv$v" ]);
+		remove_tree($mdir, "$d/tv$v/public-inbox",
+				glob("$d/tv$v/xap*"));
+
+		lei_ok qw(convert -o), $mdir, "$d/tv$v",
+			\"dump u indexed v$v inbox to Maildir";
+		PublicInbox::MdirReader->new->maildir_each_eml($mdir, sub {
+			push @md2, $_[2]->as_string;
+		});
+		@md2 = sort { $a cmp $b } @md2;
+		is_deeply(\@md, \@md2, 'got matching inboxes even unindexed');
 	}
 });
 done_testing;

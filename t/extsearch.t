@@ -581,4 +581,28 @@ EOM
 	}
 }
 
+test_lei(sub {
+	my $d = "$home/extindex";
+	lei_ok('convert', '-o', "$home/md1", $d);
+	lei_ok('convert', '-o', "$home/md2", "extindex:$d");
+	my $dst = [];
+	my $cb = sub { push @$dst, $_[2]->as_string };
+	require PublicInbox::MdirReader;
+	PublicInbox::MdirReader->new->maildir_each_eml("$home/md1", $cb);
+	my @md1 = sort { $a cmp $b } @$dst;
+	ok(scalar(@md1), 'dumped messages to md1');
+	$dst = [];
+	PublicInbox::MdirReader->new->maildir_each_eml("$home/md2", $cb);
+	@$dst = sort { $a cmp $b } @$dst;
+	is_deeply($dst, \@md1,
+		"convert from extindex w/ or w/o `extindex' prefix");
+
+	use autodie qw(unlink);
+	my @o = glob "$home/extindex/ei*/over.sqlite*";
+	unlink(@o);
+	ok(!lei('convert', '-o', "$home/fail", "extindex:$d"));
+	like($lei_err, qr/unindexed .*?not supported/,
+		'noted unindexed extindex is unsupported');
+});
+
 done_testing;

@@ -125,6 +125,51 @@ sub handle_http_input ($$@) {
 	$lei->child_error($?, "@$cmd failed: @err") if @err;
 }
 
+sub oid2eml { # git->cat_async cb
+	my ($bref, $oid, $type, $size, $self) = @_;
+	if ($type eq 'blob') {
+		$self->input_eml_cb(PublicInbox::Eml->new($bref));
+	} else {
+		warn "W: $oid is type=$type\n";
+	}
+}
+
+sub each_ibx_eml_unindexed {
+	my ($self, $ibx, @args) = @_;
+	$ibx->isa('PublicInbox::Inbox') or return $self->{lei}->fail(<<EOM);
+unindexed extindex $ibx->{topdir} not supported
+EOM
+	require PublicInbox::SearchIdx;
+	my $n = $ibx->max_git_epoch;
+	my @g = defined($n) ? map { $ibx->git_epoch($_) } (0..$n) : ($ibx->git);
+	my $sync = { D => {}, ibx => $ibx }; # D => {} filters out deletes
+	my ($f, $at, $ct, $oid, $cmt);
+	for my $git (grep defined, @g) {
+		my $s = PublicInbox::SearchIdx::log2stack($sync, $git, 'HEAD');
+		while (($f, $at, $ct, $oid, $cmt) = $s->pop_rec) {
+			$git->cat_async($oid, \&oid2eml, $self) if $f eq 'm';
+		}
+		$git->cleanup; # wait all
+	}
+}
+
+sub each_ibx_eml {
+	my ($self, $ibx, @args) = @_; # TODO: is @args used at all?
+	my $over = $ibx->over or return each_ibx_eml_unindexed(@_);
+	my $git = $ibx->git;
+	my $prev = 0;
+	my $smsg;
+	my $ids = $over->ids_after(\$prev);
+	while (@$ids) {
+		for (@$ids) {
+			$smsg = $over->get_art($_) // next;
+			$git->cat_async($smsg->{blob}, \&oid2eml, $self);
+		}
+		$ids = $over->ids_after(\$prev);
+	}
+	$git->cat_async_wait;
+}
+
 sub input_path_url {
 	my ($self, $input, @args) = @_;
 	my $lei = $self->{lei};
@@ -191,6 +236,12 @@ sub input_path_url {
 						$self->can('input_maildir_cb'),
 						$self, @args);
 		}
+	} elsif (-d _ && $ifmt =~ /\A(?:v1|v2)\z/) {
+		my $ibx = PublicInbox::Inbox->new({inboxdir => $input});
+		each_ibx_eml($self, $ibx, @args);
+	} elsif (-d _ && $ifmt eq 'extindex') {
+		my $esrch = PublicInbox::ExtSearch->new($input);
+		each_ibx_eml($self, $esrch, @args);
 	} elsif ($self->{missing_ok} && !-e $input) { # don't ->fail
 		if ($lei->{cmd} eq 'p2q') {
 			my $fp = [ qw(git format-patch --stdout -1), $input ];
@@ -308,9 +359,9 @@ sub prepare_inputs { # returns undef on error
 				require PublicInbox::MboxReader;
 				PublicInbox::MboxReader->reads($ifmt) or return
 					$lei->fail("$ifmt not supported");
-			} elsif (-d $input_path) {
-				$ifmt eq 'maildir' or return # TODO v1/v2/ei
-					$lei->fail("$ifmt not supported");
+			} elsif (-d $input_path) { # TODO extindex
+				$ifmt =~ /\A(?:maildir|v1|v2|extindex)\z/ or
+					return$lei->fail("$ifmt not supported");
 				$input = $input_path;
 				add_dir $lei, $istate, $ifmt, \$input;
 			} elsif ($self->{missing_ok} && !-e _) {
@@ -350,12 +401,12 @@ $input is `eml', not --in-format=$in_fmt
 				push @f, $input;
 			} elsif (-d "$input/new" && -d "$input/cur") {
 				add_dir $lei, $istate, 'maildir', \$input;
-			} elsif (-e "$input/inbox.lock") { # TODO
-				$lei->fail('v2 inputs not yet supported (TODO)');
-				#add_dir $lei, $istate, 'v2', \$input;
-			} elsif (-e "$input/ssoma.lock") { # TODO
-				$lei->fail('v1 inputs not yet supported (TODO)');
-				#add_dir $lei, $istate, 'v1', \$input;
+			} elsif (-e "$input/inbox.lock") {
+				add_dir $lei, $istate, 'v2', \$input;
+			} elsif (-e "$input/ssoma.lock") {
+				add_dir $lei, $istate, 'v1', \$input;
+			} elsif (-e "$input/ei.lock") {
+				add_dir $lei, $istate, 'extindex', \$input;
 			} elsif ($self->{missing_ok} && !-e $input) {
 				if ($lei->{cmd} eq 'p2q') {
 					# will run "git format-patch"
@@ -401,6 +452,7 @@ $input is `eml', not --in-format=$in_fmt
 			$lei->refresh_watches;
 		}
 	}
+	require PublicInbox::ExtSearch if $istate->{extindex};
 	$self->{inputs} = $inputs;
 }
 
