@@ -133,7 +133,7 @@ sub eml2mboxcl2 {
 sub git_to_mail { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $smsg) = @_;
 	my $self = delete $smsg->{l2m} // die "BUG: no l2m";
-	$type // return; # called by git->async_abort
+	$type // return; # called by PublicInbox::Git::close
 	eval {
 		if ($type eq 'missing' &&
 			  ($bref = $self->{-lms_rw}->local_blob($oid, 1))) {

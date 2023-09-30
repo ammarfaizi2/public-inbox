@@ -133,7 +133,7 @@ sub do_cat_async {
 	# favor git(1) over Gcf2 (libgit2) for SHA-256 support
 	$ctx->{git}->cat_async($_, $cb, $ctx) for @req;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
-		PublicInbox::GitAsyncCat::watch_cat($ctx->{git});
+		$ctx->{git}->watch_async;
 	} else { # synchronous, generic PSGI
 		$ctx->{git}->cat_async_wait;
 	}
