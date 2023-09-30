@@ -1,10 +1,9 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # parent class for LeiImport, LeiConvert, LeiIndex
 package PublicInbox::LeiInput;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::DS;
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::InboxWritable qw(eml_from_path);
@@ -181,10 +180,7 @@ sub input_path_url {
 		}
 		local $PublicInbox::DS::in_loop = 0 if $zsfx; # awaitpid
 		$self->input_fh($ifmt, $mbl->{fh}, $input, @args);
-	} elsif (-d _ && (-d "$input/cur" || -d "$input/new")) {
-		return $lei->fail(<<EOM) if $ifmt && $ifmt ne 'maildir';
-$input appears to be a maildir, not $ifmt
-EOM
+	} elsif (-d _ && $ifmt eq 'maildir') {
 		my $mdr = PublicInbox::MdirReader->new;
 		if (my $pmd = $self->{pmd}) {
 			$mdr->maildir_each_file($input,
@@ -259,6 +255,17 @@ sub prepare_http_input ($$$) {
 	$self->{"-curl-$url"} = [ @curl_opt, $uri ]; # for handle_http_input
 }
 
+sub add_dir ($$$$) {
+	my ($lei, $istate, $ifmt, $input) = @_;
+	if ($istate->{-may_sync}) {
+		$$input = "$ifmt:".$lei->abs_path($$input);
+		push @{$istate->{-sync}->{ok}}, $$input if $istate->{-sync};
+	} else {
+		substr($$input, 0, 0) = "$ifmt:"; # prefix
+	}
+	push @{$istate->{$ifmt}}, $$input;
+}
+
 sub prepare_inputs { # returns undef on error
 	my ($self, $lei, $inputs) = @_;
 	my $in_fmt = $lei->{opt}->{'in-format'};
@@ -272,7 +279,8 @@ sub prepare_inputs { # returns undef on error
 		push @{$sync->{no}}, '/dev/stdin' if $sync;
 	}
 	my $net = $lei->{net}; # NetWriter may be created by l2m
-	my (@f, @md);
+	my @f;
+	my $istate = { -sync => $sync, -may_sync => $may_sync };
 	# e.g. Maildir:/home/user/Mail/ or imaps://example.com/INBOX
 	for my $input (@$inputs) {
 		my $input_path = $input;
@@ -292,11 +300,8 @@ sub prepare_inputs { # returns undef on error
 --in-format=$in_fmt and `$ifmt:' conflict
 
 			}
-			if ($ifmt =~ /\A(?:maildir|mh)\z/i) {
-				push @{$sync->{ok}}, $input if $sync;
-			} else {
-				push @{$sync->{no}}, $input if $sync;
-			}
+			($sync && $ifmt !~ /\A(?:maildir|mh)\z/i) and
+				push(@{$sync->{no}}, $input);
 			my $devfd = $lei->path_to_fd($input_path) // return;
 			if ($devfd >= 0 || (-f $input_path || -p _)) {
 				require PublicInbox::MboxLock;
@@ -304,11 +309,10 @@ sub prepare_inputs { # returns undef on error
 				PublicInbox::MboxReader->reads($ifmt) or return
 					$lei->fail("$ifmt not supported");
 			} elsif (-d $input_path) {
-				$ifmt eq 'maildir' or return
+				$ifmt eq 'maildir' or return # TODO v1/v2/ei
 					$lei->fail("$ifmt not supported");
-				$may_sync and $input = 'maildir:'.
-						$lei->abs_path($input_path);
-				push @md, $input;
+				$input = $input_path;
+				add_dir $lei, $istate, $ifmt, \$input;
 			} elsif ($self->{missing_ok} && !-e _) {
 				# for "lei rm-watch" on missing Maildir
 				$may_sync and $input = 'maildir:'.
@@ -345,12 +349,13 @@ $input is `eml', not --in-format=$in_fmt
 				push @{$sync->{no}}, $input if $sync;
 				push @f, $input;
 			} elsif (-d "$input/new" && -d "$input/cur") {
-				if ($may_sync) {
-					$input = 'maildir:'.
-						$lei->abs_path($input);
-					push @{$sync->{ok}}, $input if $sync;
-				}
-				push @md, $input;
+				add_dir $lei, $istate, 'maildir', \$input;
+			} elsif (-e "$input/inbox.lock") { # TODO
+				$lei->fail('v2 inputs not yet supported (TODO)');
+				#add_dir $lei, $istate, 'v2', \$input;
+			} elsif (-e "$input/ssoma.lock") { # TODO
+				$lei->fail('v1 inputs not yet supported (TODO)');
+				#add_dir $lei, $istate, 'v1', \$input;
 			} elsif ($self->{missing_ok} && !-e $input) {
 				if ($lei->{cmd} eq 'p2q') {
 					# will run "git format-patch"
@@ -382,17 +387,17 @@ $input is `eml', not --in-format=$in_fmt
 		$lei->{auth} //= PublicInbox::LeiAuth->new;
 		$lei->{net} //= $net;
 	}
-	if (scalar(@md)) {
+	if (my $md = $istate->{maildir}) {
 		require PublicInbox::MdirReader;
 		if ($self->can('pmdir_cb')) {
 			require PublicInbox::LeiPmdir;
 			$self->{pmd} = PublicInbox::LeiPmdir->new($lei, $self);
 		}
+		grep(!m!\Amaildir:/!i, @$md) and die "BUG: @$md (no pfx)";
 
 		# start watching Maildirs ASAP
 		if ($may_sync && $lei->{sto}) {
-			grep(!m!\Amaildir:/!i, @md) and die "BUG: @md (no pfx)";
-			$lei->lms(1)->lms_write_prepare->add_folders(@md);
+			$lei->lms(1)->lms_write_prepare->add_folders(@$md);
 			$lei->refresh_watches;
 		}
 	}
