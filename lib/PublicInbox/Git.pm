@@ -650,15 +650,16 @@ sub event_step {
 	if ($inflight && @$inflight) {
 		$self->cat_async_step($inflight);
 		return $self->close unless $self->{sock};
-		# more to do? requeue for fairness:
-		$self->requeue if @$inflight || exists($self->{rbuf});
+		# don't loop here to keep things fair, but we must requeue
+		# if there's already-read data in rbuf
+		$self->requeue if exists($self->{rbuf});
 	}
 }
 
 # idempotently registers with DS epoll/kqueue/select/poll
 sub watch_async ($) {
 	$_[0]->{epwatch} //= do {
-		$_[0]->SUPER::new($_[0]->{sock}, EPOLLIN|EPOLLET);
+		$_[0]->SUPER::new($_[0]->{sock}, EPOLLIN);
 		\undef;
 	}
 }
