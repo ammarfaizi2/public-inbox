@@ -113,10 +113,10 @@ EOM
 
 SKIP: {
 	use PublicInbox::Spawn qw(popen_rd);
-	my $fh = popen_rd([ $^X, '-E', <<'' ]);
-say "From x@y Fri Oct  2 00:00:00 1993";
+	my $fh = popen_rd([ $^X, qw(-w -Mv5.12 -e), <<'' ]);
+say 'From x@y Fri Oct  2 00:00:00 1993';
 print "a: b\n\n", "x" x 70000, "\n\n";
-say "From x@y Fri Oct  2 00:00:00 2010";
+say 'From x@y Fri Oct  2 00:00:00 2010';
 print "Final: bit\n\n", "Incomplete\n\n";
 exit 1
 

@@ -227,7 +227,7 @@ test_lei(sub {
 	my @lss = glob("$home/" .
 		'.local/share/lei/saved-searches/*/lei.saved-search');
 	my $out = xqx([qw(git config -f), $lss[0], 'lei.q.output']);
-	xsys($^X, qw(-i -p -e), "s/\\[/\\0/", $lss[0])
+	xsys($^X, qw(-w -i -p -e), "s/\\[/\\0/", $lss[0])
 		and xbail "-ipe $lss[0]: $?";
 	lei_ok qw(ls-search);
 	like($lei_err, qr/bad config line.*?\Q$lss[0]\E/,
@@ -235,7 +235,7 @@ test_lei(sub {
 	lei_ok qw(up --all), \'up works with bad config';
 	like($lei_err, qr/bad config line.*?\Q$lss[0]\E/,
 		'git config parse error shown w/ lei up');
-	xsys($^X, qw(-i -p -e), "s/\\0/\\[/", $lss[0])
+	xsys($^X, qw(-w -i -p -e), "s/\\0/\\[/", $lss[0])
 		and xbail "-ipe $lss[0]: $?";
 	lei_ok qw(ls-search);
 	is($lei_err, '', 'no errors w/ fixed config');

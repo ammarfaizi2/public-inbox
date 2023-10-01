@@ -92,8 +92,8 @@ my $addr = pack_sockaddr_un($path);
 socket($sock, AF_UNIX, SOCK_SEQPACKET, 0) or die "socket: $!";
 unless (connect($sock, $addr)) { # start the daemon if not started
 	local $ENV{PERL5LIB} = join(':', @INC);
-	open(my $daemon, '-|', $^X, qw[-MPublicInbox::LEI
-		-E PublicInbox::LEI::lazy_start(@ARGV)],
+	open(my $daemon, '-|', $^X, $^W ? ('-w') : (),
+		qw[-MPublicInbox::LEI -e PublicInbox::LEI::lazy_start(@ARGV)],
 		$path, $! + 0, $narg) or die "popen: $!";
 	while (<$daemon>) { warn $_ } # EOF when STDERR is redirected
 	close($daemon) or warn <<"";

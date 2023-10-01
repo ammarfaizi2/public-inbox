@@ -151,7 +151,7 @@ if ('inbox edited') {
 	my ($in, $out, $err);
 	$in = $out = $err = '';
 	my $opt = { 0 => \$in, 1 => \$out, 2 => \$err };
-	my $env = { MAIL_EDITOR => "$^X -i -p -e 's/test message/BEST MSG/'" };
+	my $env = { MAIL_EDITOR => "$^X -w -i -p -e 's/test message/BEST MSG/'" };
 	my $cmd = [ qw(-edit -Ft/utf8.eml), "$home/v2test" ];
 	ok(run_script($cmd, $env, $opt), '-edit');
 	ok(run_script([qw(-extindex --all), "$home/extindex"], undef, $opt),

@@ -62,7 +62,7 @@ elsif ($pid > 0) {
 }
 EOF
 	my $oldset = PublicInbox::DS::block_signals();
-	my $rd = popen_rd([$^X, '-e', $script]);
+	my $rd = popen_rd([$^X, qw(-w -e), $script]);
 	diag 'waiting for child to reap grandchild...';
 	chomp(my $line = readline($rd));
 	my ($rdy, $pid) = split(/ /, $line);
@@ -185,7 +185,7 @@ SKIP: {
 		require BSD::Resource;
 		defined(BSD::Resource::RLIMIT_CPU())
 	} or skip 'BSD::Resource::RLIMIT_CPU missing', 3;
-	my $cmd = [ $^X, ($^W ? ('-w') : ()), '-e', <<'EOM' ];
+	my $cmd = [ $^X, qw(-w -e), <<'EOM' ];
 use POSIX qw(:signal_h);
 use BSD::Resource qw(times);
 use Time::HiRes qw(time); # gettimeofday

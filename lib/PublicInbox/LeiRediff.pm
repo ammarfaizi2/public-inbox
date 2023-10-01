@@ -140,7 +140,7 @@ EOM
 
 sub wait_requote { # OnDestroy callback
 	my ($lei, $pid, $old_1) = @_;
-	$lei->{1} = $old_1; # closes stdin of `perl -pE 's/^/> /'`
+	$lei->{1} = $old_1; # closes stdin of `perl -pe 's/^/> /'`
 	waitpid($pid, 0) == $pid or die "BUG(?) waitpid: \$!=$! \$?=$?";
 	$lei->child_error($?) if $?;
 }
@@ -150,7 +150,7 @@ sub requote ($$) {
 	my $old_1 = $lei->{1};
 	my $opt = { 1 => $old_1, 2 => $lei->{2} };
 	# $^X (perl) is overkill, but maybe there's a weird system w/o sed
-	my ($w, $pid) = popen_wr([$^X, '-pE', "s/^/$pfx/"], $lei->{env}, $opt);
+	my ($w, $pid) = popen_wr([$^X, '-pe', "s/^/$pfx/"], $lei->{env}, $opt);
 	$w->autoflush(1);
 	binmode $w, ':utf8'; # incompatible with ProcessPipe due to syswrite
 	$lei->{1} = $w;

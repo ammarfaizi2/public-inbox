@@ -30,7 +30,8 @@ sub new  {
 	socketpair(my $s1, my $s2, AF_UNIX, SOCK_STREAM, 0);
 	$s1->blocking(0);
 	$opt->{0} = $opt->{1} = $s2;
-	my $cmd = [$^X, qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
+	my $cmd = [$^X, $^W ? ('-w') : (),
+			qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
 	my $pid = spawn($cmd, $env, $opt);
 	my $sock = PublicInbox::ProcessPipe->maybe_new($pid, $s1);
 	$self->{inflight} = [];
