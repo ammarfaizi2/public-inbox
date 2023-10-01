@@ -33,6 +33,7 @@ use IO::Handle (); # ->autoflush
 use Sys::Syslog qw(syslog openlog);
 use Errno qw(EEXIST ENOENT);
 use PublicInbox::Syscall qw(rename_noreplace);
+use PublicInbox::LeiStoreErr;
 
 sub new {
 	my (undef, $dir, $opt) = @_;
@@ -112,7 +113,10 @@ sub _tail_err {
 	my ($self) = @_;
 	my $err = $self->{-tmp_err} // return;
 	$err->clearerr; # clear EOF marker
-	print { $self->{-err_wr} } readline($err);
+	my @msg = readline($err);
+	PublicInbox::LeiStoreErr::emit($self->{-err_wr}, @msg) and return;
+	# syslog is the last resort if lei-daemon broke
+	syslog('warning', '%s', $_) for @msg;
 }
 
 sub eidx_init {
@@ -627,12 +631,12 @@ sub write_prepare {
 		# Mail we import into lei are private, so headers filtered out
 		# by -mda for public mail are not appropriate
 		local @PublicInbox::MDA::BAD_HEADERS = ();
+		local $SIG{ALRM} = 'IGNORE';
 		$self->wq_workers_start("lei/store $dir", 1, $lei->oldset, {
 					lei => $lei,
 					-err_wr => $w,
 					to_close => [ $r ],
 				}, \&_sto_atexit);
-		require PublicInbox::LeiStoreErr;
 		PublicInbox::LeiStoreErr->new($r, $lei);
 	}
 	$lei->{sto} = $self;

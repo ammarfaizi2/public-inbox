@@ -1287,7 +1287,7 @@ sub lazy_start {
 	undef $lk;
 	my @st = stat($path) or die "stat($path): $!";
 	my $dev_ino_expect = pack('dd', $st[0], $st[1]); # dev+ino
-	local $oldset = PublicInbox::DS::block_signals();
+	local $oldset = PublicInbox::DS::block_signals(POSIX::SIGALRM);
 	die "incompatible narg=$narg" if $narg != 5;
 	$PublicInbox::IPC::send_cmd or die <<"";
 (Socket::MsgHdr || Inline::C) missing/unconfigured (narg=$narg);
@@ -1369,6 +1369,7 @@ sub lazy_start {
 		  strftime('%Y-%m-%dT%H:%M:%SZ', gmtime(time))," $$ ", @_);
 	};
 	local $SIG{PIPE} = 'IGNORE';
+	local $SIG{ALRM} = 'IGNORE';
 	open STDERR, '>&STDIN' or die "redirect stderr failed: $!";
 	open STDOUT, '>&STDIN' or die "redirect stdout failed: $!";
 	# $daemon pipe to `lei' closed, main loop begins:

@@ -9,6 +9,30 @@ use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN);
 use Sys::Syslog qw(openlog syslog closelog);
 use IO::Handle (); # ->blocking
+use Time::HiRes ();
+use autodie qw(open);
+our $err_wr;
+
+# We don't want blocked stderr on clients to block lei/store or lei-daemon.
+# We can't make stderr non-blocking since it can break MUAs or anything
+# lei might spawn.  So we setup a timer to wake us up after a second if
+# printing to a user's stderr hasn't completed, yet.  Unfortunately,
+# EINTR alone isn't enough since Perl auto-restarts writes on signals,
+# so to interrupt writes to clients with blocked stderr, we dup the
+# error output to $err_wr ahead-of-time and close $err_wr in the
+# SIGALRM handler to ensure `print' gets aborted:
+
+sub abort_err_wr { close($err_wr) if $err_wr; undef $err_wr }
+
+sub emit ($@) {
+	my ($efh, @msg) = @_;
+	open(local $err_wr, '>&', $efh); # fdopen(dup(fileno($efh)), "w")
+	local $SIG{ALRM} = \&abort_err_wr;
+	Time::HiRes::alarm(1.0, 0.1);
+	my $ret = print $err_wr @msg;
+	Time::HiRes::alarm(0);
+	$ret;
+}
 
 sub new {
 	my ($cls, $rd, $lei) = @_;
@@ -26,8 +50,7 @@ sub event_step {
 	for my $lei (values %PublicInbox::DS::DescriptorMap) {
 		my $cb = $lei->can('store_path') // next;
 		next if $cb->($lei) ne $self->{store_path};
-		my $err = $lei->{2} // next;
-		print $err $buf and $printed = 1;
+		emit($lei->{2} // next, $buf) and $printed = 1;
 	}
 	if (!$printed) {
 		openlog('lei/store', 'pid,nowait,nofatal,ndelay', 'user');
