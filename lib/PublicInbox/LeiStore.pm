@@ -27,7 +27,7 @@ use PublicInbox::MDA;
 use PublicInbox::Spawn qw(spawn);
 use PublicInbox::MdirReader;
 use PublicInbox::LeiToMail;
-use File::Temp ();
+use File::Temp qw(tmpnam);
 use POSIX ();
 use IO::Handle (); # ->autoflush
 use Sys::Syslog qw(syslog openlog);
@@ -110,7 +110,9 @@ sub search {
 # follows the stderr file
 sub _tail_err {
 	my ($self) = @_;
-	print { $self->{-err_wr} } readline($self->{-tmp_err});
+	my $err = $self->{-tmp_err} // return;
+	$err->clearerr; # clear EOF marker
+	print { $self->{-err_wr} } readline($err);
 }
 
 sub eidx_init {
@@ -566,11 +568,10 @@ sub xchg_stderr {
 	_tail_err($self) if $self->{-err_wr};
 	my $dir = $self->{priv_eidx}->{topdir};
 	return unless -e $dir;
-	my $old = delete $self->{-tmp_err};
-	my $pfx = POSIX::strftime('%Y%m%d%H%M%S', gmtime(time));
-	my $err = File::Temp->new(TEMPLATE => "$pfx.$$.err-XXXX",
-				SUFFIX => '.err', DIR => $dir);
-	open STDERR, '>>', $err->filename or die "dup2: $!";
+	delete $self->{-tmp_err};
+	my ($err, $name) = tmpnam();
+	open STDERR, '>>', $name or die "dup2: $!";
+	unlink($name);
 	STDERR->autoflush(1); # shared with shard subprocesses
 	$self->{-tmp_err} = $err; # separate file description for RO access
 	undef;
