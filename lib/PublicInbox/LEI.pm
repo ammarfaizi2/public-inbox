@@ -159,7 +159,7 @@ our @diff_opt = qw(unified|U=i output-indicator-new=s output-indicator-old=s
 	rename-empty! check ws-error-highlight=s full-index binary
 	abbrev:i break-rewrites|B:s find-renames|M:s find-copies:s
 	find-copies-harder irreversible-delete|D l=i diff-filter=s
-	S=s G=s find-object=s pickaxe-all pickaxe-regex O=s R
+	S=s G=s find-object=s pickaxe-all pickaxe-regex R
 	relative:s text|a ignore-cr-at-eol ignore-space-at-eol
 	ignore-space-change|b ignore-all-space|w ignore-blank-lines
 	inter-hunk-context=i function-context|W exit-code ext-diff
@@ -198,8 +198,8 @@ our %CMD = ( # sorted in order of importance/use:
 'rediff' => [ '--stdin|LOCATION...',
 		'regenerate a diff with different options',
 	'stdin|', # /|\z/ must be first for lone dash
-	qw(git-dir=s@ cwd! verbose|v+ color:s no-color drq:1 dequote-only:1),
-	@diff_opt, @lxs_opt, @net_opt, @c_opt ],
+	qw(git-dir=s@ cwd! verbose|v+ color:s no-color drq:1 dequote-only:1
+	order-file=s), @diff_opt, @lxs_opt, @net_opt, @c_opt ],
 
 'mail-diff' => [ '--stdin|LOCATION...', 'diff the contents of emails',
 	'stdin|', # /|\z/ must be first for lone dash

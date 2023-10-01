@@ -82,6 +82,7 @@ sub _lei_diff_prepare ($$) {
 			push @$cmd, $c ? "-$c" : "--$o";
 		}
 	}
+	push(@$cmd, "-O$opt->{'order-file'}") if $opt->{'order-file'};
 }
 
 sub diff_ctxq ($$) {
