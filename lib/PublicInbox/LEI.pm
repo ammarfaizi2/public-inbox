@@ -524,7 +524,7 @@ sub sigpipe_handler { # handles SIGPIPE from @WQ_KEYS workers
 
 sub fail ($;@) {
 	my ($lei, @msg) = @_;
-	my $exit_code = looks_like_number($msg[0]) ? shift(@msg) : undef;
+	my $exit_code = ($msg[0]//'') =~ /\A-?[0-9]+\z/ ? shift(@msg) : undef;
 	local $current_lei = $lei;
 	$lei->{failed}++;
 	if (@msg) {
