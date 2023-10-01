@@ -10,6 +10,7 @@ package PublicInbox::Git;
 use strict;
 use v5.10.1;
 use parent qw(Exporter PublicInbox::DS);
+use autodie qw(socketpair);
 use POSIX ();
 use IO::Handle; # ->blocking
 use Socket qw(AF_UNIX SOCK_STREAM);
@@ -57,7 +58,7 @@ my ($GIT_EXE, $GIT_VER);
 
 sub check_git_exe () {
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
-	my @st = stat($GIT_EXE) or die "stat: $!";
+	my @st = stat($GIT_EXE) or die "stat($GIT_EXE): $!";
 	my $st = pack('dd', $st[10], $st[7]);
 	if ($st ne $EXE_ST) {
 		my $rd = popen_rd([ $GIT_EXE, '--version' ]);
@@ -144,8 +145,7 @@ sub last_check_err {
 sub _sock_cmd {
 	my ($self, $batch, $err_c) = @_;
 	$self->{sock} and Carp::confess('BUG: {sock} exists');
-	my ($s1, $s2);
-	socketpair($s1, $s2, AF_UNIX, SOCK_STREAM, 0) or die "socketpair $!";
+	socketpair(my $s1, my $s2, AF_UNIX, SOCK_STREAM, 0);
 	$s1->blocking(0);
 	my $opt = { pgid => 0, 0 => $s2, 1 => $s2 };
 	my $gd = $self->{git_dir};
