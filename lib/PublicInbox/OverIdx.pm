@@ -671,13 +671,14 @@ sub vivify_xvmd {
 }
 
 sub fork_ok {
-	return 1 if $DBD::SQLite::sqlite_version >= 3008003;
+	state $fork_ok = eval("v$DBD::SQLite::sqlite_version") ge v3.8.3;
+	return 1 if $fork_ok;
 	my ($opt) = @_;
 	my @j = split(/,/, $opt->{jobs} // '');
 	state $warned;
-	grep { $_ > 1 } @j and $warned //= warn('DBD::SQLite version is ',
-		 $DBD::SQLite::sqlite_version,
-		", need >= 3008003 (3.8.3) for --jobs > 1\n");
+	grep { $_ > 1 } @j and $warned //= warn(<<EOM);
+DBD::SQLite version is v$DBD::SQLite::sqlite_version, need >= v3.8.3 for --jobs > 1
+EOM
 	$opt->{jobs} = '1,1';
 	undef;
 }
