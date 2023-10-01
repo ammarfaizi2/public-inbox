@@ -1,8 +1,7 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 my ($dir, $for_destroy) = tmpdir();
 use PublicInbox::Import;
@@ -205,4 +204,5 @@ is(git_quote($s = "hello\nworld"), '"hello\\nworld"', 'quoted LF');
 is(git_quote($s = "hello\x06world"), '"hello\\006world"', 'quoted \\x06');
 is(git_unquote($s = '"hello\\006world"'), "hello\x06world", 'unquoted \\x06');
 
-done_testing();
+diag 'git_version='.sprintf('%vd', PublicInbox::Git::git_version());
+done_testing;
