@@ -1310,9 +1310,9 @@ sub lazy_start {
 	local $quit = do {
 		my (undef, $eof_p) = PublicInbox::PktOp->pair;
 		sub {
-			$exit_code //= shift;
+			$exit_code //= eval("POSIX::SIG$_[0] + 128") if @_;
 			eval 'PublicInbox::LeiNoteEvent::flush_task()';
-			my $lis = $pil or exit($exit_code);
+			my $lis = $pil or exit($exit_code // 0);
 			# closing eof_p triggers \&noop wakeup
 			$listener = $eof_p = $pil = $path = undef;
 			$lis->close; # DS::close
