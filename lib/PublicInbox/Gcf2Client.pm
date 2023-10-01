@@ -11,6 +11,7 @@ use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::ProcessPipe;
+use autodie qw(socketpair);
 
 # fields:
 #	sock => socket to Gcf2::loop
@@ -26,8 +27,7 @@ sub new  {
 	my $self = bless {}, __PACKAGE__;
 	# ensure the child process has the same @INC we do:
 	my $env = { PERL5LIB => join(':', @INC) };
-	my ($s1, $s2);
-	socketpair($s1, $s2, AF_UNIX, SOCK_STREAM, 0) or die "socketpair $!";
+	socketpair(my $s1, my $s2, AF_UNIX, SOCK_STREAM, 0);
 	$s1->blocking(0);
 	$opt->{0} = $opt->{1} = $s2;
 	my $cmd = [$^X, qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
@@ -41,8 +41,8 @@ sub new  {
 sub gcf2_async ($$$;$) {
 	my ($self, $req, $cb, $arg) = @_;
 	my $inflight = $self->{inflight} or return $self->close;
-	PublicInbox::Git::write_all($self, $$req, \&cat_async_step, $inflight);
-	push @$inflight, $req, $cb, $arg;
+	PublicInbox::Git::write_all($self, $req, \&cat_async_step, $inflight);
+	push @$inflight, \$req, $cb, $arg; # ref prevents Git.pm retries
 }
 
 # ensure PublicInbox::Git::cat_async_step never calls cat_async_retry

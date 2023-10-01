@@ -1,10 +1,10 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
+use v5.12;
 use PublicInbox::TestCommon;
-use Test::More;
 use Cwd qw(getcwd);
+use autodie qw(open close);
 use PublicInbox::Import;
 use PublicInbox::DS;
 
@@ -17,7 +17,7 @@ PublicInbox::Import::init_bare($git_a);
 PublicInbox::Import::init_bare($git_b);
 my $fi_data = './t/git.fast-import-data';
 my $rdr = {};
-open $rdr->{0}, '<', $fi_data or BAIL_OUT $!;
+open $rdr->{0}, '<', $fi_data;
 xsys([qw(git fast-import --quiet)], { GIT_DIR => $git_a }, $rdr);
 is($?, 0, 'fast-import succeeded');
 
@@ -26,9 +26,9 @@ my $called = 0;
 my $err_f = "$tmpdir/err";
 {
 	PublicInbox::DS->Reset;
-	open my $err, '>>', $err_f or BAIL_OUT $!;
+	open my $err, '>>', $err_f;
 	my $gcf2c = PublicInbox::Gcf2Client::new({ 2 => $err });
-	$gcf2c->gcf2_async(\"$tree $git_a\n", sub {
+	$gcf2c->gcf2_async("$tree $git_a\n", sub {
 		my ($bref, $oid, $type, $size, $arg) = @_;
 		is($oid, $tree, 'got expected OID');
 		is($size, 30, 'got expected length');
@@ -39,12 +39,12 @@ my $err_f = "$tmpdir/err";
 	}, 'hi');
 	$gcf2c->cat_async_step($gcf2c->{inflight});
 
-	open $err, '<', $err_f or BAIL_OUT $!;
+	open $err, '<', $err_f;
 	my $estr = do { local $/; <$err> };
 	is($estr, '', 'nothing in stderr');
 
 	my $trunc = substr($tree, 0, 39);
-	$gcf2c->gcf2_async(\"$trunc $git_a\n", sub {
+	$gcf2c->gcf2_async("$trunc $git_a\n", sub {
 		my ($bref, $oid, $type, $size, $arg) = @_;
 		is(undef, $bref, 'missing bref is undef');
 		is($oid, $trunc, 'truncated OID printed');
@@ -55,30 +55,30 @@ my $err_f = "$tmpdir/err";
 	}, 'bye');
 	$gcf2c->cat_async_step($gcf2c->{inflight});
 
-	open $err, '<', $err_f or BAIL_OUT $!;
+	open $err, '<', $err_f;
 	$estr = do { local $/; <$err> };
 	like($estr, qr/retrying/, 'warned about retry');
 
 	# try failed alternates lookup
 	PublicInbox::DS->Reset;
-	open $err, '>', $err_f or BAIL_OUT $!;
+	open $err, '>', $err_f;
 	$gcf2c = PublicInbox::Gcf2Client::new({ 2 => $err });
-	$gcf2c->gcf2_async(\"$tree $git_b\n", sub {
+	$gcf2c->gcf2_async("$tree $git_b\n", sub {
 		my ($bref, $oid, $type, $size, $arg) = @_;
 		is(undef, $bref, 'missing bref from alt is undef');
 		$called++;
 	});
 	$gcf2c->cat_async_step($gcf2c->{inflight});
-	open $err, '<', $err_f or BAIL_OUT $!;
+	open $err, '<', $err_f;
 	$estr = do { local $/; <$err> };
 	like($estr, qr/retrying/, 'warned about retry before alt update');
 
 	# now try successful alternates lookup
-	open my $alt, '>>', "$git_b/objects/info/alternates" or BAIL_OUT $!;
-	print $alt "$git_a/objects\n" or BAIL_OUT $!;
-	close $alt or BAIL_OUT;
+	open my $alt, '>>', "$git_b/objects/info/alternates";
+	print $alt "$git_a/objects\n";
+	close $alt;
 	my $expect = xqx(['git', "--git-dir=$git_a", qw(cat-file tree), $tree]);
-	$gcf2c->gcf2_async(\"$tree $git_a\n", sub {
+	$gcf2c->gcf2_async("$tree $git_a\n", sub {
 		my ($bref, $oid, $type, $size, $arg) = @_;
 		is($oid, $tree, 'oid match on alternates retry');
 		is($$bref, $expect, 'tree content matched');

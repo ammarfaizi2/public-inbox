@@ -18,7 +18,7 @@ sub ibx_async_cat ($$$$) {
 		require PublicInbox::Gcf2Client;
 		PublicInbox::Gcf2Client::new();
 	} // 0)) { # 0: do not retry if libgit2 or Inline::C are missing
-		$GCF2C->gcf2_async(\"$oid $git->{git_dir}\n", $cb, $arg);
+		$GCF2C->gcf2_async("$oid $git->{git_dir}\n", $cb, $arg);
 		\undef;
 	} else { # read-only end of git-cat-file pipe
 		$git->cat_async($oid, $cb, $arg);
@@ -42,7 +42,7 @@ sub ibx_async_prefetch {
 	if (!defined($ibx->{topdir}) && $GCF2C) {
 		if (!@{$GCF2C->{inflight} // []}) {
 			$oid .= " $git->{git_dir}\n";
-			return $GCF2C->gcf2_async(\$oid, $cb, $arg); # true
+			return $GCF2C->gcf2_async($oid, $cb, $arg); # true
 		}
 	} elsif ($git->{epwatch}) {
 		return $git->async_prefetch($oid, $cb, $arg);
