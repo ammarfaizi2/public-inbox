@@ -798,7 +798,7 @@ sub wq_atexit_child {
 	$lei->{ale}->git->async_wait_all;
 	my ($nr_w, $nr_s) = delete(@$lei{qw(-nr_write -nr_seen)});
 	delete $self->{wcb};
-	$nr_s or return;
+	(($nr_w //= 0) + ($nr_s //= 0)) or return;
 	return if $lei->{early_mua} || !$lei->{-progress} || !$lei->{pkt_op_p};
 	$lei->{pkt_op_p}->pkt_do('l2m_progress', $nr_w, $nr_s);
 }
