@@ -58,7 +58,7 @@ sub FILENO { fileno($_[0]->{fh}) }
 sub _close ($;$) {
 	my ($self, $wait) = @_;
 	my ($fh, $pid) = delete(@$self{qw(fh pid)});
-	my $ret = defined($fh) ? close($fh) : '';
+	my $ret = (defined($fh) && $wait) ? close($fh) : ($fh = '');
 	return $ret unless defined($pid) && $self->{ppid} == $$;
 	if ($wait) { # caller cares about the exit status:
 		# synchronous wait via defined(wantarray) on awaitpid:
