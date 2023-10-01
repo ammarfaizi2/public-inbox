@@ -7,7 +7,6 @@ package PublicInbox::LeiMailDiff;
 use v5.12;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput PublicInbox::MailDiff);
 use PublicInbox::Spawn qw(run_wait);
-use File::Path ();
 require PublicInbox::LeiRediff;
 
 sub diff_a ($$) {
@@ -21,7 +20,6 @@ sub diff_a ($$) {
 	my $rdr = { -C => "$self->{tmp}" };
 	@$rdr{1, 2} = @$lei{1, 2};
 	run_wait($cmd, $lei->{env}, $rdr) and $lei->child_error($?);
-	File::Path::remove_tree($self->{curdir});
 }
 
 sub input_eml_cb { # used by PublicInbox::LeiInput::input_fh
