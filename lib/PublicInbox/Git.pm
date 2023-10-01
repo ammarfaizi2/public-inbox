@@ -486,9 +486,7 @@ sub packed_bytes {
 	my ($self) = @_;
 	my $n = 0;
 	my $pack_dir = git_path($self, 'objects/pack');
-	foreach my $p (bsd_glob("$pack_dir/*.pack", GLOB_NOSORT)) {
-		$n += -s $p;
-	}
+	$n += (-s $_ // 0) for (bsd_glob("$pack_dir/*.pack", GLOB_NOSORT));
 	$n
 }
 
