@@ -12,6 +12,7 @@ use DBD::SQLite;
 use PublicInbox::Smsg;
 use Compress::Zlib qw(uncompress);
 use constant DEFAULT_LIMIT => 1000;
+use List::Util (); # for max
 
 sub dbh_new {
 	my ($self, $rw) = @_;
@@ -198,10 +199,12 @@ ORDER BY $sort_col DESC
 }
 
 # strict `tid' matches, only, for thread-expanded mbox.gz search results
-# and future CLI interface
+# and lei
 # returns true if we have IDs, undef if not
 sub expand_thread {
 	my ($self, $ctx) = @_;
+	# previous maxuid for LeiSavedSearch is our min:
+	my $lss_min = $ctx->{min} // 0;
 	my $dbh = dbh($self);
 	do {
 		defined(my $num = $ctx->{ids}->[0]) or return;
@@ -214,7 +217,7 @@ SELECT num FROM over WHERE tid = ? AND num > ?
 ORDER BY num ASC LIMIT 1000
 
 			my $xids = $dbh->selectcol_arrayref($sql, undef, $tid,
-							$ctx->{prev} // 0);
+				List::Util::max($ctx->{prev} // 0, $lss_min));
 			if (scalar(@$xids)) {
 				$ctx->{prev} = $xids->[-1];
 				$ctx->{xids} = $xids;

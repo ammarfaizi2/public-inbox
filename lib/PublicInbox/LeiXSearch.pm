@@ -176,14 +176,10 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	my $threads = $lei->{opt}->{threads} // 0;
 	my $fl = $threads > 1 ? 1 : undef;
 	my $lss = $lei->{lss};
-	my $maxk = "external.$dir.maxuid";
-	my $stop_at = $lss ? $lss->{-cfg}->{$maxk} : undef;
-	if (defined $stop_at) {
-		ref($stop_at) and
-			return warn("$maxk=$stop_at has multiple values\n");
-		($stop_at =~ /[^0-9]/) and
-			return warn("$maxk=$stop_at not numeric\n");
-	}
+	my $maxk = "external.$dir.maxuid"; # max of previous, so our min
+	my $min = $lss ? ($lss->{-cfg}->{$maxk} // 0) : 0;
+	ref($min) and return warn("$maxk=$min has multiple values\n");
+	($min =~ /[^0-9]/) and return warn("$maxk=$min not numeric\n");
 	my $first_ids;
 	do {
 		$mset = eval { $srch->mset($mo->{qstr}, $mo) };
@@ -192,29 +188,26 @@ sub query_one_mset { # for --threads and l2m w/o sort
 				$mset->get_matches_estimated);
 		wait_startq($lei); # wait for keyword updates
 		my $ids = $srch->mset_to_artnums($mset, $mo);
-		@$ids = grep { $_ > $stop_at } @$ids if defined($stop_at);
 		my $i = 0;
 		if ($threads) {
 			# copy $ids if $lss since over->expand_thread
 			# shifts @{$ctx->{ids}}
 			$first_ids = [ @$ids ] if $lss;
-			my $ctx = { ids => $ids };
-			my %n2item = map { ($ids->[$i++], $_) } $mset->items;
-			while ($over->expand_thread($ctx)) {
-				for my $n (@{$ctx->{xids}}) {
+			my $ctx = { ids => $ids, min => $min };
+			my %n2item = map { $ids->[$i++] => $_ } $mset->items;
+			while ($over->expand_thread($ctx)) { # fills {xids}
+				for my $n (@{delete $ctx->{xids}}) {
 					my $smsg = $over->get_art($n) or next;
-					my $mitem = delete $n2item{$n};
+					my $mi = delete $n2item{$n};
 					next if $smsg->{bytes} == 0;
-					if ($mitem && $can_kw) {
-						mitem_kw($srch, $smsg, $mitem,
-							$fl);
-					} elsif ($mitem && $fl) {
+					if ($mi && $can_kw) {
+						mitem_kw($srch, $smsg, $mi, $fl)
+					} elsif ($mi && $fl) {
 						# call ->xsmsg_vmd, later
 						$smsg->{lei_q_tt_flagged} = 1;
 					}
-					$each_smsg->($smsg, $mitem);
+					$each_smsg->($smsg, $mi);
 				}
-				@{$ctx->{xids}} = ();
 			}
 		} else {
 			$first_ids = $ids;
@@ -230,7 +223,6 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	} while (_mset_more($mset, $mo));
 	_check_mset_limit($lei, $dir, $mset);
 	if ($lss && scalar(@$first_ids)) {
-		undef $stop_at;
 		my $max = $first_ids->[0];
 		$lss->cfg_set($maxk, $max);
 		undef $lss;

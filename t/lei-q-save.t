@@ -15,6 +15,7 @@ $doc3->header_set('Date', PublicInbox::Smsg::date({ds => time - (86400 * 4)}));
 my $cat_env = { VISUAL => 'cat', EDITOR => 'cat' };
 my $pre_existing = <<'EOF';
 From x Mon Sep 17 00:00:00 2001
+From: <x@example.com>
 Message-ID: <import-before@example.com>
 Subject: pre-existing
 Date: Sat, 02 Oct 2010 00:00:00 +0000
@@ -286,5 +287,23 @@ test_lei(sub {
 	is(eml_load($new[0])->header('Subject'), 'do not ever call, again',
 		'up retrieved correct message');
 
+	# --thread expansion
+	$d = "$home/thread-expand";
+	lei_ok(qw(q --no-external m:import-before@example.com -t -o), $d);
+	@orig = glob("$d/{new,cur}/*");
+	is(scalar(@orig), 1, 'one result so far');
+	lei_ok [ qw(import -Feml) ], undef, { 0 => \<<'EOM' };
+Date: Sun, 02 Oct 2023 00:00:00 +0000
+From: <x@example.com>
+In-Reply-To: <import-before@example.com>
+Message-ID: <reply1@example.com>
+Subject: reply1
+EOM
+
+	lei_ok qw(up), $d;
+	@new = glob("$d/{new,cur}/*");
+	is(scalar(@new), 2, 'got new message');
+	is_xdeeply([grep { $_ eq $orig[0] } @new], \@orig,
+		'original message preserved on up w/ threads');
 });
 done_testing;
