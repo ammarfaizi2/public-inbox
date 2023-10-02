@@ -234,7 +234,7 @@ our %CMD = ( # sorted in order of importance/use:
 'plonk' => [ '--threads|--from=IDENT',
 	'exclude mail matching From: or threads from non-Message-ID searches',
 	qw(stdin| threads|t from|f=s mid=s oid=s), @c_opt ],
-'tag' => [ 'KEYWORDS...',
+'tag' => [ 'KEYWORDS... LOCATION...|--stdin',
 	'set/unset keywords and/or labels on message(s)',
 	qw(stdin| in-format|F=s input|i=s@ oid=s@ mid=s@),
 	@net_opt, @c_opt, pass_through('-kw:foo for delete') ],
@@ -243,7 +243,8 @@ our %CMD = ( # sorted in order of importance/use:
 	'remove imported messages from IMAP, Maildirs, and MH',
 	qw(exact! all jobs:i indexed), @c_opt ],
 
-'add-watch' => [ 'LOCATION...', 'watch for new messages and flag changes',
+'add-watch' => [ 'LOCATION... [LABELS...]',
+	'watch for new messages and flag changes',
 	qw(poll-interval=s state=s recursive|r), @c_opt ],
 'rm-watch' => [ 'LOCATION...', 'remove specified watch(es)',
 	qw(recursive|r), @c_opt ],
@@ -260,7 +261,7 @@ our %CMD = ( # sorted in order of importance/use:
 	qw(in-format|F=s kw! offset=i recursive|r exclude=s include|I=s
 	verbose|v+ incremental!), @net_opt, # mainly for --proxy=
 	 @c_opt ],
-'import' => [ 'LOCATION...|--stdin',
+'import' => [ 'LOCATION...|--stdin [LABELS...]',
 	'one-time import/update from URL or filesystem',
 	qw(stdin| offset=i recursive|r exclude=s include|I=s new-only
 	lock=s@ in-format|F=s kw! verbose|v+ incremental! mail-sync!),
@@ -711,6 +712,14 @@ sub optparse ($$$) {
 	# "-" aliases "stdin" or "clear"
 	$OPT->{$lone_dash} = ${$OPT->{$lone_dash}} if defined $lone_dash;
 
+	if ($proto =~ s/\s*\[?(?:KEYWORDS|LABELS)\.\.\.\]?\s*//g) {
+		require PublicInbox::LeiInput;
+		my @err = PublicInbox::LeiInput::vmd_mod_extract($self, $argv);
+		return $self->fail(join("\n", @err)) if @err;
+	} else {
+		warn "proto $proto\n" if $cmd =~ /(add-watch|tag|index)/;
+	}
+
 	my $i = 0;
 	my $POS_ARG = '[A-Z][A-Z0-9_]+';
 	my ($err, $inf);
@@ -741,8 +750,7 @@ sub optparse ($$$) {
 							 -f _) && -r _) {
 						$OPT->{stdin} //= 1;
 					}
-					$ok = defined($OPT->{$sw});
-					last if $ok;
+					$ok = defined($OPT->{$sw}) and last;
 				} elsif (defined($argv->[$i])) {
 					$ok = 1;
 					$i++;

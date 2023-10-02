@@ -71,9 +71,7 @@ sub do_import_index ($$@) {
 	my $sto = $lei->_lei_store(1);
 	$sto->write_prepare($lei);
 	$self->{-import_kw} = $lei->{opt}->{kw} // 1;
-	my $vmd_mod = $self->vmd_mod_extract(\@inputs);
-	return $lei->fail(join("\n", @{$vmd_mod->{err}})) if $vmd_mod->{err};
-	$self->{all_vmd} = $vmd_mod if scalar keys %$vmd_mod;
+	$self->{all_vmd} = $lei->{vmd_mod} if keys %{$lei->{vmd_mod}};
 	$lei->ale; # initialize for workers to read (before LeiPmdir->new)
 	$self->{-mail_sync} = $lei->{opt}->{'mail-sync'} // 1;
 	$self->prepare_inputs($lei, \@inputs) or return;

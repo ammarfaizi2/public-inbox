@@ -491,23 +491,22 @@ sub input_only_net_merge_all_done {
 # for update_xvmd -> update_vmd
 # returns something like { "+L" => [ @Labels ], ... }
 sub vmd_mod_extract {
-	my $argv = $_[-1];
-	my $vmd_mod = {};
-	my @new_argv;
+	my ($lei, $argv) = @_;
+	my (@new_argv, @err);
 	for my $x (@$argv) {
 		if ($x =~ /\A(\+|\-)(kw|L):(.+)\z/) {
 			my ($op, $pfx, $val) = ($1, $2, $3);
 			if (my $err = $ERR{$pfx}->($val)) {
-				push @{$vmd_mod->{err}}, $err;
+				push @err, $err;
 			} else { # set "+kw", "+L", "-L", "-kw"
-				push @{$vmd_mod->{$op.$pfx}}, $val;
+				push @{$lei->{vmd_mod}->{$op.$pfx}}, $val;
 			}
 		} else {
 			push @new_argv, $x;
 		}
 	}
 	@$argv = @new_argv;
-	$vmd_mod;
+	@err;
 }
 
 1;

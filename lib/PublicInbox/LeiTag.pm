@@ -13,7 +13,7 @@ sub input_eml_cb { # used by PublicInbox::LeiInput::input_fh
 	if (my $xoids = $self->{lse}->xoids_for($eml) // # tries LeiMailSync
 			$self->{lei}->{ale}->xoids_for($eml)) {
 		$self->{lei}->{sto}->wq_do('update_xvmd', $xoids, $eml,
-						$self->{vmd_mod});
+						$self->{lei}->{vmd_mod});
 	} else {
 		++$self->{unimported};
 	}
@@ -31,11 +31,8 @@ sub lei_tag { # the "lei tag" method
 	my $sto = $lei->_lei_store(1)->write_prepare($lei);
 	my $self = bless {}, __PACKAGE__;
 	$lei->ale; # refresh and prepare
-	my $vmd_mod = $self->vmd_mod_extract(\@argv);
-	return $lei->fail(join("\n", @{$vmd_mod->{err}})) if $vmd_mod->{err};
-	$self->{vmd_mod} = $vmd_mod; # before LeiPmdir->new in prepare_inputs
 	$self->prepare_inputs($lei, \@argv) or return;
-	grep(defined, @$vmd_mod{qw(+kw +L -L -kw)}) or
+	grep(defined, @{$lei->{vmd_mod}}{qw(+kw +L -L -kw)}) or
 		return $lei->fail('no keywords or labels specified');
 	$lei->{-err_type} = 'non-fatal';
 	$lei->wq1_start($self);

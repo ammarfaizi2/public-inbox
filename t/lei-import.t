@@ -1,14 +1,15 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
+use autodie qw(open close);
 test_lei(sub {
 ok(!lei(qw(import -F bogus), 't/plack-qp.eml'), 'fails with bogus format');
 like($lei_err, qr/\bis `eml', not --in-format/, 'gave error message');
 
 lei_ok(qw(q s:boolean), \'search miss before import');
 unlike($lei_out, qr/boolean/i, 'no results, yet');
-open my $fh, '<', 't/data/0001.patch' or BAIL_OUT $!;
+open my $fh, '<', 't/data/0001.patch';
 lei_ok([qw(import -F eml -)], undef, { %$lei_opt, 0 => $fh },
 	\'import single file from stdin') or diag $lei_err;
 close $fh;
@@ -18,7 +19,7 @@ lei_ok(qw(q s:boolean -f mboxrd), \'blob accessible after import');
 	my $expect = [ eml_load('t/data/0001.patch') ];
 	require PublicInbox::MboxReader;
 	my @cmp;
-	open my $fh, '<', \$lei_out or BAIL_OUT "open :scalar: $!";
+	open my $fh, '<', \$lei_out;
 	PublicInbox::MboxReader->mboxrd($fh, sub {
 		my ($eml) = @_;
 		$eml->header_set('Status');
@@ -124,6 +125,20 @@ lei_ok([qw(import -F eml - +kw:answered)],
 lei_ok(qw(q m:inbox@example.com));
 $res = json_utf8->decode($lei_out);
 is_deeply($res->[0]->{kw}, [qw(answered seen)], 'keyword added');
+is_deeply($res->[0]->{L}, [qw(boombox inbox)], 'labels preserved');
+
+# +kw:seen is not a location
+open my $null, '<', '/dev/null';
+ok(!lei([qw(import -F eml +kw:seen)], undef, { %$lei_opt, 0 => $null }),
+	'import fails w/ only kw arg');
+like($lei_err, qr/\bLOCATION\.\.\. or --stdin must be set/s, 'error message');
+
+lei_ok([qw(import -F eml +kw:flagged)], # no lone dash (`-')
+	undef, { %$lei_opt, 0 => \$eml_str },
+	'import succeeds with implicit --stdin');
+lei_ok(qw(q m:inbox@example.com));
+$res = json_utf8->decode($lei_out);
+is_deeply($res->[0]->{kw}, [qw(answered flagged seen)], 'keyword added');
 is_deeply($res->[0]->{L}, [qw(boombox inbox)], 'labels preserved');
 
 # see t/lei_to_mail.t for "import -F mbox*"

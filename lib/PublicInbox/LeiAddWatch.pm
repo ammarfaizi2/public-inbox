@@ -15,11 +15,9 @@ sub lei_add_watch {
 	my $state = $lei->{opt}->{'state'} // 'import-rw';
 	$lei->watch_state_ok($state) or
 		return $lei->fail("invalid state: $state");
-	my $vmd_mod = $self->vmd_mod_extract(\@argv);
-	return $lei->fail(join("\n", @{$vmd_mod->{err}})) if $vmd_mod->{err};
 	$self->prepare_inputs($lei, \@argv) or return;
 	my @vmd;
-	while (my ($type, $vals) = each %$vmd_mod) {
+	while (my ($type, $vals) = each %{$lei->{vmd_mod}}) {
 		push @vmd, "$type:$_" for @$vals;
 	}
 	my $vmd0 = shift @vmd;
