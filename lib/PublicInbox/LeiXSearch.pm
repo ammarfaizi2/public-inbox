@@ -211,9 +211,10 @@ sub query_one_mset { # for --threads and l2m w/o sort
 			}
 		} else {
 			$first_ids = $ids;
-			my @items = $mset->items;
+			my @items = $mset->items; # parallel with @$ids
 			for my $n (@$ids) {
 				my $mitem = $items[$i++];
+				next if $n <= $min;
 				my $smsg = $over->get_art($n) or next;
 				next if $smsg->{bytes} == 0;
 				mitem_kw($srch, $smsg, $mitem, $fl) if $can_kw;
