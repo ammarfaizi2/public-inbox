@@ -95,6 +95,7 @@ sub onion_hint ($$) {
 	$uri->host =~ /\.onion\z/i or return "\n";
 	my $t = $uri->isa('PublicInbox::URIimap') ? 'imap' : 'nntp';
 	my $url = PublicInbox::Config::squote_maybe(uri_section($uri));
+	my $scheme = $uri->scheme;
 	my $set_cfg = 'lei config';
 	if (!$lei) { # public-inbox-watch
 		my $f = PublicInbox::Config::squote_maybe(
@@ -109,6 +110,10 @@ try configuring a socks5h:// proxy:
 
 	url=$url
 	$set_cfg $t.$dq\$url$dq.proxy socks5h://127.0.0.1:9050
+
+git 2.26+ users may instead rely on `*' to match all .onion URLs:
+
+	$set_cfg '$t.$scheme://*.onion.proxy' socks5h://127.0.0.1:9050
 
 ...before retrying your current command
 EOM
