@@ -1,8 +1,7 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 use PublicInbox::TestCommon;
 # IO::Poll is part of the standard library, but distros may split it off...
@@ -158,10 +157,19 @@ for my $args (
 	test_lei(sub {
 		lei_ok qw(ls-mail-source), "imap://$starttls_addr",
 			\'STARTTLS not used by default';
+		my $plain_out = $lei_out;
 		ok(!lei(qw(ls-mail-source -c imap.starttls),
 			"imap://$starttls_addr"), 'STARTTLS verify fails');
 		unlike $lei_err, qr!W: imap\.starttls= .*? is not boolean!i,
 			'no non-boolean warning';
+		lei_ok qw(-c imap.starttls -c imap.sslVerify= ls-mail-source),
+			"imap://$starttls_addr",
+			\'disabling imap.sslVerify works w/ STARTTLS';
+		is $lei_out, $plain_out, 'sslVerify=false w/ STARTTLS output';
+		lei_ok qw(ls-mail-source -c imap.sslVerify=false),
+			"imaps://$imaps_addr",
+			\'disabling imap.sslVerify works w/ imaps://';
+		is $lei_out, $plain_out, 'sslVerify=false w/ IMAPS output';
 	});
 
 	SKIP: {

@@ -1,8 +1,7 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::TestCommon;
 use Socket qw(SOCK_STREAM IPPROTO_TCP SOL_SOCKET);
 # IO::Poll and Net::NNTP are part of the standard library, but
@@ -149,12 +148,22 @@ for my $args (
 	test_lei(sub {
 		lei_ok qw(ls-mail-source), "nntp://$starttls_addr",
 			\'STARTTLS not used by default';
+		my $plain_out = $lei_out;
 		ok(!lei(qw(ls-mail-source -c nntp.starttls),
 			"nntp://$starttls_addr"), 'STARTTLS verify fails');
 		like $lei_err, qr/STARTTLS requested/,
 			'STARTTLS noted in stderr';
 		unlike $lei_err, qr!W: nntp\.starttls= .*? is not boolean!i,
 			'no non-boolean warning';
+		lei_ok qw(-c nntp.starttls -c nntp.sslVerify= ls-mail-source),
+			"nntp://$starttls_addr",
+			\'disabling nntp.sslVerify works w/ STARTTLS';
+		is $lei_out, $plain_out, 'sslVerify=false w/ STARTTLS output';
+
+		lei_ok qw(ls-mail-source -c nntp.sslVerify=false),
+			"nntps://$nntps_addr",
+			\'disabling nntp.sslVerify works w/ nntps://';
+		is $lei_out, $plain_out, 'sslVerify=false w/ NNTPS output';
 	});
 
 	SKIP: {

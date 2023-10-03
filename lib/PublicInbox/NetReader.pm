@@ -49,6 +49,13 @@ sub mic_tls_opt ($$) {
 	[ map { ($_, $o->{$_}) } keys %$o ];
 }
 
+sub set_ssl_verify_mode ($$) {
+	my ($o, $bool) = @_;
+	require IO::Socket::SSL;
+	$o->{SSL_verify_mode} = $bool ? IO::Socket::SSL::SSL_VERIFY_PEER() :
+					IO::Socket::SSL::SSL_VERIFY_NONE();
+}
+
 sub mic_new ($$$$) {
 	my ($self, $mic_arg, $sec, $uri) = @_;
 	my %mic_arg = (%$mic_arg, Keepalive => 1);
@@ -138,7 +145,6 @@ sub mic_for ($$$$) { # mic = Mail::IMAPClient
 		Server => $host,
 		%$common, # may set Starttls, Compress, Debug ....
 	};
-	$mic_arg->{Ssl} = 1 if $uri->scheme eq 'imaps';
 	require PublicInbox::IMAPClient;
 	my $mic = mic_new($self, $mic_arg, $sec, $uri);
 	($mic && $mic->IsConnected) or
@@ -341,6 +347,7 @@ sub imap_common_init ($;$) {
 		}
 		my $to = cfg_intvl($cfg, 'imap.timeout', $$uri);
 		$mic_common->{$sec}->{Timeout} = $to if $to;
+		$mic_common->{$sec}->{Ssl} = 1 if $uri->scheme eq 'imaps';
 
 		# knobs we use ourselves:
 		my $sa = socks_args($cfg->urlmatch('imap.Proxy', $$uri));
@@ -350,11 +357,18 @@ sub imap_common_init ($;$) {
 			$self->{cfg_opt}->{$sec}->{$k} = $to;
 		}
 		my $k = 'imap.fetchBatchSize';
-		my $bs = $cfg->urlmatch($k, $$uri) // next;
-		if ($bs =~ /\A([0-9]+)\z/ && $bs > 0) {
-			$self->{cfg_opt}->{$sec}->{batch_size} = $bs;
-		} else {
-			warn "$k=$bs is not a positive integer\n";
+		if (defined(my $bs = $cfg->urlmatch($k, $$uri))) {
+			($bs =~ /\A([0-9]+)\z/ && $bs > 0) ?
+				($self->{cfg_opt}->{$sec}->{batch_size} = $bs) :
+				warn("$k=$bs is not a positive integer\n");
+		}
+		my $v = $cfg->urlmatch(qw(--bool imap.sslVerify), $$uri);
+		if (defined $v) {
+			my $cur = $mic_common->{$sec} //= {};
+			$cur->{Starttls} //= 1 if !$cur->{Ssl};
+			for my $f (grep { $cur->{$_} } qw(Ssl Starttls)) {
+				set_ssl_verify_mode($cur->{$f} = {}, $v);
+			}
 		}
 	}
 	# make sure we can connect and cache the credentials in memory
@@ -402,6 +416,8 @@ sub nntp_common_init ($;$) {
 			$v = $cfg->urlmatch('--bool', "nntp.$k", $$uri);
 			$self->{cfg_opt}->{$sec}->{$k} = $v if defined $v;
 		}
+		$v = $cfg->urlmatch(qw(--bool nntp.sslVerify), $$uri);
+		set_ssl_verify_mode($args, $v) if defined $v;
 
 		# -watch internal option
 		for my $k (qw(pollInterval)) {
