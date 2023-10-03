@@ -40,6 +40,15 @@ EOM
 	die "$val not understood (only socks5h:// is supported)\n";
 }
 
+# gives an arrayref suitable for the Mail::IMAPClient Ssl or Starttls arg
+sub mic_tls_opt ($$) {
+	my ($o, $hostname) = @_;
+	require IO::Socket::SSL;
+	$o = {} if !ref($o);
+	$o->{SSL_hostname} //= $hostname;
+	[ map { ($_, $o->{$_}) } keys %$o ];
+}
+
 sub mic_new ($$$$) {
 	my ($self, $mic_arg, $sec, $uri) = @_;
 	my %mic_arg = (%$mic_arg, Keepalive => 1);
@@ -54,12 +63,20 @@ sub mic_new ($$$$) {
 		$opt{ConnectPort} = delete $mic_arg{Port};
 		my $s = IO::Socket::Socks->new(%opt) or die
 			"E: <$uri> ".eval('$IO::Socket::Socks::SOCKS_ERROR');
-		if ($mic_arg->{Ssl}) { # for imaps://
-			require IO::Socket::SSL;
-			$s = IO::Socket::SSL->start_SSL($s) or die
+		if (my $o = delete $mic_arg{Ssl}) { # for imaps://
+			$o = mic_tls_opt($o, $opt{ConnectAddr});
+			$s = IO::Socket::SSL->start_SSL($s, @$o) or die
 				"E: <$uri> ".(IO::Socket::SSL->errstr // '');
+		} elsif ($o = $mic_arg{Starttls}) {
+			# Mail::IMAPClient will use this:
+			$mic_arg{Starttls} = mic_tls_opt($o, $opt{ConnectAddr});
 		}
 		$mic_arg{Socket} = $s;
+	} elsif ($mic_arg{Ssl} || $mic_arg{Starttls}) {
+		for my $f (qw(Ssl Starttls)) {
+			my $o = $mic_arg{$f} or next;
+			$mic_arg{$f} = mic_tls_opt($o, $mic_arg{Server});
+		}
 	}
 	PublicInbox::IMAPClient->new(%mic_arg);
 }
