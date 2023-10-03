@@ -3,8 +3,9 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # note: our HTTP server should be standalone and capable of running
 # generic PSGI/Plack apps.
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use Time::HiRes qw(gettimeofday tv_interval);
+use autodie qw(getsockopt setsockopt);
 use PublicInbox::Spawn qw(spawn popen_rd);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
 use PublicInbox::SHA qw(sha1_hex);
@@ -26,20 +27,21 @@ my @zmods = qw(PublicInbox::GzipFilter IO::Uncompress::Gunzip);
 # Make sure we don't clobber socket options set by systemd or similar
 # using socket activation:
 my ($defer_accept_val, $accf_arg, $TCP_DEFER_ACCEPT);
-if ($^O eq 'linux') {
+SKIP: {
+	skip 'TCP_DEFER_ACCEPT is Linux-only' if $^O ne 'linux';
 	$TCP_DEFER_ACCEPT = eval { Socket::TCP_DEFER_ACCEPT() } // 9;
-	setsockopt($sock, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 5) or die;
+	setsockopt($sock, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 5);
 	my $x = getsockopt($sock, IPPROTO_TCP, $TCP_DEFER_ACCEPT);
-	defined $x or die "getsockopt: $!";
 	$defer_accept_val = unpack('i', $x);
-	if ($defer_accept_val <= 0) {
-		die "unexpected TCP_DEFER_ACCEPT value: $defer_accept_val";
-	}
-} elsif ($^O eq 'freebsd' && system('kldstat -m accf_data >/dev/null') == 0) {
+	ok($defer_accept_val > 0, 'TCP_DEFER_ACCEPT val non-zero') or
+		xbail "unexpected TCP_DEFER_ACCEPT value: $defer_accept_val";
+}
+SKIP: {
+	require_mods '+accf_data';
 	require PublicInbox::Daemon;
 	my $var = $PublicInbox::Daemon::SO_ACCEPTFILTER;
 	$accf_arg = pack('a16a240', 'dataready', '');
-	setsockopt($sock, SOL_SOCKET, $var, $accf_arg) or die "setsockopt: $!";
+	setsockopt($sock, SOL_SOCKET, $var, $accf_arg);
 }
 
 sub unix_server ($) {
@@ -625,15 +627,14 @@ SKIP: {
 SKIP: {
 	skip 'TCP_DEFER_ACCEPT is Linux-only', 1 if $^O ne 'linux';
 	my $var = $TCP_DEFER_ACCEPT;
-	defined(my $x = getsockopt($sock, IPPROTO_TCP, $var)) or die;
+	my $x = getsockopt($sock, IPPROTO_TCP, $var);
 	is(unpack('i', $x), $defer_accept_val,
 		'TCP_DEFER_ACCEPT unchanged if previously set');
 };
 SKIP: {
-	skip 'SO_ACCEPTFILTER is FreeBSD-only', 1 if $^O ne 'freebsd';
-	skip 'accf_data not loaded: kldload accf_data' if !defined $accf_arg;
+	require_mods '+accf_data';
 	my $var = $PublicInbox::Daemon::SO_ACCEPTFILTER;
-	defined(my $x = getsockopt($sock, SOL_SOCKET, $var)) or die;
+	my $x = getsockopt($sock, SOL_SOCKET, $var);
 	is($x, $accf_arg, 'SO_ACCEPTFILTER unchanged if previously set');
 };
 

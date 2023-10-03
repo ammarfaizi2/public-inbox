@@ -175,10 +175,7 @@ for my $args (
 		is(unpack('i', $x), 0, 'TCP_DEFER_ACCEPT is 0 on plain NNTP');
 	};
 	SKIP: {
-		skip 'SO_ACCEPTFILTER is FreeBSD-only', 2 if $^O ne 'freebsd';
-		if (system('kldstat -m accf_data >/dev/null')) {
-			skip 'accf_data not loaded? kldload accf_data', 2;
-		}
+		require_mods '+accf_data';
 		require PublicInbox::Daemon;
 		my $x = getsockopt($nntps, SOL_SOCKET,
 				$PublicInbox::Daemon::SO_ACCEPTFILTER);

@@ -102,10 +102,7 @@ for my $args (
 		ok(unpack('i', $x) > 0, 'TCP_DEFER_ACCEPT set on https');
 	};
 	SKIP: {
-		skip 'SO_ACCEPTFILTER is FreeBSD-only', 2 if $^O ne 'freebsd';
-		if (system('kldstat -m accf_data >/dev/null')) {
-			skip 'accf_data not loaded? kldload accf_data', 2;
-		}
+		require_mods '+accf_data';
 		require PublicInbox::Daemon;
 		ok(defined($PublicInbox::Daemon::SO_ACCEPTFILTER),
 			'SO_ACCEPTFILTER defined');

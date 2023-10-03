@@ -641,7 +641,7 @@ sub defer_accept ($$) {
 		my $sec = unpack('i', $x);
 		return if $sec > 0; # systemd users may set a higher value
 		setsockopt($s, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 1);
-	} elsif ($^O eq 'freebsd') {
+	} elsif ($^O =~ /\A(?:freebsd|netbsd)\z/) {
 		my $x = getsockopt($s, SOL_SOCKET, $SO_ACCEPTFILTER);
 		return if defined $x; # don't change if set
 		my $accf_arg = pack('a16a240', $af_name, '');

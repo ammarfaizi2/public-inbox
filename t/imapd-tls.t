@@ -181,10 +181,7 @@ for my $args (
 		is(unpack('i', $x), 0, 'TCP_DEFER_ACCEPT is 0 on plain IMAP');
 	};
 	SKIP: {
-		skip 'SO_ACCEPTFILTER is FreeBSD-only', 2 if $^O ne 'freebsd';
-		if (system('kldstat -m accf_data >/dev/null')) {
-			skip 'accf_data not loaded? kldload accf_data', 2;
-		}
+		require_mods '+accf_data';
 		require PublicInbox::Daemon;
 		my $x = getsockopt($imaps, SOL_SOCKET,
 				$PublicInbox::Daemon::SO_ACCEPTFILTER);

@@ -104,10 +104,7 @@ SKIP: {
 	ok(unpack('i', $x) > 0, 'TCP_DEFER_ACCEPT set');
 };
 SKIP: {
-	skip 'SO_ACCEPTFILTER is FreeBSD-only', 1 if $^O ne 'freebsd';
-	if (system('kldstat -m accf_http >/dev/null') != 0) {
-		skip 'accf_http not loaded: kldload accf_http', 1;
-	}
+	require_mods '+accf_http';
 	require PublicInbox::Daemon;
 	ok(defined($PublicInbox::Daemon::SO_ACCEPTFILTER),
 		'SO_ACCEPTFILTER defined');

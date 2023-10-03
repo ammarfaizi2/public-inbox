@@ -268,9 +268,7 @@ EOF
 		is(unpack('i', $x), 0, 'TCP_DEFER_ACCEPT is 0 on plain POP3');
 	};
 	SKIP: {
-		skip 'SO_ACCEPTFILTER is FreeBSD-only', 2 if $^O ne 'freebsd';
-		system('kldstat -m accf_data >/dev/null') and
-			skip 'accf_data not loaded? kldload accf_data', 2;
+		require_mods '+accf_data';
 		require PublicInbox::Daemon;
 		my $x = getsockopt($pop3s, SOL_SOCKET,
 				$PublicInbox::Daemon::SO_ACCEPTFILTER);

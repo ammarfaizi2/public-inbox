@@ -133,6 +133,15 @@ my %IPv6_VERSION = (
 	'Net::POP3' => 2.32,
 );
 
+sub need_accept_filter ($) {
+	my ($af) = @_;
+	return if $^O eq 'netbsd'; # since NetBSD 5.0
+	skip 'SO_ACCEPTFILTER is FreeBSD/NetBSD-only' if $^O ne 'freebsd';
+	state $tried = {};
+	($tried->{$af} //= system("kldstat -m $af >/dev/null")) and
+		skip "$af not loaded: kldload $af";
+}
+
 sub require_mods {
 	my @mods = @_;
 	my $maybe = pop @mods if $mods[-1] =~ /\A[0-9]+\z/;
@@ -166,6 +175,9 @@ sub require_mods {
 				push @need, $msg;
 				next;
 			}
+		} elsif ($mod =~ /\A\+(accf_.*)\z/) {
+			need_accept_filter($1);
+			next
 		} elsif (index($mod, '||') >= 0) { # "Foo||Bar"
 			my $ok;
 			for my $m (split(/\Q||\E/, $mod)) {
