@@ -568,28 +568,34 @@ sub config_cmd {
 }
 
 sub urlmatch {
-	my ($self, $key, $url, $try_git) = @_;
+	my $self = shift;
+	my @bool = $_[0] eq '--bool' ? (shift) : ();
+	my ($key, $url, $try_git) = @_;
 	state $urlmatch_broken; # requires git 1.8.5
 	return if $urlmatch_broken;
 	my (%env, %opt);
 	my $cmd = $self->config_cmd(\%env, \%opt);
-	push @$cmd, qw(-z --includes --get-urlmatch), $key, $url;
+	push @$cmd, @bool, qw(--includes -z --get-urlmatch), $key, $url;
 	my $fh = popen_rd($cmd, \%env, \%opt);
 	local $/ = "\0";
 	my $val = <$fh>;
 	if (!close($fh)) {
 		undef $val;
-		if (($? >> 8) != 1) {
+		if (@bool && ($? >> 8) == 128) { # not boolean
+		} elsif (($? >> 8) != 1) {
 			$urlmatch_broken = 1;
 		} elsif ($try_git) { # n.b. this takes cwd into account
-			$cmd = [qw(git config -z --get-urlmatch), $key, $url];
-			$fh = popen_rd($cmd);
+			$fh = popen_rd([qw(git config), @bool,
+					qw(-z --get-urlmatch), $key, $url]);
 			$val = <$fh>;
 			close($fh) or undef($val);
 		}
 	}
 	$? = 0; # don't influence lei exit status
-	chomp $val if defined $val;
+	if (defined($val)) {
+		chomp $val;
+		$val = git_bool($val) if @bool;
+	}
 	$val;
 }
 

@@ -158,8 +158,10 @@ for my $args (
 	test_lei(sub {
 		lei_ok qw(ls-mail-source), "imap://$starttls_addr",
 			\'STARTTLS not used by default';
-		ok(!lei(qw(ls-mail-source -c imap.starttls=true),
+		ok(!lei(qw(ls-mail-source -c imap.starttls),
 			"imap://$starttls_addr"), 'STARTTLS verify fails');
+		unlike $lei_err, qr!W: imap\.starttls= .*? is not boolean!i,
+			'no non-boolean warning';
 	});
 
 	SKIP: {

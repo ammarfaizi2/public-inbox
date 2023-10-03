@@ -319,14 +319,6 @@ sub cfg_intvl ($$$) {
 	}
 }
 
-sub cfg_bool ($$$) {
-	my ($cfg, $key, $url) = @_;
-	my $orig = $cfg->urlmatch($key, $url) // return;
-	my $bool = $cfg->git_bool($orig);
-	warn "W: $key=$orig for $url is not boolean\n" unless defined($bool);
-	$bool;
-}
-
 # flesh out common IMAP-specific data structures
 sub imap_common_init ($;$) {
 	my ($self, $lei) = @_;
@@ -344,8 +336,8 @@ sub imap_common_init ($;$) {
 
 		# knobs directly for Mail::IMAPClient->new
 		for my $k (qw(Starttls Debug Compress)) {
-			my $bool = cfg_bool($cfg, "imap.$k", $$uri) // next;
-			$mic_common->{$sec}->{$k} = $bool;
+			my $v = $cfg->urlmatch('--bool', "imap.$k", $$uri);
+			$mic_common->{$sec}->{$k} = $v if defined $v;
 		}
 		my $to = cfg_intvl($cfg, 'imap.timeout', $$uri);
 		$mic_common->{$sec}->{Timeout} = $to if $to;
@@ -398,7 +390,7 @@ sub nntp_common_init ($;$) {
 		my $args = $nn_common->{$sec} //= {};
 
 		# Debug and Timeout are passed to Net::NNTP->new
-		my $v = cfg_bool($cfg, 'nntp.Debug', $$uri);
+		my $v = $cfg->urlmatch(qw(--bool nntp.Debug), $$uri);
 		$args->{Debug} = $v if defined $v;
 		my $to = cfg_intvl($cfg, 'nntp.Timeout', $$uri);
 		$args->{Timeout} = $to if $to;
@@ -407,8 +399,8 @@ sub nntp_common_init ($;$) {
 
 		# Net::NNTP post-connect commands
 		for my $k (qw(starttls compress)) {
-			$v = cfg_bool($cfg, "nntp.$k", $$uri) // next;
-			$self->{cfg_opt}->{$sec}->{$k} = $v;
+			$v = $cfg->urlmatch('--bool', "nntp.$k", $$uri);
+			$self->{cfg_opt}->{$sec}->{$k} = $v if defined $v;
 		}
 
 		# -watch internal option

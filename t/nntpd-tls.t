@@ -149,10 +149,12 @@ for my $args (
 	test_lei(sub {
 		lei_ok qw(ls-mail-source), "nntp://$starttls_addr",
 			\'STARTTLS not used by default';
-		ok(!lei(qw(ls-mail-source -c nntp.starttls=true),
+		ok(!lei(qw(ls-mail-source -c nntp.starttls),
 			"nntp://$starttls_addr"), 'STARTTLS verify fails');
 		like $lei_err, qr/STARTTLS requested/,
 			'STARTTLS noted in stderr';
+		unlike $lei_err, qr!W: nntp\.starttls= .*? is not boolean!i,
+			'no non-boolean warning';
 	});
 
 	SKIP: {
