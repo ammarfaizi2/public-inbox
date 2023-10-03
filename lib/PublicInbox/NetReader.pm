@@ -788,14 +788,12 @@ sub _nntp_fetch_all ($$$) {
 	$beg = $num_a if defined($num_a) && $num_a > $beg && $num_a <= $end;
 	$end = $num_b if defined($num_b) && $num_b >= $beg && $num_b < $end;
 	$end = $beg if defined($num_a) && !defined($num_b);
-	my ($err, $art, $last_art, $kw); # kw stays undef, no keywords in NNTP
-	unless ($self->{quiet}) {
-		warn "# $uri fetching ARTICLE $beg..$end\n";
-	}
+	my ($err, $last_art, $kw); # kw stays undef, no keywords in NNTP
+	warn "# $uri fetching ARTICLE $beg..$end\n" if !$self->{quiet};
 	my $n = $self->{max_batch};
-	for ($beg..$end) {
+	for my $art ($beg..$end) {
 		last if $self->{quit};
-		$art = $_;
+		local $0 = "#$art $group $sec";
 		if (--$n < 0) {
 			run_commit_cb($self);
 			$itrk->update_last(0, $last_art) if $itrk;
