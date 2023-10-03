@@ -17,16 +17,18 @@ sub new_socks {
 	local %OPT = map {;
 		defined($opt{$_}) ? ($_ => $opt{$_}) : ()
 	} @SOCKS_KEYS;
-	Net::NNTP->new(%opt); # this calls our new() below:
+	no warnings 'uninitialized'; # needed for $SOCKS_ERROR
+	Net::NNTP->new(%opt) // die "errors: \$!=$! SOCKS=",
+				eval('$IO::Socket::Socks::SOCKS_ERROR // ""'),
+				', SSL=',
+				(eval('IO::Socket::SSL->errstr')  // ''), "\n";
 }
 
 # called by Net::NNTP->new
 sub new {
 	my ($self, %opt) = @_;
 	@OPT{qw(ConnectAddr ConnectPort)} = @opt{qw(PeerAddr PeerPort)};
-	my $ret = $self->SUPER::new(%OPT) or
-		die 'SOCKS error: '.eval('$IO::Socket::Socks::SOCKS_ERROR');
-	$ret;
+	$self->SUPER::new(%OPT);
 }
 
 1;

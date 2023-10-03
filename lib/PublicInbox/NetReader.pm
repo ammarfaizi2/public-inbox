@@ -180,8 +180,7 @@ sub nn_new ($$$) {
 	if (defined $nn_arg->{ProxyAddr}) {
 		require PublicInbox::NetNNTPSocks;
 		$nn_arg->{SocksDebug} = 1 if $nn_arg->{Debug};
-		eval { $nn = PublicInbox::NetNNTPSocks->new_socks(%$nn_arg) };
-		die "E: <$uri> $@\n" if $@;
+		$nn = PublicInbox::NetNNTPSocks->new_socks(%$nn_arg) or return;
 	} else {
 		$nn = Net::NNTP->new(%$nn_arg) or return;
 	}
