@@ -485,6 +485,7 @@ sub x_it ($$) {
 	stop_pager($self);
 	if ($self->{pkt_op_p}) { # worker => lei-daemon
 		$self->{pkt_op_p}->pkt_do('x_it', $code);
+		exit($code >> 8);
 	} elsif ($self->{sock}) { # lei->daemon => lei(1) client
 		send($self->{sock}, "x_it $code", 0);
 	} elsif ($quit == \&CORE::exit) { # an admin (one-shot) command
