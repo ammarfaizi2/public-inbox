@@ -1,10 +1,12 @@
 #!perl -w
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::MboxReader;
+use autodie qw(pipe close);
 my $test_tor = $ENV{TEST_TOR};
 plan skip_all => "TEST_TOR unset" unless $test_tor;
+require_mods qw(IO::Socket::Socks IO::Socket::SSL Mail::IMAPClient Net::NNTP);
 unless ($test_tor =~ m!\Asocks5h://!i) {
 	my $default = 'socks5h://127.0.0.1:9050';
 	diag "using $default (set TEST_TOR=socks5h://ADDR:PORT to override)";
@@ -19,11 +21,24 @@ my @cnv = qw(lei convert -o mboxrd:/dev/stdout);
 my @proxy_cli = ("--proxy=$test_tor");
 my $proxy_cfg = "proxy=$test_tor";
 test_lei(sub {
+	# ensure TLS + SOCKS works
+	ok !lei(qw(ls-mail-source imaps://mews.public-inbox.org/
+		-c), "imap.$proxy_cfg"),
+		'imaps fails on wrong hostname w/ Tor';
+	ok !lei(qw(ls-mail-source nntps://mews.public-inbox.org/
+		-c), "nntp.$proxy_cfg"),
+		'nntps fails on wrong hostname w/ Tor';
+
+	lei_ok qw(ls-mail-source imaps://news.public-inbox.org/
+		-c), "imap.$proxy_cfg";
+	lei_ok qw(ls-mail-source nntps://news.public-inbox.org/
+		-c), "nntp.$proxy_cfg";
+
 	my $run = {};
 	for my $args ([$nntp_url, @proxy_cli], [$imap_url, @proxy_cli],
 			[ $nntp_url, '-c', "nntp.$proxy_cfg" ],
 			[ $imap_url, '-c', "imap.$proxy_cfg" ]) {
-		pipe(my ($r, $w)) or xbail "pipe: $!";
+		pipe(my $r, my $w);
 		my $cmd = [@cnv, @$args];
 		my $td = start_script($cmd, undef, { 1 => $w, run_mode => 0 });
 		$args->[0] =~ s!\A(.+?://).*!$1...!;
