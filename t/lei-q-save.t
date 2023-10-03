@@ -1,7 +1,8 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
+use autodie qw(close open unlink);
 use PublicInbox::Smsg;
 use List::Util qw(sum);
 use File::Path qw(remove_tree);
@@ -89,7 +90,7 @@ test_lei(sub {
 	like($lei_out, qr!^\Q$home/mbcl2\E$!sm, 'complete got mbcl2 output');
 	like($lei_out, qr!^\Q$home/md\E$!sm, 'complete got maildir output');
 
-	unlink("$home/mbcl2") or xbail "unlink $!";
+	unlink("$home/mbcl2");
 	lei_ok qw(_complete lei up);
 	like($lei_out, qr!^\Q$home/mbcl2\E$!sm,
 		'mbcl2 output shown despite unlink');
@@ -97,24 +98,24 @@ test_lei(sub {
 	ok(-f "$home/mbcl2"  && -s _ == 0, 'up recreates on missing output');
 
 	# no --augment
-	open my $mb, '>', "$home/mbrd" or xbail "open $!";
+	open my $mb, '>', "$home/mbrd";
 	print $mb $pre_existing;
-	close $mb or xbail "close: $!";
+	close $mb;
 	lei_ok(qw(q -o mboxrd:mbrd m:qp@example.com -C), $home);
-	open $mb, '<', "$home/mbrd" or xbail "open $!";
+	open $mb, '<', "$home/mbrd";
 	is_deeply([grep(/pre-existing/, <$mb>)], [],
 		'pre-existing messsage gone w/o augment');
-	close $mb;
+	undef $mb;
 	lei_ok(qw(q m:import-before@example.com));
 	is(json_utf8->decode($lei_out)->[0]->{'s'},
 		'pre-existing', '--save imported before clobbering');
 
 	# --augment
-	open $mb, '>', "$home/mbrd-aug" or xbail "open $!";
+	open $mb, '>', "$home/mbrd-aug";
 	print $mb $pre_existing;
-	close $mb or xbail "close: $!";
+	close $mb;
 	lei_ok(qw(q -a -o mboxrd:mbrd-aug m:qp@example.com -C), $home);
-	open $mb, '<', "$home/mbrd-aug" or xbail "open $!";
+	open $mb, '<', "$home/mbrd-aug";
 	$mb = do { local $/; <$mb> };
 	like($mb, qr/pre-existing/, 'pre-existing message preserved w/ -a');
 	like($mb, qr/<qp\@example\.com>/, 'new result written w/ -a');
@@ -228,16 +229,14 @@ test_lei(sub {
 	my @lss = glob("$home/" .
 		'.local/share/lei/saved-searches/*/lei.saved-search');
 	my $out = xqx([qw(git config -f), $lss[0], 'lei.q.output']);
-	xsys($^X, qw(-w -i -p -e), "s/\\[/\\0/", $lss[0])
-		and xbail "-ipe $lss[0]: $?";
+	xsys_e($^X, qw(-w -i -p -e), "s/\\[/\\0/", $lss[0]);
 	lei_ok qw(ls-search);
 	like($lei_err, qr/bad config line.*?\Q$lss[0]\E/,
 		'git config parse error shown w/ lei ls-search');
 	lei_ok qw(up --all), \'up works with bad config';
 	like($lei_err, qr/bad config line.*?\Q$lss[0]\E/,
 		'git config parse error shown w/ lei up');
-	xsys($^X, qw(-w -i -p -e), "s/\\0/\\[/", $lss[0])
-		and xbail "-ipe $lss[0]: $?";
+	xsys_e($^X, qw(-w -i -p -e), "s/\\0/\\[/", $lss[0]);
 	lei_ok qw(ls-search);
 	is($lei_err, '', 'no errors w/ fixed config');
 
@@ -249,17 +248,17 @@ test_lei(sub {
 
 	my $d = "$home/d";
 	lei_ok [qw(import -q -F eml)], undef,
-		{0 => \"Subject: do not call\n\n"};
+		{%$lei_opt, 0 => \"Subject: do not call\n\n"};
 	lei_ok qw(q -o), $d, 's:do not call';
 
 	my @orig = glob("$d/*/*");
 	is(scalar(@orig), 1, 'got one message via argv');
 	lei_ok [qw(import -q -Feml)], undef,
-		{0 => \"Subject: do not ever call\n\n"};
+		{%$lei_opt, 0 => \"Subject: do not ever call\n\n"};
 	lei_ok 'up', $d;
 	is_deeply([glob("$d/*/*")], \@orig, 'nothing written');
 	lei_ok [qw(import -q -Feml)], undef,
-		{0 => \"Subject: do not call, ever\n\n"};
+		{%$lei_opt, 0 => \"Subject: do not call, ever\n\n"};
 	lei_ok 'up', $d;
 	@after = glob("$d/*/*");
 	is(scalar(@after), 2, '2 total, messages, now');
@@ -270,14 +269,15 @@ test_lei(sub {
 		'up retrieved correct message');
 
 	$d = "$home/d-stdin";
-	lei_ok [ qw(q -q -o), $d ], undef, { 0 => \'s:"do not ever call"' };
+	lei_ok [ qw(q -q -o), $d ], undef,
+		{ %$lei_opt, 0 => \'s:"do not ever call"' };
 	@orig = glob("$d/*/*");
 	is(scalar(@orig), 1, 'got one message via stdin');
 
 	lei_ok [qw(import -q -Feml)], undef,
-		{0 => \"Subject: do not fall or ever call\n\n"};
+		{%$lei_opt, 0 => \"Subject: do not fall or ever call\n\n"};
 	lei_ok [qw(import -q -Feml)], undef,
-		{0 => \"Subject: do not ever call, again\n\n"};
+		{%$lei_opt, 0 => \"Subject: do not ever call, again\n\n"};
 	lei_ok 'up', $d;
 	@new = glob("$d/new/*");
 	is(scalar(@new), 1, "new message written to `new'") or do {
@@ -292,7 +292,7 @@ test_lei(sub {
 	lei_ok(qw(q --no-external m:import-before@example.com -t -o), $d);
 	@orig = glob("$d/{new,cur}/*");
 	is(scalar(@orig), 1, 'one result so far');
-	lei_ok [ qw(import -Feml) ], undef, { 0 => \<<'EOM' };
+	lei_ok [ qw(import -Feml) ], undef, { %$lei_opt, 0 => \<<'EOM' };
 Date: Sun, 02 Oct 2023 00:00:00 +0000
 From: <x@example.com>
 In-Reply-To: <import-before@example.com>
