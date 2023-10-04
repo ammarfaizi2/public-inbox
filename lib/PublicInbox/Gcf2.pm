@@ -6,10 +6,11 @@
 package PublicInbox::Gcf2;
 use v5.12;
 use PublicInbox::Spawn qw(which popen_rd); # may set PERL_INLINE_DIRECTORY
-use Fcntl qw(LOCK_EX SEEK_SET);
+use Fcntl qw(SEEK_SET);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
 use PublicInbox::Git;
+use PublicInbox::Lock;
 
 BEGIN {
 	use autodie;
@@ -18,10 +19,10 @@ BEGIN {
 	# to ~/.cache/public-inbox/inline-c if it exists and Inline::C works
 	my $inline_dir = $ENV{PERL_INLINE_DIRECTORY} //
 		die 'PERL_INLINE_DIRECTORY not defined';
-	open my $fh, '+>', "$inline_dir/.public-inbox.lock";
 
 	# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
-	flock($fh, LOCK_EX);
+	my $lk = PublicInbox::Lock->new("$inline_dir/.public-inbox.lock");
+	my $fh = $lk->lock_acquire;
 
 	my $pc = which($ENV{PKG_CONFIG} // 'pkg-config') //
 		die "pkg-config missing for libgit2";
@@ -74,6 +75,7 @@ EOM
 	if ($err) {
 		seek($fh, 0, SEEK_SET);
 		my @msg = <$fh>;
+		truncate($fh, 0);
 		die "Inline::C Gcf2 build failed:\n", $err, "\n", @msg;
 	}
 }
