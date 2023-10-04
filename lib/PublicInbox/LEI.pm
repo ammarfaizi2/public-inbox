@@ -37,15 +37,16 @@ $GLP->configure(qw(gnu_getopt no_ignore_case auto_abbrev));
 my $GLP_PASS = Getopt::Long::Parser->new;
 $GLP_PASS->configure(qw(gnu_getopt no_ignore_case auto_abbrev pass_through));
 
-our %PATH2CFG; # persistent for socket daemon
-our $MDIR2CFGPATH; # /path/to/maildir => { /path/to/config => [ ino watches ] }
+our (%PATH2CFG, # persistent for socket daemon
+$MDIR2CFGPATH, # /path/to/maildir => { /path/to/config => [ ino watches ] }
+$OPT, # shared between optparse and opt_dash callback (for Getopt::Long)
+);
 
 # TBD: this is a documentation mechanism to show a subcommand
 # (may) pass options through to another command:
 sub pass_through { $GLP_PASS }
 
-my $OPT;
-sub opt_dash ($$) {
+sub opt_dash ($$) { # callback runs inside optparse
 	my ($spec, $re_str) = @_; # 'limit|n=i', '([0-9]+)'
 	my ($key) = ($spec =~ m/\A([a-z]+)/g);
 	my $cb = sub { # Getopt::Long "<>" catch-all handler
@@ -691,7 +692,7 @@ sub optparse ($$$) {
 	# allow _complete --help to complete, not show help
 	return 1 if substr($cmd, 0, 1) eq '_';
 	$self->{cmd} = $cmd;
-	$OPT = $self->{opt} //= {};
+	local $OPT = $self->{opt} //= {};
 	my $info = $CMD{$cmd} // [ '[...]' ];
 	my ($proto, undef, @spec) = @$info;
 	my $glp = ref($spec[-1]) eq ref($GLP) ? pop(@spec) : $GLP;
