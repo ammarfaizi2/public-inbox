@@ -742,8 +742,7 @@ sub setup_public_inboxes () {
 	return @ret if -f $stamp;
 
 	require PublicInbox::Lock;
-	my $lk = bless { lock_path => "$test_home/setup.lock" },
-			'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new("$test_home/setup.lock");
 	my $end = $lk->lock_for_scope;
 	return @ret if -f $stamp;
 
@@ -798,7 +797,7 @@ sub create_coderepo ($$;@) {
 		my $err = $!;
 		-d $dir or xbail "mkdir($dir): $err";
 	}
-	my $lk = bless { lock_path => "$dir/creat.lock" }, 'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new("$dir/creat.lock");
 	my $scope = $lk->lock_for_scope;
 	my $tmpdir = delete $opt{tmpdir};
 	if (!-f "$dir/creat.stamp") {
@@ -830,7 +829,7 @@ sub create_inbox ($$;@) {
 		my $err = $!;
 		-d $dir or xbail "mkdir($dir): $err";
 	}
-	my $lk = bless { lock_path => "$dir/creat.lock" }, 'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new("$dir/creat.lock");
 	$opt{inboxdir} = File::Spec->rel2abs($dir);
 	$opt{name} //= $ident;
 	my $scope = $lk->lock_for_scope;

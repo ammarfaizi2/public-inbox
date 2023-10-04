@@ -335,7 +335,7 @@ SKIP: {
 	chomp $oldrev;
 	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
 	my $wt = "t/data-gen/$base.pre-manifest-$oldrev";
-	my $lk = bless { lock_path => __FILE__ }, 'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new(__FILE__);
 	$lk->lock_acquire;
 	my $psgi = "$wt/app.psgi";
 	if (!-f $psgi) { # checkout a pre-manifest.js.gz version

@@ -873,7 +873,7 @@ sub v2_done { # called via OnDestroy
 	return if $self->{dry_run} || !keep_going($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
 	require PublicInbox::Lock;
-	my $lk = bless { lock_path => "$dst/inbox.lock" }, 'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new("$dst/inbox.lock");
 	my $lck = $lk->lock_for_scope($$);
 	_write_inbox_config($self);
 	require PublicInbox::MultiGit;

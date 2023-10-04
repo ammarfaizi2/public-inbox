@@ -1311,7 +1311,7 @@ sub lazy_start {
 	my ($sock_dir) = ($path =~ m!\A(.+?)/[^/]+\z!);
 	$errors_log = "$sock_dir/errors.log";
 	my $addr = pack_sockaddr_un($path);
-	my $lk = bless { lock_path => $errors_log }, 'PublicInbox::Lock';
+	my $lk = PublicInbox::Lock->new($errors_log);
 	umask(077) // die("umask(077): $!");
 	$lk->lock_acquire;
 	socket($listener, AF_UNIX, SOCK_SEQPACKET, 0) or die "socket: $!";

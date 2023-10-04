@@ -223,7 +223,8 @@ SKIP: {
 	};
 	my %bin = (big => $big_size, small => 1);
 	my %oid; # (small|big) => OID
-	my $lk = bless { lock_path => $l }, 'PublicInbox::Lock';
+	require PublicInbox::Lock;
+	my $lk = PublicInbox::Lock->new($l);
 	my $acq = $lk->lock_for_scope;
 	my $stamp = "$binfoo/stamp-";
 	if (open my $fh, '<', $stamp) {
