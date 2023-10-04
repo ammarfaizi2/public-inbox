@@ -1,9 +1,10 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use v5.10.1;
-use Test::More;
+# tests PublicInbox::LeiToMail internals (unstable API)
+# Not as needed now that lei functionality has been ironed out
+use v5.12;
+use autodie qw(open sysopen unlink);
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 use Fcntl qw(SEEK_SET O_RDONLY O_NONBLOCK);
@@ -74,7 +75,7 @@ for my $mbox (@MBOX) {
 
 my ($tmpdir, $for_destroy) = tmpdir();
 local $ENV{TMPDIR} = $tmpdir;
-open my $err, '>>', "$tmpdir/lei.err" or BAIL_OUT $!;
+open my $err, '>>', "$tmpdir/lei.err";
 my $lei = bless { 2 => $err, cmd => 'test' }, 'PublicInbox::LEI';
 my $commit = sub {
 	$_[0] = undef; # wcb
@@ -114,16 +115,16 @@ my $orig = do {
 	ok(-f $fn && !-s _, 'empty file created');
 	$wcb->(\(my $dup = $buf), $deadbeef);
 	$commit->($wcb);
-	open my $fh, '<', $fn or BAIL_OUT $!;
+	open my $fh, '<', $fn;
 	my $raw = do { local $/; <$fh> };
 	like($raw, qr/^blah\n/sm, 'wrote content');
-	unlink $fn or BAIL_OUT $!;
+	unlink $fn;
 
 	$wcb = $wcb_get->($mbox, $fn);
 	ok(-f $fn && !-s _, 'truncated mbox destination');
 	$wcb->(\($dup = $buf), $deadbeef);
 	$commit->($wcb);
-	open $fh, '<', $fn or BAIL_OUT $!;
+	open $fh, '<', $fn;
 	is(do { local $/; <$fh> }, $raw, 'wrote identical content');
 	$raw;
 };
@@ -162,7 +163,7 @@ for my $zsfx (qw(gz bz2 xz)) {
 		my $uncompressed = xqx([@$dc_cmd, $f]);
 		is($uncompressed, $orig, "$zsfx works unlocked");
 
-		unlink $f or BAIL_OUT "unlink $!";
+		unlink $f;
 		$wcb = $wcb_get->($mbox, $f);
 		$wcb->(\($dup = $buf), { %$deadbeef });
 		$commit->($wcb);
@@ -201,14 +202,14 @@ my $as_orig = sub {
 	$eml->as_string;
 };
 
-unlink $fn or BAIL_OUT $!;
+unlink $fn;
 if ('default deduplication uses content_hash') {
 	my $wcb = $wcb_get->('mboxo', $fn);
 	$deadbeef->{kw} = [];
 	$wcb->(\(my $x = $buf), $deadbeef) for (1..2);
 	$commit->($wcb);
 	my $cmp = '';
-	open my $fh, '<', $fn or BAIL_OUT $!;
+	open my $fh, '<', $fn;
 	PublicInbox::MboxReader->mboxo($fh, sub { $cmp .= $as_orig->(@_) });
 	is($cmp, $buf, 'only one message written');
 
@@ -216,7 +217,7 @@ if ('default deduplication uses content_hash') {
 	$wcb = $wcb_get->('mboxo', $fn);
 	$wcb->(\($x = $buf . "\nx\n"), $deadbeef) for (1..2);
 	$commit->($wcb);
-	open $fh, '<', $fn or BAIL_OUT $!;
+	open $fh, '<', $fn;
 	my @x;
 	PublicInbox::MboxReader->mboxo($fh, sub { push @x, $as_orig->(@_) });
 	is(scalar(@x), 2, 'augmented mboxo');
@@ -225,12 +226,12 @@ if ('default deduplication uses content_hash') {
 }
 
 { # stdout support
-	open my $tmp, '+>', undef or BAIL_OUT $!;
+	open my $tmp, '+>', undef;
 	local $lei->{1} = $tmp;
 	my $wcb = $wcb_get->('mboxrd', '/dev/stdout');
 	$wcb->(\(my $x = $buf), $deadbeef);
 	$commit->($wcb);
-	seek($tmp, 0, SEEK_SET) or BAIL_OUT $!;
+	seek($tmp, 0, SEEK_SET);
 	my $cmp = '';
 	PublicInbox::MboxReader->mboxrd($tmp, sub { $cmp .= $as_orig->(@_) });
 	is($cmp, $buf, 'message written to stdout');
@@ -240,7 +241,7 @@ SKIP: { # FIFO support
 	use POSIX qw(mkfifo);
 	my $fn = "$tmpdir/fifo";
 	mkfifo($fn, 0600) or skip("mkfifo not supported: $!", 1);
-	sysopen(my $cat, $fn, O_RDONLY|O_NONBLOCK) or BAIL_OUT $!;
+	sysopen(my $cat, $fn, O_RDONLY|O_NONBLOCK);
 	my $wcb = $wcb_get->('mboxo', $fn);
 	$wcb->(\(my $x = $buf), $deadbeef);
 	$commit->($wcb);
@@ -260,7 +261,7 @@ SKIP: { # FIFO support
 
 	my @f;
 	$mdr->maildir_each_file($md, sub { push @f, shift });
-	open my $fh, '<', $f[0] or BAIL_OUT $!;
+	open my $fh, '<', $f[0];
 	is(do { local $/; <$fh> }, $buf, 'wrote to Maildir');
 
 	$wcb = $wcb_get->('maildir', $md);
@@ -271,7 +272,7 @@ SKIP: { # FIFO support
 	$mdr->maildir_each_file($md, sub { push @x, shift });
 	is(scalar(@x), 1, 'wrote one new file');
 	ok(!-f $f[0], 'old file clobbered');
-	open $fh, '<', $x[0] or BAIL_OUT $!;
+	open $fh, '<', $x[0];
 	is(do { local $/; <$fh> }, $buf."\nx\n", 'wrote new file to Maildir');
 
 	local $lei->{opt}->{augment} = 1;
@@ -283,9 +284,9 @@ SKIP: { # FIFO support
 	is(scalar grep(/\A\Q$x[0]\E\z/, @f), 1, 'old file still there');
 	my @new = grep(!/\A\Q$x[0]\E\z/, @f);
 	is(scalar @new, 1, '1 new file written (b4dc0ffee skipped)');
-	open $fh, '<', $x[0] or BAIL_OUT $!;
+	open $fh, '<', $x[0];
 	is(do { local $/; <$fh> }, $buf."\nx\n", 'old file untouched');
-	open $fh, '<', $new[0] or BAIL_OUT $!;
+	open $fh, '<', $new[0];
 	is(do { local $/; <$fh> }, $buf."\ny\n", 'new file written');
 }
 
