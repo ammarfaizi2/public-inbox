@@ -1365,9 +1365,6 @@ sub lazy_start {
 	my $sig = { CHLD => \&PublicInbox::DS::enqueue_reap };
 	$sig->{$_} = $quit for qw(QUIT INT TERM);
 	$sig->{$_} = \&PublicInbox::Config::noop for qw(HUP USR1 USR2);
-	# for EVFILT_SIGNAL and signalfd behavioral difference:
-	my @kq_ign = eval { require PublicInbox::DSKQXS } ? keys(%$sig) : ();
-
 	require PublicInbox::DirIdle;
 	local $dir_idle = PublicInbox::DirIdle->new(sub {
 		# just rely on wakeup to hit post_loop_do
@@ -1390,16 +1387,6 @@ sub lazy_start {
 	# $daemon pipe to `lei' closed, main loop begins:
 	eval { PublicInbox::DS::event_loop($sig, $oldset) };
 	warn "event loop error: $@\n" if $@;
-
-	# EVFILT_SIGNAL will get a duplicate of all the signals it was sent
-	local @SIG{@kq_ign} = map 'IGNORE', @kq_ign;
-	PublicInbox::DS::sig_setmask($oldset) if @kq_ign;
-
-	# exit() may trigger waitpid via various DESTROY, ensure interruptible
-	local $SIG{TERM} = sub { exit(POSIX::SIGTERM + 128) };
-	local $SIG{INT} = sub { exit(POSIX::SIGINT + 128) };
-	local $SIG{QUIT} = sub { exit(POSIX::SIGQUIT + 128) };
-	PublicInbox::DS::sig_setmask($oldset) if !@kq_ign;
 	dump_and_clear_log();
 	exit($exit_code // 0);
 }
