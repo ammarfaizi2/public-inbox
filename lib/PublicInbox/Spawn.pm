@@ -17,7 +17,8 @@
 package PublicInbox::Spawn;
 use v5.12;
 use parent qw(Exporter);
-use Fcntl qw(LOCK_EX SEEK_SET);
+use PublicInbox::Lock;
+use Fcntl qw(SEEK_SET);
 use IO::Handle ();
 use Carp qw(croak);
 use PublicInbox::ProcessPipe;
@@ -285,26 +286,25 @@ ALL_LIBC
 	$all_libc = undef unless -d _ && -w _;
 	if (defined $all_libc) {
 		local $ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
-		my $f = "$inline_dir/.public-inbox.lock";
-		open my $oldout, '>&', \*STDOUT or die "dup(1): $!";
-		open my $olderr, '>&', \*STDERR or die "dup(2): $!";
-		open my $fh, '+>', $f or die "open($f): $!";
-		open STDOUT, '>&', $fh or die "1>$f: $!";
-		open STDERR, '>&', $fh or die "2>$f: $!";
+		use autodie;
+		# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
+		my $lk = PublicInbox::Lock->new($inline_dir.
+						'/.public-inbox.lock');
+		my $fh = $lk->lock_acquire;
+		open my $oldout, '>&', \*STDOUT;
+		open my $olderr, '>&', \*STDERR;
+		open STDOUT, '>&', $fh;
+		open STDERR, '>&', $fh;
 		STDERR->autoflush(1);
 		STDOUT->autoflush(1);
-
-		# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
-		flock($fh, LOCK_EX) or die "LOCK_EX($f): $!";
-		eval <<'EOM';
-use Inline C => $all_libc, BUILD_NOISY => 1;
-EOM
+		CORE::eval 'use Inline C => $all_libc, BUILD_NOISY => 1';
 		my $err = $@;
-		open(STDERR, '>&', $olderr) or warn "restore stderr: $!";
-		open(STDOUT, '>&', $oldout) or warn "restore stdout: $!";
+		open(STDERR, '>&', $olderr);
+		open(STDOUT, '>&', $oldout);
 		if ($err) {
 			seek($fh, 0, SEEK_SET);
 			my @msg = <$fh>;
+			truncate($fh, 0);
 			warn "Inline::C build failed:\n", $err, "\n", @msg;
 			$all_libc = undef;
 		}
