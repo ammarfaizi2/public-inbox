@@ -282,8 +282,6 @@ ALL_LIBC
 			$ENV{XDG_CACHE_HOME} //
 			( ($ENV{HOME} // '/nonexistent').'/.cache' )
 		).'/public-inbox/inline-c';
-	warn "$inline_dir exists, not writable\n" if -e $inline_dir && !-w _;
-	$all_libc = undef unless -d _ && -w _;
 	if (defined $all_libc) {
 		local $ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		use autodie;
