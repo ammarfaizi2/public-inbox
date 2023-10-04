@@ -709,7 +709,7 @@ sub xdb_remove {
 	my $xdb = $self->{xdb} // die 'BUG: missing {xdb}';
 	for my $docid (@docids) {
 		eval { $xdb->delete_document($docid) };
-		warn "E: #$docid not in in Xapian? $@\n" if $@;
+		warn "E: #$docid not in Xapian? $@\n" if $@;
 	}
 }
 
