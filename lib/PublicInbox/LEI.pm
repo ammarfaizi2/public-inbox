@@ -1285,8 +1285,11 @@ sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
 	}
 	return 1 if defined($$path);
 	my $n = PublicInbox::DS::close_non_busy() or do {
+		eval 'PublicInbox::LeiNoteEvent::flush_task()';
 		# drop stores only if no clients
 		for my $cfg (values %PATH2CFG) {
+			my $lne = delete($cfg->{-lei_note_event});
+			$lne->wq_close if $lne;
 			my $sto = delete($cfg->{-lei_store}) // next;
 			eval { $sto->wq_io_do('done') };
 			warn "E: $@ (dropping store for $cfg->{-f})" if $@;
@@ -1346,6 +1349,8 @@ sub lazy_start {
 		my (undef, $eof_p) = PublicInbox::PktOp->pair;
 		sub {
 			$exit_code //= eval("POSIX::SIG$_[0] + 128") if @_;
+			$dir_idle->close if $dir_idle; # EPOLL_CTL_DEL
+			$dir_idle = undef; # let RC take care of it
 			eval 'PublicInbox::LeiNoteEvent::flush_task()';
 			my $lis = $pil or exit($exit_code // 0);
 			# closing eof_p triggers \&noop wakeup

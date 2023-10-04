@@ -68,10 +68,16 @@ sub rm_watches {
 	}
 }
 
+sub close {
+	my ($self) = @_;
+	delete $self->{cb};
+	$self->SUPER::close; # if using real kevent/inotify
+}
+
 sub event_step {
 	my ($self) = @_;
-	my $cb = $self->{cb};
-	local $PublicInbox::DS::in_loop = 0; # waitpid() synchronously
+	my $cb = $self->{cb} or return;
+	local $PublicInbox::DS::in_loop = 0; # waitpid() synchronously (FIXME)
 	eval {
 		my @events = $self->{inot}->read; # Linux::Inotify2->read
 		$cb->($_) for @events;
@@ -83,7 +89,7 @@ sub force_close {
 	my ($self) = @_;
 	my $inot = delete $self->{inot} // return;
 	if ($inot->can('fh')) { # Linux::Inotify2 2.3+
-		close($inot->fh) or warn "CLOSE ERROR: $!";
+		CORE::close($inot->fh) or warn "CLOSE ERROR: $!";
 	} elsif ($inot->isa('Linux::Inotify2')) {
 		require PublicInbox::LI2Wrap;
 		PublicInbox::LI2Wrap::wrapclose($inot);
