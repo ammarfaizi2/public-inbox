@@ -36,11 +36,11 @@ use Errno qw(EAGAIN EINVAL ECHILD);
 use Carp qw(carp croak);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
-my %Stack;
 my $nextq; # queue for next_tick
 my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
 our ($AWAIT_PIDS, # pid => [ $callback, @args ]
+	$cur_runq, # only set inside next_tick
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
      $Poller, # global Select, Epoll, DSPoll, or DSKQXS ref
 
@@ -78,14 +78,14 @@ sub Reset {
 		%UniqTimer = ();
 		@post_loop_do = ();
 
-		# we may be iterating inside one of these on our stack
-		my @q = delete @Stack{keys %Stack};
-		for my $q (@q) { @$q = () }
+		# we may be called from an *atfork_child inside next_tick:
+		@$cur_runq = () if $cur_runq;
 		$AWAIT_PIDS = $nextq = $ToClose = undef; # may call ep_del
 		$Poller = PublicInbox::Select->new;
-	} while (@Timers || keys(%Stack) || $nextq || $AWAIT_PIDS ||
+	} while (@Timers || $nextq || $AWAIT_PIDS ||
 		$ToClose || keys(%DescriptorMap) ||
-		@post_loop_do || keys(%UniqTimer));
+		@post_loop_do || keys(%UniqTimer) ||
+		scalar(@{$cur_runq // []})); # do not vivify cur_runq
 
 	$reap_armed = undef;
 	$LoopTimeout = -1;  # no timeout by default
@@ -145,10 +145,9 @@ sub _InitPoller () {
 sub now () { clock_gettime(CLOCK_MONOTONIC) }
 
 sub next_tick () {
-	my $q = $nextq or return;
+	local $cur_runq = $nextq or return;
 	$nextq = undef;
-	$Stack{cur_runq} = $q;
-	for my $obj (@$q) {
+	for my $obj (@$cur_runq) {
 		# avoid "ref" on blessed refs to workaround a Perl 5.16.3 leak:
 		# https://rt.perl.org/Public/Bug/Display.html?id=114340
 		if (blessed($obj)) {
@@ -157,7 +156,6 @@ sub next_tick () {
 			$obj->();
 		}
 	}
-	delete $Stack{cur_runq};
 }
 
 # runs timers and returns milliseconds for next one, or next event loop
