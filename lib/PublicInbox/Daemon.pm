@@ -364,16 +364,8 @@ sub worker_quit { # $_[0] = signal name or number (unused)
 	# drop idle connections and try to quit gracefully
 	@PublicInbox::DS::post_loop_do = (sub {
 		my ($dmap, undef) = @_;
-		my $n = 0;
 		my $now = now();
-		for my $s (values %$dmap) {
-			$s->can('busy') or next;
-			if ($s->busy) {
-				++$n;
-			} else { # close as much as possible, early as possible
-				$s->close;
-			}
-		}
+		my $n = PublicInbox::DS::close_non_busy();
 		if ($n) {
 			if (($warn + 5) < now()) {
 				warn "$$ quitting, $n client(s) left\n";

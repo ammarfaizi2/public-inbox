@@ -233,6 +233,16 @@ sub enqueue_reap () { $reap_armed //= requeue(\&reap_pids) }
 
 sub in_loop () { $in_loop }
 
+# use inside @post_loop_do, returns number of busy clients
+sub close_non_busy () {
+	my $n = 0;
+	for my $s (values %DescriptorMap) {
+		# close as much as possible, early as possible
+		($s->busy ? ++$n : $s->close) if $s->can('busy');
+	}
+	$n;
+}
+
 # Internal function: run the post-event callback, send read events
 # for pushed-back data, and close pending connections.  returns 1
 # if event loop should continue, or 0 to shut it all down.

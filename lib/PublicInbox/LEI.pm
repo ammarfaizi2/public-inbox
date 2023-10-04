@@ -1367,16 +1367,8 @@ sub lazy_start {
 			$quit->();
 		}
 		return 1 if defined($path);
-		my $n = 0;
-		for my $s (values %$dmap) {
-			$s->can('busy') or next;
-			if ($s->busy) {
-				++$n;
-			} else {
-				$s->close;
-			}
-		}
-		drop_all_stores() if !$n; # drop stores only if no clients
+		my $n = PublicInbox::DS::close_non_busy() or
+			drop_all_stores(); # drop stores only if no clients
 		# returns true: continue, false: stop
 		$n + scalar(keys(%$PublicInbox::DS::AWAIT_PIDS));
 	});
