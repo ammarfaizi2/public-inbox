@@ -177,12 +177,9 @@ sub recv_loop {
 	my $in = \*STDIN;
 	while (!defined($parent_pid) || getppid == $parent_pid) {
 		PublicInbox::DS::sig_setmask($workerset);
-		my @fds = $PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33);
+		my @fds = PublicInbox::IPC::recv_cmd($in, $rbuf, 4096*33);
 		scalar(@fds) or exit(66); # EX_NOINPUT
-		if (!defined($fds[0])) {
-			next if $!{EINTR};
-			die "recvmsg: $!";
-		}
+		die "recvmsg: $!" if !defined($fds[0]);
 		PublicInbox::DS::block_signals();
 		my $req = bless {}, __PACKAGE__;
 		my $i = 0;
