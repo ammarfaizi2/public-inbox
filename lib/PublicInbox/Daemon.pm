@@ -353,31 +353,33 @@ EOF
 	bless { pid => $$, pid_file => \$pid_file }, __PACKAGE__;
 }
 
+sub has_busy_clients { # post_loop_do CB
+	my ($state) = @_;
+	my $now = now();
+	my $n = PublicInbox::DS::close_non_busy();
+	if ($n) {
+		if ($state->{-w} < now()) {
+			warn "$$ quitting, $n client(s) left\n";
+			$state->{-w} = now() + 5;
+		}
+		unless (defined $state->{0}) {
+			$state->{0} = (split(/\s+/, $0))[0];
+			$state->{0} =~ s!\A.*?([^/]+)\z!$1!;
+		}
+		$0 = "$state->{0} quitting, $n client(s) left";
+	}
+	$n; # true: loop continues, false: loop breaks
+}
+
 sub worker_quit { # $_[0] = signal name or number (unused)
 	# killing again terminates immediately:
 	exit unless @listeners;
 
 	$_->close foreach @listeners; # call PublicInbox::DS::close
 	@listeners = ();
-	my $proc_name;
-	my $warn = 0;
+
 	# drop idle connections and try to quit gracefully
-	@PublicInbox::DS::post_loop_do = (sub {
-		my $now = now();
-		my $n = PublicInbox::DS::close_non_busy();
-		if ($n) {
-			if (($warn + 5) < now()) {
-				warn "$$ quitting, $n client(s) left\n";
-				$warn = now();
-			}
-			unless (defined $proc_name) {
-				$proc_name = (split(/\s+/, $0))[0];
-				$proc_name =~ s!\A.*?([^/]+)\z!$1!;
-			}
-			$0 = "$proc_name quitting, $n client(s) left";
-		}
-		$n; # true: loop continues, false: loop breaks
-	});
+	@PublicInbox::DS::post_loop_do = (\&has_busy_clients, { -w => 0 })
 }
 
 sub reopen_logs {

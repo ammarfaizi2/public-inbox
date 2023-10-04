@@ -533,6 +533,8 @@ sub watch_nntp_init ($$) {
 	}
 }
 
+sub quit_inprogress { !$_[0]->quit_done } # post_loop_do CB
+
 sub watch { # main entry point
 	my ($self, $sig) = @_;
 	my $first_sig;
@@ -545,7 +547,7 @@ sub watch { # main entry point
 		add_timer(0, \&poll_fetch_fork, $self, $intvl, $uris);
 	}
 	watch_fs_init($self) if $self->{mdre};
-	local @PublicInbox::DS::post_loop_do = (sub { !$self->quit_done });
+	local @PublicInbox::DS::post_loop_do = (\&quit_inprogress, $self);
 	PublicInbox::DS::event_loop($first_sig); # calls ->event_step
 	_done_for_now($self);
 }

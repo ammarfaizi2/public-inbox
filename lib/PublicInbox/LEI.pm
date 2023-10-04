@@ -1271,13 +1271,30 @@ sub dir_idle_handler ($) { # PublicInbox::DirIdle callback
 	}
 }
 
-sub drop_all_stores () {
-	for my $cfg (values %PATH2CFG) {
-		my $sto = delete($cfg->{-lei_store}) // next;
-		eval { $sto->wq_io_do('done') };
-		warn "E: $@ (dropping store for $cfg->{-f})" if $@;
-		$sto->wq_close;
+sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
+	my ($path, $dev_ino_expect) = @_;
+	if (my @st = defined($$path) ? stat($$path) : ()) {
+		if ($dev_ino_expect ne pack('dd', $st[0], $st[1])) {
+			warn "$$path dev/ino changed, quitting\n";
+			$$path = undef;
+		}
+	} elsif (defined($$path)) { # ENOENT is common
+		warn "stat($$path): $!, quitting ...\n" if $! != ENOENT;
+		undef $$path;
+		$quit->();
 	}
+	return 1 if defined($$path);
+	my $n = PublicInbox::DS::close_non_busy() or do {
+		# drop stores only if no clients
+		for my $cfg (values %PATH2CFG) {
+			my $sto = delete($cfg->{-lei_store}) // next;
+			eval { $sto->wq_io_do('done') };
+			warn "E: $@ (dropping store for $cfg->{-f})" if $@;
+			$sto->wq_close;
+		}
+	};
+	# returns true: continue, false: stop
+	$n + scalar(keys(%$PublicInbox::DS::AWAIT_PIDS));
 }
 
 # lei(1) calls this when it can't connect
@@ -1354,24 +1371,8 @@ sub lazy_start {
 		dir_idle_handler($_[0]) if $_[0]->fullname ne $path;
 	});
 	$dir_idle->add_watches([$sock_dir]);
-	local @PublicInbox::DS::post_loop_do = (sub {
-		if (@st = defined($path) ? stat($path) : ()) {
-			if ($dev_ino_expect ne pack('dd', $st[0], $st[1])) {
-				warn "$path dev/ino changed, quitting\n";
-				$path = undef;
-			}
-		} elsif (defined($path)) { # ENOENT is common
-			warn "stat($path): $!, quitting ...\n" if $! != ENOENT;
-			undef $path;
-			$quit->();
-		}
-		return 1 if defined($path);
-		my $n = PublicInbox::DS::close_non_busy() or
-			drop_all_stores(); # drop stores only if no clients
-		# returns true: continue, false: stop
-		$n + scalar(keys(%$PublicInbox::DS::AWAIT_PIDS));
-	});
-
+	local @PublicInbox::DS::post_loop_do = (\&can_stay_alive,
+						\$path, $dev_ino_expect);
 	# STDIN was redirected to /dev/null above, closing STDERR and
 	# STDOUT will cause the calling `lei' client process to finish
 	# reading the <$daemon> pipe.
