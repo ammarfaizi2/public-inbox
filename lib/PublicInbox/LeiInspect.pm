@@ -251,24 +251,20 @@ sub inspect_start ($$) {
 	$self->wq_close;
 }
 
+sub do_inspect { # lei->do_env cb
+	my ($lei) = @_;
+	my $str = delete $lei->{istr};
+	$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	my $eml = PublicInbox::Eml->new(\$str);
+	inspect_start($lei, [ 'blob:'.$lei->git_oid($eml)->hexdigest,
+			map { "mid:$_" } @{mids($eml)} ]);
+}
+
 sub ins_add { # InputPipe->consume callback
 	my ($lei) = @_; # $_[1] = $rbuf
-	if (defined $_[1]) {
-		$_[1] eq '' and return eval {
-			$lei->fchdir;
-			local %ENV = %{$lei->{env}};
-			local $PublicInbox::LEI::current_lei = $lei;
-			my $str = delete $lei->{istr};
-			$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
-			my $eml = PublicInbox::Eml->new(\$str);
-			inspect_start($lei, [
-				'blob:'.$lei->git_oid($eml)->hexdigest,
-				map { "mid:$_" } @{mids($eml)} ]);
-		};
-		$lei->{istr} .= $_[1];
-	} else {
-		$lei->fail("error reading stdin: $!");
-	}
+	$_[1] // return $lei->fail("error reading stdin: $!");
+	return $lei->{istr} .= $_[1] if $_[1] ne '';
+	$lei->do_env(\&do_inspect);
 }
 
 sub lei_inspect {

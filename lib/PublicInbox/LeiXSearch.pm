@@ -405,62 +405,54 @@ sub xsearch_done_wait { # awaitpid cb
 
 sub query_done { # EOF callback for main daemon
 	my ($lei) = @_;
-	local $PublicInbox::LEI::current_lei = $lei;
-	eval {
-		my $l2m = delete $lei->{l2m};
-		delete $lei->{lxs};
-		($lei->{opt}->{'mail-sync'} && !$lei->{sto}) and
-			warn "BUG: {sto} missing with --mail-sync";
-		$lei->sto_done_request if $lei->{sto};
-		if (my $v2w = delete $lei->{v2w}) {
-			my $wait = $v2w->wq_do('done'); # may die
-			$v2w->wq_close;
-		}
-		$lei->{ovv}->ovv_end($lei);
-		if ($l2m) { # close() calls LeiToMail reap_compress
-			if (my $out = delete $lei->{old_1}) {
-				if (my $mbout = $lei->{1}) {
-					close($mbout) or die <<"";
+	my $l2m = delete $lei->{l2m};
+	delete $lei->{lxs};
+	($lei->{opt}->{'mail-sync'} && !$lei->{sto}) and
+		warn "BUG: {sto} missing with --mail-sync";
+	$lei->sto_done_request if $lei->{sto};
+	if (my $v2w = delete $lei->{v2w}) {
+		my $wait = $v2w->wq_do('done'); # may die
+		$v2w->wq_close;
+	}
+	$lei->{ovv}->ovv_end($lei);
+	if ($l2m) { # close() calls LeiToMail reap_compress
+		if (my $out = delete $lei->{old_1}) {
+			if (my $mbout = $lei->{1}) {
+				close($mbout) or die <<"";
 Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
 
-				}
-				$lei->{1} = $out;
 			}
-			if ($l2m->lock_free) {
-				$l2m->poke_dst;
-				$lei->poke_mua;
-			} else { # mbox users
-				delete $l2m->{mbl}; # drop dotlock
-			}
+			$lei->{1} = $out;
 		}
-		if ($lei->{-progress}) {
-			my $tot = $lei->{-mset_total} // 0;
-			my $nr_w = $lei->{-nr_write} // 0;
-			my $d = ($lei->{-nr_seen} // 0) - $nr_w;
-			my $x = "$tot matches";
-			$x .= ", $d duplicates" if $d;
-			if ($l2m) {
-				my $m = "# $nr_w written to " .
-					"$lei->{ovv}->{dst} ($x)";
-				$nr_w ? $lei->qfin($m) : $lei->qerr($m);
-			} else {
-				$lei->qerr("# $x");
-			}
+		if ($l2m->lock_free) {
+			$l2m->poke_dst;
+			$lei->poke_mua;
+		} else { # mbox users
+			delete $l2m->{mbl}; # drop dotlock
 		}
-		$lei->start_mua if $l2m && !$l2m->lock_free;
-		$lei->dclose;
-	};
-	$lei->fail($@) if $@;
+	}
+	if ($lei->{-progress}) {
+		my $tot = $lei->{-mset_total} // 0;
+		my $nr_w = $lei->{-nr_write} // 0;
+		my $d = ($lei->{-nr_seen} // 0) - $nr_w;
+		my $x = "$tot matches";
+		$x .= ", $d duplicates" if $d;
+		if ($l2m) {
+			my $m = "# $nr_w written to " .
+				"$lei->{ovv}->{dst} ($x)";
+			$nr_w ? $lei->qfin($m) : $lei->qerr($m);
+		} else {
+			$lei->qerr("# $x");
+		}
+	}
+	$lei->start_mua if $l2m && !$l2m->lock_free;
+	$lei->dclose;
 }
 
 sub do_post_augment {
 	my ($lei) = @_;
-	local $PublicInbox::LEI::current_lei = $lei;
 	my $l2m = $lei->{l2m} or return; # client disconnected
-	eval {
-		$lei->fchdir;
-		$l2m->post_augment($lei);
-	};
+	eval { $l2m->post_augment($lei) };
 	my $err = $@;
 	if ($err) {
 		if (my $lxs = delete $lei->{lxs}) {
@@ -518,7 +510,7 @@ sub start_query ($$) { # always runs in main (lei-daemon) process
 }
 
 sub incr_start_query { # called whenever an l2m shard starts do_post_auth
-	my ($self, $lei) = @_;
+	my ($lei, $self) = @_;
 	my $l2m = $lei->{l2m};
 	return if ++$self->{nr_start_query} != $l2m->{-wq_nr_workers};
 	start_query($self, $lei);
@@ -534,16 +526,16 @@ sub do_query {
 	my ($self, $lei) = @_;
 	my $l2m = $lei->{l2m};
 	my $ops = {
-		'sigpipe_handler' => [ $lei ],
-		'fail_handler' => [ $lei ],
-		'do_post_augment' => [ \&do_post_augment, $lei ],
-		'incr_post_augment' => [ \&incr_post_augment, $lei ],
+		sigpipe_handler => [ $lei ],
+		fail_handler => [ $lei ],
+		do_post_augment => [ \&do_post_augment, $lei ],
+		incr_post_augment => [ \&incr_post_augment, $lei ],
 		'' => [ \&query_done, $lei ],
-		'mset_progress' => [ \&mset_progress, $lei ],
-		'l2m_progress' => [ \&l2m_progress, $lei ],
-		'x_it' => [ $lei ],
-		'child_error' => [ $lei ],
-		'incr_start_query' => [ $self, $lei ],
+		mset_progress => [ \&mset_progress, $lei ],
+		l2m_progress => [ \&l2m_progress, $lei ],
+		x_it => [ $lei ],
+		child_error => [ $lei ],
+		incr_start_query => [ \&incr_start_query, $lei, $self ],
 	};
 	$lei->{auth}->op_merge($ops, $l2m, $lei) if $l2m && $lei->{auth};
 	my $end = $lei->pkt_op_pair;

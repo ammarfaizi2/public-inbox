@@ -57,7 +57,7 @@ sub net_merge_all { # called in wq worker via wq_broadcast
 # called by top-level lei-daemon when first worker is done with auth
 # passes updated net auth info to current workers
 sub net_merge_continue {
-	my ($wq, $lei, $net_new) = @_;
+	my ($lei, $wq, $net_new) = @_;
 	$wq->{-net_new} = $net_new; # for "lei up"
 	$wq->wq_broadcast('PublicInbox::LeiAuth::net_merge_all', $net_new);
 	$wq->net_merge_all_done($lei); # defined per-WQ
@@ -65,7 +65,7 @@ sub net_merge_continue {
 
 sub op_merge { # prepares PktOp->pair ops
 	my ($self, $ops, $wq, $lei) = @_;
-	$ops->{net_merge_continue} = [ \&net_merge_continue, $wq, $lei ];
+	$ops->{net_merge_continue} = [ \&net_merge_continue, $lei, $wq ];
 }
 
 sub new { bless \(my $x), __PACKAGE__ }

@@ -122,19 +122,18 @@ could not extract Message-ID from $x
 	@q ? join(' OR ', @q) : $lei->fail("no Message-ID in: @argv");
 }
 
+sub do_lcat { # lei->do_env cb
+	my ($lei) = @_;
+	my @argv = split(/\s+/, $lei->{mset_opt}->{qstr});
+	$lei->{mset_opt}->{qstr} = extract_all($lei, @argv) or return;
+	$lei->_start_query;
+}
+
 sub _stdin { # PublicInbox::InputPipe::consume callback for --stdin
 	my ($lei) = @_; # $_[1] = $rbuf
 	$_[1] // return $lei->fail("error reading stdin: $!");
 	return $lei->{mset_opt}->{qstr} .= $_[1] if $_[1] ne '';
-	eval {
-		$lei->fchdir;
-		local %ENV = %{$lei->{env}};
-		local $PublicInbox::LEI::current_lei = $lei;
-		my @argv = split(/\s+/, $lei->{mset_opt}->{qstr});
-		$lei->{mset_opt}->{qstr} = extract_all($lei, @argv) or return;
-		$lei->_start_query;
-	};
-	$lei->fail($@) if $@;
+	$lei->do_env(\&do_lcat);
 }
 
 sub lei_lcat {

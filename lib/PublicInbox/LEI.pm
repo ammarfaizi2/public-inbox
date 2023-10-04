@@ -479,7 +479,6 @@ sub _drop_wq {
 # pronounced "exit": x_it(1 << 8) => exit(1); x_it(13) => SIGPIPE
 sub x_it ($$) {
 	my ($self, $code) = @_;
-	local $current_lei = $self;
 	# make sure client sees stdout before exit
 	$self->{1}->autoflush(1) if $self->{1};
 	stop_pager($self);
@@ -514,7 +513,6 @@ sub qfin { # show message on finalization (LeiFinmsg)
 
 sub fail_handler ($;$$) {
 	my ($lei, $code, $io) = @_;
-	local $current_lei = $lei;
 	close($io) if $io; # needed to avoid warnings on SIGPIPE
 	_drop_wq($lei);
 	x_it($lei, $code // (1 << 8));
@@ -785,11 +783,19 @@ sub lazy_cb ($$$) { # $pfx is _complete_ or lei_
 		$pkg->can($pfx.$ucmd) : undef;
 }
 
+sub do_env {
+	my $lei = shift;
+	fchdir($lei);
+	my $cb = shift // return ($lei, %{$lei->{env}}) ;
+	local ($current_lei, %ENV) = ($lei, %{$lei->{env}});
+	$cb = $lei->can($cb) if !ref($cb); # $cb may be a scalar sub name
+	eval { $cb->($lei, @_) };
+	$lei->fail($@) if $@;
+}
+
 sub dispatch {
 	my ($self, $cmd, @argv) = @_;
-	fchdir($self);
-	local %ENV = %{$self->{env}};
-	local $current_lei = $self; # for __WARN__
+	local ($current_lei, %ENV) = do_env($self);
 	$self->{2}->autoflush(1); # keep stdout buffered until x_it|DESTROY
 	return _help($self, 'no command given') unless defined($cmd);
 	# do not support Getopt bundling for this

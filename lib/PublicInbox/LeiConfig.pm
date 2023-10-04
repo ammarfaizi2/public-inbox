@@ -16,24 +16,21 @@ sub cfg_do_edit ($;$) {
 	# run in script/lei foreground
 	my ($op_c, $op_p) = PublicInbox::PktOp->pair;
 	# $op_p will EOF when $EDITOR is done
-	$op_c->{ops} = { '' => [\&cfg_edit_done, $self] };
+	$op_c->{ops} = { '' => [\&cfg_edit_done, $lei, $self] };
 	$lei->send_exec_cmd([ @$lei{qw(0 1 2)}, $op_p->{op_p} ], $cmd, $env);
 }
 
-sub cfg_edit_done { # PktOp
-	my ($self) = @_;
-	eval {
-		open my $fh, '+>', undef or die "open($!)";
-		my $cfg = do {
-			local $self->{lei}->{2} = $fh;
-			$self->{lei}->cfg_dump($self->{-f});
-		} or do {
-			seek($fh, 0, SEEK_SET);
-			return cfg_do_edit($self, do { local $/; <$fh> });
-		};
-		$self->cfg_verify($cfg) if $self->can('cfg_verify');
+sub cfg_edit_done { # PktOp lei->do_env cb
+	my ($lei, $self) = @_;
+	open my $fh, '+>', undef or die "open($!)";
+	my $cfg = do {
+		local $lei->{2} = $fh;
+		$lei->cfg_dump($self->{-f});
+	} or do {
+		seek($fh, 0, SEEK_SET);
+		return cfg_do_edit($self, do { local $/; <$fh> });
 	};
-	$self->{lei}->fail($@) if $@;
+	$self->cfg_verify($cfg) if $self->can('cfg_verify');
 }
 
 sub lei_config {
