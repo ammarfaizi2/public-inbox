@@ -1271,6 +1271,15 @@ sub dir_idle_handler ($) { # PublicInbox::DirIdle callback
 	}
 }
 
+sub drop_all_stores () {
+	for my $cfg (values %PATH2CFG) {
+		my $sto = delete($cfg->{-lei_store}) // next;
+		eval { $sto->wq_io_do('done') };
+		warn "E: $@ (dropping store for $cfg->{-f})" if $@;
+		$sto->wq_close;
+	}
+}
+
 # lei(1) calls this when it can't connect
 sub lazy_start {
 	my ($path, $errno, $narg) = @_;
@@ -1367,7 +1376,9 @@ sub lazy_start {
 				$s->close;
 			}
 		}
-		$n; # true: continue, false: stop
+		drop_all_stores() if !$n; # drop stores only if no clients
+		# returns true: continue, false: stop
+		$n + scalar(keys(%$PublicInbox::DS::AWAIT_PIDS));
 	});
 
 	# STDIN was redirected to /dev/null above, closing STDERR and

@@ -38,10 +38,9 @@ our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
 my %Stack;
 my $nextq; # queue for next_tick
-my $AWAIT_PIDS; # pid => [ $callback, @args ]
 my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
-our (
+our ($AWAIT_PIDS, # pid => [ $callback, @args ]
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
      $Poller, # global Select, Epoll, DSPoll, or DSKQXS ref
 
