@@ -69,7 +69,11 @@ Reset all state
 sub Reset {
 	do {
 		$in_loop = undef; # first in case DESTROY callbacks use this
-		%DescriptorMap = ();
+		# clobbering $Poller may call DSKQXS::DESTROY,
+		# we must always have this set to something to avoid
+		# needing branches before ep_del/ep_mod calls (via ->close).
+		$Poller = PublicInbox::Select->new;
+		%DescriptorMap = (); # likely to call ep_del
 		@Timers = ();
 		%UniqTimer = ();
 		@post_loop_do = ();
@@ -77,8 +81,8 @@ sub Reset {
 		# we may be iterating inside one of these on our stack
 		my @q = delete @Stack{keys %Stack};
 		for my $q (@q) { @$q = () }
-		$AWAIT_PIDS = $nextq = $ToClose = undef;
-		$Poller = undef; # may call DSKQXS::DESTROY
+		$AWAIT_PIDS = $nextq = $ToClose = undef; # may call ep_del
+		$Poller = PublicInbox::Select->new;
 	} while (@Timers || keys(%Stack) || $nextq || $AWAIT_PIDS ||
 		$ToClose || keys(%DescriptorMap) ||
 		@post_loop_do || keys(%UniqTimer));
