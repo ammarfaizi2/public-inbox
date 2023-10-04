@@ -441,7 +441,8 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 	}
 	drt->wbuf.fp = NULL;
 	if (!drt->wbuf.len) goto done_free;
-	if (flock(drt->root2id_fd, LOCK_EX)) {
+	while (flock(drt->root2id_fd, LOCK_EX)) {
+		if (errno == EINTR) continue;
 		perror("LOCK_EX");
 		return false;
 	}
@@ -456,7 +457,8 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 			return false;
 		}
 	} while (drt->wbuf.len);
-	if (flock(drt->root2id_fd, LOCK_UN)) {
+	while (flock(drt->root2id_fd, LOCK_UN)) {
+		if (errno == EINTR) continue;
 		perror("LOCK_UN");
 		return false;
 	}

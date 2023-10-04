@@ -109,9 +109,9 @@ sub dump_roots_iter ($$$) {
 sub dump_roots_flush ($$) {
 	my ($req, $fh) = @_;
 	if ($req->{wbuf} ne '') {
-		flock($fh, LOCK_EX) or die "flock: $!";
+		until (flock($fh, LOCK_EX)) { die "LOCK_EX: $!" if !$!{EINTR} }
 		print { $req->{0} } $req->{wbuf} or die "print: $!";
-		flock($fh, LOCK_UN) or die "flock: $!";
+		until (flock($fh, LOCK_UN)) { die "LOCK_UN: $!" if !$!{EINTR} }
 		$req->{wbuf} = '';
 	}
 }
