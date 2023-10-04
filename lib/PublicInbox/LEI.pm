@@ -1355,7 +1355,6 @@ sub lazy_start {
 	});
 	$dir_idle->add_watches([$sock_dir]);
 	local @PublicInbox::DS::post_loop_do = (sub {
-		my ($dmap, undef) = @_;
 		if (@st = defined($path) ? stat($path) : ()) {
 			if ($dev_ino_expect ne pack('dd', $st[0], $st[1])) {
 				warn "$path dev/ino changed, quitting\n";

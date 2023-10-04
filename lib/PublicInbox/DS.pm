@@ -260,9 +260,7 @@ sub PostEventLoop () {
 	}
 
 	# by default we keep running, unless a postloop callback cancels it
-	@post_loop_do ?  $post_loop_do[0]->(\%DescriptorMap,
-					@post_loop_do[1..$#post_loop_do])
-			: 1
+	@post_loop_do ? $post_loop_do[0]->(@post_loop_do[1..$#post_loop_do]) : 1
 }
 
 sub sigset_prep ($$$) {

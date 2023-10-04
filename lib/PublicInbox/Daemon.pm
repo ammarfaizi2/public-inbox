@@ -363,7 +363,6 @@ sub worker_quit { # $_[0] = signal name or number (unused)
 	my $warn = 0;
 	# drop idle connections and try to quit gracefully
 	@PublicInbox::DS::post_loop_do = (sub {
-		my ($dmap, undef) = @_;
 		my $now = now();
 		my $n = PublicInbox::DS::close_non_busy();
 		if ($n) {

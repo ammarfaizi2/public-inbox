@@ -251,8 +251,8 @@ sub recv_and_run {
 	$n;
 }
 
-sub sock_defined {
-	my (undef, $wqw) = @_;
+sub sock_defined { # PublicInbox::DS::post_loop_do CB
+	my ($wqw) = @_;
 	defined($wqw->{sock});
 }
 
