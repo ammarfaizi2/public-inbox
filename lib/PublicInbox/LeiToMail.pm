@@ -195,7 +195,7 @@ sub _mbox_write_cb ($$) {
 	sub { # for git_to_mail
 		my ($buf, $smsg, $eml) = @_;
 		$eml //= PublicInbox::Eml->new($buf);
-		++$lei->{-nr_seen};
+		++$self->{-nr_seen};
 		return if $dedupe->is_dup($eml, $smsg);
 		$lse->xsmsg_vmd($smsg) if $lse;
 		$smsg->{-recent} = 1 if $set_recent;
@@ -206,7 +206,7 @@ sub _mbox_write_cb ($$) {
 			my $lk = $ovv->lock_for_scope;
 			$lei->out($$buf);
 		}
-		++$lei->{-nr_write};
+		++$self->{-nr_write};
 	}
 }
 
@@ -291,7 +291,7 @@ sub _maildir_write_cb ($$) {
 		my ($bref, $smsg, $eml) = @_;
 		$dst // return $lei->fail; # dst may be undef-ed in last run
 
-		++$lei->{-nr_seen};
+		++$self->{-nr_seen};
 		return if $dedupe && $dedupe->is_dup($eml //
 						PublicInbox::Eml->new($$bref),
 						$smsg);
@@ -299,7 +299,7 @@ sub _maildir_write_cb ($$) {
 		my $n = _buf2maildir($dst, $bref // \($eml->as_string),
 					$smsg, $dir);
 		$lms->set_src($smsg->oidbin, $out, $n) if $lms;
-		++$lei->{-nr_write};
+		++$self->{-nr_write};
 	}
 }
 
@@ -322,7 +322,7 @@ EOM
 		my ($bref, $smsg, $eml) = @_;
 		$mic // return $lei->fail; # mic may be undef-ed in last run
 
-		++$lei->{-nr_seen};
+		++$self->{-nr_seen};
 		return if $dedupe && $dedupe->is_dup($eml //
 						PublicInbox::Eml->new($$bref),
 						$smsg);
@@ -335,7 +335,7 @@ EOM
 		# imap_append returns UID if IMAP server has UIDPLUS extension
 		($lms && $uid =~ /\A[0-9]+\z/) and
 			$lms->set_src($smsg->oidbin, $$uri, $uid + 0);
-		++$lei->{-nr_write};
+		++$self->{-nr_write};
 	}
 }
 
@@ -366,10 +366,10 @@ sub _v2_write_cb ($$) {
 	sub { # for git_to_mail
 		my ($bref, $smsg, $eml) = @_;
 		$eml //= PublicInbox::Eml->new($bref);
-		++$lei->{-nr_seen};
+		++$self->{-nr_seen};
 		return if $dedupe && $dedupe->is_dup($eml, $smsg);
 		$lei->{v2w}->wq_do('add', $eml); # V2Writable->add
-		++$lei->{-nr_write};
+		++$self->{-nr_write};
 	}
 }
 
@@ -796,11 +796,11 @@ sub wq_atexit_child {
 	local $PublicInbox::DS::in_loop = 0; # waitpid synchronously
 	my $lei = $self->{lei};
 	$lei->{ale}->git->async_wait_all;
-	my ($nr_w, $nr_s) = delete(@$lei{qw(-nr_write -nr_seen)});
+	my ($nr_w, $nr_s) = delete(@$self{qw(-nr_write -nr_seen)});
 	delete $self->{wcb};
 	(($nr_w //= 0) + ($nr_s //= 0)) or return;
 	return if $lei->{early_mua} || !$lei->{-progress} || !$lei->{pkt_op_p};
-	$lei->{pkt_op_p}->pkt_do('l2m_progress', $nr_w, $nr_s);
+	$lei->{pkt_op_p}->pkt_do('incr', -nr_write => $nr_w, -nr_seen => $nr_s)
 }
 
 # runs on a 1s timer in lei-daemon

@@ -34,9 +34,10 @@ sub process_inputs { # via wq_do
 	$self->SUPER::process_inputs;
 	my $lei = $self->{lei};
 	delete $lei->{1};
+	my $l2m = delete $self->{l2m};
 	delete $self->{wcb}; # commit
-	my $nr_w = delete($lei->{-nr_write}) // 0;
-	my $d = (delete($lei->{-nr_seen}) // 0) - $nr_w;
+	my $nr_w = delete($l2m->{-nr_write}) // 0;
+	my $d = (delete($l2m->{-nr_seen}) // 0) - $nr_w;
 	$d = $d ? " ($d duplicates)" : '';
 	$lei->qerr("# converted $nr_w messages$d");
 }
@@ -64,7 +65,7 @@ sub ipc_atfork_child {
 	my ($self) = @_;
 	my $lei = $self->{lei};
 	$lei->_lei_atfork_child;
-	my $l2m = delete $lei->{l2m};
+	my $l2m = $lei->{l2m};
 	if (my $net = $lei->{net}) { # may prompt user once
 		$net->{mics_cached} = $net->imap_common_init($lei);
 		$net->{nn_cached} = $net->nntp_common_init($lei);

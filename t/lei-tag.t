@@ -101,5 +101,8 @@ test_lei(sub {
 	if (0) { # TODO label+kw search w/ externals
 		lei_ok(qw(q L:qp), "mid:$mid", '--only', "$ro_home/t2");
 	}
+	lei_ok qw(tag +L:nope -F eml t/data/binary.patch);
+	like $lei_err, qr/\b1 unimported messages/, 'noted unimported'
+		or diag $lei_err;
 });
 done_testing;

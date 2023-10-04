@@ -155,12 +155,6 @@ sub mset_progress {
 	}
 }
 
-sub l2m_progress {
-	my ($lei, $nr_write, $nr_seen) = @_;
-	$lei->{-nr_write} += $nr_write;
-	$lei->{-nr_seen} += $nr_seen;
-}
-
 sub query_one_mset { # for --threads and l2m w/o sort
 	my ($self, $ibxish) = @_;
 	local $0 = "$0 query_one_mset";
@@ -354,7 +348,6 @@ sub query_remote_mboxrd {
 	$self->{import_sto} = $lei->{sto} if $lei->{opt}->{'import-remote'};
 	for my $uri (@$uris) {
 		$lei->{-current_url} = $uri->as_string;
-		$lei->{-nr_remote_eml} = 0;
 		my $start = time;
 		my ($q, $key) = fudge_qstr_time($lei, $uri, $qstr);
 		$uri->query_form(@qform, q => $q);
@@ -369,9 +362,9 @@ sub query_remote_mboxrd {
 			my $wait = $self->{import_sto}->wq_do('done');
 		}
 		$reap_curl->join;
+		my $nr = delete $lei->{-nr_remote_eml} // 0;
 		if ($? == 0) {
 			# don't update if no results, maybe MTA is down
-			my $nr = $lei->{-nr_remote_eml};
 			$lei->{lss}->cfg_set($key, $start) if $key && $nr;
 			mset_progress($lei, $lei->{-current_url}, $nr, $nr);
 			next;
@@ -433,8 +426,8 @@ Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
 	}
 	if ($lei->{-progress}) {
 		my $tot = $lei->{-mset_total} // 0;
-		my $nr_w = $lei->{-nr_write} // 0;
-		my $d = ($lei->{-nr_seen} // 0) - $nr_w;
+		my $nr_w = delete($lei->{-nr_write}) // 0;
+		my $d = (delete($lei->{-nr_seen}) // 0) - $nr_w;
 		my $x = "$tot matches";
 		$x .= ", $d duplicates" if $d;
 		if ($l2m) {
@@ -532,7 +525,7 @@ sub do_query {
 		incr_post_augment => [ \&incr_post_augment, $lei ],
 		'' => [ \&query_done, $lei ],
 		mset_progress => [ \&mset_progress, $lei ],
-		l2m_progress => [ \&l2m_progress, $lei ],
+		incr => [ $lei ],
 		x_it => [ $lei ],
 		child_error => [ $lei ],
 		incr_start_query => [ \&incr_start_query, $lei, $self ],

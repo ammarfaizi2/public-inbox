@@ -628,8 +628,8 @@ sub pkt_op_pair {
 }
 
 sub incr {
-	my ($self, $field, $nr) = @_;
-	$self->{counters}->{$field} += $nr;
+	my $lei = shift;
+	while (my ($f, $n) = splice(@_, 0, 2)) { $lei->{$f} += $n }
 }
 
 sub pkt_ops {
@@ -1418,11 +1418,10 @@ sub busy { 1 } # prevent daemon-shutdown if client is connected
 # can immediately reread it
 sub DESTROY {
 	my ($self) = @_;
-	if (my $counters = delete $self->{counters}) {
-		for my $k (sort keys %$counters) {
-			my $nr = $counters->{$k};
-			$self->child_error(0, "$nr $k messages");
-		}
+	for my $k (sort(grep(/\A-nr_/, keys %$self))) {
+		my $nr = $self->{$k};
+		substr($k, 0, length('-nr_'), '');
+		$self->child_error(0, "$nr $k messages");
 	}
 	$self->{1}->autoflush(1) if $self->{1};
 	stop_pager($self);

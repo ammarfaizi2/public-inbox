@@ -15,7 +15,7 @@ sub input_eml_cb { # used by PublicInbox::LeiInput::input_fh
 		$self->{lei}->{sto}->wq_do('update_xvmd', $xoids, $eml,
 						$self->{lei}->{vmd_mod});
 	} else {
-		++$self->{unimported};
+		++$self->{-nr_unimported};
 	}
 }
 
@@ -40,8 +40,8 @@ sub lei_tag { # the "lei tag" method
 
 sub note_unimported {
 	my ($self) = @_;
-	my $n = $self->{unimported} or return;
-	$self->{lei}->{pkt_op_p}->pkt_do('incr', 'unimported', $n);
+	my $n = $self->{-nr_unimported} or return;
+	$self->{lei}->{pkt_op_p}->pkt_do('incr', -nr_unimported => $n);
 }
 
 sub ipc_atfork_child {
