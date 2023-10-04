@@ -1,15 +1,15 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Various mbox locking methods
 package PublicInbox::MboxLock;
-use strict;
-use v5.10.1;
+use v5.12;
 use PublicInbox::OnDestroy;
 use Fcntl qw(:flock F_SETLK F_SETLKW F_RDLCK F_WRLCK
 			O_CREAT O_EXCL O_WRONLY SEEK_SET);
 use Carp qw(croak);
 use PublicInbox::DS qw(now); # ugh...
+use autodie qw(chdir opendir unlink);
 
 our $TMPL = do {
 	if ($^O eq 'linux') { \'s @32' }
@@ -58,16 +58,13 @@ sub acq_dotlock {
 					rand(0xffffffff), $pid, time);
 		if (sysopen(my $fh, $tmp, O_CREAT|O_EXCL|O_WRONLY)) {
 			if (link($tmp, $dot_lock)) {
-				unlink($tmp) or die "unlink($tmp): $!";
+				unlink($tmp);
 				$self->{".lock$pid"} = $dot_lock;
-				if (substr($dot_lock, 0, 1) ne '/') {
-					opendir(my $dh, '.') or
-							die "opendir . $!";
-					$self->{dh} = $dh;
-				}
+				substr($dot_lock, 0, 1) eq '/' or
+					opendir($self->{dh}, '.');
 				return;
 			}
-			unlink($tmp) or die "unlink($tmp): $!";
+			unlink($tmp);
 			select(undef, undef, undef, $self->{delay});
 		} else {
 			croak "open $tmp (for $dot_lock): $!" if !$!{EXIST};
@@ -83,18 +80,20 @@ sub acq_flock {
 	my $end = now + $self->{timeout};
 	do {
 		return if flock($self->{fh}, $op);
-		select(undef, undef, undef, $self->{delay});
+		if ($!{EWOULDBLOCK}) {
+			select(undef, undef, undef, $self->{delay});
+		} elsif (!$!{EINTR}) {
+			croak "flock($self->{f} ($self->{fh}): $!";
+		}
 	} while (now < $end);
 	die "flock timeout $self->{f}: $!\n";
 }
 
 sub acq {
 	my ($cls, $f, $rw, $methods) = @_;
-	my $fh;
-	unless (open $fh, $rw ? '+>>' : '<', $f) {
-		croak "open($f): $!" if $rw || !$!{ENOENT};
-	}
-	my $self = bless { f => $f, fh => $fh, rw => $rw }, $cls;
+	my $self = bless { f => $f, rw => $rw }, $cls;
+	my $ok = open $self->{fh}, $rw ? '+>>' : '<', $f;
+	croak "open($f): $!" if !$ok && ($rw || !$!{ENOENT});
 	my $m = "@$methods";
 	if ($m ne 'none') {
 		my @m = map {
@@ -116,20 +115,16 @@ sub acq {
 	$self;
 }
 
-sub _fchdir { chdir($_[0]) } # OnDestroy callback
-
 sub DESTROY {
 	my ($self) = @_;
-	if (my $f = $self->{".lock$$"}) {
-		my $x;
-		if (my $dh = delete $self->{dh}) {
-			opendir my $c, '.' or die "opendir . $!";
-			$x = PublicInbox::OnDestroy->new(\&_fchdir, $c);
-			chdir($dh) or die "chdir (for $f): $!";
-		}
-		unlink($f) or die "unlink($f): $! (lock stolen?)";
-		undef $x;
+	my $f = $self->{".lock$$"} or return;
+	my $x;
+	if (my $dh = delete $self->{dh}) {
+		opendir my $c, '.';
+		$x = PublicInbox::OnDestroy->new(\&chdir, $c);
+		chdir($dh);
 	}
+	CORE::unlink($f) or die "unlink($f): $! (lock stolen?)";
 }
 
 1;
