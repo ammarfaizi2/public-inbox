@@ -1217,8 +1217,6 @@ sub event_step_init {
 	};
 }
 
-sub noop {}
-
 sub oldset { $oldset }
 
 sub dump_and_clear_log {
@@ -1364,15 +1362,9 @@ sub lazy_start {
 			$lis->close; # DS::close
 		};
 	};
-	my $sig = {
-		CHLD => \&PublicInbox::DS::enqueue_reap,
-		QUIT => $quit,
-		INT => $quit,
-		TERM => $quit,
-		HUP => \&noop,
-		USR1 => \&noop,
-		USR2 => \&noop,
-	};
+	my $sig = { CHLD => \&PublicInbox::DS::enqueue_reap };
+	$sig->{$_} = $quit for qw(QUIT INT TERM);
+	$sig->{$_} = \&PublicInbox::Config::noop for qw(HUP USR1 USR2);
 	# for EVFILT_SIGNAL and signalfd behavioral difference:
 	my @kq_ign = eval { require PublicInbox::DSKQXS } ? keys(%$sig) : ();
 
