@@ -1302,7 +1302,7 @@ sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
 		}
 	};
 	# returns true: continue, false: stop
-	$n + scalar(keys(%$PublicInbox::DS::AWAIT_PIDS));
+	$n + scalar(keys(%PublicInbox::DS::AWAIT_PIDS));
 }
 
 # lei(1) calls this when it can't connect

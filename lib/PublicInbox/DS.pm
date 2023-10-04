@@ -39,7 +39,7 @@ our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 my $nextq; # queue for next_tick
 my $reap_armed;
 my $ToClose; # sockets to close when event loop is done
-our ($AWAIT_PIDS, # pid => [ $callback, @args ]
+our (%AWAIT_PIDS, # pid => [ $callback, @args ]
 	$cur_runq, # only set inside next_tick
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
      $Poller, # global Select, Epoll, DSPoll, or DSKQXS ref
@@ -80,9 +80,10 @@ sub Reset {
 
 		# we may be called from an *atfork_child inside next_tick:
 		@$cur_runq = () if $cur_runq;
-		$AWAIT_PIDS = $nextq = $ToClose = undef; # may call ep_del
+		$nextq = $ToClose = undef; # may call ep_del
+		%AWAIT_PIDS = ();
 		$Poller = PublicInbox::Select->new;
-	} while (@Timers || $nextq || $AWAIT_PIDS ||
+	} while (@Timers || $nextq || keys(%AWAIT_PIDS) ||
 		$ToClose || keys(%DescriptorMap) ||
 		@post_loop_do || keys(%UniqTimer) ||
 		scalar(@{$cur_runq // []})); # do not vivify cur_runq
@@ -218,7 +219,7 @@ sub reap_pids {
 	$reap_armed = undef;
 	while (1) {
 		my $pid = waitpid(-1, WNOHANG) or return;
-		if (defined(my $cb_args = delete $AWAIT_PIDS->{$pid})) {
+		if (defined(my $cb_args = delete $AWAIT_PIDS{$pid})) {
 			await_cb($pid, @$cb_args) if $cb_args;
 		} elsif ($pid == -1 && $! == ECHILD) {
 			return requeue(\&dflush); # force @post_loop_do to run
@@ -719,17 +720,17 @@ sub long_response ($$;@) {
 
 sub awaitpid {
 	my ($pid, @cb_args) = @_; # @cb_args = ($cb, @args), $cb may be undef
-	$AWAIT_PIDS->{$pid} = \@cb_args if @cb_args;
+	$AWAIT_PIDS{$pid} = \@cb_args if @cb_args;
 	# provide synchronous API
 	if (defined(wantarray) || (!$in_loop && !@cb_args)) {
 		my $ret = waitpid($pid, 0);
 		if ($ret == $pid) {
-			my $cb_args = delete $AWAIT_PIDS->{$pid};
+			my $cb_args = delete $AWAIT_PIDS{$pid};
 			@cb_args = @$cb_args if !@cb_args && $cb_args;
 			await_cb($pid, @cb_args);
 		} else {
 			carp "waitpid($pid) => $ret ($!)";
-			delete $AWAIT_PIDS->{$pid};
+			delete $AWAIT_PIDS{$pid};
 		}
 		return $ret;
 	} elsif ($in_loop) { # We could've just missed our SIGCHLD, cover it, here:
