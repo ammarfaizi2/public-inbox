@@ -1,7 +1,7 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use v5.12; use strict; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::DS qw(now);
 use File::Path qw(make_path);
 use_ok 'PublicInbox::DirIdle';
@@ -26,10 +26,12 @@ rmdir("$tmpdir/a") or xbail "rmdir $!";
 @x = ();
 $end = 3 + now;
 PublicInbox::DS::event_loop();
-is(scalar(@x), 1, 'got an event') and
+if (is(scalar(@x), 1, 'got an event after rmdir')) {
 	is($x[0]->[0]->fullname, "$tmpdir/a", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE_SELF, 'IN_DELETE_SELF set');
-
+} else {
+	diag explain(\@x);
+}
 rename("$tmpdir/c", "$tmpdir/j") or xbail "rmdir $!";
 @x = ();
 $end = 3 + now;
