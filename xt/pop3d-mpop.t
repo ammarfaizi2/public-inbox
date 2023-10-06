@@ -12,9 +12,8 @@ my $inboxdir = $ENV{GIANT_INBOX_DIR};
 plan skip_all => "bad characters in $inboxdir" if $inboxdir =~ m![^\w\.\-/]!;
 my $uuidgen = require_cmd('uuidgen');
 my $mpop = require_cmd('mpop');
-require_mods(qw(DBD::SQLite));
-require_git('2.6'); # for v2
-require_mods(qw(File::FcntlLock)) if $^O !~ /\A(?:linux|freebsd)\z/;
+require_mods(qw(DBD::SQLite :fcntl_lock));
+require_git(v2.6); # for v2
 
 my ($tmpdir, $for_destroy) = tmpdir();
 my $cfg = "$tmpdir/cfg";

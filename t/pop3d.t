@@ -12,10 +12,8 @@ unless (-r $key && -r $cert) {
 }
 
 # Net::POP3 is part of the standard library, but distros may split it off...
-require_mods(qw(DBD::SQLite Net::POP3 IO::Socket::SSL));
-require_git('2.6'); # for v2
-$^O =~ /\A(?:linux|(?:free|net|open)bsd)\z/ or
-	require_mods(qw(File::FcntlLock));
+require_mods(qw(DBD::SQLite Net::POP3 IO::Socket::SSL :fcntl_lock));
+require_git(v2.6); # for v2
 use_ok 'IO::Socket::SSL';
 use_ok 'PublicInbox::TLS';
 my ($tmpdir, $for_destroy) = tmpdir();

@@ -6,8 +6,9 @@
 use v5.12;
 use Test::More;
 unless (eval { require IO::KQueue }) {
-	my $m = $^O !~ /bsd/ ? 'DSKQXS is only for *BSD systems'
-				: "no IO::KQueue, skipping $0: $@";
+	my $m = ($^O =~ /bsd/ || $^O eq 'dragonfly') ?
+		"no IO::KQueue, skipping $0: $@" :
+		'DSKQXS is only for *BSD systems';
 	plan skip_all => $m;
 }
 

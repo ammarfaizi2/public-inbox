@@ -12,9 +12,13 @@ use PublicInbox::DS qw(now); # ugh...
 use autodie qw(chdir opendir unlink);
 
 our $TMPL = do {
-	if ($^O eq 'linux') { \'s @32' }
-	elsif ($^O =~ /bsd/) { \'@20 s @256' } # n.b. @32 may be enough...
-	else { eval { require File::FcntlLock; 1 } }
+	if ($^O eq 'linux') {
+		\'s @32'
+	} elsif ($^O =~ /bsd/ || $^O eq 'dragonfly') {
+		\'@20 s @256' # n.b. @32 may be enough...
+	} else {
+		 eval { require File::FcntlLock; 1 }
+	}
 };
 
 # This order matches Debian policy on Linux systems.

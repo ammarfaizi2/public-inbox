@@ -437,6 +437,7 @@ sub DESTROY {
 my %NPROCESSORS_ONLN = (
 	linux => 84,
 	freebsd => 58,
+	dragonfly => 58,
 	openbsd => 503,
 	netbsd => 1002
 );

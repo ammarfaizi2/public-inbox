@@ -3,9 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
 use PublicInbox::TestCommon;
-require_mods(qw(DBD::SQLite Net::POP3));
-$^O =~ /\A(?:linux|(?:free|net|open)bsd)\z/ or
-	require_mods(qw(File::FcntlLock));
+require_mods(qw(DBD::SQLite Net::POP3 :fcntl_lock));
 use autodie;
 my ($tmpdir, $for_destroy) = tmpdir();
 mkdir("$tmpdir/p3state");

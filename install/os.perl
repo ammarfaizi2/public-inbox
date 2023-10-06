@@ -40,7 +40,7 @@ EOM
 		last if $ID ne '' && $VERSION_ID ne '';
 	}
 	$ID = 'linux' if $ID eq ''; # cf. os-release(5)
-} elsif ($^O =~ m!\A(?:free|net|open)bsd\z!) { # TODO: net? dragonfly?
+} elsif ($^O =~ m!\A(?:free|net|open)bsd\z! || $^O eq 'dragonfly') {
 	$ID = $^O;
 	require POSIX;
 	(undef, undef, $release, $version) = POSIX::uname();
@@ -50,7 +50,8 @@ EOM
 	die "$^O unsupported";
 }
 $VERSION_ID //= 0; # numeric? could be 'sid', actually...
-my %MIN_VER = (freebsd => v11, openbsd => v7.3, netbsd => v9.3);
+my %MIN_VER = (freebsd => v11, openbsd => v7.3, netbsd => v9.3,
+	dragonfly => v6.4);
 
 if (defined(my $min_ver = $MIN_VER{$^O})) {
 	my $vid = $VERSION_ID;
@@ -63,7 +64,7 @@ EOM
 }
 
 sub pkg_fmt () {
-	if ($ID eq 'freebsd') { 'pkg' }
+	if ($ID =~ /\A(?:freebsd|dragonfly)\z/) { 'pkg' }
 	# *shrug*, as long as the (Net|Open)BSD names don't conflict w/ FreeBSD
 	elsif ($ID eq 'netbsd') { 'pkgin' }
 	elsif ($ID eq 'openbsd') { 'pkg_add' }

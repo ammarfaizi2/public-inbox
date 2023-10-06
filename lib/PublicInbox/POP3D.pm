@@ -15,7 +15,7 @@ use File::Temp 0.19 (); # 0.19 for ->newdir
 use Fcntl qw(F_SETLK F_UNLCK F_WRLCK SEEK_SET);
 my ($FLOCK_TMPL, @FLOCK_ORDER);
 # are all BSDs the same "struct flock"? tested Free+Net+Open...
-if ($^O eq 'linux' || $^O =~ /bsd/) {
+if ($^O =~ /\A(?:linux|dragonfly)\z/ || $^O =~ /bsd/) {
 	require Config;
 	my $off_t;
 	my $sz = $Config::Config{lseeksize};
@@ -28,7 +28,7 @@ if ($^O eq 'linux' || $^O =~ /bsd/) {
 		if ($^O eq 'linux') {
 			$FLOCK_TMPL = "ss\@8$off_t$off_t\@32";
 			@FLOCK_ORDER = qw(l_type l_whence l_start l_len);
-		} elsif ($^O =~ /bsd/) { # @32 may be enough
+		} else { # *bsd including dragonfly
 			$FLOCK_TMPL = "${off_t}${off_t}lss\@256";
 			@FLOCK_ORDER = qw(l_start l_len l_pid l_type l_whence);
 		}

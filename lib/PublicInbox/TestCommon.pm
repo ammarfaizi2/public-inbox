@@ -23,7 +23,7 @@ BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
-		create_coderepo no_scm_rights
+		create_coderepo require_bsd
 		quit_waiter_pipe wait_for_eof
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
@@ -33,6 +33,15 @@ BEGIN {
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
 	die $@ if $@;
 	push @EXPORT, @methods;
+}
+
+sub require_bsd (;$) {
+	state $ok = ($^O =~ m!\A(?:free|net|open)bsd\z! ||
+			$^O eq 'dragonfly');
+	return 1 if $ok;
+	return if defined(wantarray);
+	my $m = "$0 is BSD-only (\$^O=$^O)";
+	@_ ? skip($m) : plan(skip_all => $m);
 }
 
 sub xbail (@) { BAIL_OUT join(' ', map { ref() ? (explain($_)) : ($_) } @_) }
@@ -136,7 +145,8 @@ my %IPv6_VERSION = (
 sub need_accept_filter ($) {
 	my ($af) = @_;
 	return if $^O eq 'netbsd'; # since NetBSD 5.0
-	skip 'SO_ACCEPTFILTER is FreeBSD/NetBSD-only' if $^O ne 'freebsd';
+	$^O =~ /\A(?:freebsd|dragonfly)\z/ or
+		skip 'SO_ACCEPTFILTER is FreeBSD/NetBSD/Dragonfly-only so far';
 	state $tried = {};
 	($tried->{$af} //= system("kldstat -m $af >/dev/null")) and
 		skip "$af not loaded: kldload $af";
@@ -175,6 +185,11 @@ sub require_mods {
 				push @need, $msg;
 				next;
 			}
+		} elsif ($mod eq ':fcntl_lock') {
+			next if $^O eq 'linux' || require_bsd;
+			diag "untested platform: $^O, ".
+				"requiring File::FcntlLock...";
+			push @mods, 'File::FcntlLock';
 		} elsif ($mod =~ /\A\+(accf_.*)\z/) {
 			need_accept_filter($1);
 			next

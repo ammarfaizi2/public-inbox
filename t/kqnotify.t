@@ -7,7 +7,7 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use autodie;
-plan skip_all => 'KQNotify is only for *BSD systems' if $^O !~ /bsd/;
+require_bsd;
 require_mods('IO::KQueue');
 use_ok 'PublicInbox::KQNotify';
 my ($tmpdir, $for_destroy) = tmpdir();
@@ -33,9 +33,35 @@ $hit = [ grep(m!/link$!, @read) ];
 is_deeply($hit, ["$tmpdir/new/link"], 'link(2) detected (via NOTE_WRITE)')
 	or diag explain(\@read);
 
+{
+	my $d = "$tmpdir/new/ANOTHER";
+	mkdir $d;
+	$hit = [ map { $_->fullname } $kqn->read ];
+	is_xdeeply($hit, [ $d ], 'mkdir detected');
+	rmdir $d;
+	# TODO: should we always watch for directory removals?
+}
+
 $w->cancel;
 link("$tmpdir/new/tst", "$tmpdir/new/link2");
 $hit = [ map { $_->fullname } $kqn->read ];
 is_deeply($hit, [], 'link(2) not detected after cancel');
+
+# rearm:
+my $GONE = PublicInbox::KQNotify::NOTE_DELETE() |
+	PublicInbox::KQNotify::NOTE_REVOKE() |
+	PublicInbox::KQNotify::NOTE_ATTRIB() |
+	PublicInbox::KQNotify::NOTE_WRITE() |
+	PublicInbox::KQNotify::NOTE_RENAME();
+$w = $kqn->watch("$tmpdir/new", $mask|$GONE);
+my @unlink = sort glob("$tmpdir/new/*");
+unlink(@unlink);
+$hit = [ sort(map { $_->fullname } $kqn->read) ];
+is_xdeeply($hit, \@unlink, 'unlinked files match');
+
+# this is unreliable on Dragonfly tmpfs (fixed post-6.4)
+rmdir "$tmpdir/new";
+$hit = [ sort(map { $_->fullname } $kqn->read) ];
+is(scalar(@$hit), 1, 'detected self removal');
 
 done_testing;
