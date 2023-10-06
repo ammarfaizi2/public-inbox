@@ -491,11 +491,20 @@ static enum exc_iter dump_roots_iter(struct req *req,
 
 static char *hsearch_enter_key(char *s)
 {
-#if defined(__OpenBSD__) /* hdestroy frees each key */
+#if defined(__OpenBSD__) || defined(__DragonFly__)
+	// hdestroy frees each key on some platforms,
+	// so give it something to free:
 	char *ret = strdup(s);
 	if (!ret) perror("strdup");
 	return ret;
-#endif // glibc, musl, FreeBSD, NetBSD do not free keys
+// AFAIK there's no way to detect musl, assume non-glibc Linux is musl:
+#elif defined(__GLIBC__) || defined(__linux__) || \
+	defined(__FreeBSD__) || defined(__NetBSD__)
+	// do nothing on these platforms
+#else
+#warning untested platform detected, unsure if hdestroy(3) frees keys
+#warning contact us at meta@public-inbox.org if you get segfaults
+#endif
 	return s;
 }
 
