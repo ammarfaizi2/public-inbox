@@ -394,6 +394,8 @@ use constant msg_controllen => CMSG_SPACE(10 * SIZEOF_int) + 16; # 10 FDs
 
 if (defined($SYS_sendmsg) && defined($SYS_recvmsg)) {
 no warnings 'once';
+require PublicInbox::CmdIPC4;
+
 *send_cmd4 = sub ($$$$) {
 	my ($sock, $fds, undef, $flags) = @_;
 	my $iov = pack('P'.TMPL_size_t,
@@ -418,16 +420,12 @@ no warnings 'once';
 			$cmsghdr, # msg_control
 			$msg_controllen,
 			0); # msg_flags
-	my $sent;
+	my $s;
 	my $try = 0;
 	do {
-		$sent = syscall($SYS_sendmsg, fileno($sock), $mh, $flags);
-	} while ($sent < 0 &&
-			($!{ENOBUFS} || $!{ENOMEM} || $!{ETOOMANYREFS}) &&
-			(++$try < 50) &&
-			warn "# sleeping on sendmsg: $! (#$try)\n" &&
-			select(undef, undef, undef, 0.1) == 0);
-	$sent >= 0 ? $sent : undef;
+		$s = syscall($SYS_sendmsg, fileno($sock), $mh, $flags);
+	} while ($s < 0 && PublicInbox::CmdIPC4::sendmsg_retry($try));
+	$s >= 0 ? $s : undef;
 };
 
 *recv_cmd4 = sub ($$$) {
@@ -446,8 +444,11 @@ no warnings 'once';
 			$cmsghdr, # msg_control
 			msg_controllen,
 			0); # msg_flags
-	my $r = syscall($SYS_recvmsg, fileno($sock), $mh, 0);
-	if ($r < 0) { # $! is set
+	my $r;
+	do {
+		$r = syscall($SYS_recvmsg, fileno($sock), $mh, 0);
+	} while ($r < 0 && $!{EINTR});
+	if ($r < 0) {
 		$_[1] = '';
 		return (undef);
 	}

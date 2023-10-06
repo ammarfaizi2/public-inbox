@@ -59,18 +59,20 @@ my $do_test = sub { SKIP: {
 			if ($pid == 0) {
 				# need to loop since Perl signals are racy
 				# (the interpreter doesn't self-pipe)
-				CORE::kill('ALRM', $tgt) while (tick(0.05));
+				my $n = 3;
+				while (tick(0.01 * $n) && --$n) {
+					kill('ALRM', $tgt)
+				}
+				close $s1;
 				POSIX::_exit(1);
 			}
+			close $s1;
 			@fds = $recv->($s2, $buf, length($src) + 1);
-			ok($!{EINTR}, "EINTR set by ($desc)");
-			kill('KILL', $pid);
 			waitpid($pid, 0);
-			is_deeply(\@fds, [ undef ], "EINTR $desc");
+			is_deeply(\@fds, [], "EINTR->EOF $desc");
 			ok($alrm, 'SIGALRM hit');
 		}
 
-		close $s1;
 		@fds = $recv->($s2, $buf, length($src) + 1);
 		is_deeply(\@fds, [], "no FDs on EOF $desc");
 		is($buf, '', "buffer cleared on EOF ($desc)");

@@ -173,19 +173,20 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	return (int)pid;
 }
 
-static int sleep_wait(unsigned *tries, int err)
+static int sendmsg_retry(unsigned *tries)
 {
 	const struct timespec req = { 0, 100000000 }; /* 100ms */
+	int err = errno;
 	switch (err) {
+	case EINTR: PERL_ASYNC_CHECK(); return 1;
 	case ENOBUFS: case ENOMEM: case ETOOMANYREFS:
-		if (++*tries < 50) {
-			fprintf(stderr, "# sleeping on sendmsg: %s (#%u)\n",
-				strerror(err), *tries);
-			nanosleep(&req, NULL);
-			return 1;
-		}
-	default:
-		return 0;
+		if (++*tries >= 50) return 0;
+		fprintf(stderr, "# sleeping on sendmsg: %s (#%u)\n",
+			strerror(err), *tries);
+		nanosleep(&req, NULL);
+		PERL_ASYNC_CHECK();
+		return 1;
+	default: return 0;
 	}
 }
 
@@ -237,7 +238,7 @@ SV *send_cmd4(PerlIO *s, SV *svfds, SV *data, int flags)
 	}
 	do {
 		sent = sendmsg(PerlIO_fileno(s), &msg, flags);
-	} while (sent < 0 && sleep_wait(&tries, errno));
+	} while (sent < 0 && sendmsg_retry(&tries));
 	return sent >= 0 ? newSViv(sent) : &PL_sv_undef;
 }
 
@@ -259,19 +260,23 @@ void recv_cmd4(PerlIO *s, SV *buf, STRLEN n)
 	msg.msg_control = &cmsg.hdr;
 	msg.msg_controllen = CMSG_SPACE(SEND_FD_SPACE);
 
-	i = recvmsg(PerlIO_fileno(s), &msg, 0);
+	for (;;) {
+		i = recvmsg(PerlIO_fileno(s), &msg, 0);
+		if (i >= 0 || errno != EINTR) break;
+		PERL_ASYNC_CHECK();
+	}
 	if (i >= 0) {
 		SvCUR_set(buf, i);
+		if (cmsg.hdr.cmsg_level == SOL_SOCKET &&
+				cmsg.hdr.cmsg_type == SCM_RIGHTS) {
+			size_t len = cmsg.hdr.cmsg_len;
+			int *fdp = (int *)CMSG_DATA(&cmsg.hdr);
+			for (i = 0; CMSG_LEN((i + 1) * sizeof(int)) <= len; i++)
+				Inline_Stack_Push(sv_2mortal(newSViv(*fdp++)));
+		}
 	} else {
 		Inline_Stack_Push(&PL_sv_undef);
 		SvCUR_set(buf, 0);
-	}
-	if (i > 0 && cmsg.hdr.cmsg_level == SOL_SOCKET &&
-			cmsg.hdr.cmsg_type == SCM_RIGHTS) {
-		size_t len = cmsg.hdr.cmsg_len;
-		int *fdp = (int *)CMSG_DATA(&cmsg.hdr);
-		for (i = 0; CMSG_LEN((i + 1) * sizeof(int)) <= len; i++)
-			Inline_Stack_Push(sv_2mortal(newSViv(*fdp++)));
 	}
 	Inline_Stack_Done;
 }

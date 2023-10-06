@@ -116,10 +116,7 @@ $SIG{CONT} = sub { send($sock, 'CONT', 0) };
 my $x_it_code = 0;
 while (1) {
 	my (@fds) = $recv_cmd->($sock, my $buf, 4096 * 33);
-	if (scalar(@fds) == 1 && !defined($fds[0])) {
-		next if $!{EINTR};
-		die "recvmsg: $!";
-	}
+	die "recvmsg: $!" if scalar(@fds) == 1 && !defined($fds[0]);
 	last if $buf eq '';
 	if ($buf =~ /\Aexec (.+)\z/) {
 		$exec_cmd->(\@fds, split(/\0/, $1));

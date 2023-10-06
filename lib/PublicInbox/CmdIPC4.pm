@@ -7,6 +7,16 @@
 package PublicInbox::CmdIPC4;
 use v5.12;
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
+
+sub sendmsg_retry ($) {
+	return 1 if $!{EINTR};
+	return unless ($!{ENOMEM} || $!{ENOBUFS} || $!{ETOOMANYREFS});
+	return if ++$_[0] >= 50;
+	warn "# sleeping on sendmsg: $! (#$_[0])\n";
+	select(undef, undef, undef, 0.1);
+	1;
+}
+
 BEGIN { eval {
 require Socket::MsgHdr; # XS
 no warnings 'once';
@@ -20,21 +30,21 @@ no warnings 'once';
 	my $try = 0;
 	do {
 		$s = Socket::MsgHdr::sendmsg($sock, $mh, $flags);
-	} while (!defined($s) &&
-			($!{ENOBUFS} || $!{ENOMEM} || $!{ETOOMANYREFS}) &&
-			(++$try < 50) &&
-			warn "# sleeping on sendmsg: $! (#$try)\n" &&
-			select(undef, undef, undef, 0.1) == 0);
+	} while (!defined($s) && sendmsg_retry($try));
 	$s;
 };
 
 *recv_cmd4 = sub ($$$) {
 	my ($s, undef, $len) = @_; # $_[1] = destination buffer
 	my $mh = Socket::MsgHdr->new(buflen => $len, controllen => 256);
-	my $r = Socket::MsgHdr::recvmsg($s, $mh, 0) // do {
+	my $r;
+	do {
+		$r = Socket::MsgHdr::recvmsg($s, $mh, 0);
+	} while (!defined($r) && $!{EINTR});
+	if (!defined($r)) {
 		$_[1] = '';
 		return (undef);
-	};
+	}
 	$_[1] = $mh->buf;
 	return () if $r == 0;
 	my (undef, undef, $data) = $mh->cmsghdr;

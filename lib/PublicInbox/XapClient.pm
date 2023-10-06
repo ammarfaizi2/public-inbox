@@ -21,7 +21,7 @@ sub mkreq {
 	}
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
-	$n = PublicInbox::IPC::send_cmd($self->{io}, \@fds, $buf, 0) //
+	$n = $PublicInbox::IPC::send_cmd->($self->{io}, \@fds, $buf, 0) //
 		die "send_cmd: $!";
 	$n == length($buf) or die "send_cmd: $n != ".length($buf);
 	$r;

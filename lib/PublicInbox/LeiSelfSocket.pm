@@ -21,7 +21,8 @@ sub new {
 
 sub event_step {
 	my ($self) = @_;
-	my @fds = PublicInbox::IPC::recv_cmd($self->{sock}, my $buf, 4096 * 33);
+	my ($buf, @fds);
+	@fds = $PublicInbox::IPC::recv_cmd->($self->{sock}, $buf, 4096 * 33);
 	if (scalar(@fds) == 1 && !defined($fds[0])) {
 		return if $!{EAGAIN};
 		die "recvmsg: $!" unless $!{ECONNRESET};

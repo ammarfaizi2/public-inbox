@@ -204,27 +204,9 @@ sub ipc_sibling_atfork_child {
 	$pid == $$ and die "BUG: $$ ipc_atfork_child called on itself";
 }
 
-sub send_cmd ($$$$) {
-	my ($s, $fds, $buf, $fl) = @_;
-	while (1) {
-		my $n = $send_cmd->($s, $fds, $buf, $fl);
-		next if !defined($n) && $!{EINTR};
-		return $n;
-	}
-}
-
-sub recv_cmd ($$$) {
-	my ($s, undef, $len) = @_; # $_[1] is $buf
-	while (1) {
-		my @fds = $recv_cmd->($s, $_[1], $len);
-		next if scalar(@fds) == 1 && !defined($fds[0]) && $!{EINTR};
-		return @fds;
-	}
-}
-
 sub recv_and_run {
 	my ($self, $s2, $len, $full_stream) = @_;
-	my @fds = recv_cmd($s2, my $buf, $len // $MY_MAX_ARG_STRLEN);
+	my @fds = $recv_cmd->($s2, my $buf, $len // $MY_MAX_ARG_STRLEN);
 	return if scalar(@fds) && !defined($fds[0]);
 	my $n = length($buf) or return 0;
 	my $nfd = 0;
@@ -291,11 +273,11 @@ sub stream_in_full ($$$) {
 	my ($s1, $fds, $buf) = @_;
 	socketpair(my $r, my $w, AF_UNIX, SOCK_STREAM, 0) or
 		croak "socketpair: $!";
-	my $n = send_cmd($s1, [ fileno($r) ],
+	my $n = $send_cmd->($s1, [ fileno($r) ],
 			ipc_freeze(['do_sock_stream', length($buf)]),
 			0) // croak "sendmsg: $!";
 	undef $r;
-	$n = send_cmd($w, $fds, $buf, 0) // croak "sendmsg: $!";
+	$n = $send_cmd->($w, $fds, $buf, 0) // croak "sendmsg: $!";
 	while ($n < length($buf)) {
 		my $x = syswrite($w, $buf, length($buf) - $n, $n);
 		if (!defined($n)) {
@@ -315,7 +297,7 @@ sub wq_io_do { # always async
 		if (length($buf) > $MY_MAX_ARG_STRLEN) {
 			stream_in_full($s1, $fds, $buf);
 		} else {
-			my $n = send_cmd $s1, $fds, $buf, 0;
+			my $n = $send_cmd->($s1, $fds, $buf, 0);
 			return if defined($n); # likely
 			$!{ETOOMANYREFS} and
 				croak "sendmsg: $! (check RLIMIT_NOFILE)";

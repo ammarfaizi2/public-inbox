@@ -1041,7 +1041,7 @@ sub start_mua {
 
 sub send_exec_cmd { # tell script/lei to execute a command
 	my ($self, $io, $cmd, $env) = @_;
-	PublicInbox::IPC::send_cmd(
+	$PublicInbox::IPC::send_cmd->(
 			$self->{sock} // die('lei client gone'),
 			[ map { fileno($_) } @$io ],
 			exec_buf($cmd, $env), 0) //
@@ -1139,7 +1139,7 @@ sub accept_dispatch { # Listener {post_accept} callback
 	select($rvec, undef, undef, 60) or
 		return send($sock, 'timed out waiting to recv FDs', 0);
 	# (4096 * 33) >MAX_ARG_STRLEN
-	my @fds = PublicInbox::IPC::recv_cmd($sock, my $buf, 4096 * 33) or
+	my @fds = $PublicInbox::IPC::recv_cmd->($sock, my $buf, 4096 * 33) or
 		return; # EOF
 	if (!defined($fds[0])) {
 		warn(my $msg = "recv_cmd failed: $!");
@@ -1178,7 +1178,7 @@ sub event_step {
 	local %ENV = %{$self->{env}};
 	local $current_lei = $self;
 	eval {
-		my @fds = PublicInbox::IPC::recv_cmd(
+		my @fds = $PublicInbox::IPC::recv_cmd->(
 			$self->{sock} // return, my $buf, 4096);
 		if (scalar(@fds) == 1 && !defined($fds[0])) {
 			return if $! == EAGAIN;
