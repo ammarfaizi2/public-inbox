@@ -37,13 +37,13 @@ __DATA__
 #include <assert.h>
 #include <signal.h>
 #include <stddef.h>
+#include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #ifdef __linux__
 #	include <linux/fs.h>
 #	include <sys/epoll.h>
 #	include <sys/inotify.h>
-#	include <sys/socket.h> // we don't care about this on *BSD
 #	include <sys/vfs.h>
 #endif
 #include <sys/types.h>
@@ -93,8 +93,6 @@ int main(void)
 	D(SYS_inotify_rm_watch);
 	D(SYS_prctl);
 	D(SYS_fstatfs);
-	D(SYS_sendmsg);
-	D(SYS_recvmsg);
 
 	MAYBE X(FS_IOC_GETFLAGS);
 	MAYBE X(FS_IOC_SETFLAGS);
@@ -114,10 +112,29 @@ int main(void)
 		PR_OFF(name);
 	STRUCT_END;
 
-	/*
-	 * msghdr and cmsghdr are portable, but we only care about its layout
-	 * on OSes like Linux with stable syscall numbers
-	 */
+	STRUCT_BEGIN(struct statfs);
+		PR_NUM(f_type);
+	STRUCT_END;
+#endif /* Linux, any other OSes with stable syscalls? */
+
+	D(SIGWINCH);
+	MAYBE D(SO_ACCEPTFILTER);
+	MAYBE D(_SC_NPROCESSORS_ONLN);
+	MAYBE D(_SC_AVPHYS_PAGES);
+	MAYBE D(_SC_PAGE_SIZE);
+	MAYBE D(_SC_PAGESIZE);
+
+	D(SYS_sendmsg);
+	D(SYS_recvmsg);
+
+	STRUCT_BEGIN(struct flock);
+		PR_NUM(l_start);
+		PR_NUM(l_len);
+		PR_NUM(l_pid);
+		PR_NUM(l_type);
+		PR_NUM(l_whence);
+	STRUCT_END;
+
 	STRUCT_BEGIN(struct msghdr);
 		PR_PTR(msg_name);
 		PR_NUM(msg_namelen);
@@ -132,24 +149,6 @@ int main(void)
 		PR_NUM(cmsg_len);
 		PR_NUM(cmsg_level);
 		PR_NUM(cmsg_type);
-	STRUCT_END;
-
-	STRUCT_BEGIN(struct statfs);
-		PR_NUM(f_type);
-	STRUCT_END;
-#endif /* Linux, any other OSes with stable syscalls? */
-	D(SIGWINCH);
-	MAYBE D(_SC_NPROCESSORS_ONLN);
-	MAYBE D(_SC_AVPHYS_PAGES);
-	MAYBE D(_SC_PAGE_SIZE);
-	MAYBE D(_SC_PAGESIZE);
-
-	STRUCT_BEGIN(struct flock);
-		PR_NUM(l_start);
-		PR_NUM(l_len);
-		PR_NUM(l_pid);
-		PR_NUM(l_type);
-		PR_NUM(l_whence);
 	STRUCT_END;
 
 	return 0;
