@@ -6,9 +6,8 @@
 # and public-inbox-watch. Not the WWW or NNTP code which only
 # requires read-only access.
 package PublicInbox::Import;
-use strict;
+use v5.12;
 use parent qw(PublicInbox::Lock);
-use v5.10.1;
 use PublicInbox::Spawn qw(run_die popen_rd);
 use PublicInbox::MID qw(mids mid2path);
 use PublicInbox::Address;
@@ -18,13 +17,15 @@ use PublicInbox::ContentHash qw(content_digest);
 use PublicInbox::MDA;
 use PublicInbox::Eml;
 use POSIX qw(strftime);
+use autodie qw(read close);
+use Carp qw(croak);
 
 sub default_branch () {
 	state $default_branch = do {
 		my $r = popen_rd([qw(git config --global init.defaultBranch)],
 				 { GIT_CONFIG => undef });
 		chomp(my $h = <$r> // '');
-		close $r;
+		CORE::close $r;
 		$h eq '' ? 'refs/heads/master' : "refs/heads/$h";
 	}
 }
@@ -113,20 +114,10 @@ sub _cat_blob ($$$) {
 	local $/ = "\n";
 	my $info = <$r> // die "EOF from fast-import / cat-blob: $!";
 	$info =~ /\A[a-f0-9]{40,} blob ([0-9]+)\n\z/ or return;
-	my $left = $1;
-	my $offset = 0;
-	my $buf = '';
-	my $n;
-	while ($left > 0) {
-		$n = read($r, $buf, $left, $offset) //
-			die "read cat-blob failed: $!";
-		$n == 0 and die 'fast-export (cat-blob) died';
-		$left -= $n;
-		$offset += $n;
-	}
-	$n = read($r, my $lf, 1) //
-		die "read final byte of cat-blob failed: $!";
-	die "bad read on final byte: <$lf>" if $lf ne "\n";
+	my $n = read($r, my $buf, my $len = $1 + 1);
+	$n == $len or croak "cat-blob: short read: $n < $len";
+	my $lf = chop $buf;
+	croak "bad read on final byte: <$lf>" if $lf ne "\n";
 
 	# fixup some bugginess in old versions:
 	$buf =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
@@ -479,9 +470,9 @@ EOM
 	while (my ($fn, $contents) = splice(@fn_contents, 0, 2)) {
 		my $f = $dir.'/'.$fn;
 		next if -f $f;
-		open my $fh, '>', $f or die "open $f: $!";
-		print $fh $contents or die "print $f: $!";
-		close $fh or die "close $f: $!";
+		open my $fh, '>', $f;
+		print $fh $contents;
+		close $fh;
 	}
 }
 
@@ -494,7 +485,7 @@ sub done {
 	eval {
 		my $r = delete $self->{in} or die 'BUG: missing {in} when done';
 		print $w "done\n" or wfail;
-		close $r or die "fast-import failed: $?"; # ProcessPipe::CLOSE
+		close $r;
 	};
 	my $wait_err = $@;
 	my $nchg = delete $self->{nchg};
@@ -509,10 +500,7 @@ sub done {
 
 sub atfork_child {
 	my ($self) = @_;
-	foreach my $f (qw(in out)) {
-		next unless defined($self->{$f});
-		close $self->{$f} or die "failed to close import[$f]: $!\n";
-	}
+	close($_) for (grep defined, delete(@$self{qw(in out)}));
 }
 
 sub digest2mid ($$;$) {
@@ -583,10 +571,9 @@ sub replace_oids {
 			push @buf, "commit $tmp\n";
 		} elsif (/^data ([0-9]+)/) {
 			# only commit message, so $len is small:
-			my $len = $1; # + 1 for trailing "\n"
 			push @buf, $_;
-			my $n = read($rd, my $buf, $len) or die "read: $!";
-			$len == $n or die "short read ($n < $len)";
+			my $n = read($rd, my $buf, my $len = $1);
+			$len == $n or croak "short read ($n < $len)";
 			push @buf, $buf;
 		} elsif (/^M 100644 ([a-f0-9]+) (\w+)/) {
 			my ($oid, $path) = ($1, $2);
@@ -625,7 +612,7 @@ sub replace_oids {
 			push @buf, $_;
 		}
 	}
-	close $rd or die "close fast-export failed: $?";
+	close $rd;
 	if (@buf) {
 		print $w @buf or wfail;
 	}
