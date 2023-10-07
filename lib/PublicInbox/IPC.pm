@@ -256,16 +256,12 @@ sub do_sock_stream { # via wq_io_do, for big requests
 
 sub wq_broadcast {
 	my ($self, $sub, @args) = @_;
-	if (my $wkr = $self->{-wq_workers}) {
-		my $buf = ipc_freeze([$sub, @args]);
-		for my $bcast1 (values %$wkr) {
-			my $sock = $bcast1 // $self->{-wq_s1} // next;
-			send($sock, $buf, 0) // croak "send: $!";
-			# XXX shouldn't have to deal with EMSGSIZE here...
-		}
-	} else {
-		eval { $self->$sub(@args) };
-		warn "wq_broadcast: $@" if $@;
+	my $wkr = $self->{-wq_workers} or Carp::confess('no -wq_workers');
+	my $buf = ipc_freeze([$sub, @args]);
+	for my $bcast1 (values %$wkr) {
+		my $sock = $bcast1 // $self->{-wq_s1} // next;
+		send($sock, $buf, 0) // croak "send: $!";
+		# XXX shouldn't have to deal with EMSGSIZE here...
 	}
 }
 
@@ -291,24 +287,17 @@ sub stream_in_full ($$$) {
 
 sub wq_io_do { # always async
 	my ($self, $sub, $ios, @args) = @_;
-	if (my $s1 = $self->{-wq_s1}) { # run in worker
-		my $fds = [ map { fileno($_) } @$ios ];
-		my $buf = ipc_freeze([$sub, @args]);
-		if (length($buf) > $MY_MAX_ARG_STRLEN) {
-			stream_in_full($s1, $fds, $buf);
-		} else {
-			my $n = $send_cmd->($s1, $fds, $buf, 0);
-			return if defined($n); # likely
-			$!{ETOOMANYREFS} and
-				croak "sendmsg: $! (check RLIMIT_NOFILE)";
-			$!{EMSGSIZE} ? stream_in_full($s1, $fds, $buf) :
-				croak("sendmsg: $!");
-		}
+	my $s1 = $self->{-wq_s1} or Carp::confess('no -wq_s1');
+	my $fds = [ map { fileno($_) } @$ios ];
+	my $buf = ipc_freeze([$sub, @args]);
+	if (length($buf) > $MY_MAX_ARG_STRLEN) {
+		stream_in_full($s1, $fds, $buf);
 	} else {
-		@$self{0..$#$ios} = @$ios;
-		eval { $self->$sub(@args) };
-		warn "wq_io_do: $@" if $@;
-		delete @$self{0..$#$ios}; # don't close
+		my $n = $send_cmd->($s1, $fds, $buf, 0);
+		return if defined($n); # likely
+		$!{ETOOMANYREFS} and croak "sendmsg: $! (check RLIMIT_NOFILE)";
+		$!{EMSGSIZE} ? stream_in_full($s1, $fds, $buf) :
+			croak("sendmsg: $!");
 	}
 }
 
