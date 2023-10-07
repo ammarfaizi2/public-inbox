@@ -58,7 +58,7 @@ my $do_get_all = sub {
 	my ($buf, $nr);
 	my $bytes = 0;
 	my $t0 = now();
-	my ($rd, $pid) = popen_rd([$curl, @CURL_OPT, $url]);
+	my $rd = popen_rd([$curl, @CURL_OPT, $url]);
 	while (1) {
 		$nr = sysread($rd, $buf, 65536);
 		last if !$nr;
@@ -67,9 +67,7 @@ my $do_get_all = sub {
 	}
 	my $res = $dig->hexdigest;
 	my $elapsed = sprintf('%0.3f', now() - $t0);
-	close $rd or die "close curl failed: $!\n";
-	waitpid($pid, 0) == $pid or die "waitpid failed: $!\n";
-	$? == 0 or die "curl failed: $?\n";
+	close $rd or die "close curl failed: $! \$?=$?\n";
 	print STDERR "# $job $$ ($?) $res (${elapsed}s) $bytes bytes\n";
 	$res;
 };
