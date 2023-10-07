@@ -1,11 +1,9 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# a tied handle for auto reaping of children tied to a read-only pipe, see perltie(1)
-# DO NOT use this as-is for bidirectional pipes/sockets (e.g. in PublicInbox::Git),
-# both ends of the pipe must be at the same level of the Perl object hierarchy
-# to ensure orderly destruction.
-package PublicInbox::ProcessPipe;
+# a tied handle for auto reaping of children tied to a pipe or socket,
+# see perltie(1) for details.
+package PublicInbox::ProcessIO;
 use v5.12;
 use PublicInbox::DS qw(awaitpid);
 use Symbol qw(gensym);

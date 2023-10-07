@@ -21,7 +21,7 @@ use PublicInbox::Lock;
 use Fcntl qw(SEEK_SET);
 use IO::Handle ();
 use Carp qw(croak);
-use PublicInbox::ProcessPipe;
+use PublicInbox::ProcessIO;
 our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
 
@@ -368,13 +368,13 @@ sub spawn ($;$$) {
 sub popen_rd {
 	my ($cmd, $env, $opt) = @_;
 	pipe(my $r, local $opt->{1}) or die "pipe: $!\n";
-	PublicInbox::ProcessPipe->maybe_new(spawn($cmd, $env, $opt), $r, $opt)
+	PublicInbox::ProcessIO->maybe_new(spawn($cmd, $env, $opt), $r, $opt)
 }
 
 sub popen_wr {
 	my ($cmd, $env, $opt) = @_;
 	pipe(local $opt->{0}, my $w) or die "pipe: $!\n";
-	PublicInbox::ProcessPipe->maybe_new(spawn($cmd, $env, $opt), $w, $opt)
+	PublicInbox::ProcessIO->maybe_new(spawn($cmd, $env, $opt), $w, $opt)
 }
 
 sub run_wait ($;$$) {

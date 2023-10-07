@@ -149,8 +149,8 @@ EOF
 	$fh = popen_rd(['true'], undef, { cb_arg => [sub { @c = caller }] });
 	undef $fh; # ->DESTROY
 	ok(scalar(@c), 'callback fired by ->DESTROY');
-	ok(grep(!m[/PublicInbox/ProcessPipe\.pm\z], @c),
-		'callback not invoked by ProcessPipe');
+	ok(grep(!m[/PublicInbox/ProcessIO\.pm\z], @c),
+		'callback not invoked by ProcessIO');
 }
 
 { # children don't wait on siblings

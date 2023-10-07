@@ -10,7 +10,7 @@ use PublicInbox::Gcf2; # fails if Inline::C or libgit2-dev isn't available
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN);
-use PublicInbox::ProcessPipe;
+use PublicInbox::ProcessIO;
 use autodie qw(socketpair);
 
 # fields:
@@ -33,7 +33,7 @@ sub new  {
 	my $cmd = [$^X, $^W ? ('-w') : (),
 			qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
 	my $pid = spawn($cmd, $env, $opt);
-	my $sock = PublicInbox::ProcessPipe->maybe_new($pid, $s1);
+	my $sock = PublicInbox::ProcessIO->maybe_new($pid, $s1);
 	$self->{inflight} = [];
 	$self->{epwatch} = \undef; # for Git->cleanup
 	$self->SUPER::new($sock, EPOLLIN);

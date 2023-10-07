@@ -37,7 +37,7 @@ sub new {
 		arg => $arg, # arg for $cb
 		end_obj => $end_obj, # like END{}, can ->event_step
 	}, $class;
-	my $pp = tied *$io; # ProcessPipe
+	my $pp = tied *$io; # ProcessIO
 	$pp->{fh}->blocking(0) // die "$io->blocking(0): $!";
 	$self->SUPER::new($io, EPOLLIN);
 }

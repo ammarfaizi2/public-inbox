@@ -152,7 +152,7 @@ sub requote ($$) {
 	# $^X (perl) is overkill, but maybe there's a weird system w/o sed
 	my ($w, $pid) = popen_wr([$^X, '-pe', "s/^/$pfx/"], $lei->{env}, $opt);
 	$w->autoflush(1);
-	binmode $w, ':utf8'; # incompatible with ProcessPipe due to syswrite
+	binmode $w, ':utf8'; # incompatible with ProcessIO due to syswrite
 	$lei->{1} = $w;
 	PublicInbox::OnDestroy->new(\&wait_requote, $lei, $pid, $old_1);
 }

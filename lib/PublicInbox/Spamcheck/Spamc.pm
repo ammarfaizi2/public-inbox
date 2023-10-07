@@ -27,7 +27,7 @@ sub spamcheck {
 		$out = \$buf;
 	}
 	$$out = do { local $/; <$fh> };
-	close $fh; # PublicInbox::ProcessPipe::CLOSE
+	close $fh; # PublicInbox::ProcessIO::CLOSE
 	($? || $$out eq '') ? 0 : 1;
 }
 

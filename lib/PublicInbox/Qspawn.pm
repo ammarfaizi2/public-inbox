@@ -124,7 +124,7 @@ sub finish ($;$) {
 
 	# we can safely finalize if pipe was closed before, or if
 	# {_err} is defined by waitpid_err.  Deleting {rpipe} will
-	# trigger PublicInbox::ProcessPipe::DESTROY -> waitpid_err,
+	# trigger PublicInbox::ProcessIO::DESTROY -> waitpid_err,
 	# but it may not fire right away if inside the event loop.
 	my $closed_before = !delete($self->{rpipe});
 	finalize($self) if $closed_before || defined($self->{_err});
@@ -251,7 +251,7 @@ sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	if (ref($r) ne 'ARRAY' || scalar(@$r) == 3) { # error
 		if ($async) { # calls rpipe->close && ->event_step
 			$async->close; # PublicInbox::HTTPD::Async::close
-		} else { # generic PSGI, use PublicInbox::ProcessPipe::CLOSE
+		} else { # generic PSGI, use PublicInbox::ProcessIO::CLOSE
 			delete($self->{rpipe})->close;
 			event_step($self);
 		}
