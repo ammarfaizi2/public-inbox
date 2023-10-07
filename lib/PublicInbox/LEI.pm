@@ -1296,7 +1296,7 @@ sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
 			my $lne = delete($cfg->{-lei_note_event});
 			$lne->wq_close if $lne;
 			my $sto = delete($cfg->{-lei_store}) // next;
-			eval { $sto->wq_io_do('done') };
+			eval { $sto->wq_do('done') if $sto->{-wq_s1} };
 			warn "E: $@ (dropping store for $cfg->{-f})" if $@;
 			$sto->wq_close;
 		}
