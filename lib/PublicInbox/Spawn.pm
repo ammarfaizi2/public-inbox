@@ -366,15 +366,17 @@ sub spawn ($;$$) {
 }
 
 sub popen_rd {
-	my ($cmd, $env, $opt) = @_;
+	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(my $r, local $opt->{1}) or die "pipe: $!\n";
-	PublicInbox::ProcessIO->maybe_new(spawn($cmd, $env, $opt), $r, $opt)
+	my $pid = spawn($cmd, $env, $opt);
+	PublicInbox::ProcessIO->maybe_new($pid, $r, @cb_arg);
 }
 
 sub popen_wr {
-	my ($cmd, $env, $opt) = @_;
+	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(local $opt->{0}, my $w) or die "pipe: $!\n";
-	PublicInbox::ProcessIO->maybe_new(spawn($cmd, $env, $opt), $w, $opt)
+	my $pid = spawn($cmd, $env, $opt);
+	PublicInbox::ProcessIO->maybe_new($pid, $w, @cb_arg)
 }
 
 sub run_wait ($;$$) {

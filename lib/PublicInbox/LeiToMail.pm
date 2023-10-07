@@ -162,8 +162,8 @@ sub _post_augment_mbox { # open a compressor process from top-level lei-daemon
 	my ($r, $w) = @{delete $lei->{zpipe}};
 	my $rdr = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2}, pgid => 0 };
 	my $pid = spawn($cmd, undef, $rdr);
-	$lei->{1} = PublicInbox::ProcessIO->maybe_new($pid, $w, {
-			cb_arg => [\&reap_compress, $lei, $cmd, $lei->{1} ] });
+	$lei->{1} = PublicInbox::ProcessIO->maybe_new($pid, $w,
+				\&reap_compress, $lei, $cmd, $lei->{1});
 }
 
 # --augment existing output destination, with deduplication

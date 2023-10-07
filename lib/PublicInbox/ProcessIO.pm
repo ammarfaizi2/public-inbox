@@ -9,10 +9,10 @@ use PublicInbox::DS qw(awaitpid);
 use Symbol qw(gensym);
 
 sub maybe_new {
-	my ($cls, $pid, $fh, $opt) = @_;
+	my ($cls, $pid, $fh, @cb_arg) = @_;
 	return ($fh, $pid) if wantarray;
 	my $s = gensym;
-	tie *$s, $cls, $pid, $fh, @{$opt->{cb_arg} // []};
+	tie *$s, $cls, $pid, $fh, @cb_arg;
 	$s;
 }
 

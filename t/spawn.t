@@ -140,13 +140,13 @@ EOF
 
 { # ->CLOSE vs ->DESTROY waitpid caller distinction
 	my @c;
-	my $fh = popen_rd(['true'], undef, { cb_arg => [sub { @c = caller }] });
+	my $fh = popen_rd(['true'], undef, undef, sub { @c = caller });
 	ok(close($fh), '->CLOSE fired and successful');
 	ok(scalar(@c), 'callback fired by ->CLOSE');
 	ok(grep(!m[/PublicInbox/DS\.pm\z], @c), 'callback not invoked by DS');
 
 	@c = ();
-	$fh = popen_rd(['true'], undef, { cb_arg => [sub { @c = caller }] });
+	$fh = popen_rd(['true'], undef, undef, sub { @c = caller });
 	undef $fh; # ->DESTROY
 	ok(scalar(@c), 'callback fired by ->DESTROY');
 	ok(grep(!m[/PublicInbox/ProcessIO\.pm\z], @c),
@@ -157,8 +157,8 @@ EOF
 	use POSIX qw(_exit);
 	pipe(my ($r, $w)) or BAIL_OUT $!;
 	my @arg;
-	my $cb = [ sub { @arg = @_; warn "x=$$\n" }, 'hi' ];
-	my $fh = popen_rd(['cat'], undef, { 0 => $r, cb_arg => $cb });
+	my $fh = popen_rd(['cat'], undef, { 0 => $r },
+			sub { @arg = @_; warn "x=$$\n" }, 'hi');
 	my $pp = tied *$fh;
 	my $pid = fork // BAIL_OUT $!;
 	local $SIG{__WARN__} = sub { _exit(1) };

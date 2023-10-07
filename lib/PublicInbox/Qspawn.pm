@@ -58,10 +58,10 @@ sub _do_spawn {
 	}
 	$self->{cmd} = $cmd;
 	$self->{-quiet} = 1 if $o{quiet};
-	$o{cb_arg} = [ \&waitpid_err, $self ];
 	eval {
 		# popen_rd may die on EMFILE, ENFILE
-		$self->{rpipe} = popen_rd($cmd, $cmd_env, \%o) // die "E: $!";
+		$self->{rpipe} = popen_rd($cmd, $cmd_env, \%o,
+					\&waitpid_err, $self);
 		$limiter->{running}++;
 		$start_cb->($self); # EPOLL_CTL_ADD may ENOSPC/ENOMEM
 	};
