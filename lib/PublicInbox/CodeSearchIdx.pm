@@ -55,8 +55,8 @@ use PublicInbox::CidxLogP;
 use PublicInbox::CidxComm;
 use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
-use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use Carp ();
+use autodie qw(pipe open seek sysseek send);
 our (
 	$LIVE, # pid => cmd
 	$LIVE_JOBS, # integer
@@ -265,9 +265,9 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
-	sysseek($in, 0, SEEK_SET) or die "seek: $!";
+	sysseek($in, 0, SEEK_SET);
 	my ($rd, $pid) = $git->popen(@LOG_STDIN, undef, { 0 => $in });
-	close $in or die "close: $!";
+	close $in;
 	awaitpid($pid, \&cidx_reap_log, $self, $op_p);
 	PublicInbox::CidxLogP->new($rd, $self, $git, $roots);
 	# CidxLogP->event_step will call cidx_read_log_p once there's input
@@ -382,7 +382,7 @@ sub cidx_await ($$$$$@) {
 sub fp_start ($$$) {
 	my ($self, $git, $prep_repo) = @_;
 	return if !$LIVE || $DO_QUIT;
-	open my $refs, '+>', undef or die "open: $!";
+	open my $refs, '+>', undef;
 	my $cmd = ['git', "--git-dir=$git->{git_dir}",
 		qw(show-ref --heads --tags --hash)];
 	my $pid = spawn($cmd, undef, { 1 => $refs });
@@ -393,7 +393,7 @@ sub fp_start ($$$) {
 sub fp_fini { # cidx_await cb
 	my ($self, $git, $prep_repo) = @_;
 	my $refs = $git->{-repo}->{refs} // die 'BUG: no {-repo}->{refs}';
-	seek($refs, 0, SEEK_SET) or die "seek: $!";
+	seek($refs, 0, SEEK_SET);
 	my $buf;
 	my $dig = PublicInbox::SHA->new(256);
 	while (read($refs, $buf, 65536)) { $dig->add($buf) }
@@ -458,13 +458,13 @@ sub check_existing { # retry_reopen callback
 
 sub partition_refs ($$$) {
 	my ($self, $git, $refs) = @_; # show-ref --heads --tags --hash output
-	sysseek($refs, 0, SEEK_SET) or die "seek: $!"; # for rev-list --stdin
+	sysseek($refs, 0, SEEK_SET);
 	my $rfh = $git->popen(qw(rev-list --stdin), undef, { 0 => $refs });
-	close $refs or die "close: $!";
+	close $refs;
 	my $seen = 0;
 	my @shard_in = map {
 		$_->reopen;
-		open my $fh, '+>', undef or die "open: $!";
+		open my $fh, '+>', undef;
 		$fh;
 	} @RDONLY_XDB;
 
@@ -483,11 +483,11 @@ sub partition_refs ($$$) {
 			$seen = 0;
 		}
 		if ($DO_QUIT) {
-			close($rfh);
+			CORE::close($rfh);
 			return ();
 		}
 	}
-	close($rfh);
+	CORE::close($rfh);
 	return () if $DO_QUIT;
 	if (!$? || (($? & 127) == POSIX::SIGPIPE && $seen > $SEEN_MAX)) {
 		my $n = $NCHANGE - $n0;
@@ -521,16 +521,16 @@ sub dump_roots_start {
 	local $self->{xdb};
 	@ID2ROOT = $self->all_terms('G');
 	my $root2id = "$TMPDIR/root2id";
-	open my $fh, '>', $root2id or die "open($root2id): $!";
+	open my $fh, '>', $root2id;
 	my $nr = -1;
 	for (@ID2ROOT) { print $fh $_, "\0", ++$nr, "\0" } # mmap-friendly
-	close $fh or die "close: $!";
+	close $fh;
 	# dump_roots | sort -k1,1 | OFS=' ' uniq_fold >to_root_id
-	pipe(my ($sort_r, $sort_w)) or die "pipe: $!";
-	pipe(my ($fold_r, $fold_w)) or die "pipe: $!";
+	pipe(my $sort_r, my $sort_w);
+	pipe(my $fold_r, my $fold_w);
 	my @sort = (@SORT, '-k1,1');
 	my $dst = "$TMPDIR/to_root_id";
-	open $fh, '>', $dst or die "open($dst): $!";
+	open $fh, '>', $dst;
 	my $env = { %$CMD_ENV, OFS => ' ' };
 	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fold_w });
 	my $fold_pid = spawn(\@UNIQ_FOLD, $env, { 0 => $fold_r, 1 => $fh });
@@ -539,7 +539,7 @@ sub dump_roots_start {
 	my @arg = ((map { ('-A', $_) } @ASSOC_PFX), '-c',
 		'-m', assoc_max_init($self), $root2id, $QRY_STR);
 	for my $d ($self->shard_dirs) {
-		pipe(my ($err_r, $err_w)) or die "pipe: $!";
+		pipe(my $err_r, my $err_w);
 		$XHC->mkreq([$sort_w, $err_w], qw(dump_roots -d), $d, @arg);
 		my $desc = "dump_roots $d";
 		$self->{PENDING}->{$desc} = $associate;
@@ -554,7 +554,7 @@ sub dump_ibx { # sends to xap_helper.h
 	my @cmd = ('dump_ibx', $ibx->isrch->xh_args,
 			(map { ('-A', $_) } @ASSOC_PFX),
 			$ibx_id, $QRY_STR);
-	pipe(my ($r, $w)) or die "pipe: $!";
+	pipe(my $r, my $w);
 	$XHC->mkreq([$DUMP_IBX_WPIPE, $w], @cmd);
 	my $ekey = $ibx->eidx_key;
 	$self->{PENDING}->{$ekey} = $TODO{associate};
@@ -563,12 +563,12 @@ sub dump_ibx { # sends to xap_helper.h
 
 sub dump_ibx_start {
 	my ($self, $associate) = @_;
-	pipe(my $sort_r, $DUMP_IBX_WPIPE) or die "pipe: $!";
-	pipe(my ($fold_r, $fold_w)) or die "pipe: $!";
+	pipe(my $sort_r, $DUMP_IBX_WPIPE);
+	pipe(my $fold_r, my $fold_w);
 	my @sort = (@SORT, '-k1,1'); # sort only on ASSOC_PFX
 	# pipeline: dump_ibx | sort -k1,1 | uniq_fold >to_ibx_id
 	my $dst = "$TMPDIR/to_ibx_id";
-	open my $fh, '>', $dst or die "open($dst): $!";
+	open my $fh, '>', $dst;
 	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fold_w });
 	my $fold_pid = spawn(\@UNIQ_FOLD, $CMD_ENV, { 0 => $fold_r, 1 => $fh });
 	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
@@ -638,9 +638,9 @@ sub index_repo { # cidx_await cb
 	return push(@$IDX_TODO, $git) if $REPO_CTX; # busy
 	my $repo = delete $git->{-repo} or return index_next($self);
 	my $roots_fh = delete $repo->{roots_fh} // die 'BUG: no {roots_fh}';
-	seek($roots_fh, 0, SEEK_SET) or die "seek: $!";
+	seek($roots_fh, 0, SEEK_SET);
 	chomp(my @roots = <$roots_fh>);
-	close($roots_fh) or die "close: $!";
+	close($roots_fh);
 	if (!@roots) {
 		warn("E: $git->{git_dir} has no root commits\n");
 		return index_next($self);
@@ -670,8 +670,8 @@ sub get_roots ($$) {
 	my ($self, $git) = @_;
 	return if !$LIVE || $DO_QUIT;
 	my $refs = $git->{-repo}->{refs} // die 'BUG: no {-repo}->{refs}';
-	sysseek($refs, 0, SEEK_SET) or die "seek: $!";
-	open my $roots_fh, '+>', undef or die "open: $!";
+	sysseek($refs, 0, SEEK_SET);
+	open my $roots_fh, '+>', undef;
 	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
 			qw(rev-list --stdin --max-parents=0) ];
 	my $pid = spawn($cmd, undef, { 0 => $refs, 1 => $roots_fh });
@@ -838,7 +838,7 @@ sub prep_alternate_end { # awaitpid callback for config extensions.objectFormat
 	if ($status == 1) { # unset, default is '' (SHA-1)
 		$fmt = 'sha1';
 	} elsif ($status == 0) {
-		seek($out, 0, SEEK_SET) or die "seek: $!";
+		seek($out, 0, SEEK_SET);
 		chomp($fmt = <$out> // 'sha1');
 	} else {
 		return warn("git config \$?=$? for objdir=$objdir");
@@ -851,7 +851,7 @@ EOM
 		my $git_dir = "$TMPDIR/hexlen$hexlen.git";
 		PublicInbox::Import::init_bare($git_dir, 'cidx-all', $fmt);
 		my $f = "$git_dir/objects/info/alternates";
-		open $ALT_FH{$hexlen}, '>', $f or die "open($f): $!";
+		open $ALT_FH{$hexlen}, '>', $f;
 	}
 	say { $ALT_FH{$hexlen} } $objdir or die "say: $!";
 }
@@ -865,7 +865,7 @@ sub prep_alternate_start {
 	}
 	my $cmd = [ 'git', "--git-dir=$git_dir",
 			qw(config extensions.objectFormat) ];
-	open my $out, '+>', undef or die "open(tmp): $!";
+	open my $out, '+>', undef;
 	my $pid = spawn($cmd, undef, { 1 => $out });
 	awaitpid($pid, \&prep_alternate_end, $o, $out, $run_prune);
 }
@@ -894,7 +894,7 @@ sub associate {
 			++$score{"$ibx_id $_"} for @root_ids;
 		}
 	}
-	close $rd or die "@join failed: $?=$?";
+	CORE::close $rd or die "@join failed: $?=$?";
 	my $min = $self->{-opt}->{'assoc-min'} // 10;
 	progress($self, scalar(keys %score).' potential pairings...');
 	for my $k (keys %score) {
@@ -961,10 +961,10 @@ sub init_prune ($) {
 			comm => \@COMM, awk => \@AWK);
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
 	my $run_prune = PublicInbox::OnDestroy->new($$, \&run_prune, $self);
-	pipe(my ($sed_in, $delve_out)) or die "pipe: $!";
-	pipe(my ($sort_in, $sed_out)) or die "pipe: $!";
+	pipe(my $sed_in, my $delve_out);
+	pipe(my $sort_in, my $sed_out);
 	my @sort_u = (@SORT, '-u');
-	open(my $sort_out, '+>', "$TMPDIR/indexed_commits") or die "open: $!";
+	open(my $sort_out, '+>', "$TMPDIR/indexed_commits");
 	my $pid = spawn(\@sort_u, $CMD_ENV, { 0 => $sort_in, 1 => $sort_out });
 	awaitpid($pid, \&cmd_done, \@sort_u, $run_prune);
 	$pid = spawn(\@sed, $CMD_ENV, { 0 => $sed_in, 1 => $sed_out });
@@ -982,7 +982,7 @@ sub dump_git_commits { # awaitpid cb
 	(defined($pid) && $?) and die "E: @PRUNE_BATCH: \$?=$?";
 	return if $DO_QUIT;
 	my ($hexlen) = keys(%ALT_FH) or return; # done
-	close(delete $ALT_FH{$hexlen}) or die "close: $!";
+	close(delete $ALT_FH{$hexlen});
 
 	$PRUNE_BATCH[1] = "--git-dir=$TMPDIR/hexlen$hexlen.git";
 	$pid = spawn(\@PRUNE_BATCH, undef, { 1 => $batch_out });
@@ -998,9 +998,9 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	#	git --git-dir=hexlen64.git cat-file \
 	#		--batch-all-objects --batch-check
 	# ) | awk | sort | comm | cidx_read_comm()
-	pipe(my ($awk_in, $batch_out)) or die "pipe: $!";
-	pipe(my ($sort_in, $awk_out)) or die "pipe: $!";
-	pipe(my ($comm_in, $sort_out)) or die "pipe: $!";
+	pipe(my $awk_in, my $batch_out);
+	pipe(my $sort_in, my $awk_out);
+	pipe(my $comm_in, my $sort_out);
 	my $awk_pid = spawn(\@AWK, $CMD_ENV, { 0 => $awk_in, 1 => $awk_out });
 	my @sort_u = (@SORT, '-u');
 	my $sort_pid = spawn(\@sort_u, $CMD_ENV,
