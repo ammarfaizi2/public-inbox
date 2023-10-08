@@ -199,7 +199,7 @@ sub resolve_mid_to_tid {
 	$tid // do { # create a new ghost
 		my $id = mid2id($self, $mid);
 		my $num = next_ghost_num($self);
-		$num < 0 or die "ghost num is non-negative: $num\n";
+		$num < 0 or croak "BUG: ghost num is non-negative: $num\n";
 		$tid = next_tid($self);
 		my $dbh = $self->{dbh};
 		$dbh->prepare_cached(<<'')->execute($num, $tid);
@@ -283,7 +283,7 @@ sub _add_over {
 	my ($self, $smsg, $mid, $refs, $old_tid, $v) = @_;
 	my $cur_tid = $smsg->{tid};
 	my $n = $smsg->{num};
-	die "num must not be zero for $mid" if !$n;
+	croak "BUG: num must not be zero for $mid" if !$n;
 	my $cur_valid = $cur_tid > $self->{min_tid};
 
 	if ($n > 0) { # regular mail
@@ -454,7 +454,7 @@ sub rollback_lazy {
 
 sub dbh_close {
 	my ($self) = @_;
-	die "in transaction" if $self->{txn};
+	Carp::confess('BUG: in transaction') if $self->{txn};
 	$self->SUPER::dbh_close;
 }
 
