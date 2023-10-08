@@ -12,7 +12,6 @@ use v5.10.1;
 use parent qw(Exporter PublicInbox::DS);
 use autodie qw(socketpair);
 use POSIX ();
-use IO::Handle; # ->blocking
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
 use Errno qw(EINTR EAGAIN);
@@ -20,6 +19,7 @@ use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use Time::HiRes qw(stat);
 use PublicInbox::Spawn qw(spawn popen_rd which);
+use PublicInbox::ProcessIONBF;
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
@@ -146,7 +146,6 @@ sub _sock_cmd {
 	my ($self, $batch, $err_c) = @_;
 	$self->{sock} and Carp::confess('BUG: {sock} exists');
 	socketpair(my $s1, my $s2, AF_UNIX, SOCK_STREAM, 0);
-	$s1->blocking(0);
 	my $opt = { pgid => 0, 0 => $s2, 1 => $s2 };
 	my $gd = $self->{git_dir};
 	if ($gd =~ s!/([^/]+/[^/]+)\z!/!) {
@@ -165,7 +164,7 @@ sub _sock_cmd {
 						$self->fail("tmpfile($id): $!");
 	}
 	my $pid = spawn(\@cmd, undef, $opt);
-	$self->{sock} = PublicInbox::ProcessIO->maybe_new($pid, $s1);
+	$self->{sock} = PublicInbox::ProcessIONBF->new($pid, $s1);
 }
 
 sub poll_in ($) { IO::Poll::_poll($RDTIMEO, fileno($_[0]), my $ev = POLLIN) }
@@ -626,8 +625,8 @@ sub cleanup_if_unlinked {
 	my $ret = 0;
 	for my $obj ($self, ($self->{ck} // ())) {
 		my $sock = $obj->{sock} // next;
-		my PublicInbox::ProcessIO $pp = tied *$sock; # ProcessIO
-		my $pid = $pp->{pid} // next;
+		my PublicInbox::ProcessIONBF $p = tied *$sock; # ProcessIONBF
+		my $pid = $p->{pid} // next;
 		open my $fh, '<', "/proc/$pid/maps" or return cleanup($self, 1);
 		while (<$fh>) {
 			# n.b. we do not restart for unlinked multi-pack-index
