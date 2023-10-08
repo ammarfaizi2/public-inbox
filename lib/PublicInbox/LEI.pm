@@ -1537,12 +1537,11 @@ sub lms {
 
 sub sto_done_request {
 	my ($lei, $wq) = @_;
-	return unless $lei->{sto};
+	return unless $lei->{sto} && $lei->{sto}->{-wq_s1};
 	local $current_lei = $lei;
-	my $sock = $wq ? $wq->{lei_sock} : undef;
-	$sock //= $lei->{sock};
-	my @io;
-	push(@io, $sock) if $sock; # async wait iff possible
+	my $s = ($wq ? $wq->{lei_sock} : undef) // $lei->{sock};
+	my $errfh = $lei->{2} // *STDERR{GLOB};
+	my @io = $s ? ($errfh, $s) : ($errfh);
 	eval { $lei->{sto}->wq_io_do('done', \@io) };
 	warn($@) if $@;
 }

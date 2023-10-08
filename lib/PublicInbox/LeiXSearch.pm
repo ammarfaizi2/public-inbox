@@ -358,9 +358,7 @@ sub query_remote_mboxrd {
 		$fh = IO::Uncompress::Gunzip->new($fh, MultiStream => 1);
 		PublicInbox::MboxReader->mboxrd($fh, \&each_remote_eml, $self,
 						$lei, $each_smsg);
-		if (delete($self->{-sto_imported})) {
-			my $wait = $self->{import_sto}->wq_do('done');
-		}
+		$lei->sto_done_request if delete($self->{-sto_imported});
 		$reap_curl->join;
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
 		if ($? == 0) {
@@ -402,7 +400,7 @@ sub query_done { # EOF callback for main daemon
 	delete $lei->{lxs};
 	($lei->{opt}->{'mail-sync'} && !$lei->{sto}) and
 		warn "BUG: {sto} missing with --mail-sync";
-	$lei->sto_done_request if $lei->{sto};
+	$lei->sto_done_request;
 	if (my $v2w = delete $lei->{v2w}) {
 		my $wait = $v2w->wq_do('done'); # may die
 		$v2w->wq_close;

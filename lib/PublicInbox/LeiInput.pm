@@ -467,7 +467,7 @@ sub process_inputs {
 	}
 	# always commit first, even on error partial work is acceptable for
 	# lei <import|tag|convert>
-	my $wait = $self->{lei}->{sto}->wq_do('done') if $self->{lei}->{sto};
+	$self->{lei}->sto_done_request;
 	$self->{lei}->fail($err) if $err;
 }
 

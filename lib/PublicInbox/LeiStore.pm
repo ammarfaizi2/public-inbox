@@ -582,19 +582,20 @@ sub xchg_stderr {
 }
 
 sub done {
-	my ($self, $sock_ref) = @_;
-	my $err = '';
+	my ($self) = @_;
+	my ($errfh, $lei_sock) = @$self{0, 1}; # via sto_done_request
+	my @err;
 	if (my $im = delete($self->{im})) {
 		eval { $im->done };
-		if ($@) {
-			$err .= "import done: $@\n";
-			warn $err;
-		}
+		push(@err, "E: import done: $@\n") if $@;
 	}
 	delete $self->{lms};
-	$self->{priv_eidx}->done; # V2Writable::done
+	eval { $self->{priv_eidx}->done }; # V2Writable::done
+	push(@err, "E: priv_eidx done: $@\n") if $@;
+	print { $errfh // *STDERR{GLOB} } @err;
+	send($lei_sock, 'child_error 256', 0) if @err && $lei_sock;
 	xchg_stderr($self);
-	die $err if $err;
+	die @err if @err;
 }
 
 sub ipc_atfork_child {
