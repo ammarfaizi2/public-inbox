@@ -21,6 +21,7 @@ use PublicInbox::LEI;
 use Fcntl qw(SEEK_SET F_SETFL O_APPEND O_RDWR);
 use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
+use autodie qw(read seek truncate);
 
 sub new {
 	my ($class) = @_;
@@ -353,29 +354,21 @@ sub query_remote_mboxrd {
 		$uri->query_form(@qform, q => $q);
 		my $cmd = $curl->for_uri($lei, $uri);
 		$lei->qerr("# $cmd");
-		my ($fh, $pid) = popen_rd($cmd, undef, $rdr);
-		my $reap_curl = PublicInbox::AutoReap->new($pid);
-		$fh = IO::Uncompress::Gunzip->new($fh, MultiStream => 1);
+		my $cfh = popen_rd($cmd, undef, $rdr);
+		my $fh = IO::Uncompress::Gunzip->new($cfh, MultiStream => 1);
 		PublicInbox::MboxReader->mboxrd($fh, \&each_remote_eml, $self,
 						$lei, $each_smsg);
 		$lei->sto_done_request if delete($self->{-sto_imported});
-		$reap_curl->join;
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
-		if ($? == 0) {
-			# don't update if no results, maybe MTA is down
+		close $cfh;
+		if ($? == 0) { # don't update if no results, maybe MTA is down
 			$lei->{lss}->cfg_set($key, $start) if $key && $nr;
 			mset_progress($lei, $lei->{-current_url}, $nr, $nr);
 			next;
 		}
-		my $err;
-		if (-s $cerr) {
-			seek($cerr, 0, SEEK_SET) //
-					warn "seek($cmd stderr): $!";
-			$err = do { local $/; <$cerr> } //
-					warn "read($cmd stderr): $!";
-			truncate($cerr, 0) // warn "truncate($cmd stderr): $!";
-		}
-		$err //= '';
+		seek($cerr, 0, SEEK_SET);
+		read($cerr, my $err, -s $cerr);
+		truncate($cerr, 0);
 		next if (($? >> 8) == 22 && $err =~ /\b404\b/);
 		$uri->query_form(q => $qstr);
 		$lei->child_error($?, "E: <$uri> $err");

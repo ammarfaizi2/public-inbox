@@ -33,8 +33,8 @@ sub TIEHANDLE {
 
 # for IO::Uncompress::Gunzip
 sub BINMODE {
-	my $self = shift;
-	binmode($self->{fh}, @_);
+	return binmode($_[0]->{fh}) if @_ == 1;
+	binmode $_[0]->{fh}, $_[1];
 }
 
 sub READ { read($_[0]->{fh}, $_[1], $_[2], $_[3] || 0) }
