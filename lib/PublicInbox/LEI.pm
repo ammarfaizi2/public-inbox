@@ -747,7 +747,7 @@ sub optparse ($$$) {
 					# w/o args means stdin
 					if ($sw eq 'stdin' && !@$argv &&
 							(-p $self->{0} ||
-							 -f _) && -r _) {
+							 -f _)) {
 						$OPT->{stdin} //= 1;
 					}
 					$ok = defined($OPT->{$sw}) and last;
