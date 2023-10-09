@@ -14,7 +14,7 @@ use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::GitHTTPBackend;
 use PublicInbox::WwwStream;
-use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::Hval qw(ascii_html utf8_maybe);
 use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
@@ -179,7 +179,7 @@ EOM
 
 sub capture { # psgi_qx callback to capture git-for-each-ref
 	my ($bref, $arg) = @_; # arg = [ctx, key, OnDestroy(summary_END)]
-	utf8::decode($$bref);
+	utf8_maybe($$bref);
 	$arg->[0]->{qx_res}->{$arg->[1]} = $$bref;
 	# summary_END may be called via OnDestroy $arg->[2]
 }
@@ -241,13 +241,13 @@ sub translate {
 	$fbuf .= shift while @_;
 	if ($ctx->{-heads}) {
 		while ($fbuf =~ s/\A([^\n]+)\n//s) {
-			utf8::decode(my $x = $1);
+			utf8_maybe(my $x = $1);
 			push @out, _refs_heads_link($x, '../../');
 		}
 	} else {
 		my ($snap_pfx, @snap_fmt) = _snapshot_link_prep($ctx);
 		while ($fbuf =~ s/\A([^\n]+)\n//s) {
-			utf8::decode(my $x = $1);
+			utf8_maybe(my $x = $1);
 			push @out, _refs_tags_link($x, '../../',
 						$snap_pfx, @snap_fmt);
 		}

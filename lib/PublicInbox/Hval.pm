@@ -4,13 +4,13 @@
 # represents a header value in various forms.  Used for HTML generation
 # in our web interface(s)
 package PublicInbox::Hval;
+use v5.10.1; # be careful about unicode_strings in v5.12;
 use strict;
-use warnings;
 use Encode qw(find_encoding);
 use PublicInbox::MID qw/mid_clean mid_escape/;
 use base qw/Exporter/;
 our @EXPORT_OK = qw/ascii_html obfuscate_addrs to_filename src_escape
-		to_attr prurl mid_href fmt_ts ts2str/;
+		to_attr prurl mid_href fmt_ts ts2str utf8_maybe/;
 use POSIX qw(strftime);
 my $enc_ascii = find_encoding('us-ascii');
 
@@ -136,5 +136,10 @@ sub ts2str ($) { strftime('%Y%m%d%H%M%S', gmtime($_[0])) };
 
 # human-friendly format
 sub fmt_ts ($) { strftime('%Y-%m-%d %k:%M', gmtime($_[0])) }
+
+sub utf8_maybe ($) {
+	utf8::decode($_[0]);
+	utf8::valid($_[0]) or utf8::encode($_[0]); # non-UTF-8 data exists
+}
 
 1;

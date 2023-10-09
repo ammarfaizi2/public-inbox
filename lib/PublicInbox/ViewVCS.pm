@@ -25,7 +25,7 @@ use PublicInbox::ViewDiff qw(flush_diff uri_escape_path);
 use PublicInbox::View;
 use PublicInbox::Eml;
 use Text::Wrap qw(wrap);
-use PublicInbox::Hval qw(ascii_html to_filename prurl);
+use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe);
 use POSIX qw(strftime);
 my $hl = eval {
 	require PublicInbox::HlMod;
@@ -115,14 +115,14 @@ sub show_other_result ($$) { # future-proofing
 				"git show error:$qsp_err");
 	}
 	my $l = PublicInbox::Linkify->new;
-	utf8::decode($$bref);
+	utf8_maybe($$bref);
 	html_page($ctx, 200, '<pre>', $l->to_html($$bref), '</pre><hr>',
 		dbg_log($ctx));
 }
 
 sub cmt_title { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $ctx) = @_;
-	utf8::decode($$bref);
+	utf8_maybe($$bref);
 	my $title = $$bref =~ /\r?\n\r?\n([^\r\n]+)\r?\n?/ ? $1 : '';
 	push(@{$ctx->{-cmt_pt}} , ascii_html($title)) == @{$ctx->{-cmt_P}} and
 		cmt_finalize($ctx);
@@ -160,8 +160,7 @@ sub show_commit_start { # ->psgi_qx callback
 	open my $fh, '<', "$ctx->{-tmp}/h" or
 		die "open $ctx->{-tmp}/h: $!";
 	chop(my $buf = do { local $/ = "\0"; <$fh> });
-	utf8::decode($buf);
-	utf8::valid($buf) or utf8::encode($buf); # non-UTF-8 commits exist
+	utf8_maybe($buf); # non-UTF-8 commits exist
 	chomp $buf;
 	my ($P, $p);
 	($P, $p, @{$ctx->{cmt_info}}) = split(/\n/, $buf, 9);
@@ -248,12 +247,12 @@ committer $co
 EOM
 	print $zfh "\n", $ctx->{-linkify}->to_html($bdy) if length($bdy);
 	$bdy = '';
-	open my $fh, '<:utf8', "$ctx->{-tmp}/p" or
-		die "open $ctx->{-tmp}/p: $!";
+	open my $fh, '<', "$ctx->{-tmp}/p" or die "open $ctx->{-tmp}/p: $!";
 	if (-s $fh > $MAX_SIZE) {
 		print $zfh "---\n patch is too large to show\n";
 	} else { # prepare flush_diff:
 		read($fh, $x, -s _);
+		utf8_maybe($x);
 		$ctx->{-apfx} = $ctx->{-spfx} = $upfx;
 		$x =~ s/\r?\n/\n/gs;
 		$ctx->{-anchors} = {} if $x =~ /^diff --git /sm;
@@ -418,7 +417,7 @@ EOM
 		undef $_;
 		($m, $t, $oid, $sz) = split(/ +/, $x, 4);
 		$m = $GIT_MODE{$m} // '?';
-		utf8::decode($f);
+		utf8_maybe($f);
 		$n = ascii_html($f);
 		if ($m eq 'g') { # gitlink submodule commit
 			$$bref .= "\ng\t\t$n @ <a\nhref=#g>commit</a>$oid";
@@ -480,7 +479,7 @@ sub tz_adj ($) {
 
 sub show_tag_result { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $ctx) = @_;
-	utf8::decode($$bref);
+	utf8_maybe($$bref);
 	my $l = PublicInbox::Linkify->new;
 	$$bref = $l->to_html($$bref);
 	$$bref =~ s!^object ([a-f0-9]+)!object <a
@@ -568,7 +567,7 @@ sub show_blob { # git->cat_async callback
 				" $raw_more</pre>".dbg_log($ctx));
 
 	# TODO: detect + convert to ensure validity
-	utf8::decode($$blob);
+	utf8_maybe($$blob);
 	my $nl = ($$blob =~ s/\r?\n/\n/sg);
 	my $pad = length($nl);
 

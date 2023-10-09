@@ -8,7 +8,7 @@ use parent qw(PublicInbox::GzipFilter);
 use POSIX qw(strftime);
 use URI::Escape qw(uri_escape);
 use Scalar::Util ();
-use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::Hval qw(ascii_html utf8_maybe);
 
 # git for-each-ref and log use different format fields :<
 my $ATOM_FMT = '--pretty=tformat:'.join('%n',
@@ -50,7 +50,7 @@ sub translate {
 	my $is_tag = $self->{-is_tag};
 	my ($H, $ct, $an, $ae, $at, $s, $bdy);
 	while ($lbuf =~ s/\A([^\0]+)\0\n//s) {
-		utf8::decode($bdy = $1);
+		utf8_maybe($bdy = $1);
 		if ($is_tag) {
 			my %r;
 			eval "$bdy";

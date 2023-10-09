@@ -32,23 +32,30 @@ my $todo = {
 		'c2f3bf071ee90b01f2d629921bb04c4f798f02fa/s/', # tag
 		'7eb93c89651c47c8095d476251f2e4314656b292/s/', # non-UTF-8
 	],
+	'sox-devel' => [
+		'c38987e8d20505621b8d872863afa7d233ed1096/s/', # non-UTF-8
+	]
 };
 
-my ($ibx_name, $urls, @gone);
+my @gone;
 my $client = sub {
 	my ($cb) = @_;
-	for my $u (@$urls) {
-		my $url = "/$ibx_name/$u";
-		my $res = $cb->(GET($url));
-		is($res->code, 200, $url);
-		next if $res->code == 200;
-		diag "$url failed";
-		diag $res->content;
+	for my $ibx_name (sort keys %$todo) {
+		diag "testing $ibx_name";
+		my $urls = $todo->{$ibx_name};
+		for my $u (@$urls) {
+			my $url = "/$ibx_name/$u";
+			my $res = $cb->(GET($url));
+			is($res->code, 200, $url);
+			next if $res->code == 200;
+			diag "$url failed";
+			diag $res->content;
+		}
 	}
 };
 
 my $nr = 0;
-while (($ibx_name, $urls) = each %$todo) {
+while (my ($ibx_name, $urls) = each %$todo) {
 	SKIP: {
 		my $ibx = $cfg->lookup_name($ibx_name);
 		if (!$ibx) {
@@ -61,15 +68,13 @@ while (($ibx_name, $urls) = each %$todo) {
 			skip(qq{publicinbox.$ibx_name.coderepo not configured},
 				scalar(@$urls));
 		}
-		test_psgi($app, $client);
 		$nr++;
 	}
 }
 
 delete @$todo{@gone};
+test_psgi($app, $client);
 my $env = { PI_CONFIG => PublicInbox::Config->default_file };
-while (($ibx_name, $urls) = each %$todo) {
-	test_httpd($env, $client, $nr);
-}
+test_httpd($env, $client, $nr);
 
 done_testing();

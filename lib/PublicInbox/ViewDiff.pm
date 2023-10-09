@@ -11,7 +11,7 @@ use v5.12;
 use parent qw(Exporter);
 our @EXPORT_OK = qw(flush_diff uri_escape_path);
 use URI::Escape qw(uri_escape_utf8);
-use PublicInbox::Hval qw(ascii_html to_attr);
+use PublicInbox::Hval qw(ascii_html to_attr utf8_maybe);
 use PublicInbox::Git qw(git_unquote);
 
 my $OID_NULL = '0{7,}';
@@ -236,7 +236,7 @@ sub flush_diff ($$) {
 				}
 			}
 			if (!$dctx) {
-				utf8::decode($after);
+				utf8_maybe($after);
 				diff_before_or_after($ctx, \$after);
 			}
 		} else {

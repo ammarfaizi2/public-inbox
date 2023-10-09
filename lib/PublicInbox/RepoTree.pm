@@ -8,7 +8,7 @@ use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::Qspawn;
 use PublicInbox::WwwStream qw(html_oneshot);
-use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::Hval qw(ascii_html utf8_maybe);
 
 sub rd_404_log {
 	my ($bref, $ctx) = @_;
@@ -26,7 +26,7 @@ sub rd_404_log {
 		$code = 404;
 	} else {
 		my ($H, $h, $s_as) = split(/ /, $$bref, 3);
-		utf8::decode($s_as);
+		utf8_maybe($s_as);
 		my $x = uri_escape_path($ctx->{-path});
 		$s_as = ascii_html($s_as);
 		print $zfh <<EOM;
