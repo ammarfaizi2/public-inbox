@@ -287,6 +287,7 @@ ALL_LIBC
 			$ENV{XDG_CACHE_HOME} //
 			( ($ENV{HOME} // '/nonexistent').'/.cache' )
 		).'/public-inbox/inline-c';
+	undef $all_libc unless -d $inline_dir;
 	if (defined $all_libc) {
 		local $ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		use autodie;
