@@ -3,14 +3,17 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-require_mods(qw(DBD::SQLite Data::Dumper));
+require_mods(qw(DBD::SQLite));
 use_ok 'PublicInbox::NNTP';
 use PublicInbox::Config;
 use POSIX qw(strftime);
+use Data::Dumper;
 
 {
 	my $quote_str = sub {
-		my (undef, $s) = split(/ = /, Data::Dumper::Dumper($_[0]), 2);
+		my ($orig) = @_;
+		my (undef, $s) = split(/ = /, Dumper($orig), 2);
+		$s // diag explain(['$s undefined, $orig = ', $orig]);
 		$s =~ s/;\n//;
 		$s;
 	};
