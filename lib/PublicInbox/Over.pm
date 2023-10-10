@@ -82,7 +82,13 @@ sub dbh_close {
 	}
 }
 
-sub dbh ($) { $_[0]->{dbh} //= $_[0]->dbh_new } # dbh_new may be subclassed
+sub dbh ($) {
+	my ($self) = @_;
+	$self->{dbh} // do {
+		my $dbh = $self->dbh_new; # dbh_new may be subclassed
+		$self->{dbh} = $dbh;
+	}
+}
 
 sub load_from_row ($;$) {
 	my ($smsg, $cull) = @_;
@@ -256,9 +262,12 @@ SELECT ts,ds,ddd FROM over WHERE $s
 sub get_art {
 	my ($self, $num) = @_;
 	# caching $sth ourselves is faster than prepare_cached
-	my $sth = $self->{-get_art} //= dbh($self)->prepare(<<'');
+	my $sth = $self->{-get_art} // do {
+		my $sth = dbh($self)->prepare(<<'');
 SELECT num,tid,ds,ts,ddd FROM over WHERE num = ? LIMIT 1
 
+		$self->{-get_art} = $sth;
+	};
 	$sth->execute($num);
 	my $smsg = $sth->fetchrow_hashref;
 	$smsg ? load_from_row($smsg) : undef;

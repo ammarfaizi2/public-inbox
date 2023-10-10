@@ -520,7 +520,7 @@ EOM
 # used for cross-inbox search
 sub eidx_prep ($) {
 	my ($self) = @_;
-	$self->{-eidx_prep} //= do {
+	$self->{-eidx_prep} // do {
 		my $dbh = $self->dbh;
 		$dbh->do(<<'');
 INSERT OR IGNORE INTO counter (key) VALUES ('eidx_docid')
@@ -565,7 +565,7 @@ CREATE TABLE IF NOT EXISTS eidx_meta (
 		$dbh->do(<<'');
 CREATE TABLE IF NOT EXISTS eidxq (docid INTEGER PRIMARY KEY NOT NULL)
 
-		1;
+		$self->{-eidx_prep} = 1;
 	};
 }
 
