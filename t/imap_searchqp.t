@@ -28,12 +28,15 @@ $q = $parse->(qq{CHARSET UTF-8 From b});
 is($q->{xap}, 'f:"b"', 'charset handled');
 $q = $parse->(qq{CHARSET WTF-8 From b});
 like($q, qr/\ANO \[/, 'bad charset rejected');
-{
+
+for my $x ('', ' (try #2)') {
 	open my $fh, '>:scalar', \(my $buf = '') or die;
 	local *STDERR = $fh;
 	$q = $parse->(qq{CHARSET});
-	is($buf, '', 'nothing spewed to STDERR on bad query');
+	last if is($buf, '', "nothing spewed to STDERR on bad query$x");
+	diag 'FIXME: above fails mysteriously sometimes, so we try again...';
 }
+
 like($q, qr/\ABAD /, 'bad charset rejected');
 
 $q = $parse->(qq{HEADER CC B (SENTBEFORE 2-Oct-1993)});
