@@ -67,12 +67,12 @@ Reset all state
 
 =cut
 sub Reset {
+	$Poller = bless [], 'PublicInbox::DummyPoller';
 	do {
 		$in_loop = undef; # first in case DESTROY callbacks use this
 		# clobbering $Poller may call DSKQXS::DESTROY,
 		# we must always have this set to something to avoid
 		# needing branches before ep_del/ep_mod calls (via ->close).
-		$Poller = PublicInbox::Select->new;
 		%DescriptorMap = (); # likely to call ep_del
 		@Timers = ();
 		%UniqTimer = ();
@@ -82,7 +82,6 @@ sub Reset {
 		@$cur_runq = () if $cur_runq;
 		$nextq = $ToClose = undef; # may call ep_del
 		%AWAIT_PIDS = ();
-		$Poller = PublicInbox::Select->new;
 	} while (@Timers || $nextq || keys(%AWAIT_PIDS) ||
 		$ToClose || keys(%DescriptorMap) ||
 		@post_loop_do || keys(%UniqTimer) ||
@@ -737,6 +736,14 @@ sub awaitpid {
 		enqueue_reap();
 	}
 }
+
+package PublicInbox::DummyPoller; # only used during Reset
+use v5.12;
+
+sub ep_del {}
+no warnings 'once';
+*ep_add = \&ep_del;
+*ep_mod = \&ep_del;
 
 1;
 
