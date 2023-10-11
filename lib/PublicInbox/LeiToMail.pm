@@ -53,8 +53,7 @@ sub _mbox_hdr_buf ($$$) {
 	}
 	my $buf = delete $eml->{hdr};
 
-	# fixup old bug from import (pre-a0c07cba0e5d8b6a)
-	$$buf =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	PublicInbox::Eml::strip_from($$buf);
 	my $ident = $smsg->{blob} // 'lei';
 	if (defined(my $pct = $smsg->{pct})) { $ident .= "=$pct" }
 

@@ -93,7 +93,7 @@ sub _mbox_cl ($$$;@) {
 			undef $mbfh;
 		}
 		while (my $hdr = _extract_hdr(\$buf)) {
-			$$hdr =~ s/\A[\r\n]*From [^\n]*\n//s or
+			PublicInbox::Eml::strip_from($$hdr) or
 				die "E: no 'From ' line in:\n", Dumper($hdr);
 			my $eml = PublicInbox::Eml->new($hdr);
 			next unless $eml->raw_size;

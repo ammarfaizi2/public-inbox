@@ -528,4 +528,10 @@ sub willneed { re_memo($_) for @_ }
 willneed(qw(From To Cc Date Subject Content-Type In-Reply-To References
 		Message-ID X-Alt-Message-ID));
 
+# This fixes an old bug from import (pre-a0c07cba0e5d8b6a)
+# mutt also pipes single RFC822 messages with a "From " line,
+# but no Content-Length or "From " escaping.
+# "git format-patch" also generates such files by default.
+sub strip_from { $_[0] =~ s/\A[\r\n]*From [^\n]*\n//s }
+
 1;

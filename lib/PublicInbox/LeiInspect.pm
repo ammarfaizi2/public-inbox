@@ -254,7 +254,7 @@ sub inspect_start ($$) {
 sub do_inspect { # lei->do_env cb
 	my ($lei) = @_;
 	my $str = delete $lei->{istr};
-	$str =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	PublicInbox::Eml::strip_from($str);
 	my $eml = PublicInbox::Eml->new(\$str);
 	inspect_start($lei, [ 'blob:'.$lei->git_oid($eml)->hexdigest,
 			map { "mid:$_" } @{mids($eml)} ]);

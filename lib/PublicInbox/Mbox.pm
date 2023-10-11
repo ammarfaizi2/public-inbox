@@ -89,17 +89,15 @@ sub emit_raw {
 
 sub msg_hdr ($$) {
 	my ($ctx, $eml) = @_;
-	my $header_obj = $eml->header_obj;
 
-	# drop potentially confusing headers, ssoma already should've dropped
-	# Lines and Content-Length
-	foreach my $d (qw(Lines Bytes Content-Length Status)) {
-		$header_obj->header_set($d);
+	# drop potentially confusing headers, various importers should've
+	# already dropped these, but we can't trust stuff we've cloned
+	for my $d (qw(Lines Bytes Content-Length Status)) {
+		$eml->header_set($d);
 	}
-	my $crlf = $header_obj->crlf;
-	my $buf = $header_obj->as_string;
-	# fixup old bug from import (pre-a0c07cba0e5d8b6a)
-	$buf =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	my $crlf = $eml->crlf;
+	my $buf = $eml->header_obj->as_string;
+	PublicInbox::Eml::strip_from($buf);
 	"From mboxrd\@z Thu Jan  1 00:00:00 1970" . $crlf . $buf . $crlf;
 }
 

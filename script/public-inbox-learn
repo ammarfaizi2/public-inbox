@@ -40,7 +40,7 @@ my $pi_cfg = PublicInbox::Config->new;
 my $err;
 my $mime = PublicInbox::Eml->new(do{
 	defined(my $data = do { local $/; <STDIN> }) or die "read STDIN: $!\n";
-	$data =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	PublicInbox::Eml::strip_from($data);
 
 	if ($train ne 'rm') {
 		eval {

@@ -118,9 +118,6 @@ sub _cat_blob ($$$) {
 	$n == $len or croak "cat-blob: short read: $n < $len";
 	my $lf = chop $buf;
 	croak "bad read on final byte: <$lf>" if $lf ne "\n";
-
-	# fixup some bugginess in old versions:
-	$buf =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
 	\$buf;
 }
 
@@ -136,8 +133,9 @@ sub check_remove_v1 {
 	my $info = _check_path($r, $w, $tip, $path) or return ('MISSING',undef);
 	$info =~ m!\A100644 blob ([a-f0-9]{40,})\t!s or die "not blob: $info";
 	my $oid = $1;
-	my $msg = _cat_blob($r, $w, $oid) or die "BUG: cat-blob $1 failed";
-	my $cur = PublicInbox::Eml->new($msg);
+	my $bref = _cat_blob($r, $w, $oid) or die "BUG: cat-blob $1 failed";
+	PublicInbox::Eml::strip_from($$bref);
+	my $cur = PublicInbox::Eml->new($bref);
 	my $cur_s = $cur->header('Subject') // '';
 	my $cur_m = $mime->header('Subject') // '';
 	if ($cur_s ne $cur_m || norm_body($cur) ne norm_body($mime)) {

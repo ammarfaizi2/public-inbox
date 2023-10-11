@@ -664,7 +664,7 @@ sub op_eml_new { $_[4] = PublicInbox::Eml->new($_[3]) }
 # s/From / fixes old bug from import (pre-a0c07cba0e5d8b6a)
 sub to_crlf_full {
 	${$_[0]} =~ s/(?<!\r)\n/\r\n/sg;
-	${$_[0]} =~ s/\A[\r\n]*From [^\r\n]*\r\n//s;
+	PublicInbox::Eml::strip_from(${$_[0]});
 }
 
 sub op_crlf_bref { to_crlf_full($_[3]) }

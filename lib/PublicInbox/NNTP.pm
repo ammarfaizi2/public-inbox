@@ -523,8 +523,7 @@ sub msg_hdr_write ($$) {
 	set_nntp_headers($eml, $smsg);
 
 	my $hdr = $eml->{hdr} // \(my $x = '');
-	# fixup old bug from import (pre-a0c07cba0e5d8b6a)
-	$$hdr =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+	PublicInbox::Eml::strip_from($$hdr);
 	$$hdr =~ s/(?<!\r)\n/\r\n/sg; # Alpine barfs without this
 
 	# for leafnode compatibility, we need to ensure Message-ID headers

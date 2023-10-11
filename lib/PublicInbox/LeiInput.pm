@@ -84,10 +84,7 @@ sub input_fh {
 			return $self->{lei}->child_error(0, <<"");
 error reading $name: $!
 
-		# mutt pipes single RFC822 messages with a "From " line,
-		# but no Content-Length or "From " escaping.
-		# "git format-patch" also generates such files by default.
-		$buf =~ s/\A[\r\n]*From [^\r\n]*\r?\n//s;
+		PublicInbox::Eml::strip_from($buf);
 
 		# a user may feed just a body: git diff | lei rediff -U9
 		if ($self->{-force_eml}) {
