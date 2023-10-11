@@ -157,20 +157,16 @@ sub msg_date_only ($) {
 
 # Favors Received header for sorting globally
 sub msg_timestamp ($;$) {
-	my ($hdr, $fallback) = @_; # PublicInbox::Eml
-	my $ret;
-	$ret = msg_received_at($hdr) and return time_response($ret);
-	$ret = msg_date_only($hdr) and return time_response($ret);
-	time_response([ $fallback // time, '+0000' ]);
+	my ($eml, $fallback) = @_;
+	time_response(msg_received_at($eml) // msg_date_only($eml) //
+			[ $fallback // time, '+0000' ]);
 }
 
 # Favors the Date: header for display and sorting within a thread
 sub msg_datestamp ($;$) {
-	my ($hdr, $fallback) = @_; # PublicInbox::Eml
-	my $ret;
-	$ret = msg_date_only($hdr) and return time_response($ret);
-	$ret = msg_received_at($hdr) and return time_response($ret);
-	time_response([ $fallback // time, '+0000' ]);
+	my ($eml, $fallback) = @_; # PublicInbox::Eml
+	time_response(msg_date_only($eml) // msg_received_at($eml) //
+			[ $fallback // time, '+0000' ]);
 }
 
 1;
