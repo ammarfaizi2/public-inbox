@@ -376,6 +376,7 @@ sub popen_rd {
 sub popen_wr {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(local $opt->{0}, my $w) or die "pipe: $!\n";
+	$w->autoflush(1);
 	my $pid = spawn($cmd, $env, $opt);
 	PublicInbox::ProcessIO->maybe_new($pid, $w, @cb_arg)
 }

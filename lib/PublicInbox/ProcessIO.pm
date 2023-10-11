@@ -7,6 +7,7 @@ package PublicInbox::ProcessIO;
 use v5.12;
 use PublicInbox::DS qw(awaitpid);
 use Symbol qw(gensym);
+use bytes qw(length);
 
 sub maybe_new {
 	my ($cls, $pid, $fh, @cb_arg) = @_;
@@ -31,25 +32,16 @@ sub TIEHANDLE {
 	$self;
 }
 
-# for IO::Uncompress::Gunzip
-sub BINMODE {
-	return binmode($_[0]->{fh}) if @_ == 1;
-	binmode $_[0]->{fh}, $_[1];
-}
+# for IO::Uncompress::Gunzip and PublicInbox::LeiRediff
+sub BINMODE { @_ == 1 ? binmode($_[0]->{fh}) : binmode($_[0]->{fh}, $_[1]) }
 
 sub READ { read($_[0]->{fh}, $_[1], $_[2], $_[3] || 0) }
 
 sub READLINE { readline($_[0]->{fh}) }
 
-sub WRITE {
-	use bytes qw(length);
-	syswrite($_[0]->{fh}, $_[1], $_[2] // length($_[1]), $_[3] // 0);
-}
+sub WRITE { syswrite($_[0]->{fh}, $_[1], $_[2] // length($_[1]), $_[3] // 0) }
 
-sub PRINT {
-	my $self = shift;
-	print { $self->{fh} } @_;
-}
+sub PRINT { print { $_[0]->{fh} } @_[1..$#_] }
 
 sub FILENO { fileno($_[0]->{fh}) }
 

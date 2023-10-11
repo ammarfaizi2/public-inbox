@@ -138,35 +138,30 @@ EOM
 	undef;
 }
 
-sub wait_requote { # OnDestroy callback
-	my ($lei, $pid, $old_1) = @_;
-	$lei->{1} = $old_1; # closes stdin of `perl -pe 's/^/> /'`
-	waitpid($pid, 0) == $pid or die "BUG(?) waitpid: \$!=$! \$?=$?";
-	$lei->child_error($?) if $?;
-}
+# awaitpid callback
+sub wait_requote { $_[1]->child_error($?) if $? }
 
-sub requote ($$) {
+sub requote ($$) { # '> ' prefix(es) lei->{1}
 	my ($lei, $pfx) = @_;
-	my $old_1 = $lei->{1};
-	my $opt = { 1 => $old_1, 2 => $lei->{2} };
+	my $opt = { 1 => $lei->{1}, 2 => $lei->{2} };
 	# $^X (perl) is overkill, but maybe there's a weird system w/o sed
-	my ($w, $pid) = popen_wr([$^X, '-pe', "s/^/$pfx/"], $lei->{env}, $opt);
-	$w->autoflush(1);
-	binmode $w, ':utf8'; # incompatible with ProcessIO due to syswrite
-	$lei->{1} = $w;
-	PublicInbox::OnDestroy->new(\&wait_requote, $lei, $pid, $old_1);
+	my $w = popen_wr([$^X, '-pe', "s/^/$pfx/"], $lei->{env}, $opt,
+			 \&wait_requote, $lei);
+	binmode $w, ':utf8';
+	$w;
 }
 
 sub extract_oids { # Eml each_part callback
 	my ($ary, $self) = @_;
+	my $lei = $self->{lei};
 	my ($p, undef, $idx) = @$ary;
-	$self->{lei}->out($p->header_obj->as_string, "\n");
+	$lei->out($p->header_obj->as_string, "\n");
 	my ($s, undef) = msg_part_text($p, $p->content_type || 'text/plain');
 	defined $s or return;
-	my $rq;
-	if ($self->{dqre} && $s =~ s/$self->{dqre}//g) { # '> ' prefix(es)
-		$rq = requote($self->{lei}, $1) if $self->{lei}->{opt}->{drq};
-	}
+
+	$self->{dqre} && $s =~ s/$self->{dqre}//g && $lei->{opt}->{drq} and
+		local $lei->{1} = requote($lei, $1);
+
 	my @top = split($PublicInbox::ViewDiff::EXTRACT_DIFFS, $s);
 	undef $s;
 	my $blobs = $self->{blobs}; # blobs to resolve
