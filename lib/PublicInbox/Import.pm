@@ -123,7 +123,7 @@ sub _cat_blob ($$) {
 
 sub cat_blob {
 	my ($self, $oid) = @_;
-	_cat_blob(gfi_start($self), $oid);
+	_cat_blob($self->{io} // return, $oid);
 }
 
 sub check_remove_v1 {
