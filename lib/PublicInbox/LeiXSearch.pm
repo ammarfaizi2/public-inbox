@@ -12,16 +12,15 @@ use PublicInbox::DS qw(now);
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use File::Spec ();
 use PublicInbox::Search qw(xap_terms);
-use PublicInbox::Spawn qw(popen_rd spawn which);
+use PublicInbox::Spawn qw(popen_rd popen_wr which);
 use PublicInbox::MID qw(mids);
 use PublicInbox::Smsg;
-use PublicInbox::AutoReap;
 use PublicInbox::Eml;
 use PublicInbox::LEI;
 use Fcntl qw(SEEK_SET F_SETFL O_APPEND O_RDWR);
 use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
-use autodie qw(read seek truncate);
+use autodie qw(open read seek truncate);
 
 sub new {
 	my ($class) = @_;
@@ -330,18 +329,20 @@ sub query_remote_mboxrd {
 	$qstr =~ s/[ \n\t]+/ /sg; # make URLs less ugly
 	my @qform = (x => 'm');
 	push(@qform, t => 1) if $opt->{threads};
-	my $verbose = $opt->{verbose};
-	my $reap_tail;
-	my $cerr = File::Temp->new(TEMPLATE => 'curl.err-XXXX', TMPDIR => 1);
-	fcntl($cerr, F_SETFL, O_APPEND|O_RDWR) or warn "set O_APPEND: $!";
+	open my $cerr, '+>', undef;
 	my $rdr = { 2 => $cerr };
-	if ($verbose) {
-		# spawn a process to force line-buffering, otherwise curl
+	my @lbf_tee;
+	if ($opt->{verbose}) {
+		# spawn a line-buffered tee(1) script, otherwise curl
 		# will write 1 character at-a-time and parallel outputs
 		# mmmaaayyy llloookkk llliiikkkeee ttthhhiiisss
-		my $o = { 1 => $lei->{2}, 2 => $lei->{2} };
-		my $pid = spawn(['tail', '-f', $cerr->filename], undef, $o);
-		$reap_tail = PublicInbox::AutoReap->new($pid);
+		# (n.b. POSIX tee(1) cannot do any buffering)
+		my $o = { 1 => $cerr, 2 => $lei->{2} };
+		delete $rdr->{2};
+		@lbf_tee = ([ $^X, qw(-w -p -e), <<'' ], undef, $o);
+BEGIN { $| = 1; use IO::Handle; STDERR->autoflush(1); }
+print STDERR $_;
+
 	}
 	my $curl = PublicInbox::LeiCurl->new($lei, $self->{curl}) or return;
 	push @$curl, '-s', '-d', '';
@@ -354,6 +355,7 @@ sub query_remote_mboxrd {
 		$uri->query_form(@qform, q => $q);
 		my $cmd = $curl->for_uri($lei, $uri);
 		$lei->qerr("# $cmd");
+		$rdr->{2} //= popen_wr(@lbf_tee) if @lbf_tee;
 		my $cfh = popen_rd($cmd, undef, $rdr);
 		my $fh = IO::Uncompress::Gunzip->new($cfh, MultiStream => 1);
 		PublicInbox::MboxReader->mboxrd($fh, \&each_remote_eml, $self,
@@ -361,17 +363,19 @@ sub query_remote_mboxrd {
 		$lei->sto_done_request if delete($self->{-sto_imported});
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
 		close $cfh;
-		if ($? == 0) { # don't update if no results, maybe MTA is down
+		my $code = $?;
+		if (!$code) { # don't update if no results, maybe MTA is down
 			$lei->{lss}->cfg_set($key, $start) if $key && $nr;
 			mset_progress($lei, $lei->{-current_url}, $nr, $nr);
 			next;
 		}
+		close(delete($rdr->{2})) if @lbf_tee;
 		seek($cerr, 0, SEEK_SET);
 		read($cerr, my $err, -s $cerr);
 		truncate($cerr, 0);
-		next if (($? >> 8) == 22 && $err =~ /\b404\b/);
+		next if (($code >> 8) == 22 && $err =~ /\b404\b/);
 		$uri->query_form(q => $qstr);
-		$lei->child_error($?, "E: <$uri> $err");
+		$lei->child_error($code, "E: <$uri> `$cmd` failed");
 	}
 	undef $each_smsg;
 	$lei->{ovv}->ovv_atexit_child($lei);
