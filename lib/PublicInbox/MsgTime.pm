@@ -1,11 +1,11 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Various date/time-related functions
 package PublicInbox::MsgTime;
+use v5.10.1; # unicode_strings in 5.12 may not work...
 use strict;
-use warnings;
-use base qw(Exporter);
+use parent qw(Exporter);
 our @EXPORT_OK = qw(msg_timestamp msg_datestamp);
 use Time::Local qw(timegm);
 my @MoY = qw(january february march april may june
@@ -125,10 +125,7 @@ sub str2date_zone ($) {
 	# but we want to keep "git fsck" happy.
 	# "-1200" is the furthest westermost zone offset,
 	# but git fast-import is liberal so we use "-1400"
-	if ($zone >= 1400 || $zone <= -1400) {
-		warn "bogus TZ offset: $zone, ignoring and assuming +0000\n";
-		$zone = '+0000';
-	}
+	$zone = '+0000' if $zone >= 1400 || $zone <= -1400;
 	[$ts, $zone];
 }
 
@@ -138,30 +135,22 @@ sub time_response ($) {
 }
 
 sub msg_received_at ($) {
-	my ($hdr) = @_; # PublicInbox::Eml
-	my @recvd = $hdr->header_raw('Received');
-	my ($ts);
-	foreach my $r (@recvd) {
+	my ($eml) = @_;
+	my $ts;
+	for my $r ($eml->header_raw('Received')) {
 		$r =~ /\s*([0-9]+\s+[a-zA-Z]+\s+[0-9]{2,4}\s+
 			[0-9]+[^0-9][0-9]+(?:[^0-9][0-9]+)
-			\s+([\+\-][0-9]+))/sx or next;
+			\s+(?:[\+\-][0-9]+))/sx or next;
 		$ts = eval { str2date_zone($1) } and return $ts;
-		my $mid = $hdr->header_raw('Message-ID');
-		warn "no date in $mid Received: $r\n";
 	}
 	undef;
 }
 
 sub msg_date_only ($) {
-	my ($hdr) = @_; # PublicInbox::Eml
-	my @date = $hdr->header_raw('Date');
-	my ($ts);
-	foreach my $d (@date) {
+	my ($eml) = @_;
+	my $ts;
+	for my $d ($eml->header_raw('Date')) {
 		$ts = eval { str2date_zone($d) } and return $ts;
-		if ($@) {
-			my $mid = $hdr->header_raw('Message-ID');
-			warn "bad Date: $d in $mid: $@\n";
-		}
 	}
 	undef;
 }
