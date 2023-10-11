@@ -1,9 +1,10 @@
 #!perl -w
 # Copyright (C) 2021 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict; use v5.10.1; use PublicInbox::TestCommon;
+use v5.12; use PublicInbox::TestCommon;
 require_git 2.6;
 require_mods(qw(json DBD::SQLite Xapian));
+use PublicInbox::DS qw(now);
 my ($ro_home, $cfg_path) = setup_public_inboxes;
 my $check_kw = sub {
 	my ($exp, %opt) = @_;
@@ -104,5 +105,17 @@ test_lei(sub {
 	lei_ok qw(tag +L:nope -F eml t/data/binary.patch);
 	like $lei_err, qr/\b1 unimported messages/, 'noted unimported'
 		or diag $lei_err;
+
+	lei_ok qw(tag -F eml --commit-delay=1 t/utf8.eml +L:utf8);
+	lei_ok 'ls-label';
+	unlike($lei_out, qr/\butf8\b/, 'commit-delay delays label');
+	my $end = now + 10;
+	my $n = 1;
+	diag 'waiting for lei/store commit...';
+	do {
+		tick $n;
+		$n = 0.1;
+	} until (!lei('ls-label') || $lei_out =~ /\butf8\b/ || now > $end);
+	like($lei_out, qr/\butf8\b/, 'commit-delay eventually commits');
 });
 done_testing;

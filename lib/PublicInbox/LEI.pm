@@ -231,13 +231,13 @@ our %CMD = ( # sorted in order of importance/use:
 'rm' => [ '--stdin|LOCATION...',
 	'remove a message from the index and prevent reindexing',
 	'stdin|', # /|\z/ must be first for lone dash
-	qw(in-format|F=s lock=s@), @net_opt, @c_opt ],
+	qw(in-format|F=s lock=s@ commit-delay=i), @net_opt, @c_opt ],
 'plonk' => [ '--threads|--from=IDENT',
 	'exclude mail matching From: or threads from non-Message-ID searches',
 	qw(stdin| threads|t from|f=s mid=s oid=s), @c_opt ],
-'tag' => [ 'KEYWORDS... LOCATION...|--stdin',
+tag => [ 'KEYWORDS... LOCATION...|--stdin',
 	'set/unset keywords and/or labels on message(s)',
-	qw(stdin| in-format|F=s input|i=s@ oid=s@ mid=s@),
+	qw(stdin| in-format|F=s input|i=s@ oid=s@ mid=s@ commit-delay=i),
 	@net_opt, @c_opt, pass_through('-kw:foo for delete') ],
 
 'purge-mailsource' => [ 'LOCATION|--all',
@@ -262,10 +262,11 @@ our %CMD = ( # sorted in order of importance/use:
 	qw(in-format|F=s kw! offset=i recursive|r exclude=s include|I=s
 	verbose|v+ incremental!), @net_opt, # mainly for --proxy=
 	 @c_opt ],
-'import' => [ 'LOCATION...|--stdin [LABELS...]',
+import => [ 'LOCATION...|--stdin [LABELS...]',
 	'one-time import/update from URL or filesystem',
 	qw(stdin| offset=i recursive|r exclude=s include|I=s new-only
-	lock=s@ in-format|F=s kw! verbose|v+ incremental! mail-sync!),
+	lock=s@ in-format|F=s kw! verbose|v+ incremental! mail-sync!
+	commit-delay=i),
 	@net_opt, @c_opt ],
 'forget-mail-sync' => [ 'LOCATION...',
 	'forget sync information for a mail folder', @c_opt ],
@@ -1539,10 +1540,14 @@ sub sto_done_request {
 	my ($lei, $wq) = @_;
 	return unless $lei->{sto} && $lei->{sto}->{-wq_s1};
 	local $current_lei = $lei;
-	my $s = ($wq ? $wq->{lei_sock} : undef) // $lei->{sock};
-	my $errfh = $lei->{2} // *STDERR{GLOB};
-	my @io = $s ? ($errfh, $s) : ($errfh);
-	eval { $lei->{sto}->wq_io_do('done', \@io) };
+	if (my $n = $lei->{opt}->{'commit-delay'}) {
+		eval { $lei->{sto}->wq_do('schedule_commit', $n) };
+	} else {
+		my $s = ($wq ? $wq->{lei_sock} : undef) // $lei->{sock};
+		my $errfh = $lei->{2} // *STDERR{GLOB};
+		my @io = $s ? ($errfh, $s) : ($errfh);
+		eval { $lei->{sto}->wq_io_do('done', \@io) };
+	}
 	warn($@) if $@;
 }
 

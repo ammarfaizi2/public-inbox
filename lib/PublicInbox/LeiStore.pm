@@ -34,6 +34,7 @@ use Sys::Syslog qw(syslog openlog);
 use Errno qw(EEXIST ENOENT);
 use PublicInbox::Syscall qw(rename_noreplace);
 use PublicInbox::LeiStoreErr;
+use PublicInbox::DS qw(add_uniq_timer);
 
 sub new {
 	my (undef, $dir, $opt) = @_;
@@ -111,6 +112,11 @@ sub search {
 sub cat_blob {
 	my ($self, $oid) = @_;
 	$self->{im} ? $self->{im}->cat_blob($oid) : undef;
+}
+
+sub schedule_commit {
+	my ($self, $sec) = @_;
+	add_uniq_timer($self->{priv_eidx}->{topdir}, $sec, \&done, $self);
 }
 
 # follows the stderr file

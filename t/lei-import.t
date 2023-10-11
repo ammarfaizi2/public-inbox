@@ -2,6 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12; use PublicInbox::TestCommon;
+use PublicInbox::DS qw(now);
 use autodie qw(open close);
 test_lei(sub {
 ok(!lei(qw(import -F bogus), 't/plack-qp.eml'), 'fails with bogus format');
@@ -140,6 +141,18 @@ lei_ok(qw(q m:inbox@example.com));
 $res = json_utf8->decode($lei_out);
 is_deeply($res->[0]->{kw}, [qw(answered flagged seen)], 'keyword added');
 is_deeply($res->[0]->{L}, [qw(boombox inbox)], 'labels preserved');
+
+lei_ok qw(import --commit-delay=1 +L:bin -F eml t/data/binary.patch);
+lei_ok 'ls-label';
+unlike($lei_out, qr/\bbin\b/, 'commit-delay delays label');
+my $end = now + 10;
+my $n = 1;
+diag 'waiting for lei/store commit...';
+do {
+	tick $n;
+	$n = 0.1;
+} until (!lei('ls-label') || $lei_out =~ /\bbin\b/ || now > $end);
+like($lei_out, qr/\bbin\b/, 'commit-delay eventually commits');
 
 # see t/lei_to_mail.t for "import -F mbox*"
 });
