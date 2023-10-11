@@ -9,6 +9,7 @@ use v5.10.1;
 use parent qw(PublicInbox::IPC);
 use PublicInbox::Spawn qw(run_wait popen_rd which);
 use PublicInbox::DS;
+use PublicInbox::Eml;
 
 sub get_git_dir ($$) {
 	my ($lei, $d) = @_;
@@ -121,18 +122,21 @@ sub lei_blob {
 				'cat-file', 'blob', $blob ];
 		if (defined $lei->{-attach_idx}) {
 			my $fh = popen_rd($cmd, $lei->{env}, $rdr);
-			require PublicInbox::Eml;
 			my $buf = do { local $/; <$fh> };
 			return extract_attach($lei, $blob, \$buf) if close($fh);
 		}
 		$rdr->{1} = $lei->{1};
 		my $cerr = run_wait($cmd, $lei->{env}, $rdr) or return;
 		my $lms = $lei->lms;
-		if (my $bref = $lms ? $lms->local_blob($blob, 1) : undef) {
-			defined($lei->{-attach_idx}) and
-				return extract_attach($lei, $blob, $bref);
-			return $lei->out($$bref);
-		} elsif ($opt->{mail}) {
+		my $bref = ($lms ? $lms->local_blob($blob, 1) : undef) // do {
+			my $sto = $lei->{sto} // $lei->_lei_store;
+			$sto && $sto->{-wq_s1} ? $sto->wq_do('cat_blob', $blob)
+						: undef;
+		};
+		$bref and return $lei->{-attach_idx} ?
+					extract_attach($lei, $blob, $bref) :
+					$lei->out($$bref);
+		if ($opt->{mail}) {
 			my $eh = $rdr->{2};
 			seek($eh, 0, 0);
 			return $lei->child_error($cerr, do { local $/; <$eh> });

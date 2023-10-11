@@ -108,6 +108,11 @@ sub search {
 	PublicInbox::LeiSearch->new($_[0]->{priv_eidx}->{topdir});
 }
 
+sub cat_blob {
+	my ($self, $oid) = @_;
+	$self->{im} ? $self->{im}->cat_blob($oid) : undef;
+}
+
 # follows the stderr file
 sub _tail_err {
 	my ($self) = @_;
