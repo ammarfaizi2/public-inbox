@@ -120,7 +120,7 @@ my $head = $old->{ref_head} || 'HEAD';
 my $rd = $old->git->popen(qw(fast-export --use-done-feature), $head);
 $v2w->idx_init($opt);
 my $im = $v2w->importer;
-my ($r, $w) = $im->gfi_start;
+my $io = $im->gfi_start;
 my $h = '[0-9a-f]';
 my %D;
 my $last;
@@ -131,12 +131,12 @@ while (<$rd>) {
 		$state = 'commit';
 	} elsif (/^data ([0-9]+)/) {
 		my $len = $1;
-		print $w $_ or $im->wfail;
+		print $io $_ or $im->wfail;
 		while ($len) {
 			my $n = read($rd, my $tmp, $len) or die "read: $!";
 			warn "$n != $len\n" if $n != $len;
 			$len -= $n;
-			print $w $tmp or $im->wfail;
+			print $io $tmp or $im->wfail;
 		}
 		next;
 	} elsif ($state eq 'commit') {
@@ -144,9 +144,9 @@ while (<$rd>) {
 			my ($mark, $path) = ($1, $2);
 			$D{$path} = $mark;
 			if ($last && $last ne 'm') {
-				print $w "D $last\n" or $im->wfail;
+				print $io "D $last\n" or $im->wfail;
 			}
-			print $w "M 100644 :$mark m\n" or $im->wfail;
+			print $io "M 100644 :$mark m\n" or $im->wfail;
 			$last = 'm';
 			next;
 		}
@@ -154,18 +154,18 @@ while (<$rd>) {
 			my $mark = delete $D{$1};
 			defined $mark or die "undeleted path: $1\n";
 			if ($last && $last ne 'd') {
-				print $w "D $last\n" or $im->wfail;
+				print $io "D $last\n" or $im->wfail;
 			}
-			print $w "M 100644 :$mark d\n" or $im->wfail;
+			print $io "M 100644 :$mark d\n" or $im->wfail;
 			$last = 'd';
 			next;
 		}
 	}
 	last if $_ eq "done\n";
-	print $w $_ or $im->wfail;
+	print $io $_ or $im->wfail;
 }
 close $rd or die "fast-export: \$?=$? \$!=$!\n";
-$r = $w = undef; # v2w->done does the actual close and error checking
+$io = undef;
 $v2w->done;
 if (my $old_mm = $old->mm) {
 	$old->cleanup;
