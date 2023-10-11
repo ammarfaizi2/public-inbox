@@ -18,7 +18,7 @@ sub new {
 
 sub _fn_in {
 	my ($self, $pid, $dir) = @_;
-	my $host = $self->{short_host} //= (split(/\./, hostname))[0];
+	my $host = $self->{-host} //= (split(/\./, hostname))[0] // 'localhost';
 	my $now = time;
 	my $n;
 	if ($self->{t} != $now) {
