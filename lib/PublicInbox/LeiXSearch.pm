@@ -419,12 +419,12 @@ Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
 			delete $l2m->{mbl}; # drop dotlock
 		}
 	}
+	my $nr_w = delete($lei->{-nr_write}) // 0;
+	my $nr_dup = (delete($lei->{-nr_seen}) // 0) - $nr_w;
 	if ($lei->{-progress}) {
 		my $tot = $lei->{-mset_total} // 0;
-		my $nr_w = delete($lei->{-nr_write}) // 0;
-		my $d = (delete($lei->{-nr_seen}) // 0) - $nr_w;
 		my $x = "$tot matches";
-		$x .= ", $d duplicates" if $d;
+		$x .= ", $nr_dup duplicates" if $nr_dup;
 		if ($l2m) {
 			my $m = "# $nr_w written to " .
 				"$lei->{ovv}->{dst} ($x)";
