@@ -7,11 +7,15 @@
 # The resulting executable is not linked to Perl in any way.
 package PublicInbox::XapHelperCxx;
 use v5.12;
-use PublicInbox::Spawn qw(popen_rd);
+use PublicInbox::Spawn qw(popen_rd which);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
-my $dir = ($ENV{PERL_INLINE_DIRECTORY} //
-	die('BUG: PERL_INLINE_DIRECTORY unset')) . '/cxx';
+use Config;
+my $cxx = which($ENV{CXX} // 'c++');
+my $dir = substr("$cxx-$Config{archname}", 1); # drop leading '/'
+$dir =~ tr!/!-!;
+$ENV{PERL_INLINE_DIRECTORY} // die('BUG: PERL_INLINE_DIRECTORY unset');
+substr($dir, 0, 0) = "$ENV{PERL_INLINE_DIRECTORY}/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
 my @srcs = map { $srcpfx.$_ } qw(xap_helper.h);
@@ -85,7 +89,6 @@ sub build () {
 	$^O eq 'netbsd' and $fl =~ s/(\A|[ \t])\-L([^ \t]+)([ \t]|\z)/
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
 
-	my $cxx = $ENV{CXX} // 'c++';
 	my $cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
 	system($cmd) and die "$cmd failed: \$?=$?";
 	open $fh, '>', "$tmp/XFLAGS";
