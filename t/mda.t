@@ -2,13 +2,13 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use warnings;
-use Test::More;
 use Cwd qw(getcwd);
 use PublicInbox::MID qw(mid2path);
 use PublicInbox::Git;
 use PublicInbox::InboxWritable;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
+use File::Path qw(remove_tree);
 my ($tmpdir, $for_destroy) = tmpdir();
 my $home = "$tmpdir/pi-home";
 my $pi_home = "$home/.public-inbox";
@@ -311,5 +311,40 @@ EOF
 	$cur = $git->qx(qw(diff HEAD~1..HEAD));
 	like($cur, qr/^-Message-ID: <2lids\@example>/sm, 'changed in git');
 }
+
+SKIP: {
+	require_mods(qw(DBD::SQLite Xapian), 1);
+	local $ENV{PI_EMERGENCY} = $faildir;
+	local $ENV{HOME} = $home;
+	local $ENV{PATH} = $main_path;
+	my $rdr = { 1 => \(my $out = ''), 2 => \(my $err = '') };
+	ok(run_script([qw(-index -L medium), $maindir], undef, $rdr),
+		'index inbox');
+	my $in = <<'EOM';
+From: a@example.com
+To: updated-address@example.com
+Subject: this is a ham message for learn
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+Message-ID: <medium-ham@example>
+
+yum
+EOM
+	$rdr->{0} = \$in;
+	ok(run_script([qw(-learn ham)], undef, $rdr), 'learn medium ham');
+	is($err, '', 'nothing in stderr after medium -learn');
+	my $msg = $git->cat_file('HEAD:'.mid2path('medium-ham@example'));
+	like($$msg, qr/medium-ham/, 'medium ham added via -learn');
+	my @xap = grep(!m!/over\.sqlite3!,
+			glob("$maindir/public-inbox/xapian*/*"));
+	ok(remove_tree(@xap), 'rm Xapian files to convert to indexlevel=basic');
+	$in =~ s/medium-ham/basic-ham/g or xbail 'BUG: no s//';
+	ok(run_script([qw(-learn ham)], undef, $rdr), 'learn basic ham');
+	is($err, '', 'nothing in stderr after basic -learn');
+	$msg = $git->cat_file('HEAD:'.mid2path('basic-ham@example'));
+	like($$msg, qr/basic-ham/, 'basic ham added via -learn');
+	@xap = grep(!m!/over\.sqlite3!,
+			glob("$maindir/public-inbox/xapian*/*"));
+	is_deeply(\@xap, [], 'no Xapian files created by -learn');
+};
 
 done_testing();

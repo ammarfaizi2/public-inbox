@@ -3,11 +3,11 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.10.1;
 use strict;
-use Test::More;
 use Fcntl qw(SEEK_SET);
 use Cwd;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
+use File::Path qw(remove_tree);
 require_git(2.6);
 
 my $V = 2;
@@ -94,6 +94,31 @@ is($eml->as_string, $mime->as_string, 'injected message');
 	my $patchid = '91ee6b761fc7f47cad9f2b09b10489f313eb5b71';
 	my $mset = $ibx->search->mset("patchid:$patchid");
 	is($mset->size, 1, 'patchid search works');
+}
+
+{
+	my @shards = grep(m!/[0-9]+\z!, glob("$ibx->{inboxdir}/xap*/*"));
+	ok(remove_tree(@shards), 'rm shards to convert to indexlevel=basic');
+	$ibx->do_cleanup;
+	$rdr->{2} = \(my $err = '');
+	$rdr->{0} = \<<'EOM';
+From: a@example.com
+To: test@example.com
+Subject: this is a ham message for learn
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+Message-ID: <ham@example>
+
+yum
+EOM
+	my ($id, $prev);
+	is($ibx->over->next_by_mid('ham@example', \$id, \$prev), undef,
+		'no ham@example, yet');
+	ok(run_script([qw(-learn ham)], undef, $rdr), '-learn runs on basic')
+		or diag $err;
+	my $smsg = $ibx->over->next_by_mid('ham@example', \$id, \$prev);
+	ok($smsg, 'ham message learned w/ indexlevel=basic');
+	@shards = grep(m!/[0-9]+\z!, glob("$ibx->{inboxdir}/xap*/*"));
+	is_deeply(\@shards, [], 'not converted to medium/full after learn');
 }
 
 done_testing();

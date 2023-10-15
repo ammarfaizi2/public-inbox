@@ -64,6 +64,7 @@ sub remove_or_add ($$$$) {
 	$ibx->{name} = $ENV{GIT_COMMITTER_NAME} // $ibx->{name};
 	$ibx->{-primary_address} = $ENV{GIT_COMMITTER_EMAIL} // $addr;
 	$ibx = PublicInbox::InboxWritable->new($ibx);
+	$ibx->{indexlevel} = $ibx->detect_indexlevel;
 	my $im = $ibx->importer(0);
 
 	if ($train eq "rm") {
