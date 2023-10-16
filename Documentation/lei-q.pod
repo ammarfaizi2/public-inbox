@@ -12,9 +12,6 @@ lei q [OPTIONS] (--stdin|-)
 
 Search for messages across the lei/store and externals.
 
-=for comment
-TODO: Give common prefixes, or at least a description/reference.
-
 =head1 OPTIONS
 
 =for comment
