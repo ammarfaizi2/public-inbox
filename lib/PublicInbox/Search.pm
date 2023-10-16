@@ -68,10 +68,10 @@ our $ENQ_DESCENDING = 0;
 our $ENQ_ASCENDING = 1;
 our @MAIL_VMAP = (
 	[ YYYYMMDD, 'd:'],
-	[ DT, 'dt:' ],
-	# these are undocumented for WWW, but lei and IMAP use them
-	[ BYTES, 'z:' ],
 	[ TS, 'rt:' ],
+	# these are undocumented for WWW, but lei and IMAP use them
+	[ DT, 'dt:' ],
+	[ BYTES, 'z:' ],
 	[ UID, 'uid:' ]
 );
 our @MAIL_NRP;
