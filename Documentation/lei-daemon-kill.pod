@@ -31,7 +31,7 @@ remain running after a short while after this takes effect.
 =back
 
 =for comment
-SIGQUIT and SIGINT currently do what SIGTERM do, may change...
+SIGQUIT and SIGINT currently do what SIGTERM does, may change...
 
 =head1 CONTACT
 

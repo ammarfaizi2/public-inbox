@@ -36,7 +36,7 @@ sub xap_cfg (@) {
 	seek($err, 0, SEEK_SET) or die "seek: $!";
 	$err = do { local $/; <$err> };
 	die <<EOM;
-@$cmd failed: Xapian devlopment files missing? (\$?=$?)
+@$cmd failed: Xapian development files missing? (\$?=$?)
 $err
 EOM
 }

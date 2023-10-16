@@ -64,8 +64,8 @@ L<https://rt.cpan.org/Ticket/Display.html?id=129967>
 
 Enable debugging output of underlying IMAP and NNTP libraries,
 currently L<Mail::IMAPClient> and L<Net::NNTP>, respectively.
-If using L<imap.proxy> or L<nntp.proxy> point to a SOCKS proxy,
-debugging output for L<IO::Socket::Socks> will be enabled, as
+If L<imap.proxy> or L<nntp.proxy> points to a SOCKS proxy,
+debugging output for L<IO::Socket::Socks> will be enabled as
 well.
 
 Disabling L<imap.compress> may be required for readability.
@@ -104,7 +104,7 @@ C<frag>, C<func>, and C<context>.
 =head1 OPTIONS
 
 Most L<git-config(1)> command-line switches are accepted by C<lei config>
-as-is.  The most-frequently-used options are expected to be:
+as is.  The most frequently used options are expected to be:
 
 =over 4
 
@@ -112,7 +112,7 @@ as-is.  The most-frequently-used options are expected to be:
 
 =item --edit
 
-Opens an editor to edit the lei config file
+Open an editor to edit the lei config file.
 
 =item -l
 

@@ -4,7 +4,7 @@ lei - security information
 
 =head1 SYNOPSIS
 
-L<lei(1)> is intended for use with both publicly-archived
+L<lei(1)> is intended for use with both publicly archived
 and "private" mail in personal mailboxes.  This document is
 intended to give an overview of security implications and
 lower^Wmanage user expectations.
@@ -66,7 +66,7 @@ other users on the local system.
 
 =head1 CORE DUMPS
 
-In case any process crashes, a core dumps may contain passwords or
+In case any process crashes, a core dump may contain passwords or
 contents of sensitive messages.  Please report these so they can be
 fixed (see L</CONTACT>).
 
@@ -74,7 +74,7 @@ fixed (see L</CONTACT>).
 
 lei currently uses the L<curl(1)> and L<git(1)> executables in
 C<$PATH> for HTTP and HTTPS network access.  Interactive
-authentication for HTTP and HTTPS is not-yet-supported since all
+authentication for HTTP and HTTPS is not yet supported since all
 currently supported HTTP/HTTPS sources are L<PublicInbox::WWW>
 instances.
 
@@ -83,7 +83,7 @@ L<Net::NNTP> (standard library) is used for NNTP and NNTPS.
 
 L<Mail::IMAPClient> and L<Net::NNTP> will use L<IO::Socket::SSL>
 for TLS if available.  In turn, L<IO::Socket::SSL> uses the
-widely-installed OpenSSL library.
+widely installed OpenSSL library.
 
 STARTTLS will be attempted if advertised by the server
 unless IMAPS or NNTPS are used.  C<-c imap.starttls=0>

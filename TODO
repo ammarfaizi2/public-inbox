@@ -26,7 +26,7 @@ all need to be considered for everything we introduce.)
   archive locations to avoid SPOF.
 
 * optional Cache::FastMmap support so production deployments won't
-  need Varnish (Varnish doesn't protect NNTP nor IMAP, either)
+  need Varnish (Varnish doesn't protect NNTP or IMAP, either)
 
 * dogfood and take advantage of new kernel APIs (while maintaining
   portability to older Linux, free BSDs and maybe Hurd).

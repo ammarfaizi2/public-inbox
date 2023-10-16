@@ -31,7 +31,7 @@ C<-f text> when writing to stdout.
 
 Most commonly C<text> (the default) or C<reply> to
 display the message(s) in a format suitable for trimming
-and sending as a email reply.
+and sending as an email reply.
 
 =item --stdin
 

@@ -28,7 +28,7 @@ Format output as JSON and include more information.
 
 =item --pretty
 
-Pretty print JSON output.  If stdout is opened to a tty, C<--pretty>
+Pretty-print JSON output.  If stdout is opened to a tty, C<--pretty>
 is enabled by default.
 
 =item --ascii

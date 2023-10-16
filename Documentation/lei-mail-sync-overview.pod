@@ -20,7 +20,7 @@ Future work will be done to improve it and add IMAP IDLE support.
   # dump "inbox" labeled files from the past week to a Maildir
   lei q L:inbox rt:last.week.. -o /tmp/results
 
-  # open /tmp/results in your favorite mail agent.  If inotify or kevent
+  # Open /tmp/results in your favorite mail agent.  If inotify or kevent
   # works, keyword changes (e.g. marking messages as `seen') are
   # synchronized automatically.
 

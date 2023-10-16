@@ -57,11 +57,11 @@ lei
 
   * compatibility with SQLite <3.8.3 on CentOS 7.x
 
-  * fix `lei q -tt' on locally-indexed messages (still broken for remotes:
+  * fix `lei q -tt' on locally indexed messages (still broken for remotes:
     https://public-inbox.org/meta/20230226170931.M947721@dcvr/ )
 
   * `lei import' now sets labels+keywords consistently on all
-     already-imported messages
+     already imported messages
 
 solver (used by lei (rediff|blob), and PublicInbox::WWW)
 
@@ -101,7 +101,7 @@ PublicInbox::SaPlugin::ListMirror
 
 Search improvements (lei and PublicInbox::WWW)
 
-  * quoted text inside base-85 binary patches are no longer indexed
+  * quoted text inside base-85 binary patches is no longer indexed
 
 Thanks to all the bug reporters and users who made this release
 possible.

@@ -46,7 +46,7 @@ Search improvements:
   * patchid: prefix search support added to WWW and lei for
     "git patch-id --stable" support
 
-  * text inside base-85 binary patches are no longer indexed
+  * text inside base-85 binary patches is no longer indexed
     to avoid false positives
 
   * for lei users, "lei reindex" now exists and is required

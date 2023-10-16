@@ -67,7 +67,7 @@ the "same" message.
 
 =head2 mail_sync.sqlite3
 
-This SQLite database maintained for bidirectional mapping of
+This SQLite database is maintained for bidirectional mapping of
 git blobs to IMAP UIDs, Maildir file names, and NNTP article numbers.
 
 It is also used for retrieving messages from Maildirs indexed by

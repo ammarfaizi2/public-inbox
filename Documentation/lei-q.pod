@@ -80,7 +80,7 @@ Disable color (for C<-f reply> and C<-f text>).
 
 =item --pretty
 
-Pretty print C<json> or C<concatjson> output.  If stdout is opened to
+Pretty-print C<json> or C<concatjson> output.  If stdout is opened to
 a tty and used as the C<--output> destination, C<--pretty> is enabled
 by default.
 
@@ -218,7 +218,7 @@ Default: fcntl,dotlock
 
 =item -n NUMBER
 
-Fuzzy limit the number of matches per-local external and lei/store.
+Fuzzy-limit the number of matches per local external and lei/store.
 Messages added by the L<--threads> switch do not count towards this
 limit, and there is no limit on remote externals.
 

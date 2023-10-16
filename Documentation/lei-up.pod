@@ -32,8 +32,8 @@ delays or downtime.
 The time(s) of the last successful queries are the C<lastresult>
 values visible from L<lei-edit-search(1)>.
 
-Date formats understood by L<git-rev-parse(1)> may be used.
-e.g C<1.hour> or C<3.days>
+Date formats understood by L<git-rev-parse(1)> may be used,
+e.g., C<1.hour> or C<3.days>.
 
 Default: 2.days
 
