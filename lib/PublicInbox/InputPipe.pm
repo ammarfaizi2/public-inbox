@@ -6,6 +6,31 @@ package PublicInbox::InputPipe;
 use v5.12;
 use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN);
+use POSIX ();
+use Carp qw(croak carp);
+
+# I'm not sure what I'm doing w.r.t terminals.
+# FIXME needs non-interactive tests
+sub unblock_tty ($) {
+	my ($self) = @_;
+	my $fd = fileno($self->{sock});
+	my $t = POSIX::Termios->new;
+	$t->getattr($fd) or croak("tcgetattr($fd): $!");
+	return if $t->getlflag & POSIX::ICANON; # line-oriented, good
+
+	# make noncanonical mode TTYs behave like a O_NONBLOCK pipe.
+	# O_NONBLOCK itself isn't well-defined, here, so rely on VMIN + VTIME
+	my ($vmin, $vtime) = ($t->getcc(POSIX::VMIN), $t->getcc(POSIX::VTIME));
+	return if $vmin == 1 && $vtime == 0;
+
+	$t->setcc(POSIX::VMIN, 1); # 1 byte minimum
+	$t->setcc(POSIX::VTIME, 0); # no timeout
+	$t->setattr($fd, POSIX::TCSANOW) or croak("tcsetattr($fd): $!");
+
+	$t->setcc(POSIX::VMIN, $vmin);
+	$t->setcc(POSIX::VTIME, $vtime);
+	$self->{restore_termios} = $t;
+}
 
 sub consume {
 	my ($in, $cb, @args) = @_;
@@ -16,11 +41,17 @@ sub consume {
 		$self->requeue;
 	} elsif (-p $in || -s _) { # O_NONBLOCK for sockets and pipes
 		$in->blocking(0);
-	} # TODO: tty
+	} elsif (-t $in) { # isatty(3) can't use `_' stat cache
+		unblock_tty($self);
+	}
 }
 
 sub close {
 	my ($self) = @_;
+	if (my $t = delete($self->{restore_termios})) {
+		my $fd = fileno($self->{sock} // return);
+		$t->setattr($fd, POSIX::TCSANOW) or carp("tcsetattr($fd): $!")
+	}
 	$self->{-need_rq} ? delete($self->{sock}) : $self->SUPER::close
 }
 
