@@ -21,7 +21,7 @@ use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha1_hex);
 use POSIX qw(strftime);
-use autodie qw(chmod pipe readlink seek sysopen truncate unlink);
+use autodie qw(chmod close pipe readlink seek sysopen truncate unlink);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
@@ -58,7 +58,7 @@ sub try_scrape {
 	my $opt = { 0 => $lei->{0}, 2 => $lei->{2} };
 	my $fh = popen_rd($cmd, undef, $opt);
 	my $html = do { local $/; <$fh> } // die "read(curl $uri): $!";
-	close($fh) or return $lei->child_error($?, "@$cmd failed");
+	CORE::close($fh) or return $lei->child_error($?, "@$cmd failed");
 
 	# we grep with URL below, we don't want Subject/From headers
 	# making us clone random URLs.  This assumes remote instances
@@ -295,7 +295,7 @@ sub start_update_ref {
 		qw(update-ref --stdin -z) ];
 	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
 	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $fgrp->{lei}->{2} }, $pack);
-	close $r or die "close(r): $!";
+	close $r;
 	$fgrp->{dry_run} ? undef : $w;
 }
 
@@ -335,7 +335,7 @@ sub fgrp_update {
 			upr($lei, $w, 'create', $ref, $oid);
 		}
 	}
-	close($w) or upref_warn();
+	CORE::close($w) or upref_warn();
 }
 
 sub satellite_done {
@@ -345,7 +345,7 @@ sub satellite_done {
 		while (my ($ref, $oid) = each %$create) {
 			upr($fgrp->{lei}, $w, 'create', $ref, $oid);
 		}
-		close($w) or upref_warn();
+		CORE::close($w) or upref_warn();
 	} else {
 		pack_refs($fgrp, $fgrp->{cur_dst});
 		run_puh($fgrp);
@@ -463,7 +463,7 @@ sub fgrp_fetch_all {
 				(map { "\t$grp = $_->{-remote}\n" } @$old),
 				(map { "\t$grp = $_->{-remote}\n" } @$new));
 			print $fh $buf or die "print($f): $!";
-			close $fh or die "close($f): $!";
+			close $fh;
 			unlink("$f.lock");
 		}
 		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
@@ -490,7 +490,7 @@ sub forkgroup_prep {
 [pack]
 	island = refs/remotes/([^/]+)/
 EOM
-		close $fh or die "close($f): $!";
+		close $fh;
 	}
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my $rn = substr(sha256_hex($key), 0, 16);
@@ -507,7 +507,7 @@ EOM
 ;	fetch = +refs/*:refs/*
 ;	mirror = true
 EOM
-		close $fh or die "close($f): $!";
+		close $fh;
 	}
 	if (!$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
@@ -520,7 +520,7 @@ EOM
 		if (!grep(/\A\Q$l\E\z/, @cur)) {
 			say $fh $l or die "say($f): $!";
 		}
-		close $fh or die "close($f): $!";
+		close $fh;
 	}
 	bless {
 		%$self, -osdir => $dir, -remote => $rn, -uri => $uri
@@ -712,7 +712,7 @@ EOM
 	owner = $ent->{owner}
 EOM
 	}
-	close $fh or die "close($f): $!";
+	close $fh;
 	my %map = (head => 'HEAD', description => undef);
 	while (my ($key, $fn) = each %map) {
 		my $val = $ent->{$key} // next;
@@ -720,7 +720,7 @@ EOM
 		$fn = "$edst/$fn";
 		open $fh, '>', $fn or die "open($fn): $!";
 		print $fh $val, "\n" or die "print($fn): $!";
-		close $fh or die "close($fn): $!";
+		close $fh;
 	}
 }
 
@@ -1395,7 +1395,7 @@ compact :
 
 .PHONY : help fetch update index reindex compact
 EOM
-		close $fh or die "close($f): $!";
+		close $fh;
 	} else {
 		die "open($f): $!" unless $!{EEXIST};
 	}
