@@ -18,11 +18,11 @@ test_lei(sub {
 		gunzip("$home/$x.mbox.gz" => \$uc, MultiStream => 1) or
 				xbail "gunzip $GunzipError";
 		ok(index($uc, $qp->body_raw) >= 0,
-			"original mail in $x.mbox.gz");
+			"original mail in $x.mbox.gz") or diag $uc;
 		open my $fh, '<', "$home/$x" or xbail $!;
 		$uc = do { local $/; <$fh> } // xbail $!;
 		ok(index($uc, $qp->body_raw) >= 0,
-			"original mail in uncompressed $x");
+			"original mail in uncompressed $x") or diag $uc;
 	}
 	lei_ok qw(ls-search);
 	$s = eml_load('t/utf8.eml')->as_string;
