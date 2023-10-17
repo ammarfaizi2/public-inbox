@@ -22,7 +22,7 @@ sub cfg_do_edit ($;$) {
 
 sub cfg_edit_done { # PktOp lei->do_env cb
 	my ($lei, $self) = @_;
-	open my $fh, '+>', undef or die "open($!)";
+	open my $fh, '+>', undef;
 	my $cfg = do {
 		local $lei->{2} = $fh;
 		$lei->cfg_dump($self->{-f});
