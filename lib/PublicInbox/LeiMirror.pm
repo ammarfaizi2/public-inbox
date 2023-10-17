@@ -16,7 +16,7 @@ use Carp qw(croak);
 use URI;
 use PublicInbox::Config qw(glob2re);
 use PublicInbox::Inbox;
-use PublicInbox::Git;
+use PublicInbox::Git qw(read_all);
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha1_hex);
@@ -174,8 +174,7 @@ sub _get_txt_done { # returns true on error (non-fatal), undef on success
 	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
 	seek($fh, SEEK_SET, 0);
 	$self->{"mtime.$endpoint"} = (stat($fh))[9];
-	local $/;
-	$self->{"txt.$endpoint"} = <$fh>;
+	$self->{"txt.$endpoint"} = read_all($fh, -s _);
 	undef; # success
 }
 
@@ -537,7 +536,7 @@ sub fp_done {
 	seek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
-	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
+	my $B = sha1_hex(read_all($fh));
 	return $cb->($self, @arg) if $A ne $B;
 	$self->{lei}->qerr("# $self->{-key} up-to-date");
 }
@@ -734,7 +733,7 @@ sub up_fp_done {
 	seek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
-	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
+	my $B = sha1_hex(read_all($fh));
 	return if $A eq $B;
 	$self->{-ent}->{fingerprint} = $B;
 	push @{$self->{chg}->{fp_mismatch}}, $self->{-key};
@@ -948,7 +947,7 @@ failed to extract epoch number from $src
 sub decode_manifest ($$$) {
 	my ($fh, $fn, $uri) = @_;
 	my $js;
-	my $gz = do { local $/; <$fh> } // die "slurp($fn): $!";
+	my $gz = read_all($fh);
 	gunzip(\$gz => \$js, MultiStream => 1) or
 		die "gunzip($uri): $GunzipError\n";
 	my $m = eval { PublicInbox::Config->json->decode($js) };
