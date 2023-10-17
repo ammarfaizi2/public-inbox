@@ -11,7 +11,7 @@ if ('close-on-exec for epoll and kqueue') {
 	my $pid;
 	my $evfd_re = qr/(?:kqueue|eventpoll)/i;
 
-	PublicInbox::DS->SetLoopTimeout(0);
+	$PublicInbox::DS::loop_timeout = 0;
 	local @PublicInbox::DS::post_loop_do = (sub { 0 });
 
 	# make sure execve closes if we're using fork()
@@ -54,7 +54,7 @@ SKIP: {
 	}
 	my $cb = sub {};
 	for my $i (0..$n) {
-		PublicInbox::DS->SetLoopTimeout(0);
+		$PublicInbox::DS::loop_timeout = 0;
 		local @PublicInbox::DS::post_loop_do = ($cb);
 		PublicInbox::DS::event_loop();
 		PublicInbox::DS->Reset;

@@ -104,7 +104,7 @@ sub once { 0 }; # stops event loop
 
 # setup the event loop so that it exits at every step
 # while we're still doing connect(2)
-PublicInbox::DS->SetLoopTimeout(0);
+$PublicInbox::DS::loop_timeout = 0;
 local @PublicInbox::DS::post_loop_do = (\&once);
 
 foreach my $n (1..$nfd) {
@@ -119,14 +119,14 @@ foreach my $n (1..$nfd) {
 	# try not to overflow the listen() backlog:
 	if (!($n % 128) && $n != $DONE) {
 		diag("nr: ($n) $DONE/$nfd");
-		PublicInbox::DS->SetLoopTimeout(-1);
+		$PublicInbox::DS::loop_timeout = -1;
 		@PublicInbox::DS::post_loop_do = (sub { $DONE != $n });
 
 		# clear the backlog:
 		PublicInbox::DS::event_loop();
 
 		# resume looping
-		PublicInbox::DS->SetLoopTimeout(0);
+		$PublicInbox::DS::loop_timeout = 0;
 		@PublicInbox::DS::post_loop_do = (\&once);
 	}
 }
@@ -140,7 +140,7 @@ $dump_rss->();
 
 # run the event loop normally, now:
 if ($DONE != $nfd) {
-	PublicInbox::DS->SetLoopTimeout(-1);
+	$PublicInbox::DS::loop_timeout = -1;
 	@PublicInbox::DS::post_loop_do = (sub {
 		diag "done: ".time." $DONE";
 		$DONE != $nfd;

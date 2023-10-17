@@ -47,7 +47,7 @@ our (%AWAIT_PIDS, # pid => [ $callback, @args ]
 
      @post_loop_do,              # subref + args to call at the end of each loop
 
-     $LoopTimeout,               # timeout of event loop in milliseconds
+     $loop_timeout,               # timeout of event loop in milliseconds
      @Timers,                    # timers
      %UniqTimer,
      $in_loop,
@@ -89,19 +89,9 @@ sub Reset {
 		scalar(@{$cur_runq // []})); # do not vivify cur_runq
 
 	$reap_armed = undef;
-	$LoopTimeout = -1;  # no timeout by default
+	$loop_timeout = -1;  # no timeout by default
 	$Poller = PublicInbox::Select->new;
 }
-
-=head2 C<< CLASS->SetLoopTimeout( $timeout ) >>
-
-Set the loop timeout for the event loop to some value in milliseconds.
-
-A timeout of 0 (zero) means poll forever. A timeout of -1 means poll and return
-immediately.
-
-=cut
-sub SetLoopTimeout { $LoopTimeout = $_[1] + 0 }
 
 sub _add_named_timer {
 	my ($name, $secs, $coderef, @args) = @_;
@@ -163,7 +153,7 @@ sub next_tick () {
 sub RunTimers {
 	next_tick();
 
-	return (($nextq || $ToClose) ? 0 : $LoopTimeout) unless @Timers;
+	return (($nextq || $ToClose) ? 0 : $loop_timeout) unless @Timers;
 
 	my $now = now();
 
@@ -177,16 +167,16 @@ sub RunTimers {
 	# timers may enqueue into nextq:
 	return 0 if ($nextq || $ToClose);
 
-	return $LoopTimeout unless @Timers;
+	return $loop_timeout unless @Timers;
 
 	# convert time to an even number of milliseconds, adding 1
 	# extra, otherwise floating point fun can occur and we'll
 	# call RunTimers like 20-30 times, each returning a timeout
 	# of 0.0000212 seconds
-	my $timeout = int(($Timers[0][0] - $now) * 1000) + 1;
+	my $t = int(($Timers[0][0] - $now) * 1000) + 1;
 
 	# -1 is an infinite timeout, so prefer a real timeout
-	($LoopTimeout < 0 || $LoopTimeout >= $timeout) ? $timeout : $LoopTimeout
+	($loop_timeout < 0 || $loop_timeout >= $t) ? $t : $loop_timeout
 }
 
 sub sig_setmask { sigprocmask(SIG_SETMASK, @_) or die "sigprocmask: $!" }
@@ -305,7 +295,7 @@ sub event_loop (;$$) {
 		sig_setmask($oldset) if $oldset;
 		sigprocmask(SIG_UNBLOCK, unblockset($sig)) or
 			die "SIG_UNBLOCK: $!";
-		PublicInbox::DS->SetLoopTimeout(1000);
+		$loop_timeout = 1000;
 	}
 	$_[0] = $sigfd = $sig = undef; # $_[0] == sig
 	local $in_loop = 1;

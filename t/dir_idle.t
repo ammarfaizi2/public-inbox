@@ -11,7 +11,7 @@ my @x;
 my $cb = sub { push @x, \@_ };
 my $di = PublicInbox::DirIdle->new($cb);
 $di->add_watches(["$tmpdir/a", "$tmpdir/c"], 1);
-PublicInbox::DS->SetLoopTimeout(1000);
+$PublicInbox::DS::loop_timeout = 1000;
 my $end = 3 + now;
 local @PublicInbox::DS::post_loop_do = (sub { scalar(@x) == 0 && now < $end });
 rmdir("$tmpdir/a/b") or xbail "rmdir $!";
