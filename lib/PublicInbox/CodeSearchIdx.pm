@@ -1222,9 +1222,4 @@ sub shard_done_wait { # awaitpid cb via ipc_worker_reap
 	PublicInbox::DS::enqueue_reap() if !shards_active(); # once more for PLC
 }
 
-sub do_quit { $DO_QUIT }
-
-sub tmpdir { $TMPDIR }
-
-
 1;
