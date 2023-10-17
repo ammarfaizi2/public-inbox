@@ -10,7 +10,7 @@ package PublicInbox::Git;
 use strict;
 use v5.10.1;
 use parent qw(Exporter PublicInbox::DS);
-use autodie qw(socketpair);
+use autodie qw(socketpair read);
 use POSIX ();
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
@@ -26,7 +26,7 @@ use Carp qw(croak carp);
 use PublicInbox::SHA ();
 our %HEXLEN2SHA = (40 => 1, 64 => 256);
 our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
-our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN);
+our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN read_all);
 our $in_cleanup;
 our $RDTIMEO = 60_000; # milliseconds
 our $async_warn; # true in read-only daemons
@@ -548,11 +548,19 @@ sub modified ($;$) {
 	(split(/ /, <$fh> // time))[0] + 0; # integerize for JSON
 }
 
+# read_all/try_cat can probably be moved somewhere else...
+
+sub read_all ($;$) {
+	my ($fh, $len) = @_;
+	my $r = read($fh, my $buf, $len //= -s $fh);
+	croak("$fh read ($r != $len)") if $len != $r;
+	$buf;
+}
+
 sub try_cat {
 	my ($path) = @_;
 	open(my $fh, '<', $path) or return '';
-	local $/;
-	<$fh> // '';
+	read_all($fh);
 }
 
 sub cat_desc ($) {
@@ -606,7 +614,7 @@ sub manifest_entry {
 		}
 	}
 	my $dig = PublicInbox::SHA->new(1);
-	while (read($sr, $buf, 65536)) { $dig->add($buf) }
+	while (CORE::read($sr, $buf, 65536)) { $dig->add($buf) }
 	CORE::close $sr or return; # empty, uninitialized git repo
 	$ent->{fingerprint} = $dig->hexdigest;
 	$ent->{modified} = modified(undef, $mod);
