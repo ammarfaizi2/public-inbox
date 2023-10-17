@@ -619,7 +619,7 @@ sub lei_ok (@) {
 	my @msg = ref($_[0]) eq 'ARRAY' ? @{$_[0]} : @_;
 	if (!$lei_loud) {
 		for (@msg) {
-			s!\A([a-z0-9]+://)[^/]+/!$1\$HOST_PORT/!;
+			s!(127\.0\.0\.1|\[::1\]):(?:\d+)!$1:\$PORT!g;
 			s!$tmpdir\b/(?:[^/]+/)?!\$TMPDIR/!g;
 			s!\Q$PWD\E\b!\$PWD!g;
 		}
