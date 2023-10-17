@@ -21,6 +21,7 @@ use Fcntl qw(SEEK_SET F_SETFL O_APPEND O_RDWR);
 use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
 use autodie qw(open read seek truncate);
+use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 
 sub new {
 	my ($class) = @_;
@@ -536,7 +537,6 @@ sub do_query {
 		if ($lei->{opt}->{augment} && delete $lei->{early_mua}) {
 			$lei->start_mua;
 		}
-		my $F_SETPIPE_SZ = $^O eq 'linux' ? 1031 : undef;
 		if ($l2m->{-wq_nr_workers} > 1 &&
 				$l2m->{base_type} =~ /\A(?:maildir|mbox)\z/) {
 			# setup two barriers to coordinate ->has_entries

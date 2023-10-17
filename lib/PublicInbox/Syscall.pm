@@ -28,7 +28,7 @@ our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
                   EPOLLIN EPOLLOUT EPOLLET
                   EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
                   EPOLLONESHOT EPOLLEXCLUSIVE
-                  signalfd rename_noreplace %SIGNUM);
+                  signalfd rename_noreplace %SIGNUM $F_SETPIPE_SZ);
 use constant {
 	EPOLLIN => 1,
 	EPOLLOUT => 4,
@@ -55,13 +55,12 @@ use constant {
 
 my @BYTES_4_hole = BYTES_4_hole ? (0) : ();
 
-our (
-     $SYS_epoll_create,
-     $SYS_epoll_ctl,
-     $SYS_epoll_wait,
-     $SYS_signalfd4,
-     $SYS_renameat2,
-     );
+our ($SYS_epoll_create,
+	$SYS_epoll_ctl,
+	$SYS_epoll_wait,
+	$SYS_signalfd4,
+	$SYS_renameat2,
+	$F_SETPIPE_SZ);
 
 my ($SYS_sendmsg, $SYS_recvmsg);
 my $SYS_fstatfs; # don't need fstatfs64, just statfs.f_type
@@ -70,6 +69,7 @@ my $SFD_CLOEXEC = 02000000; # Perl does not expose O_CLOEXEC
 our $no_deprecated = 0;
 
 if ($^O eq "linux") {
+	$F_SETPIPE_SZ = 1031;
     my (undef, undef, $release, undef, $machine) = POSIX::uname();
     my ($maj, $min) = ($release =~ /\A([0-9]+)\.([0-9]+)/);
     $SYS_renameat2 = 0 if "$maj.$min" < 3.15;

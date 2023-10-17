@@ -7,6 +7,7 @@ package PublicInbox::SearchIdxShard;
 use v5.12;
 use parent qw(PublicInbox::SearchIdx PublicInbox::IPC);
 use PublicInbox::OnDestroy;
+use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 
 sub new {
 	my ($class, $v2w, $shard) = @_; # v2w may be ExtSearchIdx
@@ -20,13 +21,12 @@ sub new {
 	if ($v2w->{parallel}) {
 		local $self->{-v2w_afc} = $v2w;
 		$self->ipc_worker_spawn("shard[$shard]");
-		# F_SETPIPE_SZ = 1031 on Linux; increasing the pipe size for
-		# inputs speeds V2Writable batch imports across 8 cores by
-		# nearly 20%.  Since any of our responses are small, make
-		# the response pipe as small as possible
-		if ($^O eq 'linux') {
-			fcntl($self->{-ipc_req}, 1031, 1048576);
-			fcntl($self->{-ipc_res}, 1031, 4096);
+		# Increasing the pipe size for requests speeds V2 batch imports
+		# across 8 cores by nearly 20%.  Since many of our responses
+		# are small, make the response pipe as small as possible
+		if ($F_SETPIPE_SZ) {
+			fcntl($self->{-ipc_req}, $F_SETPIPE_SZ, 1048576);
+			fcntl($self->{-ipc_res}, $F_SETPIPE_SZ, 4096);
 		}
 	}
 	$self;

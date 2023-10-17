@@ -10,6 +10,7 @@ use POSIX qw(_exit);
 use Cwd qw(abs_path);
 require_mods('PublicInbox::Gcf2');
 use_ok 'PublicInbox::Gcf2';
+use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 use PublicInbox::Import;
 my ($tmpdir, $for_destroy) = tmpdir();
 
@@ -109,7 +110,7 @@ SKIP: {
 	for my $blk (1, 0) {
 		my ($r, $w);
 		pipe($r, $w) or BAIL_OUT $!;
-		fcntl($w, 1031, 4096) or
+		fcntl($w, $F_SETPIPE_SZ, 4096) or
 			skip('Linux too old for F_SETPIPE_SZ', 14);
 		$w->blocking($blk);
 		seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
@@ -129,7 +130,7 @@ SKIP: {
 		$ck_copying->("pipe blocking($blk)");
 
 		pipe($r, $w) or BAIL_OUT $!;
-		fcntl($w, 1031, 4096) or BAIL_OUT $!;
+		fcntl($w, $F_SETPIPE_SZ, 4096) or BAIL_OUT $!;
 		$w->blocking($blk);
 		close $r;
 		local $SIG{PIPE} = 'IGNORE';

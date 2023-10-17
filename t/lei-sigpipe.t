@@ -6,6 +6,7 @@ use v5.10.1;
 use PublicInbox::TestCommon;
 use POSIX qw(WTERMSIG WIFSIGNALED SIGPIPE);
 use PublicInbox::OnDestroy;
+use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 
 # undo systemd (and similar) ignoring SIGPIPE, since lei expects to be run
 # from an interactive terminal:
@@ -21,10 +22,8 @@ test_lei(sub {
 	my $imported;
 	for my $out ([], [qw(-f mboxcl2)], [qw(-f text)]) {
 		pipe(my ($r, $w)) or BAIL_OUT $!;
-		my $size = 65536;
-		if ($^O eq 'linux' && fcntl($w, 1031, 4096)) {
-			$size = 4096;
-		}
+		my $size = $F_SETPIPE_SZ && fcntl($w, $F_SETPIPE_SZ, 4096) ?
+			4096 : 65536;
 		unless (-f $f) {
 			open my $fh, '>', $f or xbail "open $f: $!";
 			print $fh <<'EOM' or xbail;

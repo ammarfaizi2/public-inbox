@@ -10,12 +10,12 @@
 package PublicInbox::CidxLogP;
 use v5.12;
 use parent qw(PublicInbox::DS);
-use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT);
+use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT $F_SETPIPE_SZ);
 
 sub new {
 	my ($cls, $rd, $cidx, $git, $roots) = @_;
 	my $self = bless { cidx => $cidx, git => $git, roots => $roots }, $cls;
-	fcntl($rd, 1031, 1048576) if $^O eq 'linux'; # fatter pipes
+	fcntl($rd, $F_SETPIPE_SZ, 1048576) if $F_SETPIPE_SZ;
 	$self->SUPER::new($rd, EPOLLIN|EPOLLONESHOT);
 }
 

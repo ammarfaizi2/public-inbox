@@ -4,13 +4,13 @@
 package PublicInbox::EOFpipe;
 use v5.12;
 use parent qw(PublicInbox::DS);
-use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT);
+use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT $F_SETPIPE_SZ);
 
 sub new {
 	my (undef, $rd, $cb) = @_;
 	my $self = bless { cb => $cb }, __PACKAGE__;
-	# 1031: F_SETPIPE_SZ, 4096: page size
-	fcntl($rd, 1031, 4096) if $^O eq 'linux';
+	# 4096: page size
+	fcntl($rd, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 	$self->SUPER::new($rd, EPOLLIN|EPOLLONESHOT);
 }
 
