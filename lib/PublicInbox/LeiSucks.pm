@@ -12,6 +12,7 @@ use Config;
 use POSIX ();
 use PublicInbox::Config;
 use PublicInbox::IPC;
+use PublicInbox::Git qw(read_all);
 
 sub lei_sucks {
 	my ($lei, @argv) = @_;
@@ -58,8 +59,8 @@ sub lei_sucks {
 	for my $m (grep(m{^PublicInbox/}, sort keys %INC)) {
 		my $f = $INC{$m} // next; # lazy require failed (missing dep)
 		open my $fh, '<', $f or do { warn "open($f): $!"; next };
-		my $hex = sha1_hex('blob '.(-s $fh)."\0".
-				(do { local $/; <$fh> } // die("read: $!")));
+		my $size = -s $fh;
+		my $hex = sha1_hex("blob $size\0".read_all($fh, $size));
 		push @out, '  '.$hex.' '.$m."\n";
 	}
 	push @out, <<'EOM';

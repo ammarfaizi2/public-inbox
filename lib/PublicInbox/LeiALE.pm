@@ -9,7 +9,7 @@ package PublicInbox::LeiALE;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::LeiSearch PublicInbox::Lock);
-use PublicInbox::Git;
+use PublicInbox::Git qw(read_all);
 use PublicInbox::Import;
 use PublicInbox::LeiXSearch;
 use Fcntl qw(SEEK_SET);
@@ -54,11 +54,7 @@ sub refresh_externals {
 	$self->git->cleanup;
 	my $lk = $self->lock_for_scope;
 	my $cur_lxs = ref($lxs)->new;
-	my $orig = do {
-		local $/;
-		readline($self->{lockfh}) //
-				die "readline($self->{lock_path}): $!";
-	};
+	my $orig = read_all($self->{lockfh});
 	my $new = '';
 	my $old = '';
 	my $gone = 0;
@@ -91,8 +87,7 @@ sub refresh_externals {
 	$new = $old = '';
 	my $f = $self->git->{git_dir}.'/objects/info/alternates';
 	if (open my $fh, '<', $f) {
-		local $/;
-		$old = <$fh> // die "readline($f): $!";
+		read_all($fh, -s $fh, \$old);
 	}
 	for my $x (@ibxish) {
 		$new .= $lei->canonpath_harder($x->git->{git_dir})."/objects\n";

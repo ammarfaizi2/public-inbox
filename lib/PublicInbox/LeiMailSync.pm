@@ -10,7 +10,7 @@ use PublicInbox::Compat qw(uniqstr);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::ContentHash qw(git_sha);
 use Carp ();
-use PublicInbox::Git qw(%HEXLEN2SHA);
+use PublicInbox::Git qw(%HEXLEN2SHA read_all);
 
 sub dbh_new {
 	my ($self) = @_;
@@ -456,8 +456,7 @@ WHERE b.oidbin = ?
 			open my $fh, '<', $f or next;
 			# some (buggy) Maildir writers are non-atomic:
 			next unless -s $fh;
-			local $/;
-			my $raw = <$fh>;
+			my $raw = read_all($fh, -s _);
 			if ($vrfy) {
 				my $sha = $HEXLEN2SHA{length($oidhex)};
 				my $got = git_sha($sha, \$raw)->hexdigest;

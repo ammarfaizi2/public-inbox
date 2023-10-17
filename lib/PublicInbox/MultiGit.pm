@@ -9,6 +9,7 @@ use PublicInbox::Spawn qw(run_die popen_rd);
 use PublicInbox::Import;
 use File::Temp 0.19;
 use List::Util qw(max);
+use PublicInbox::Git qw(read_all);
 
 sub new {
 	my ($cls, $topdir, $all, $epfx) = @_;
@@ -31,7 +32,7 @@ sub read_alternates {
 			qr!\A\Q../../$self->{epfx}\E/([0-9]+)\.git/objects\z! :
 			undef;
 		$$moderef = (stat($fh))[2] & 07777;
-		for my $rel (split(/^/m, do { local $/; <$fh> })) {
+		for my $rel (split(/^/m, read_all($fh, -s _))) {
 			chomp(my $dir = $rel);
 			my $score;
 			if (defined($is_edir) && $dir =~ $is_edir) {

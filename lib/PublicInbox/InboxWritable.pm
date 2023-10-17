@@ -7,6 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Inbox PublicInbox::Umask Exporter);
 use PublicInbox::Import;
+use PublicInbox::Git qw(read_all);
 use PublicInbox::Filter::Base qw(REJECT);
 use Errno qw(ENOENT);
 our @EXPORT_OK = qw(eml_from_path);
@@ -114,9 +115,8 @@ sub filter {
 sub eml_from_path ($) {
 	my ($path) = @_;
 	if (sysopen(my $fh, $path, O_RDONLY|O_NONBLOCK)) {
-		return unless -f $fh; # no FIFOs or directories
-		my $str = do { local $/; <$fh> } or return;
-		PublicInbox::Eml->new(\$str);
+		return unless -f $fh && -s _; # no FIFOs or directories
+		PublicInbox::Eml->new(\(my $str = read_all($fh, -s _)));
 	} else { # ENOENT is common with Maildir
 		warn "failed to open $path: $!\n" if $! != ENOENT;
 		undef;

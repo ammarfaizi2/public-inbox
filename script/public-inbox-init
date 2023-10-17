@@ -125,13 +125,14 @@ my $auto_unlink = PublicInbox::OnDestroy->new($$, sub { unlink $lockfile });
 my $perm = 0644 & ~umask;
 my %seen;
 if (-e $pi_config) {
+	require PublicInbox::Git;
 	open(my $oh, '<', $pi_config) or die "unable to read $pi_config: $!\n";
 	my @st = stat($oh);
 	$perm = $st[2];
 	defined $perm or die "(f)stat failed on $pi_config: $!\n";
 	chmod($perm & 07777, $fh) or
 		die "(f)chmod failed on future $pi_config: $!\n";
-	defined(my $old = do { local $/; <$oh> }) or die "read $pi_config: $!\n";
+	my $old = PublicInbox::Git::read_all($oh);
 	print $fh $old or die "failed to write: $!\n";
 	close $oh or die "failed to close $pi_config: $!\n";
 

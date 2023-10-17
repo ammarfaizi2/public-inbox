@@ -9,7 +9,7 @@ use PublicInbox::Spawn qw(which popen_rd); # may set PERL_INLINE_DIRECTORY
 use Fcntl qw(SEEK_SET);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
-use PublicInbox::Git;
+use PublicInbox::Git qw(read_all);
 use PublicInbox::Lock;
 
 BEGIN {
@@ -43,12 +43,11 @@ BEGIN {
 		# build them.
 		my $f = "$dir/gcf2_libgit2.h";
 		open my $src, '<', $f;
-		local $/;
-		$c_src = <$src> // die "read $f: $!";
+		$c_src = read_all($src);
 	}
 	unless ($c_src) {
 		seek($err, 0, SEEK_SET);
-		$err = do { local $/; <$err> };
+		$err = read_all($err);
 		die "E: libgit2 not installed: $err\n";
 	}
 	# append pkg-config results to the source to ensure Inline::C

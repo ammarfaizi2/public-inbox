@@ -10,6 +10,7 @@ use parent qw(PublicInbox::IPC);
 use PublicInbox::Spawn qw(run_wait popen_rd which);
 use PublicInbox::DS;
 use PublicInbox::Eml;
+use PublicInbox::Git qw(read_all);
 
 sub get_git_dir ($$) {
 	my ($lei, $d) = @_;
@@ -137,9 +138,8 @@ sub lei_blob {
 					extract_attach($lei, $blob, $bref) :
 					$lei->out($$bref);
 		if ($opt->{mail}) {
-			my $eh = $rdr->{2};
-			seek($eh, 0, 0);
-			return $lei->child_error($cerr, do { local $/; <$eh> });
+			seek($rdr->{2}, 0, 0);
+			return $lei->child_error($cerr, read_all($rdr->{2}));
 		} # else: fall through to solver below
 	}
 

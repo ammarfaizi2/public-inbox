@@ -8,6 +8,7 @@
 package PublicInbox::XapHelperCxx;
 use v5.12;
 use PublicInbox::Spawn qw(popen_rd which);
+use PublicInbox::Git qw(read_all);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
@@ -34,7 +35,7 @@ sub xap_cfg (@) {
 	chomp(my $ret = do { local $/; <$rd> });
 	return $ret if close($rd);
 	seek($err, 0, SEEK_SET) or die "seek: $!";
-	$err = do { local $/; <$err> };
+	$err = read_all($err);
 	die <<EOM;
 @$cmd failed: Xapian development files missing? (\$?=$?)
 $err
@@ -70,8 +71,7 @@ sub build () {
 	for (@srcs) {
 		say $fh qq(# line 1 "$_");
 		open my $rfh, '<', $_;
-		local $/;
-		print $fh readline($rfh);
+		print $fh read_all($rfh);
 	}
 	print $fh PublicInbox::Search::generate_cxx();
 	print $fh PublicInbox::CodeSearch::generate_cxx();

@@ -550,11 +550,12 @@ sub modified ($;$) {
 
 # read_all/try_cat can probably be moved somewhere else...
 
-sub read_all ($;$) {
-	my ($fh, $len) = @_;
-	my $r = read($fh, my $buf, $len //= -s $fh);
+sub read_all ($;$$) {
+	my ($fh, $len, $bref) = @_;
+	$bref //= \(my $buf);
+	my $r = read($fh, $$bref, $len //= -s $fh);
 	croak("$fh read ($r != $len)") if $len != $r;
-	$buf;
+	$$bref;
 }
 
 sub try_cat {

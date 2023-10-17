@@ -10,6 +10,7 @@ $GLP->configure(qw(require_order bundling no_ignore_case no_auto_abbrev));
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::CodeSearch;
 use PublicInbox::IPC;
+use PublicInbox::Git qw(read_all);
 use Socket qw(SOL_SOCKET SO_TYPE SOCK_SEQPACKET AF_UNIX);
 use PublicInbox::DS qw(awaitpid);
 use POSIX qw(:signal_h);
@@ -123,7 +124,7 @@ sub cmd_dump_roots {
 	$req->{A} or return warn('dump_roots requires -A PREFIX');
 	open my $fh, '<', $root2id_file or die "open($root2id_file): $!";
 	my $root2id; # record format: $OIDHEX "\0" uint32_t
-	my @x = split(/\0/, do { local $/; <$fh> } // die "readline: $!");
+	my @x = split(/\0/, read_all($fh));
 	while (@x) {
 		my $oidhex = shift @x;
 		$root2id->{$oidhex} = shift @x;

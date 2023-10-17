@@ -15,6 +15,7 @@ PublicInbox::Admin::check_require('-index');
 use PublicInbox::Eml;
 use PublicInbox::InboxWritable qw(eml_from_path);
 use PublicInbox::Import;
+use PublicInbox::Git qw(read_all);
 
 my $help = <<'EOF';
 usage: public-inbox-edit -m MESSAGE-ID [--all] [INBOX_DIRS]
@@ -184,8 +185,7 @@ retry_edit:
 	# rename/relink $edit_fn
 	open my $new_fh, '<', $edit_fn or
 		die "can't read edited file ($edit_fn): $!\n";
-	defined(my $new_raw = do { local $/; <$new_fh> }) or die
-		"read $edit_fn: $!\n";
+	my $new_raw = read_all($new_fh);
 
 	if (!$opt->{raw}) {
 		PublicInbox::Eml::strip_from($new_raw);

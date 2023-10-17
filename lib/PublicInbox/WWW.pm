@@ -587,9 +587,9 @@ sub stylesheets_prepare ($$) {
 				next;
 			};
 			my $ctime = 0;
-			my $local = do { local $/; <$fh> };
+			my $local = read_all($fh, -s $fh);
 			if ($local =~ /\S/) {
-				$ctime = sprintf('%x',(stat($fh))[10]);
+				$ctime = sprintf('%x',(stat(_))[10]);
 				$local = $mini->($local);
 			}
 

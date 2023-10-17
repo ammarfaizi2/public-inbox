@@ -28,7 +28,7 @@ sub cfg_edit_done { # PktOp lei->do_env cb
 		$lei->cfg_dump($self->{-f});
 	} or do {
 		seek($fh, 0, SEEK_SET);
-		return cfg_do_edit($self, do { local $/; <$fh> });
+		return cfg_do_edit($self, read_all($fh));
 	};
 	$self->cfg_verify($cfg) if $self->can('cfg_verify');
 }
