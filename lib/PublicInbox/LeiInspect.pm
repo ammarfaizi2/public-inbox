@@ -253,18 +253,11 @@ sub inspect_start ($$) {
 
 sub do_inspect { # lei->do_env cb
 	my ($lei) = @_;
-	my $str = delete $lei->{istr};
+	my $str = delete $lei->{stdin_buf};
 	PublicInbox::Eml::strip_from($str);
 	my $eml = PublicInbox::Eml->new(\$str);
 	inspect_start($lei, [ 'blob:'.$lei->git_oid($eml)->hexdigest,
 			map { "mid:$_" } @{mids($eml)} ]);
-}
-
-sub ins_add { # InputPipe->consume callback
-	my ($lei) = @_; # $_[1] = $rbuf
-	$_[1] // return $lei->fail("error reading stdin: $!");
-	return $lei->{istr} .= $_[1] if $_[1] ne '';
-	$lei->do_env(\&do_inspect);
 }
 
 sub lei_inspect {
@@ -281,8 +274,7 @@ sub lei_inspect {
 		return $lei->fail(<<'') if @argv;
 no args allowed on command-line with --stdin
 
-		require PublicInbox::InputPipe;
-		PublicInbox::InputPipe::consume($lei->{0}, \&ins_add, $lei);
+		$lei->slurp_stdin(\&do_inspect);
 	} else {
 		inspect_start($lei, \@argv);
 	}

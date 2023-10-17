@@ -182,6 +182,11 @@ my $test_fail = sub {
 	}
 	lei_ok('sucks', \'yes, but hopefully less every day');
 	like($lei_out, qr/loaded features/, 'loaded features shown');
+
+	lei_ok([qw(q --stdin -f text)], undef, { 0 => \'', %$lei_opt });
+	is($lei_err, '', 'no errors on empty stdin');
+	is($lei_out, '', 'no output on empty query');
+
 SKIP: {
 	skip 'no curl', 3 unless require_cmd('curl', 1);
 	lei(qw(q --only http://127.0.0.1:99999/bogus/ t:m));

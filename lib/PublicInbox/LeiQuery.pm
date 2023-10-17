@@ -61,17 +61,11 @@ sub _start_query { # used by "lei q" and "lei up"
 
 sub do_qry { # do_env cb
 	my ($lei) = @_;
-	$lei->{mset_opt}->{q_raw} = $lei->{mset_opt}->{qstr};
+	$lei->{mset_opt}->{q_raw} = $lei->{mset_opt}->{qstr}
+						= delete $lei->{stdin_buf};
 	$lei->{lse}->query_approxidate($lei->{lse}->git,
 					$lei->{mset_opt}->{qstr});
 	_start_query($lei);
-}
-
-sub qstr_add { # PublicInbox::InputPipe::consume callback for --stdin
-	my ($lei) = @_; # $_[1] = $rbuf
-	$_[1] // $lei->fail("error reading stdin: $!");
-	return $lei->{mset_opt}->{qstr} .= $_[1] if $_[1] ne '';
-	$lei->do_env(\&do_qry);
 }
 
 # make the URI||PublicInbox::{Inbox,ExtSearch} a config-file friendly string
@@ -159,9 +153,7 @@ sub lei_q {
 		return $self->fail(<<'') if @argv;
 no query allowed on command-line with --stdin
 
-		require PublicInbox::InputPipe;
-		PublicInbox::InputPipe::consume($self->{0}, \&qstr_add, $self);
-		return;
+		return $self->slurp_stdin(\&do_qry);
 	}
 	chomp(@argv) and $self->qerr("# trailing `\\n' removed");
 	$mset_opt{q_raw} = [ @argv ]; # copy

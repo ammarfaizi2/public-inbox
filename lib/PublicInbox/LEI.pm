@@ -1573,4 +1573,17 @@ sub request_umask {
 	$u eq 'u' or warn "E: recv $v has no umask";
 }
 
+sub _stdin_cb { # PublicInbox::InputPipe::consume callback for --stdin
+	my ($lei, $cb) = @_; # $_[-1] = $rbuf
+	$_[1] // return $lei->fail("error reading stdin: $!");
+	$lei->{stdin_buf} .= $_[-1];
+	do_env($lei, $cb) if $_[-1] eq '';
+}
+
+sub slurp_stdin {
+	my ($lei, $cb) = @_;
+	require PublicInbox::InputPipe;
+	PublicInbox::InputPipe::consume($lei->{0}, \&_stdin_cb, $lei, $cb);
+}
+
 1;

@@ -124,16 +124,9 @@ could not extract Message-ID from $x
 
 sub do_lcat { # lei->do_env cb
 	my ($lei) = @_;
-	my @argv = split(/\s+/, $lei->{mset_opt}->{qstr});
+	my @argv = split(/\s+/, delete($lei->{stdin_buf}));
 	$lei->{mset_opt}->{qstr} = extract_all($lei, @argv) or return;
 	$lei->_start_query;
-}
-
-sub _stdin { # PublicInbox::InputPipe::consume callback for --stdin
-	my ($lei) = @_; # $_[1] = $rbuf
-	$_[1] // return $lei->fail("error reading stdin: $!");
-	return $lei->{mset_opt}->{qstr} .= $_[1] if $_[1] ne '';
-	$lei->do_env(\&do_lcat);
 }
 
 sub lei_lcat {
@@ -152,9 +145,7 @@ sub lei_lcat {
 		return $lei->fail(<<'') if @argv;
 no args allowed on command-line with --stdin
 
-		require PublicInbox::InputPipe;
-		PublicInbox::InputPipe::consume($lei->{0}, \&_stdin, $lei);
-		return;
+		return $lei->slurp_stdin(\&do_lcat);
 	}
 	$lei->{mset_opt}->{qstr} = extract_all($lei, @argv) or return;
 	$lei->_start_query;
