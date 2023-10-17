@@ -385,7 +385,6 @@ sub watch_atfork_child ($) {
 	my ($self) = @_;
 	delete $self->{pids};
 	delete $self->{opendirs};
-	PublicInbox::DS->Reset;
 	my $sig = delete $self->{sig};
 	$sig->{CHLD} = $sig->{HUP} = $sig->{USR1} = 'DEFAULT';
 	# TERM/QUIT/INT call ->quit, which works in both parent+child
@@ -413,11 +412,8 @@ sub imap_idle_reap { # awaitpid callback
 sub imap_idle_fork {
 	my ($self, $uri, $intvl) = @_;
 	return if $self->{quit};
-	my $seed = rand(0xffffffff);
-	my $pid = fork // die "fork: $!";
+	my $pid = PublicInbox::DS::do_fork;
 	if ($pid == 0) {
-		srand($seed);
-		eval { Net::SSLeay::randomize() };
 		watch_atfork_child($self);
 		watch_imap_idle_1($self, $uri, $intvl);
 		_exit(0);
@@ -477,11 +473,8 @@ sub poll_fetch_fork { # DS::add_timer callback
 	my @imap = grep { # push() always returns > 0
 		$_->scheme =~ m!\Aimaps?!i ? 1 : (push(@nntp, $_) < 0)
 	} @$uris;
-	my $seed = rand(0xffffffff);
-	my $pid = fork // die "fork: $!";
+	my $pid = PublicInbox::DS::do_fork;
 	if ($pid == 0) {
-		srand($seed);
-		eval { Net::SSLeay::randomize() };
 		watch_atfork_child($self);
 		watch_imap_fetch_all($self, \@imap) if @imap;
 		watch_nntp_fetch_all($self, \@nntp) if @nntp;

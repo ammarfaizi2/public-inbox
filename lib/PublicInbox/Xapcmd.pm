@@ -11,6 +11,7 @@ use PublicInbox::SearchIdx;
 use File::Temp 0.19 (); # ->newdir
 use File::Path qw(remove_tree);
 use POSIX qw(WNOHANG _exit);
+use PublicInbox::DS;
 
 # support testing with dev versions of Xapian which installs
 # commands with a version number suffix (e.g. "xapian-compact-1.5")
@@ -102,10 +103,8 @@ sub commit_changes ($$$$) {
 
 sub cb_spawn {
 	my ($cb, $args, $opt) = @_; # $cb = cpdb() or compact()
-	my $seed = rand(0xffffffff);
-	my $pid = fork // die "fork: $!";
+	my $pid = PublicInbox::DS::do_fork;
 	return $pid if $pid > 0;
-	srand($seed);
 	$SIG{__DIE__} = sub { warn @_; _exit(1) }; # don't jump up stack
 	$cb->($args, $opt);
 	_exit(0);

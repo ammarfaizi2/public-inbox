@@ -541,17 +541,11 @@ sub reap_worker { # awaitpid CB
 
 sub start_worker ($) {
 	my ($nr) = @_;
-	my $seed = rand(0xffffffff);
 	return unless @listeners;
-	my $pid = fork;
-	if (!defined($pid)) {
-		warn "fork: $!";
-	} elsif ($pid == 0) {
+	my $pid = PublicInbox::DS::do_fork;
+	if ($pid == 0) {
 		undef %WORKERS;
-		PublicInbox::DS::Reset();
 		local $PublicInbox::DS::Poller; # allow epoll/kqueue
-		srand($seed);
-		eval { Net::SSLeay::randomize() };
 		$set_user->() if $set_user;
 		PublicInbox::EOFpipe->new($parent_pipe, \&worker_quit);
 		worker_loop();
@@ -563,9 +557,9 @@ sub start_worker ($) {
 }
 
 sub start_workers {
-	for my $nr (grep { !defined($WORKERS{$_}) } (0..($nworker - 1))) {
-		start_worker($nr);
-	}
+	my @idx = grep { !defined($WORKERS{$_}) } (0..($nworker - 1)) or return;
+	eval { start_worker($_) for @idx };
+	warn "E: $@\n" if $@;
 }
 
 sub trim_workers {

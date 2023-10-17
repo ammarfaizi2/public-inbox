@@ -549,9 +549,8 @@ sub start_script {
 	require PublicInbox::OnDestroy;
 	my $tmp_mask = PublicInbox::OnDestroy->new(
 					\&PublicInbox::DS::sig_setmask, $oset);
-	my $pid = fork // die "fork: $!";
+	my $pid = PublicInbox::DS::do_fork();
 	if ($pid == 0) {
-		eval { PublicInbox::DS->Reset };
 		for (@{delete($opt->{-CLOFORK}) // []}) {
 			close($_) or die "close $!";
 		}

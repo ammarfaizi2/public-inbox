@@ -102,12 +102,8 @@ sub ipc_worker_spawn {
 	pipe(my $r_res, my $w_res);
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
 	$self->ipc_atfork_prepare;
-	my $seed = rand(0xffffffff);
-	my $pid = fork;
+	my $pid = PublicInbox::DS::do_fork;
 	if ($pid == 0) {
-		srand($seed);
-		eval { Net::SSLeay::randomize() };
-		eval { PublicInbox::DS->Reset };
 		delete @$self{qw(-wq_s1 -wq_s2 -wq_workers -wq_ppid)};
 		$w_req = $r_res = undef;
 		$w_res->autoflush(1);
@@ -341,13 +337,9 @@ sub _wq_worker_start {
 	my ($self, $oldset, $fields, $one, @cb_args) = @_;
 	my ($bcast1, $bcast2);
 	$one or socketpair($bcast1, $bcast2, AF_UNIX, SOCK_SEQPACKET, 0);
-	my $seed = rand(0xffffffff);
-	my $pid = fork;
+	my $pid = PublicInbox::DS::do_fork;
 	if ($pid == 0) {
-		srand($seed);
-		eval { Net::SSLeay::randomize() };
 		undef $bcast1;
-		eval { PublicInbox::DS->Reset };
 		delete @$self{qw(-wq_s1 -wq_ppid)};
 		$self->{-wq_worker_nr} =
 				keys %{delete($self->{-wq_workers}) // {}};

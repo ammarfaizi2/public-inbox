@@ -34,6 +34,7 @@ use PublicInbox::Tmpfile;
 use PublicInbox::Select;
 use Errno qw(EAGAIN EINVAL ECHILD);
 use Carp qw(carp croak);
+use autodie qw(fork);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
 my $nextq; # queue for next_tick
@@ -735,6 +736,17 @@ sub awaitpid {
 	} elsif ($in_loop) { # We could've just missed our SIGCHLD, cover it, here:
 		enqueue_reap();
 	}
+}
+
+sub do_fork () {
+	my $seed = rand(0xffffffff);
+	my $pid = fork;
+	if ($pid == 0) {
+		srand($seed);
+		eval { Net::SSLeay::randomize() };
+		Reset();
+	}
+	$pid;
 }
 
 package PublicInbox::DummyPoller; # only used during Reset
