@@ -130,14 +130,8 @@ while (<$rd>) {
 	} elsif (/^commit /) {
 		$state = 'commit';
 	} elsif (/^data ([0-9]+)/) {
-		my $len = $1;
 		print $io $_ or $im->wfail;
-		while ($len) {
-			my $n = read($rd, my $tmp, $len) or die "read: $!";
-			warn "$n != $len\n" if $n != $len;
-			$len -= $n;
-			print $io $tmp or $im->wfail;
-		}
+		print $io PublicInbox::Git::read_all($rd, $1) or $im->wfail;
 		next;
 	} elsif ($state eq 'commit') {
 		if (m{^M 100644 :([0-9]+) (${h}{2}/${h}{38})}o) {
