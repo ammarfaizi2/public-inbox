@@ -5,7 +5,7 @@ TL;DR:	sudo ./install/deps.perl all
 
 Files in this directory are designed for:
 
-* users using from git or tarballs (and not the OS package manager)
+* users running our code from git or tarballs (and not the OS package manager)
 
 * lazy users who can't be bothered to read all of INSTALL
 
