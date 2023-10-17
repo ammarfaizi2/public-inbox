@@ -1,8 +1,8 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Authentication worker for anything that needs auth for read/write IMAP
-# (eventually for read-only NNTP access)
+# and read-only NNTP access
 #
 # timelines
 # lei-daemon              |  LeiAuth worker #0      | other WQ workers
@@ -22,8 +22,7 @@
 #                         |
 # call net_merge_all_done ->-> do per-WQ-class defined actions
 package PublicInbox::LeiAuth;
-use strict;
-use v5.10.1;
+use v5.12;
 
 sub do_auth_atfork { # used by IPC WQ workers
 	my ($self, $wq) = @_;
