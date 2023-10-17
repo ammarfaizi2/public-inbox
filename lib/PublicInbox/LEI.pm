@@ -9,6 +9,7 @@ package PublicInbox::LEI;
 use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
+use autodie qw(bind chdir fork open socket socketpair unlink);
 use Getopt::Long ();
 use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET);
@@ -29,7 +30,6 @@ use File::Path ();
 use File::Spec;
 use Carp ();
 use Sys::Syslog qw(openlog syslog closelog);
-use Scalar::Util qw(looks_like_number);
 our $quit = \&CORE::exit;
 our ($current_lei, $errors_log, $listener, $oldset, $dir_idle);
 my $GLP = Getopt::Long::Parser->new;
@@ -574,12 +574,12 @@ sub _lei_atfork_child {
 	# we need to explicitly close things which are on stack
 	my $cfg = $self->{cfg};
 	if ($persist) {
-		open $self->{3}, '<', '/' or die "open(/) $!";
+		open $self->{3}, '<', '/';
 		fchdir($self);
 		close($_) for (grep(defined, delete @$self{qw(0 1 2 sock)}));
 		delete @$cfg{qw(-lei_store -watches -lei_note_event)};
 	} else { # worker, Net::NNTP (Net::Cmd) uses STDERR directly
-		open STDERR, '+>&='.fileno($self->{2}) or warn "open $!";
+		open STDERR, '+>&='.fileno($self->{2});
 		STDERR->autoflush(1);
 		POSIX::setpgid(0, $$) // die "setpgid(0, $$): $!";
 		delete @$cfg{qw(-watches -lei_note_event)};
@@ -813,10 +813,9 @@ sub dispatch {
 		if (my $chdir = $self->{opt}->{C}) {
 			for my $d (@$chdir) {
 				next if $d eq ''; # same as git(1)
-				chdir $d or return fail($self, "cd $d: $!");
+				chdir $d;
 			}
-			open $self->{3}, '<', '.' or
-				return fail($self, "open . $!");
+			open($self->{3}, '<', '.');
 		}
 		$cb->($self, @argv);
 	} elsif (grep(/\A-/, $cmd, @argv)) { # --help or -h only
@@ -851,7 +850,7 @@ sub _lei_cfg ($;$) {
 		}
 		my ($cfg_dir) = ($f =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($cfg_dir);
-		open my $fh, '>>', $f or die "open($f): $!\n";
+		open my $fh, '>>', $f;
 		@st = stat($fh) or die "fstat($f): $!\n";
 		$cur_st = pack('dd', $st[10], $st[7]);
 		qerr($self, "# $f created") if $self->{cmd} ne 'config';
@@ -1148,10 +1147,7 @@ sub accept_dispatch { # Listener {post_accept} callback
 		return send($sock, $msg, 0);
 	} else {
 		my $i = 0;
-		for my $fd (@fds) {
-			open($self->{$i++}, '+<&=', $fd) and next;
-			send($sock, "open(+<&=$fd) (FD=$i): $!", 0);
-		}
+		open($self->{$i++}, '+<&=', $_) for @fds;
 		$i == 4 or return send($sock, 'not enough FDs='.($i-1), 0)
 	}
 	# $ENV_STR = join('', map { "\0$_=$ENV{$_}" } keys %ENV);
@@ -1236,12 +1232,11 @@ sub dump_and_clear_log {
 sub cfg2lei ($) {
 	my ($cfg) = @_;
 	my $lei = bless { env => { %{$cfg->{-env}} } }, __PACKAGE__;
-	open($lei->{0}, '<&', \*STDIN) or die "dup 0: $!";
-	open($lei->{1}, '>>&', \*STDOUT) or die "dup 1: $!";
-	open($lei->{2}, '>>&', \*STDERR) or die "dup 2: $!";
-	open($lei->{3}, '<', '/') or die "open /: $!";
-	my ($x, $y);
-	socketpair($x, $y, AF_UNIX, SOCK_SEQPACKET, 0) or die "socketpair: $!";
+	open($lei->{0}, '<&', \*STDIN);
+	open($lei->{1}, '>>&', \*STDOUT);
+	open($lei->{2}, '>>&', \*STDERR);
+	open($lei->{3}, '<', '/');
+	socketpair(my $x, my $y, AF_UNIX, SOCK_SEQPACKET, 0);
 	$lei->{sock} = $x;
 	require PublicInbox::LeiSelfSocket;
 	PublicInbox::LeiSelfSocket->new($y); # adds to event loop
@@ -1317,17 +1312,15 @@ sub lazy_start {
 	my $lk = PublicInbox::Lock->new($errors_log);
 	umask(077) // die("umask(077): $!");
 	$lk->lock_acquire;
-	socket($listener, AF_UNIX, SOCK_SEQPACKET, 0) or die "socket: $!";
+	socket($listener, AF_UNIX, SOCK_SEQPACKET, 0);
 	if ($errno == ECONNREFUSED || $errno == ENOENT) {
 		return if connect($listener, $addr); # another process won
-		if ($errno == ECONNREFUSED && -S $path) {
-			unlink($path) or die "unlink($path): $!";
-		}
+		unlink($path) if $errno == ECONNREFUSED && -S $path;
 	} else {
 		$! = $errno; # allow interpolation to stringify in die
 		die "connect($path): $!";
 	}
-	bind($listener, $addr) or die "bind($path): $!";
+	bind($listener, $addr);
 	$lk->lock_release;
 	undef $lk;
 	my @st = stat($path) or die "stat($path): $!";
@@ -1340,11 +1333,11 @@ sub lazy_start {
 	require PublicInbox::Listener;
 	require PublicInbox::PktOp;
 	(-p STDOUT) or die "E: stdout must be a pipe\n";
-	open(STDIN, '+>>', $errors_log) or die "open($errors_log): $!";
+	open(STDIN, '+>>', $errors_log);
 	STDIN->autoflush(1);
 	dump_and_clear_log();
 	POSIX::setsid() > 0 or die "setsid: $!";
-	my $pid = fork // die "fork: $!";
+	my $pid = fork;
 	return if $pid;
 	$0 = "lei-daemon $path";
 	local %PATH2CFG;
@@ -1385,8 +1378,8 @@ sub lazy_start {
 	};
 	local $SIG{PIPE} = 'IGNORE';
 	local $SIG{ALRM} = 'IGNORE';
-	open STDERR, '>&STDIN' or die "redirect stderr failed: $!";
-	open STDOUT, '>&STDIN' or die "redirect stdout failed: $!";
+	open STDERR, '>&STDIN';
+	open STDOUT, '>&STDIN';
 	# $daemon pipe to `lei' closed, main loop begins:
 	eval { PublicInbox::DS::event_loop($sig, $oldset) };
 	warn "event loop error: $@\n" if $@;
@@ -1424,8 +1417,7 @@ sub wq_done_wait { # awaitpid cb (via wq_eof)
 
 sub fchdir {
 	my ($lei) = @_;
-	my $dh = $lei->{3} // die 'BUG: lei->{3} (CWD) gone';
-	chdir($dh) || die "fchdir: $!";
+	chdir($lei->{3} // die 'BUG: lei->{3} (CWD) gone');
 }
 
 sub wq_eof { # EOF callback for main daemon
