@@ -12,7 +12,7 @@ use PublicInbox::TestCommon;
 my $git_dir = $ENV{GIANT_GIT_DIR};
 plan 'skip_all' => 'GIANT_GIT_DIR not defined' unless $git_dir;
 require_mods(qw(BSD::Resource Plack::Util Plack::Builder
-		HTTP::Date HTTP::Status Net::HTTP));
+		HTTP::Date HTTP::Status HTTP::Tiny));
 my $psgi = "./t/git-http-backend.psgi";
 my ($tmpdir, $for_destroy) = tmpdir();
 my $err = "$tmpdir/stderr.log";
@@ -20,15 +20,12 @@ my $out = "$tmpdir/stdout.log";
 my $sock = tcp_server();
 my ($host, $port) = tcp_host_port($sock);
 my $td;
+my $http = HTTP::Tiny->new;
 
 my $get_maxrss = sub {
-        my $http = Net::HTTP->new(Host => "$host:$port");
-	ok($http, 'Net::HTTP object created for maxrss');
-        $http->write_request(GET => '/');
-        my ($code, $mess, %h) = $http->read_response_headers;
-	is($code, 200, 'success reading maxrss');
-	my $n = $http->read_entity_body(my $buf, 256);
-	ok(defined $n, 'read response body');
+	my $res = $http->get("http://$host:$port/");
+	is($res->{status}, 200, 'success reading maxrss');
+	my $buf = $res->{content};
 	like($buf, qr/\A\d+\n\z/, 'got memory response');
 	ok(int($buf) > 0, 'got non-zero memory response');
 	int($buf);
@@ -55,16 +52,15 @@ SKIP: {
 	if ($pack !~ m!(/objects/pack/pack-[a-f0-9]{40,64}.pack)\z!) {
 		skip "bad pack name: $pack";
 	}
-	my $url = $1;
-	my $http = Net::HTTP->new(Host => "$host:$port");
-	ok($http, 'Net::HTTP object created');
-	$http->write_request(GET => $url);
-	my ($code, $mess, %h) = $http->read_response_headers;
-	is(200, $code, 'got 200 success for pack');
-	is($max, $h{'Content-Length'}, 'got expected Content-Length for pack');
+	my $s = tcp_connect($sock);
+	print $s "GET $1 HTTP/1.1\r\nHost: $host:$port\r\n\r\n" or xbail $!;
+	my $hdr = do { local $/ = "\r\n\r\n"; readline($s) };
+	like $hdr, qr!\AHTTP/1\.1\s+200\b!, 'got 200 success for pack';
+	like $hdr, qr/^content-length:\s*$max\r\n/ims,
+		'got expected Content-Length for pack';
 
-	# no $http->read_entity_body, here, since we want to force buffering
-	foreach my $i (1..3) {
+	# don't read the body
+	for my $i (1..3) {
 		sleep 1;
 		my $diff = $get_maxrss->() - $mem_a;
 		note "${diff}K memory increase after $i seconds";
