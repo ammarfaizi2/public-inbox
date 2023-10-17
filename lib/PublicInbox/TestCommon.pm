@@ -16,6 +16,7 @@ our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err, $lei_cwdfh);
+use autodie qw(chdir close fcntl open opendir seek unlink);
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
 
@@ -46,11 +47,16 @@ sub require_bsd (;$) {
 
 sub xbail (@) { BAIL_OUT join(' ', map { ref() ? (explain($_)) : ($_) } @_) }
 
+sub read_all ($;$$) {
+	require PublicInbox::Git;
+	PublicInbox::Git::read_all($_[0], $_[1], $_[2])
+}
+
 sub eml_load ($) {
 	my ($path, $cb) = @_;
-	open(my $fh, '<', $path) or die "open $path: $!";
+	open(my $fh, '<', $path);
 	require PublicInbox::Eml;
-	PublicInbox::Eml->new(\(do { local $/; <$fh> }));
+	PublicInbox::Eml->new(\(read_all($fh)));
 }
 
 sub tmpdir (;$) {
@@ -243,9 +249,9 @@ sub _prepare_redirects ($) {
 	for (my $fd = 0; $fd <= $#io_mode; $fd++) {
 		my $fh = $fhref->[$fd] or next;
 		my ($oldfh, $mode) = @{$io_mode[$fd]};
-		open my $orig, $mode, $oldfh or die "$oldfh $mode stash: $!";
+		open(my $orig, $mode, $oldfh);
 		$orig_io->[$fd] = $orig;
-		open $oldfh, $mode, $fh or die "$oldfh $mode redirect: $!";
+		open $oldfh, $mode, $fh;
 	}
 	$orig_io;
 }
@@ -255,7 +261,7 @@ sub _undo_redirects ($) {
 	for (my $fd = 0; $fd <= $#io_mode; $fd++) {
 		my $fh = $orig_io->[$fd] or next;
 		my ($oldfh, $mode) = @{$io_mode[$fd]};
-		open $oldfh, $mode, $fh or die "$$oldfh $mode redirect: $!";
+		open $oldfh, $mode, $fh;
 	}
 }
 
@@ -281,8 +287,8 @@ sub key2sub ($) {
 	my ($key) = @_;
 	$cached_scripts{$key} //= do {
 		my $f = key2script($key);
-		open my $fh, '<', $f or die "open $f: $!";
-		my $str = do { local $/; <$fh> };
+		open my $fh, '<', $f;
+		my $str = read_all($fh);
 		my $pkg = (split(m!/!, $f))[-1];
 		$pkg =~ s/([a-z])([a-z0-9]+)(\.t)?\z/\U$1\E$2/;
 		$pkg .= "_T" if $3;
@@ -329,7 +335,7 @@ sub _run_sub ($$$) {
 sub no_coredump (@) {
 	my @dirs = @_;
 	my $cwdfh;
-	if (@dirs) { opendir($cwdfh, '.') or die "opendir(.): $!" }
+	opendir($cwdfh, '.') if @dirs;
 	my @found;
 	for (@dirs, '.') {
 		chdir $_;
@@ -375,7 +381,7 @@ sub run_script ($;$$) {
 			next if $fd > 0;
 			$fh->autoflush(1);
 			print $fh $$redir or die "print: $!";
-			seek($fh, 0, SEEK_SET) or die "seek: $!";
+			seek($fh, 0, SEEK_SET);
 		} elsif ($ref eq 'GLOB') {
 			$spawn_opt->{$fd} = $fhref->[$fd] = $redir;
 		} elsif ($ref) {
@@ -406,15 +412,13 @@ sub run_script ($;$$) {
 		my $orig_io = _prepare_redirects($fhref);
 		my $cwdfh = $lei_cwdfh;
 		if (my $d = $opt->{'-C'}) {
-			unless ($cwdfh) {
-				opendir $cwdfh, '.' or die "opendir .: $!";
-			}
-			chdir $d or die "chdir $d: $!";
+			$cwdfh or opendir $cwdfh, '.';
+			chdir $d;
 		}
 		_run_sub($sub, $key, \@argv);
 		# n.b. all our uses of PublicInbox::DS should be fine
 		# with this and we can't Reset here.
-		die "fchdir(restore): $!" if $cwdfh && !chdir($cwdfh);
+		chdir($cwdfh) if $cwdfh;
 		_undo_redirects($orig_io);
 		select STDOUT;
 		umask($umask);
@@ -425,10 +429,8 @@ sub run_script ($;$$) {
 	for my $fd (1..2) {
 		my $fh = $fhref->[$fd] or next;
 		next unless -f $fh;
-		seek($fh, 0, SEEK_SET) or die "seek: $!";
-		my $redir = $opt->{$fd};
-		local $/;
-		$$redir = <$fh>;
+		seek($fh, 0, SEEK_SET);
+		${$opt->{$fd}} = read_all($fh);
 	}
 	no_coredump($opt->{-C} ? ($opt->{-C}) : ());
 	$? == 0;
@@ -458,7 +460,7 @@ sub wait_for_tail {
 		$ino[0] =~ s!/fd/!/fdinfo/!;
 		my @info;
 		do {
-			if (open my $fh, '<', $ino[0]) {
+			if (CORE::open(my $fh, '<', $ino[0])) {
 				local $/ = "\n";
 				@info = grep(/^inotify wd:/, <$fh>);
 			}
@@ -500,7 +502,6 @@ sub tail_f (@) {
 	$tail_cmd or return; # "tail -F" or "tail -f"
 	my $opt = (ref($f[-1]) eq 'HASH') ? pop(@f) : {};
 	my $clofork = $opt->{-CLOFORK} // [];
-	use autodie qw(fcntl open);
 	my @cfmap = map {
 		my $fl = fcntl($_, F_GETFD, 0);
 		fcntl($_, F_SETFD, $fl | FD_CLOEXEC) unless $fl & FD_CLOEXEC;
@@ -551,9 +552,7 @@ sub start_script {
 					\&PublicInbox::DS::sig_setmask, $oset);
 	my $pid = PublicInbox::DS::do_fork();
 	if ($pid == 0) {
-		for (@{delete($opt->{-CLOFORK}) // []}) {
-			close($_) or die "close $!";
-		}
+		close($_) for (@{delete($opt->{-CLOFORK}) // []});
 		# pretend to be systemd (cf. sd_listen_fds(3))
 		# 3 == SD_LISTEN_FDS_START
 		my $fd;
@@ -561,7 +560,7 @@ sub start_script {
 			my $io = $opt->{$fd} // next;
 			my $old = fileno($io);
 			if ($old == $fd) {
-				fcntl($io, F_SETFD, 0) // die "F_SETFD: $!";
+				fcntl($io, F_SETFD, 0);
 			} else {
 				dup2($old, $fd) // die "dup2($old, $fd): $!";
 			}
@@ -572,7 +571,7 @@ sub start_script {
 			$ENV{LISTEN_PID} = $$;
 			$ENV{LISTEN_FDS} = $fds;
 		}
-		if ($opt->{-C}) { chdir($opt->{-C}) or die "chdir: $!" }
+		if ($opt->{-C}) { chdir($opt->{-C}) }
 		$0 = join(' ', @$cmd);
 		local @SIG{keys %SIG} = map { undef } values %SIG;
 		local $SIG{FPE} = 'IGNORE'; # Perl default
@@ -657,7 +656,6 @@ sub need_scm_rights () {
 
 # returns a pipe with FD_CLOEXEC disabled on the write-end
 sub quit_waiter_pipe () {
-	use autodie qw(fcntl pipe);
 	pipe(my $r, my $w);
 	fcntl($w, F_SETFD, fcntl($w, F_GETFD, 0) & ~FD_CLOEXEC);
 	($r, $w);
@@ -675,7 +673,7 @@ SKIP: {
 	my ($cb) = pop @_;
 	my $test_opt = shift // {};
 	local $lei_cwdfh;
-	use autodie qw(mkdir open opendir);
+	use autodie qw(mkdir);
 	opendir $lei_cwdfh, '.';
 	require_git(2.6, 1);
 	my $mods = $test_opt->{mods} // [ 'lei' ];
@@ -766,7 +764,7 @@ sub setup_public_inboxes () {
 				'--newsgroup', "t.v$V", "t$V",
 				"$test_home/t$V", "http://example.com/t$V",
 				"t$V\@example.com" ]) or xbail "init v$V";
-		unlink "$test_home/t$V/description" or xbail "unlink $!";
+		unlink "$test_home/t$V/description";
 	}
 	require PublicInbox::Config;
 	require PublicInbox::InboxWritable;
@@ -786,7 +784,7 @@ sub setup_public_inboxes () {
 		$im->done;
 	});
 	$seen or BAIL_OUT 'no imports';
-	open my $fh, '>', $stamp or BAIL_OUT "open $stamp: $!";
+	open my $fh, '>', $stamp;
 	@ret;
 }
 
@@ -815,13 +813,12 @@ sub create_coderepo ($$;@) {
 	my $scope = $lk->lock_for_scope;
 	my $tmpdir = delete $opt{tmpdir};
 	if (!-f "$dir/creat.stamp") {
-		opendir(my $dfh, '.') or xbail "opendir .: $!";
-		chdir($dir) or xbail "chdir($dir): $!";
+		opendir(my $dfh, '.');
+		chdir($dir);
 		local %ENV = (%ENV, %COMMIT_ENV);
 		$cb->($dir);
-		chdir($dfh) or xbail "cd -: $!";
-		open my $s, '>', "$dir/creat.stamp" or
-			BAIL_OUT "error creating $dir/creat.stamp: $!";
+		chdir($dfh);
+		open my $s, '>', "$dir/creat.stamp";
 	}
 	return $dir if !defined($tmpdir);
 	xsys_e([qw(/bin/cp -Rp), $dir, $tmpdir]);
@@ -868,8 +865,7 @@ sub create_inbox ($$;@) {
 				xsys_e([ qw(git gc -q) ], { GIT_DIR => $dir });
 			}
 		}
-		open my $s, '>', "$dir/creat.stamp" or
-			BAIL_OUT "error creating $dir/creat.stamp: $!";
+		open my $s, '>', "$dir/creat.stamp";
 	}
 	if ($tmpdir) {
 		undef $ibx;
@@ -904,8 +900,8 @@ sub test_httpd ($$;$$) {
 							ua => $ua);
 		$cb->() if $cb;
 		$td->join('TERM');
-		open my $fh, '<', $err or BAIL_OUT $!;
-		my $e = do { local $/; <$fh> };
+		open my $fh, '<', $err;
+		my $e = read_all($fh);
 		if ($e =~ s/^Plack::Middleware::ReverseProxy missing,\n//gms) {
 			$e =~ s/^URL generation for redirects .*\n//gms;
 		}
@@ -934,7 +930,6 @@ sub no_pollerfd ($) {
 
 sub cfg_new ($;@) {
 	my ($tmpdir, @body) = @_;
-	use autodie;
 	require PublicInbox::Config;
 	my $f = "$tmpdir/tmp_cfg";
 	open my $fh, '>', $f;
