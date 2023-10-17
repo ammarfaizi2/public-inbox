@@ -29,12 +29,13 @@ my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -O0') . ' ' .
 my $xap_modversion;
 
 sub xap_cfg (@) {
-	open my $err, '+>', undef or die "open(undef): $!";
+	use autodie qw(open seek);
+	open my $err, '+>', undef;
 	my $cmd = [ $ENV{PKG_CONFIG} // 'pkg-config', @_, 'xapian-core' ];
 	my $rd = popen_rd($cmd, undef, { 2 => $err });
 	chomp(my $ret = do { local $/; <$rd> });
 	return $ret if close($rd);
-	seek($err, 0, SEEK_SET) or die "seek: $!";
+	seek($err, 0, SEEK_SET);
 	$err = read_all($err);
 	die <<EOM;
 @$cmd failed: Xapian development files missing? (\$?=$?)
