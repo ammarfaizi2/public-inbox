@@ -13,6 +13,7 @@ use PublicInbox::IPC;
 use PublicInbox::Git qw(read_all);
 use Socket qw(SOL_SOCKET SO_TYPE SOCK_SEQPACKET AF_UNIX);
 use PublicInbox::DS qw(awaitpid);
+use autodie qw(open);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
@@ -122,7 +123,7 @@ sub cmd_dump_roots {
 	$qry_str // return
 		warn('usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR');
 	$req->{A} or return warn('dump_roots requires -A PREFIX');
-	open my $fh, '<', $root2id_file or die "open($root2id_file): $!";
+	open my $fh, '<', $root2id_file;
 	my $root2id; # record format: $OIDHEX "\0" uint32_t
 	my @x = split(/\0/, read_all($fh));
 	while (@x) {
@@ -184,13 +185,7 @@ sub recv_loop {
 		PublicInbox::DS::block_signals();
 		my $req = bless {}, __PACKAGE__;
 		my $i = 0;
-		for my $fd (@fds) {
-			open($req->{$i++}, '+<&=', $fd) and next;
-			warn("open(+<&=$fd) (FD=$i): $!");
-			undef $req;
-			last;
-		}
-		$req or next;
+		open($req->{$i++}, '+<&=', $_) for @fds;
 		local $stderr = $req->{1} // \*STDERR;
 		if (chop($rbuf) ne "\0") {
 			warn "not NUL-terminated";

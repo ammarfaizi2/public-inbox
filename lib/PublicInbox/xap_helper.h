@@ -668,40 +668,28 @@ static bool recv_req(struct req *req, char *rbuf, size_t *len)
 		size_t len = cmsg.hdr.cmsg_len;
 		int *fdp = (int *)CMSG_DATA(&cmsg.hdr);
 		size_t i;
-		bool fd_ok = true;
 		for (i = 0; CMSG_LEN((i + 1) * sizeof(int)) <= len; i++) {
 			int fd = *fdp++;
 			const char *mode = NULL;
-			int fl = fd_ok ? fcntl(fd, F_GETFL) : 0;
-			if (fl == 0) {
-				continue; // hit previous error
-			} else if (fl == -1) {
-				warnx("invalid fd=%d", fd);
-				fd_ok = false;
+			int fl = fcntl(fd, F_GETFL);
+			if (fl == -1) {
+				errx(EXIT_FAILURE, "invalid fd=%d", fd);
 			} else if (fl & O_WRONLY) {
 				mode = "w";
 			} else if (fl & O_RDWR) {
 				mode = "r+";
 				if (i == 0) req->has_input = true;
 			} else {
-				warnx("invalid mode from F_GETFL: 0x%x", fl);
-				fd_ok = false;
+				errx(EXIT_FAILURE,
+					"invalid mode from F_GETFL: 0x%x", fl);
 			}
-			if (!fd_ok) {
-				xclose(fd);
-			} else {
-				req->fp[i] = fdopen(fd, mode);
-				if (!req->fp[i]) {
-					warn("fdopen(fd=%d)", fd);
-					fd_ok = false;
-				}
-			}
+			req->fp[i] = fdopen(fd, mode);
+			if (!req->fp[i])
+				err(EXIT_FAILURE, "fdopen(fd=%d)", fd);
 		}
-		for (i = 0; !fd_ok && i < MY_ARRAY_SIZE(req->fp); i++)
-			if (req->fp[i]) fclose(req->fp[i]);
-		return fd_ok;
+		return true;
 	}
-	warnx("no FD received in %zd-byte request", r);
+	errx(EXIT_FAILURE, "no FD received in %zd-byte request", r);
 	return false;
 }
 
