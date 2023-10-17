@@ -7,7 +7,6 @@ use strict;
 use v5.10.1;
 use Socket qw(SOCK_STREAM IPPROTO_TCP SOL_SOCKET);
 use PublicInbox::TestCommon;
-use PublicInbox::Syscall qw(:epoll);
 use PublicInbox::DS;
 require_mods(qw(-imapd));
 my $inboxdir = $ENV{GIANT_INBOX_DIR};
@@ -134,7 +133,7 @@ package IMAPC;
 use strict;
 use parent qw(PublicInbox::DS);
 # fields: step: state machine, zin: Zlib inflate context
-use PublicInbox::Syscall qw(EPOLLIN EPOLLOUT EPOLLONESHOT);
+use PublicInbox::Syscall qw(EPOLLOUT EPOLLONESHOT);
 use Errno qw(EAGAIN);
 # determines where we start event_step
 use constant FIRST_STEP => ($ENV{TEST_COMPRESS} // 1) ? -2 : 0;
