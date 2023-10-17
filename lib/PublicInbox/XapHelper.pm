@@ -17,7 +17,7 @@ use autodie qw(open);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
-our (%SRCH, %WORKERS, $parent_pid, $alive, $nworker, $workerset);
+our (%SRCH, %WORKERS, $alive, $nworker, $workerset);
 our $stderr = \*STDERR;
 
 # only short options for portability in C++ implementation
@@ -177,7 +177,8 @@ sub recv_loop {
 	local $SIG{__WARN__} = sub { print $stderr @_ };
 	my $rbuf;
 	my $in = \*STDIN;
-	while (!defined($parent_pid) || getppid == $parent_pid) {
+	local $SIG{TERM} = sub { undef $in };
+	while (defined($in)) {
 		PublicInbox::DS::sig_setmask($workerset);
 		my @fds = $PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33);
 		scalar(@fds) or exit(66); # EX_NOINPUT
@@ -218,7 +219,6 @@ sub start_worker ($) {
 	if ($pid == 0) {
 		undef %WORKERS;
 		PublicInbox::DS::Reset();
-		$SIG{TERM} = sub { $parent_pid = -1 };
 		$SIG{TTIN} = $SIG{TTOU} = 'IGNORE';
 		$SIG{CHLD} = 'DEFAULT'; # Xapian may use this
 		recv_loop();
@@ -267,7 +267,6 @@ sub start (@) {
 	for (POSIX::SIGTERM, POSIX::SIGCHLD) {
 		$workerset->delset($_) or die "delset($_): $!";
 	}
-	local $parent_pid = $$;
 	my $sig = {
 		TTIN => sub {
 			if ($alive) {

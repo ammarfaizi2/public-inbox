@@ -72,8 +72,8 @@
 	assert(ckvar______ == (expect) && "BUG" && __FILE__ && __LINE__); \
 } while (0)
 
-static const int sock_fd = STDIN_FILENO; // SOCK_SEQPACKET as stdin :P
-static volatile pid_t parent_pid; // may be set in worker sighandler (sigw)
+// sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
+static volatile int sock_fd = STDIN_FILENO;
 static sigset_t fullset, workerset;
 static bool alive = true;
 #if STDERR_ASSIGNABLE
@@ -640,6 +640,7 @@ static bool recv_req(struct req *req, char *rbuf, size_t *len)
 	union my_cmsg cmsg = {};
 	struct msghdr msg = {};
 	struct iovec iov;
+	ssize_t r;
 	iov.iov_base = rbuf;
 	iov.iov_len = *len;
 	msg.msg_iov = &iov;
@@ -650,25 +651,29 @@ static bool recv_req(struct req *req, char *rbuf, size_t *len)
 	// allow SIGTERM to hit
 	CHECK(int, 0, sigprocmask(SIG_SETMASK, &workerset, NULL));
 
-	ssize_t r = recvmsg(sock_fd, &msg, 0);
+again:
+	r = recvmsg(sock_fd, &msg, 0);
 	if (r == 0) {
 		exit(EX_NOINPUT); /* grandparent went away */
 	} else if (r < 0) {
-		if (errno == EINTR)
-			return false; // retry recv_loop
-		err(EXIT_FAILURE, "recvmsg");
+		switch (errno) {
+		case EINTR: goto again;
+		case EBADF: if (sock_fd < 0) exit(0);
+			// fall-through
+		default: err(EXIT_FAILURE, "recvmsg");
+		}
 	}
 
 	// success! no signals for the rest of the request/response cycle
 	CHECK(int, 0, sigprocmask(SIG_SETMASK, &fullset, NULL));
 
 	*len = r;
-	if (r > 0 && cmsg.hdr.cmsg_level == SOL_SOCKET &&
+	if (cmsg.hdr.cmsg_level == SOL_SOCKET &&
 			cmsg.hdr.cmsg_type == SCM_RIGHTS) {
-		size_t len = cmsg.hdr.cmsg_len;
+		size_t clen = cmsg.hdr.cmsg_len;
 		int *fdp = (int *)CMSG_DATA(&cmsg.hdr);
 		size_t i;
-		for (i = 0; CMSG_LEN((i + 1) * sizeof(int)) <= len; i++) {
+		for (i = 0; CMSG_LEN((i + 1) * sizeof(int)) <= clen; i++) {
 			int fd = *fdp++;
 			const char *mode = NULL;
 			int fl = fcntl(fd, F_GETFL);
@@ -923,7 +928,7 @@ static void stderr_restore(FILE *tmp_err)
 
 static void sigw(int sig) // SIGTERM handler for worker
 {
-	parent_pid = -1; // break out of recv_loop
+	sock_fd = -1; // break out of recv_loop
 }
 
 static void recv_loop(void) // worker process loop
@@ -934,7 +939,7 @@ static void recv_loop(void) // worker process loop
 
 	CHECK(int, 0, sigaction(SIGTERM, &sa, NULL));
 
-	while (!parent_pid || getppid() == parent_pid) {
+	while (sock_fd == 0) {
 		size_t len = sizeof(rbuf);
 		struct req req = {};
 		if (!recv_req(&req, rbuf, &len))
@@ -1197,7 +1202,6 @@ int main(int argc, char *argv[])
 	}
 	CHECK(int, 0, sigdelset(&workerset, SIGTERM));
 	CHECK(int, 0, sigdelset(&workerset, SIGCHLD));
-	parent_pid = getpid();
 	nworker_hwm = nworker;
 	worker_pids = (pid_t *)calloc(nworker, sizeof(pid_t));
 	if (!worker_pids) err(EXIT_FAILURE, "calloc");
