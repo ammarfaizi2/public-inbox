@@ -15,7 +15,7 @@ use Carp ();
 our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
-our ($lei_opt, $lei_out, $lei_err, $lei_cwdfh);
+our ($lei_opt, $lei_out, $lei_err);
 use autodie qw(chdir close fcntl open opendir seek unlink);
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
@@ -410,15 +410,12 @@ sub run_script ($;$$) {
 		local $SIG{FPE} = 'IGNORE'; # Perl default
 		local $0 = join(' ', @$cmd);
 		my $orig_io = _prepare_redirects($fhref);
-		my $cwdfh = $lei_cwdfh;
-		if (my $d = $opt->{'-C'}) {
-			$cwdfh or opendir $cwdfh, '.';
-			chdir $d;
-		}
+		opendir(my $cwdfh, '.');
+		chdir $opt->{-C} if defined $opt->{-C};
 		_run_sub($sub, $key, \@argv);
 		# n.b. all our uses of PublicInbox::DS should be fine
 		# with this and we can't Reset here.
-		chdir($cwdfh) if $cwdfh;
+		chdir($cwdfh);
 		_undo_redirects($orig_io);
 		select STDOUT;
 		umask($umask);
@@ -672,9 +669,7 @@ sub test_lei {
 SKIP: {
 	my ($cb) = pop @_;
 	my $test_opt = shift // {};
-	local $lei_cwdfh;
 	use autodie qw(mkdir);
-	opendir $lei_cwdfh, '.';
 	require_git(2.6, 1);
 	my $mods = $test_opt->{mods} // [ 'lei' ];
 	require_mods(@$mods, 2);
