@@ -13,11 +13,11 @@ use PublicInbox::IPC;
 use PublicInbox::Git qw(read_all);
 use Socket qw(SOL_SOCKET SO_TYPE SOCK_SEQPACKET AF_UNIX);
 use PublicInbox::DS qw(awaitpid);
-use autodie qw(open);
+use autodie qw(open getsockopt);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
-our (%SRCH, %WORKERS, $alive, $nworker, $workerset);
+our (%SRCH, %WORKERS, $alive, $nworker, $workerset, $in);
 our $stderr = \*STDERR;
 
 # only short options for portability in C++ implementation
@@ -176,7 +176,6 @@ sub dispatch {
 sub recv_loop {
 	local $SIG{__WARN__} = sub { print $stderr @_ };
 	my $rbuf;
-	my $in = \*STDIN;
 	local $SIG{TERM} = sub { undef $in };
 	while (defined($in)) {
 		PublicInbox::DS::sig_setmask($workerset);
@@ -247,7 +246,7 @@ sub xh_alive { $alive || scalar(keys %WORKERS) }
 
 sub start (@) {
 	my (@argv) = @_;
-	my $c = getsockopt(STDIN, SOL_SOCKET, SO_TYPE) or die "getsockopt: $!";
+	my $c = getsockopt($in = \*STDIN, SOL_SOCKET, SO_TYPE);
 	unpack('i', $c) == SOCK_SEQPACKET or die 'stdin is not SOCK_SEQPACKET';
 
 	local (%SRCH, %WORKERS);
