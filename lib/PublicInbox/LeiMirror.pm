@@ -21,7 +21,8 @@ use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha1_hex);
 use POSIX qw(strftime);
-use autodie qw(chmod close pipe readlink seek sysopen truncate unlink);
+use autodie qw(chdir chmod close open pipe readlink seek symlink sysopen
+		truncate unlink);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
@@ -185,7 +186,7 @@ sub _write_inbox_config {
 	my $f = "$dst/inbox.config.example";
 	my $mtime = delete $self->{'mtime._/text/config/raw'};
 	if (CORE::sysopen(my $fh, $f, O_CREAT|O_EXCL|O_WRONLY)) {
-		print $fh $buf or die "print: $!";
+		print $fh $buf;
 		chmod(0444 & ~umask, $fh);
 		$fh->flush or die "flush($f): $!";
 		if (defined $mtime) {
@@ -381,12 +382,12 @@ sub fgrpv_done {
 		my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
 			"--format=refs/%(refname:lstrip=3)%00%(objectname)",
 			"refs/remotes/$rn/" ];
-		open(my $sfh, '+>', undef) or die "open(src): $!";
+		open(my $sfh, '+>', undef);
 		$fgrp->{srcfh} = $sfh;
 		start_cmd($fgrp, $src, { %opt, 1 => $sfh }, $update_ref);
 		my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
 			'--format=%(refname)%00%(objectname)' ];
-		open(my $dfh, '+>', undef) or die "open(dst): $!";
+		open(my $dfh, '+>', undef);
 		$fgrp->{dstfh} = $dfh;
 		start_cmd($fgrp, $dst, { %opt, 1 => $dfh }, $update_ref);
 	}
@@ -449,7 +450,7 @@ sub fgrp_fetch_all {
 			# update the config atomically via O_APPEND while
 			# respecting git-config locking
 			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY);
-			open my $fh, '>>', $f or die "open(>>$f): $!";
+			open my $fh, '>>', $f;
 			$fh->autoflush(1);
 			my $buf = '';
 			if (@$old) {
@@ -482,9 +483,8 @@ sub forkgroup_prep {
 	my $dir = "$os/$fg.git";
 	if (!-d $dir && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($dir);
-		my $f = "$dir/config";
-		open my $fh, '+>>', $f or die "open:($f): $!";
-		print $fh <<EOM or die "print($f): $!";
+		open my $fh, '+>>', "$dir/config";
+		print $fh <<EOM;
 [repack]
 	useDeltaIslands = true
 [pack]
@@ -496,9 +496,8 @@ EOM
 	my $rn = substr(sha256_hex($key), 0, 16);
 	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($self->{cur_dst});
-		my $f = "$self->{cur_dst}/config";
-		open my $fh, '+>>', $f or die "open:($f): $!";
-		print $fh <<EOM or die "print($f): $!";
+		open my $fh, '+>>', "$self->{cur_dst}/config";
+		print $fh <<EOM;
 ; rely on the "$rn" remote in the
 ; $fg fork group for fetches
 ; only uncomment the following iff you detach from fork groups
@@ -514,11 +513,11 @@ EOM
 		my $o = "$self->{cur_dst}/objects";
 		my $f = "$o/info/alternates";
 		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
-		open my $fh, '+>>', $f or die "open($f): $!";
+		open my $fh, '+>>', $f;
 		seek($fh, SEEK_SET, 0);
 		chomp(my @cur = <$fh>);
 		if (!grep(/\A\Q$l\E\z/, @cur)) {
-			say $fh $l or die "say($f): $!";
+			say $fh $l;
 		}
 		close $fh;
 	}
@@ -556,7 +555,7 @@ sub cmp_fp_do {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
 	my $opt = { 2 => $self->{lei}->{2} };
-	open($opt->{1}, '+>', undef) or die "open(tmp): $!";
+	open($opt->{1}, '+>', undef);
 	$self->{-show_ref} = $opt->{1};
 	do_reap($self);
 	$self->{lei}->qerr("# @$cmd");
@@ -695,8 +694,8 @@ sub init_placeholder ($$$) {
 	my ($src, $edst, $ent) = @_;
 	PublicInbox::Import::init_bare($edst);
 	my $f = "$edst/config";
-	open my $fh, '>>', $f or die "open($f): $!";
-	print $fh <<EOM or die "print($f): $!";
+	open my $fh, '>>', $f;
+	print $fh <<EOM;
 [remote "origin"]
 	url = $src
 	fetch = +refs/*:refs/*
@@ -706,20 +705,17 @@ sub init_placeholder ($$$) {
 ; will not fetch updates for it unless write permission is added.
 ; Hint: chmod +w $edst
 EOM
-	if (defined($ent->{owner})) {
-		print $fh <<EOM or die "print($f): $!";
+	print $fh <<EOM if defined($ent->{owner});
 [gitweb]
 	owner = $ent->{owner}
 EOM
-	}
 	close $fh;
 	my %map = (head => 'HEAD', description => undef);
 	while (my ($key, $fn) = each %map) {
 		my $val = $ent->{$key} // next;
 		$fn //= $key;
-		$fn = "$edst/$fn";
-		open $fh, '>', $fn or die "open($fn): $!";
-		print $fh $val, "\n" or die "print($fn): $!";
+		open $fh, '>', "$edst/$fn";
+		say $fh $val;
 		close $fh;
 	}
 }
@@ -747,7 +743,7 @@ sub up_fp_done {
 sub atomic_write ($$$) {
 	my ($dn, $bn, $raw) = @_;
 	my $ft = File::Temp->new(DIR => $dn, TEMPLATE => "$bn-XXXX");
-	print $ft $raw or die "print($ft): $!";
+	print $ft $raw;
 	$ft->flush or die "flush($ft): $!";
 	ft_rename($ft, "$dn/$bn", 0666);
 }
@@ -778,7 +774,7 @@ sub update_ent {
 	if (defined($new) && $new ne $cur) {
 		my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
 		my $opt = { 2 => $self->{lei}->{2} };
-		open($opt->{1}, '+>', undef) or die "open(tmp): $!";
+		open($opt->{1}, '+>', undef);
 		$self->{-show_ref_up} = $opt->{1};
 		my $done = PublicInbox::OnDestroy->new($$, \&up_fp_done, $self);
 		start_cmd($self, $cmd, $opt, $done);
@@ -816,7 +812,7 @@ sub update_ent {
 					push @{$self->{chg}->{badlink}}, $p;
 				}
 			}
-			symlink($tgt, $ln) or die "symlink($tgt, $ln): $!";
+			symlink($tgt, $ln);
 			++$self->{chg}->{nr_chg};
 		}
 	}
@@ -844,7 +840,7 @@ sub v1_done { # called via OnDestroy
 	unlink_fetch_head($dst);
 	update_ent($self) if $self->{-ent};
 	my $o = "$dst/objects";
-	if (open(my $fh, '<', my $fn = "$o/info/alternates")) {;
+	if (CORE::open(my $fh, '<', my $fn = "$o/info/alternates")) {;
 		my $base = File::Spec->rel2abs($o);
 		my @l = <$fh>;
 		my $ft;
@@ -855,7 +851,7 @@ sub v1_done { # called via OnDestroy
 						DIR => "$o/info");
 		}
 		if ($ft) {
-			print $ft @l or die "print($ft): $!";
+			print $ft @l;
 			$ft->flush or die "flush($ft): $!";
 			ft_rename($ft, $fn, 0666, $fh);
 		}
@@ -964,7 +960,7 @@ sub decode_manifest ($$$) {
 sub load_current_manifest ($) {
 	my ($self) = @_;
 	my $fn = $self->{-manifest} // return;
-	if (open(my $fh, '<', $fn)) {
+	if (CORE::open(my $fh, '<', $fn)) {
 		decode_manifest($fh, $fn, $fn);
 	} elsif ($!{ENOENT}) { # non-fatal, we can just do it slowly
 		warn "open($fn): $!\n" if !$self->{-initial_clone};
@@ -1102,12 +1098,12 @@ sub dump_project_list ($$) {
 	my $old = defined($f) ? PublicInbox::Git::try_cat($f) : '';
 	my %new;
 
-	open my $dh, '<', '.' or die "open(.): $!";
+	open my $dh, '<', '.';
 	if (!$self->{dry_run} || -d $self->{dst}) {
-		chdir($self->{dst}) or die "chdir($self->{dst}): $!";
+		chdir($self->{dst});
 	}
 	my @local = grep { -e $_ ? ($new{$_} = undef) : 1 } split(/\n/s, $old);
-	chdir($dh) or die "chdir(restore): $!";
+	chdir($dh);
 
 	$new{substr($_, 1)} = 1 for keys %$m; # drop leading '/'
 	my @list = sort keys %new;
@@ -1345,7 +1341,7 @@ sub write_makefile {
 	my ($dir, $ibx_ver) = @_;
 	my $f = "$dir/Makefile";
 	if (CORE::sysopen my $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
-		print $fh <<EOM or die "print($f) $!";
+		print $fh <<EOM;
 # This is a v$ibx_ver public-inbox, see the public-inbox-v$ibx_ver-format(5)
 # manpage for more information on the format.  This Makefile is
 # intended as a familiar wrapper for users unfamiliar with
@@ -1359,7 +1355,7 @@ sub write_makefile {
 # so you may edit it freely with your own convenience targets
 # and notes.  public-inbox-fetch will recreate it if removed.
 EOM
-		print $fh <<'EOM' or die "print($f): $!";
+		print $fh <<'EOM';
 # the default target:
 help :
 	@echo Common targets:
