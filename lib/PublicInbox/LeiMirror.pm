@@ -21,6 +21,7 @@ use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha1_hex);
 use POSIX qw(strftime);
+use autodie qw(chmod pipe readlink seek sysopen truncate unlink);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
@@ -122,7 +123,7 @@ sub ft_rename ($$$;$) {
 	my ($ft, $dst, $open_mode, $fh) = @_;
 	my @st = stat($fh // $dst);
 	my $mode = @st ? ($st[2] & 07777) : ($open_mode & ~umask);
-	chmod($mode, $ft) or croak "E: chmod($ft): $!";
+	chmod($mode, $ft);
 	require File::Copy;
 	File::Copy::mv($ft->filename, $dst) or croak "E: mv($ft => $dst): $!";
 	$ft->unlink_on_destroy(0);
@@ -170,7 +171,7 @@ sub _get_txt_done { # returns true on error (non-fatal), undef on success
 	$? = 0; # don't influence normal lei exit
 	return warn("$uri missing\n") if ($cerr >> 8) == 22;
 	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
-	seek($fh, SEEK_SET, 0) or die "seek: $!";
+	seek($fh, SEEK_SET, 0);
 	$self->{"mtime.$endpoint"} = (stat($fh))[9];
 	local $/;
 	$self->{"txt.$endpoint"} = <$fh>;
@@ -183,9 +184,9 @@ sub _write_inbox_config {
 	my $dst = $self->{cur_dst} // $self->{dst};
 	my $f = "$dst/inbox.config.example";
 	my $mtime = delete $self->{'mtime._/text/config/raw'};
-	if (sysopen(my $fh, $f, O_CREAT|O_EXCL|O_WRONLY)) {
+	if (CORE::sysopen(my $fh, $f, O_CREAT|O_EXCL|O_WRONLY)) {
 		print $fh $buf or die "print: $!";
-		chmod(0444 & ~umask, $fh) or die "chmod($f): $!";
+		chmod(0444 & ~umask, $fh);
 		$fh->flush or die "flush($f): $!";
 		if (defined $mtime) {
 			utime($mtime, $mtime, $fh) or die "utime($f): $!";
@@ -289,7 +290,7 @@ sub upr { # feed `git update-ref --stdin -z' verbosely
 
 sub start_update_ref {
 	my ($fgrp) = @_;
-	pipe(my ($r, $w)) or die "pipe: $!";
+	pipe(my $r, my $w);
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
 	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
@@ -305,8 +306,8 @@ sub fgrp_update {
 	return if !keep_going($fgrp);
 	my $srcfh = delete $fgrp->{srcfh} or return;
 	my $dstfh = delete $fgrp->{dstfh} or return;
-	seek($srcfh, SEEK_SET, 0) or die "seek(src): $!";
-	seek($dstfh, SEEK_SET, 0) or die "seek(dst): $!";
+	seek($srcfh, SEEK_SET, 0);
+	seek($dstfh, SEEK_SET, 0);
 	my %src = map { chomp; split(/\0/) } (<$srcfh>);
 	close $srcfh;
 	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
@@ -359,7 +360,7 @@ sub pack_refs {
 
 sub unlink_fetch_head ($) {
 	my ($git_dir) = @_;
-	return if unlink("$git_dir/FETCH_HEAD") || $!{ENOENT};
+	return if CORE::unlink("$git_dir/FETCH_HEAD") || $!{ENOENT};
 	warn "W: unlink($git_dir/FETCH_HEAD): $!";
 }
 
@@ -447,8 +448,7 @@ sub fgrp_fetch_all {
 		if (!$self->{dry_run}) {
 			# update the config atomically via O_APPEND while
 			# respecting git-config locking
-			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY)
-				or die "open($f.lock): $!";
+			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY);
 			open my $fh, '>>', $f or die "open(>>$f): $!";
 			$fh->autoflush(1);
 			my $buf = '';
@@ -464,7 +464,7 @@ sub fgrp_fetch_all {
 				(map { "\t$grp = $_->{-remote}\n" } @$new));
 			print $fh $buf or die "print($f): $!";
 			close $fh or die "close($f): $!";
-			unlink("$f.lock") or die "unlink($f.lock): $!";
+			unlink("$f.lock");
 		}
 		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
 		push @$old, @$new;
@@ -515,7 +515,7 @@ EOM
 		my $f = "$o/info/alternates";
 		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
 		open my $fh, '+>>', $f or die "open($f): $!";
-		seek($fh, SEEK_SET, 0) or die "seek($f): $!";
+		seek($fh, SEEK_SET, 0);
 		chomp(my @cur = <$fh>);
 		if (!grep(/\A\Q$l\E\z/, @cur)) {
 			say $fh $l or die "say($f): $!";
@@ -535,7 +535,7 @@ sub fp_done {
 	}
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
-	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
+	seek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
 	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
@@ -735,7 +735,7 @@ sub up_fp_done {
 	my ($self) = @_;
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref_up} // die 'BUG: no show-ref output';
-	seek($fh, SEEK_SET, 0) or die "seek(show_ref): $!";
+	seek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
 	my $B = sha1_hex(do { local $/; <$fh> } // die("read(show_ref): $!"));
@@ -811,7 +811,7 @@ sub update_ent {
 			if (lstat($ln)) {
 				if (-l _) {
 					next if readlink($ln) eq $tgt;
-					unlink($ln) or die "unlink($ln): $!";
+					unlink($ln);
 				} else {
 					push @{$self->{chg}->{badlink}}, $p;
 				}
@@ -882,7 +882,7 @@ sub v2_done { # called via OnDestroy
 	for my $i ($mg->git_epochs) { $mg->epoch_cfg_set($i) }
 	for my $edst (@{delete($self->{-read_only}) // []}) {
 		my @st = stat($edst) or die "stat($edst): $!";
-		chmod($st[2] & 0555, $edst) or die "chmod(a-w, $edst): $!";
+		chmod($st[2] & 0555, $edst);
 	}
 	write_makefile($dst, 2);
 	undef $lck; # unlock
@@ -1089,8 +1089,8 @@ sub dump_manifest ($$) {
 	# epoch they no longer want to skip
 	my $json = PublicInbox::Config->json->encode($m);
 	my $mtime = (stat($ft))[9];
-	seek($ft, SEEK_SET, 0) or die "seek($ft): $!";
-	truncate($ft, 0) or die "truncate($ft): $!";
+	seek($ft, SEEK_SET, 0);
+	truncate($ft, 0);
 	gzip(\$json => $ft) or die "gzip($ft): $GzipError";
 	$ft->flush or die "flush($ft): $!";
 	utime($mtime, $mtime, "$ft") or die "utime(..., $ft): $!";
@@ -1344,7 +1344,7 @@ sub ipc_atfork_child {
 sub write_makefile {
 	my ($dir, $ibx_ver) = @_;
 	my $f = "$dir/Makefile";
-	if (sysopen my $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
+	if (CORE::sysopen my $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
 		print $fh <<EOM or die "print($f) $!";
 # This is a v$ibx_ver public-inbox, see the public-inbox-v$ibx_ver-format(5)
 # manpage for more information on the format.  This Makefile is
