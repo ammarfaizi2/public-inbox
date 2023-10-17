@@ -216,6 +216,13 @@ SKIP: {
 	is($n, 13, 'V1 NNTP article numbers skipped via --skip-artnum');
 }
 
+{
+	my $cmd = [ qw(-init -C), "$tmpdir", qw(chdirlist chdirlist),
+		   qw(http://example.com/chdirlist chdirlist@example.com)];
+	ok(run_script($cmd), '-init with -C (chdir)');
+	ok(-d "$tmpdir/chdirlist", '-C processed correctly');
+}
+
 done_testing();
 
 sub read_indexlevel {

@@ -60,7 +60,7 @@ my $inboxdir = shift @ARGV or $usage_cb->();
 my $http_url = shift @ARGV or $usage_cb->();
 my (@address) = @ARGV;
 @address or $usage_cb->();
-+PublicInbox::Admin::do_chdir(\@chdir);
+PublicInbox::Admin::do_chdir(\@chdir);
 
 @c_extra = map {
 	my ($k, $v) = split(/=/, $_, 2);
