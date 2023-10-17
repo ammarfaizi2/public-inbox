@@ -4,6 +4,7 @@
 use strict;
 use v5.10.1;
 use Getopt::Long qw/:config gnu_getopt no_ignore_case auto_abbrev/;
+use autodie qw(open chmod close rename);
 use Fcntl qw(:DEFAULT);
 my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
 usage: public-inbox-init NAME INBOX_DIR HTTP_URL ADDRESS [ADDRESS..]
@@ -126,15 +127,12 @@ my $perm = 0644 & ~umask;
 my %seen;
 if (-e $pi_config) {
 	require PublicInbox::Git;
-	open(my $oh, '<', $pi_config) or die "unable to read $pi_config: $!\n";
-	my @st = stat($oh);
+	open(my $oh, '<', $pi_config);
+	my @st = stat($oh) or die "(f)stat failed on $pi_config: $!\n";
 	$perm = $st[2];
-	defined $perm or die "(f)stat failed on $pi_config: $!\n";
-	chmod($perm & 07777, $fh) or
-		die "(f)chmod failed on future $pi_config: $!\n";
-	my $old = PublicInbox::Git::read_all($oh);
-	print $fh $old or die "failed to write: $!\n";
-	close $oh or die "failed to close $pi_config: $!\n";
+	chmod($perm & 07777, $fh);
+	print $fh PublicInbox::Git::read_all($oh);
+	close $oh;
 
 	# yes, this conflict checking is racy if multiple instances of this
 	# script are run by the same $PI_DIR
@@ -161,7 +159,7 @@ if (-e $pi_config) {
 	$indexlevel //= $ibx->{indexlevel} if $ibx;
 }
 my $pi_config_tmp = $fh->filename;
-close($fh) or die "failed to close $pi_config_tmp: $!\n";
+close($fh);
 
 my $pfx = "publicinbox.$name";
 my @x = (qw/git config/, "--file=$pi_config_tmp");
@@ -216,8 +214,8 @@ $ibx->init_inbox(0, $skip_epoch, $skip_artnum);
 
 my $f = "$inboxdir/description";
 if (sysopen $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
-	print $fh "public inbox for $address[0]\n" or die "print($f): $!";
-	close $fh or die "close($f): $!";
+	print $fh "public inbox for $address[0]\n";
+	close $fh;
 }
 
 # needed for git prior to v2.1.0
@@ -248,9 +246,6 @@ for my $kv (@c_extra) {
 }
 
 # needed for git prior to v2.1.0
-chmod($perm & 07777, $pi_config_tmp) or
-	die "(f)chmod failed on future $pi_config: $!\n";
-
-rename $pi_config_tmp, $pi_config or
-	die "failed to rename `$pi_config_tmp' to `$pi_config': $!\n";
+chmod($perm & 07777, $pi_config_tmp);
+rename $pi_config_tmp, $pi_config;
 undef $auto_unlink; # trigger ->DESTROY
