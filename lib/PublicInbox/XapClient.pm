@@ -11,14 +11,12 @@ use v5.12;
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
+use autodie qw(pipe socketpair);
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;
-	my ($r, $w, $n);
-	if (!defined($ios->[0])) {
-		pipe($r, $w) or die "pipe: $!";
-		$ios->[0] = $w;
-	}
+	my ($r, $n);
+	pipe($r, $ios->[0]) if !defined($ios->[0]);
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
 	$n = $PublicInbox::IPC::send_cmd->($self->{io}, \@fds, $buf, 0) //
@@ -29,8 +27,7 @@ sub mkreq {
 
 sub start_helper {
 	my @argv = @_;
-	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0) or
-		die "socketpair: $!";
+	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0);
 	my $cls = ($ENV{PI_NO_CXX} ? undef : eval {
 			require PublicInbox::XapHelperCxx;
 			PublicInbox::XapHelperCxx::check_build();
