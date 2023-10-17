@@ -6,6 +6,7 @@
 use strict;
 use v5.10.1;
 use Socket qw(SOCK_STREAM IPPROTO_TCP SOL_SOCKET);
+use PublicInbox::Spawn qw(which);
 use PublicInbox::TestCommon;
 use PublicInbox::DS;
 require_mods(qw(-imapd));
@@ -71,7 +72,7 @@ if ($TEST_TLS) {
 	$ssl_opt{SSL_startHandshake} = 0;
 }
 chomp(my $nfd = `/bin/sh -c 'ulimit -n'`);
-$nfd -= 10;
+$nfd -= 20;
 ok($nfd > 0, 'positive FD count');
 my $MAX_FD = 10000;
 $nfd = $MAX_FD if $nfd >= $MAX_FD;
@@ -118,10 +119,11 @@ if ($DONE != $nfd) {
 	PublicInbox::DS::event_loop();
 }
 is($nfd, $DONE, "$nfd/$DONE done");
-if ($^O eq 'linux' && open(my $f, '<', "/proc/$pid/status")) {
+my $lsof = which('lsof');
+if ($^O eq 'linux' && $lsof && open(my $f, '<', "/proc/$pid/status")) {
 	diag(grep(/RssAnon/, <$f>));
-	diag "  SELF lsof | wc -l ".`lsof -p $$ |wc -l`;
-	diag "SERVER lsof | wc -l ".`lsof -p $pid |wc -l`;
+	diag "  SELF lsof | wc -l ".`$lsof -p $$ |wc -l`;
+	diag "SERVER lsof | wc -l ".`$lsof -p $pid |wc -l`;
 }
 PublicInbox::DS->Reset;
 $td->kill;
