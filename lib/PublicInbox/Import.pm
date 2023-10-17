@@ -21,6 +21,7 @@ use POSIX qw(strftime);
 use autodie qw(read close socketpair);
 use Carp qw(croak);
 use Socket qw(AF_UNIX SOCK_STREAM);
+use PublicInbox::Git qw(read_all);
 
 sub default_branch () {
 	state $default_branch = do {
@@ -114,8 +115,7 @@ sub _cat_blob ($$) {
 	local $/ = "\n";
 	my $info = <$io> // die "EOF from fast-import / cat-blob: $!";
 	$info =~ /\A[a-f0-9]{40,} blob ([0-9]+)\n\z/ or return;
-	my $n = read($io, my $buf, my $len = $1 + 1);
-	$n == $len or croak "cat-blob: short read: $n < $len";
+	my $buf = read_all($io, my $len = $1 + 1);
 	my $lf = chop $buf;
 	croak "bad read on final byte: <$lf>" if $lf ne "\n";
 	\$buf;
@@ -562,9 +562,7 @@ sub replace_oids {
 		} elsif (/^data ([0-9]+)/) {
 			# only commit message, so $len is small:
 			push @buf, $_;
-			my $n = read($rd, my $buf, my $len = $1);
-			$len == $n or croak "short read ($n < $len)";
-			push @buf, $buf;
+			push @buf, read_all($rd, my $len = $1);
 		} elsif (/^M 100644 ([a-f0-9]+) (\w+)/) {
 			my ($oid, $path) = ($1, $2);
 			$tree->{$path} = 1;
