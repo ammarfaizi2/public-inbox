@@ -26,7 +26,7 @@ sub watch {
 	my $ident = fileno($w->[2]) // die "BUG: bad fileno $w->[2]: $!";
 	$self->{dskq}->{kq}->EV_SET($ident, # ident (fd)
 		EVFILT_VNODE, # filter
-		EV_ADD, # flags
+		EV_ADD | EV_CLEAR, # flags
 		$mask, # fflags
 		0, $dir_delete); # data, udata
 	$self->{watch}->{$ident} = $w;
