@@ -9,7 +9,7 @@ package PublicInbox::LEI;
 use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
-use autodie qw(bind chdir fork open socket socketpair unlink);
+use autodie qw(bind chdir fork open socket socketpair syswrite unlink);
 use Getopt::Long ();
 use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET);
@@ -1031,9 +1031,10 @@ sub start_mua {
 		$io->[0] = $self->{1} if $self->{opt}->{stdin} && -t $self->{1};
 		send_exec_cmd($self, $io, \@cmd, {});
 	}
-	if ($self->{lxs} && $self->{au_done}) { # kick wait_startq
-		syswrite($self->{au_done}, 'q' x ($self->{lxs}->{jobs} // 0));
-	}
+
+	# kick wait_startq:
+	syswrite($self->{au_done}, 'q') if $self->{lxs} && $self->{au_done};
+
 	return unless -t $self->{2}; # XXX how to determine non-TUI MUAs?
 	$self->{opt}->{quiet} = 1;
 	delete $self->{-progress};

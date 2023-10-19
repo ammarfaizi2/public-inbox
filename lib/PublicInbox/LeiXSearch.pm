@@ -122,26 +122,16 @@ sub _mset_more ($$) {
 	$size >= $mo->{limit} && (($mo->{offset} += $size) < $mo->{total});
 }
 
-# $startq will EOF when do_augment is done augmenting and allow
+# $startq will see `q' in do_post_augment -> start_mua if spawning MUA.
+# Otherwise $startq will EOF when do_augment is done augmenting and allow
 # query_combined_mset and query_thread_mset to proceed.
 sub wait_startq ($) {
 	my ($lei) = @_;
-	my $startq = delete $lei->{startq} or return;
-	while (1) {
-		my $n = sysread($startq, my $do_augment_done, 1);
-		if (defined $n) {
-			return if $n == 0; # no MUA
-			if ($do_augment_done eq 'q') {
-				$lei->{opt}->{quiet} = 1;
-				delete $lei->{opt}->{verbose};
-				delete $lei->{-progress};
-			} else {
-				die "BUG: do_augment_done=`$do_augment_done'";
-			}
-			return;
-		}
-		die "wait_startq: $!" unless $!{EINTR};
-	}
+	read(delete($lei->{startq}) // return, my $buf, 1) or return; # EOF
+	die "BUG: wrote `$buf' to au_done" if $buf ne 'q';
+	$lei->{opt}->{quiet} = 1;
+	delete $lei->{opt}->{verbose};
+	delete $lei->{-progress};
 }
 
 sub mset_progress {
@@ -451,10 +441,10 @@ sub do_post_augment {
 		$lei->fail("$err");
 	}
 	if (!$err && delete $lei->{early_mua}) { # non-augment case
-		eval { $lei->start_mua };
+		eval { $lei->start_mua }; # may trigger wait_startq
 		$lei->fail($@) if $@;
 	}
-	close(delete $lei->{au_done}); # triggers wait_startq in lei_xsearch
+	close(delete $lei->{au_done}); # trigger wait_startq if start_mua didn't
 }
 
 sub incr_post_augment { # called whenever an l2m shard finishes augment
