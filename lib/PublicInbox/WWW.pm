@@ -14,6 +14,7 @@ package PublicInbox::WWW;
 use strict;
 use v5.10.1;
 use PublicInbox::Config;
+use PublicInbox::Git;
 use PublicInbox::Hval;
 use URI::Escape qw(uri_unescape);
 use PublicInbox::MID qw(mid_escape);
@@ -587,7 +588,7 @@ sub stylesheets_prepare ($$) {
 				next;
 			};
 			my $ctime = 0;
-			my $local = read_all($fh, -s $fh);
+			my $local = PublicInbox::Git::read_all($fh, -s $fh);
 			if ($local =~ /\S/) {
 				$ctime = sprintf('%x',(stat(_))[10]);
 				$local = $mini->($local);
