@@ -17,7 +17,7 @@ use autodie qw(open getsockopt);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 my $X = \%PublicInbox::Search::X;
-our (%SRCH, %WORKERS, $alive, $nworker, $workerset, $in);
+our (%SRCH, %WORKERS, $nworker, $workerset, $in);
 our $stderr = \*STDERR;
 
 # only short options for portability in C++ implementation
@@ -179,7 +179,11 @@ sub recv_loop {
 	local $SIG{TERM} = sub { undef $in };
 	while (defined($in)) {
 		PublicInbox::DS::sig_setmask($workerset);
-		my @fds = $PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33);
+		my @fds = do { # we undef $in in SIG{TERM}
+			no strict 'refs';
+			no warnings 'uninitialized';
+			$PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33)
+		};
 		scalar(@fds) or exit(66); # EX_NOINPUT
 		die "recvmsg: $!" if !defined($fds[0]);
 		PublicInbox::DS::block_signals();
@@ -201,11 +205,11 @@ sub reap_worker { # awaitpid CB
 	my ($pid, $nr) = @_;
 	delete $WORKERS{$nr};
 	if (($? >> 8) == 66) { # EX_NOINPUT
-		$alive = undef;
+		undef $in;
 	} elsif ($?) {
 		warn "worker[$nr] died \$?=$?\n";
 	}
-	PublicInbox::DS::requeue(\&start_workers) if $alive;
+	PublicInbox::DS::requeue(\&start_workers) if $in;
 }
 
 sub start_worker ($) {
@@ -230,27 +234,26 @@ sub start_worker ($) {
 
 sub start_workers {
 	for my $nr (grep { !defined($WORKERS{$_}) } (0..($nworker - 1))) {
-		start_worker($nr) if $alive;
+		start_worker($nr) if $in;
 	}
 }
 
 sub do_sigttou {
-	if ($alive && $nworker > 1) {
+	if ($in && $nworker > 1) {
 		--$nworker;
 		my @nr = grep { $_ >= $nworker } keys %WORKERS;
 		kill('TERM', @WORKERS{@nr});
 	}
 }
 
-sub xh_alive { $alive || scalar(keys %WORKERS) }
+sub xh_alive { $in || scalar(keys %WORKERS) }
 
 sub start (@) {
 	my (@argv) = @_;
-	my $c = getsockopt($in = \*STDIN, SOL_SOCKET, SO_TYPE);
+	my $c = getsockopt(local $in = \*STDIN, SOL_SOCKET, SO_TYPE);
 	unpack('i', $c) == SOCK_SEQPACKET or die 'stdin is not SOCK_SEQPACKET';
 
 	local (%SRCH, %WORKERS);
-	local $alive = 1;
 	PublicInbox::Search::load_xapian();
 	$GLP->getoptionsfromarray(\@argv, my $opt = { j => 1 }, 'j=i') or
 		die 'bad args';
@@ -268,7 +271,7 @@ sub start (@) {
 	}
 	my $sig = {
 		TTIN => sub {
-			if ($alive) {
+			if ($in) {
 				++$nworker;
 				PublicInbox::DS::requeue(\&start_workers)
 			}
