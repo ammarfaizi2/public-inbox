@@ -217,6 +217,7 @@ SKIP: {
 }
 
 {
+	local $ENV{PI_DIR} = "$tmpdir/.public-inbox/";
 	my $cmd = [ qw(-init -C), "$tmpdir", qw(chdirlist chdirlist),
 		   qw(http://example.com/chdirlist chdirlist@example.com)];
 	ok(run_script($cmd), '-init with -C (chdir)');
