@@ -198,4 +198,25 @@ SKIP: {
 	ok(run_script([qw(-xcpdb --compact), "$tmp/ext"]), 'xcpdb compact');
 };
 
+my $basic = create_inbox 'basic', indexlevel => 'basic', sub {
+	my ($im, $ibx) = @_;
+	$im->add(eml_load('t/plack-qp.eml'));
+};
+{
+	my $env = { PI_CONFIG => "$tmp/pi_config" };
+	open my $fh, '>', $env->{PI_CONFIG};
+	print $fh <<EOM;
+[publicinbox "basictest"]
+	inboxdir = $basic->{inboxdir}
+	address = basic\@example.com
+EOM
+	close $fh;
+	my $cmd = [ qw(-cindex -u --all --associate -d), "$tmp/ext",
+		'-I', $basic->{inboxdir} ];
+	my $opt = { 1 => \(my $cidx_out), 2 => \(my $cidx_err) };
+	ok(run_script($cmd, $env, $opt), 'associate w/o search');
+	like($cidx_err, qr/W: \Q$basic->{inboxdir}\E not indexed for search/,
+		'non-Xapian-enabled inbox noted');
+}
+
 done_testing;

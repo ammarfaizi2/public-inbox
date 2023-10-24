@@ -551,12 +551,14 @@ sub dump_roots_start {
 sub dump_ibx { # sends to xap_helper.h
 	my ($self, $ibx_id) = @_;
 	my $ibx = $IBX[$ibx_id] // die "BUG: no IBX[$ibx_id]";
-	my @cmd = ('dump_ibx', $ibx->isrch->xh_args,
-			(map { ('-A', $_) } @ASSOC_PFX),
-			$ibx_id, $QRY_STR);
+	my $ekey = $ibx->eidx_key;
+	my $srch = $ibx->isrch or return warn <<EOM;
+W: $ekey not indexed for search
+EOM
+	my @cmd = ('dump_ibx', $srch->xh_args,
+			(map { ('-A', $_) } @ASSOC_PFX), $ibx_id, $QRY_STR);
 	pipe(my $r, my $w);
 	$XHC->mkreq([$DUMP_IBX_WPIPE, $w], @cmd);
-	my $ekey = $ibx->eidx_key;
 	$self->{PENDING}->{$ekey} = $TODO{associate};
 	PublicInbox::CidxXapHelperAux->new($r, $self, $ekey);
 }
