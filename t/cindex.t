@@ -5,6 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use Cwd qw(getcwd abs_path);
 use List::Util qw(sum);
+use autodie qw(close open rename);
 require_mods(qw(json Xapian));
 use_ok 'PublicInbox::CodeSearchIdx';
 require PublicInbox::Import;
@@ -51,17 +52,17 @@ my $zp = create_coderepo 'NUL in patch', sub {
 	$src =~ s/\b(Limitation of Liability\.)\n\n/$1\n\0\n/s or
 		xbail "BUG: no `\\n\\n' in $pwd/COPYING";
 
-	open my $fh, '>', 'f' or xbail "open: $!";
+	open my $fh, '>', 'f';
 	print $fh $src or xbail "print: $!";
-	close $fh or xbail "close: $!";
+	close $fh;
 	xsys_e([qw(/bin/sh -c), <<'EOM']);
 git add f &&
 git commit -q -m 'initial with NUL character'
 EOM
 	$src =~ s/\n\0\n/\n\n/ or xbail "BUG: no `\\n\\0\\n'";
-	open $fh, '>', 'f' or xbail "open: $!";
+	open $fh, '>', 'f';
 	print $fh $src or xbail "print: $!";
-	close $fh or xbail "close: $!";
+	close $fh;
 	xsys_e([qw(/bin/sh -c), <<'EOM']);
 git add f &&
 git commit -q -m 'remove NUL character' &&
@@ -164,12 +165,12 @@ SKIP: { # --prune
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	is(scalar($csrch->mset('s:hi')->items), 1, 'got hit');
 
-	rename("$tmp/wt0/.git", "$tmp/wt0/.giit") or xbail "rename $!";
+	rename("$tmp/wt0/.git", "$tmp/wt0/.giit");
 	ok(run_script([qw(-cindex -q --prune -d), "$tmp/ext"]), 'prune');
 	$csrch->reopen;
 	is(scalar($csrch->mset('s:hi')->items), 0, 'hit pruned');
 
-	rename("$tmp/wt0/.giit", "$tmp/wt0/.git") or xbail "rename $!";
+	rename("$tmp/wt0/.giit", "$tmp/wt0/.git");
 	ok(run_script([qw(-cindex -qu -d), "$tmp/ext"]), 'update');
 	$csrch->reopen;
 	is(scalar($csrch->mset('s:hi')->items), 0,
