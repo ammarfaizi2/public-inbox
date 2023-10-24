@@ -930,9 +930,8 @@ sub init_associate_postfork ($) {
 	require_progs('associate', join => \@JOIN);
 	$QRY_STR = $self->{-opt}->{'associate-date-range'} // '1.year.ago..';
 	substr($QRY_STR, 0, 0) = 'dt:';
-	scalar(@{$self->{git_dirs} //  []}) or die <<EOM;
-E: no coderepos to associate
-EOM
+	@{$self->{git_dirs} // []} or die "E: no coderepos to associate\n";
+	@IBX or die "E: no inboxes to associate\n";
 	my $approx_git = PublicInbox::Git->new($self->{git_dirs}->[0]); # ugh
 	$self->query_approxidate($approx_git, $QRY_STR); # in-place
 	$TODO{associate} = PublicInbox::OnDestroy->new($$, \&associate, $self);
