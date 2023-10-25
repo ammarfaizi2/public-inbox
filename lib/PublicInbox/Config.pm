@@ -124,9 +124,9 @@ sub lookup_newsgroup {
 sub limiter {
 	my ($self, $name) = @_;
 	$self->{-limiters}->{$name} //= do {
-		require PublicInbox::Qspawn;
+		require PublicInbox::Limiter;
 		my $max = $self->{"publicinboxlimiter.$name.max"} || 1;
-		my $limiter = PublicInbox::Qspawn::Limiter->new($max);
+		my $limiter = PublicInbox::Limiter->new($max);
 		$limiter->setup_rlimit($name, $self);
 		$limiter;
 	};

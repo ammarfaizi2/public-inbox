@@ -9,13 +9,14 @@ use v5.10.1;
 use Fcntl qw(:seek);
 use IO::Handle; # ->flush
 use HTTP::Date qw(time2str);
+use PublicInbox::Limiter;
 use PublicInbox::Qspawn;
 use PublicInbox::Tmpfile;
 use PublicInbox::WwwStatic qw(r @NO_CACHE);
 use Carp ();
 
 # 32 is same as the git-daemon connection limit
-my $default_limiter = PublicInbox::Qspawn::Limiter->new(32);
+my $default_limiter = PublicInbox::Limiter->new(32);
 
 # n.b. serving "description" and "cloneurl" should be innocuous enough to
 # not cause problems.  serving "config" might...

@@ -3,6 +3,7 @@
 use v5.12;
 use Test::More;
 use_ok 'PublicInbox::Qspawn';
+use_ok 'PublicInbox::Limiter';
 
 {
 	my $cmd = [qw(sh -c), 'echo >&2 err; echo out'];
@@ -23,7 +24,7 @@ sub finish_err ($) {
 	$qsp->{qsp_err} && ${$qsp->{qsp_err}};
 }
 
-my $limiter = PublicInbox::Qspawn::Limiter->new(1);
+my $limiter = PublicInbox::Limiter->new(1);
 {
 	my $x = PublicInbox::Qspawn->new([qw(true)]);
 	$x->{qsp_err} = \(my $err = '');

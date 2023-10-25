@@ -29,6 +29,7 @@ use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::GzipFilter;
 use Scalar::Util qw(blessed);
+use PublicInbox::Limiter;
 
 # n.b.: we get EAGAIN with public-inbox-httpd, and EINTR on other PSGI servers
 use Errno qw(EAGAIN EINTR);
@@ -183,7 +184,7 @@ sub psgi_qx {
 	$self->{qx_arg} = $qx_arg;
 	$self->{qx_fh} = $qx_fh;
 	$self->{qx_buf} = \$qx_buf;
-	$limiter ||= $def_limiter ||= PublicInbox::Qspawn::Limiter->new(32);
+	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
 	start($self, $limiter, \&psgi_qx_start);
 }
 
@@ -317,7 +318,7 @@ sub psgi_return {
 	$self->{psgi_env} = $env;
 	$self->{hdr_buf} = \(my $hdr_buf = '');
 	$self->{parse_hdr} = [ $parse_hdr, $hdr_arg ];
-	$limiter ||= $def_limiter ||= PublicInbox::Qspawn::Limiter->new(32);
+	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
 
 	# the caller already captured the PSGI write callback from
 	# the PSGI server, so we can call ->start, here:
@@ -331,48 +332,6 @@ sub psgi_return {
 	sub {
 		$env->{'qspawn.wcb'} = $_[0];
 		start($self, $limiter, \&psgi_return_start);
-	}
-}
-
-package PublicInbox::Qspawn::Limiter;
-use v5.12;
-
-sub new {
-	my ($class, $max) = @_;
-	bless {
-		# 32 is same as the git-daemon connection limit
-		max => $max || 32,
-		running => 0,
-		run_queue => [],
-		# RLIMIT_CPU => undef,
-		# RLIMIT_DATA => undef,
-		# RLIMIT_CORE => undef,
-	}, $class;
-}
-
-sub setup_rlimit {
-	my ($self, $name, $cfg) = @_;
-	foreach my $rlim (@PublicInbox::Spawn::RLIMITS) {
-		my $k = lc($rlim);
-		$k =~ tr/_//d;
-		$k = "publicinboxlimiter.$name.$k";
-		defined(my $v = $cfg->{$k}) or next;
-		my @rlimit = split(/\s*,\s*/, $v);
-		if (scalar(@rlimit) == 1) {
-			push @rlimit, $rlimit[0];
-		} elsif (scalar(@rlimit) != 2) {
-			warn "could not parse $k: $v\n";
-		}
-		eval { require BSD::Resource };
-		if ($@) {
-			warn "BSD::Resource missing for $rlim";
-			next;
-		}
-		foreach my $i (0..$#rlimit) {
-			next if $rlimit[$i] ne 'INFINITY';
-			$rlimit[$i] = BSD::Resource::RLIM_INFINITY();
-		}
-		$self->{$rlim} = \@rlimit;
 	}
 }
 

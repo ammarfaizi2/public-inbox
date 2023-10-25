@@ -55,8 +55,8 @@ sub _set_limiter ($$$) {
 		my $val = $self->{$mkey} or return;
 		my $lim;
 		if ($val =~ /\A[0-9]+\z/) {
-			require PublicInbox::Qspawn;
-			$lim = PublicInbox::Qspawn::Limiter->new($val);
+			require PublicInbox::Limiter;
+			$lim = PublicInbox::Limiter->new($val);
 		} elsif ($val =~ /\A[a-z][a-z0-9]*\z/) {
 			$lim = $pi_cfg->limiter($val);
 			warn "$mkey limiter=$val not found\n" if !$lim;

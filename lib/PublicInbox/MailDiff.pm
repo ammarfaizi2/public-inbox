@@ -8,6 +8,7 @@ use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff qw(flush_diff);
 use PublicInbox::GitAsyncCat;
 use PublicInbox::ContentDigestDbg;
+use PublicInbox::Qspawn;
 
 sub write_part { # Eml->each_part callback
 	my ($ary, $self) = @_;
