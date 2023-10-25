@@ -48,6 +48,4 @@ is_deeply([map{ $_->fullname }@events], ["$tmpdir/new/tst"], 'unlink detected') 
 	diag explain(\@events);
 ok($events[0]->IN_DELETE, 'IN_DELETE set on unlink');
 
-PublicInbox::DS->Reset;
-
 done_testing;

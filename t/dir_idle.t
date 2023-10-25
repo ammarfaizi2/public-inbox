@@ -41,5 +41,4 @@ is(scalar(@x), 1, 'got an event') and
 	ok($x[0]->[0]->IN_DELETE_SELF || $x[0]->[0]->IN_MOVE_SELF,
 		'IN_DELETE_SELF set on move');
 
-PublicInbox::DS->Reset;
 done_testing;

@@ -14,6 +14,7 @@ use v5.12;
 use IO::Handle; # ->autoflush
 use PublicInbox::TestCommon;
 use PublicInbox::Spawn;
+use PublicInbox::DS; # already loaded by Spawn via ProcessIO
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use Errno qw(EINTR);
 use Fcntl qw(:seek);
@@ -187,6 +188,7 @@ my $start_worker = sub {
 			DIE "short read $r" if $r != UINT_SIZE;
 			my $t = unpack('I', $buf);
 			run_test($todo->[$t]);
+			PublicInbox::DS->Reset;
 			$tb->reset;
 		}
 		kill 'USR1', $producer if !$eof; # sets $eof in $producer
