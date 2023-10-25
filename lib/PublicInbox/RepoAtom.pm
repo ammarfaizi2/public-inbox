@@ -100,7 +100,7 @@ sub srv_tags_atom {
 	$ctx->{-feed_title} = "$ctx->{git}->{nick} tags";
 	my $qsp = PublicInbox::Qspawn->new(\@cmd);
 	$ctx->{-is_tag} = 1;
-	$qsp->psgi_return($ctx->{env}, undef, \&atom_ok, $ctx);
+	$qsp->psgi_yield($ctx->{env}, undef, \&atom_ok, $ctx);
 }
 
 sub srv_atom {
@@ -122,7 +122,7 @@ sub srv_atom {
 	push @cmd, $path if $path ne '';
 	my $qsp = PublicInbox::Qspawn->new(\@cmd, undef,
 					{ quiet => 1, 2 => $ctx->{lh} });
-	$qsp->psgi_return($ctx->{env}, undef, \&atom_ok, $ctx);
+	$qsp->psgi_yield($ctx->{env}, undef, \&atom_ok, $ctx);
 }
 
 1;
