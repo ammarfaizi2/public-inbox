@@ -47,28 +47,27 @@ my $def_limiter;
 # {qsp_err} is an optional error buffer callers may access themselves
 sub new {
 	my ($class, $cmd, $cmd_env, $opt) = @_;
-	bless { args => [ $cmd, $cmd_env, $opt ] }, $class;
+	bless { args => [ $cmd, $cmd_env, $opt ? { %$opt } : {} ] }, $class;
 }
 
 sub _do_spawn {
 	my ($self, $start_cb, $limiter) = @_;
-	my ($cmd, $cmd_env, $opt) = @{delete $self->{args}};
+	my ($cmd, $cmd_env, $opt) = @{$self->{args}};
 	my %o = %{$opt || {}};
 	$self->{limiter} = $limiter;
 	for my $k (@PublicInbox::Spawn::RLIMITS) {
-		$o{$k} = $limiter->{$k} // next;
+		$opt->{$k} = $limiter->{$k} // next;
 	}
-	$self->{cmd} = $cmd;
 	$self->{-quiet} = 1 if $o{quiet};
 	$limiter->{running}++;
 	if ($start_cb) {
 		eval { # popen_rd may die on EMFILE, ENFILE
-			$self->{rpipe} = popen_rd($cmd, $cmd_env, \%o,
-						\&waitpid_err, $self, \%o);
+			$self->{rpipe} = popen_rd($cmd, $cmd_env, $opt,
+							\&waitpid_err, $self);
 			$start_cb->($self); # EPOLL_CTL_ADD may ENOSPC/ENOMEM
 		};
 	} else {
-		eval { run_await($cmd, $cmd_env, \%o, \&wait_await, $self) };
+		eval { run_await($cmd, $cmd_env, $opt, \&wait_await, $self) };
 		warn "E: $@" if $@;
 	}
 	finish($self, $@) if $@;
@@ -79,8 +78,8 @@ sub psgi_status_err { # Qspawn itself is useful w/o PSGI
 	PublicInbox::WwwStatic::r($_[0] // 500);
 }
 
-sub finalize ($;$) {
-	my ($self, $opt) = @_;
+sub finalize ($) {
+	my ($self) = @_;
 
 	# process is done, spawn whatever's in the queue
 	my $limiter = delete $self->{limiter} or return;
@@ -96,13 +95,13 @@ sub finalize ($;$) {
 		if (my $dst = $self->{qsp_err}) {
 			$$dst .= $$dst ? " $err" : "; $err";
 		}
-		warn "@{$self->{cmd}}: $err\n" if !$self->{-quiet};
+		warn "E: @{$self->{args}->[0]}: $err\n" if !$self->{-quiet};
 	}
 
 	my ($env, $qx_cb_arg) = delete @$self{qw(psgi_env qx_cb_arg)};
 	if ($qx_cb_arg) {
 		my $cb = shift @$qx_cb_arg;
-		eval { $cb->($opt->{1}, @$qx_cb_arg) };
+		eval { $cb->($self->{args}->[2]->{1}, @$qx_cb_arg) };
 		return unless $@;
 		warn "E: $@"; # hope qspawn.wcb can handle it
 	}
@@ -113,23 +112,21 @@ sub finalize ($;$) {
 	}
 }
 
-sub DESTROY { finalize($_[0]) } # ->finalize is idempotent
-
 sub waitpid_err { # callback for awaitpid
-	my (undef, $self, $opt) = @_; # $_[0]: pid
+	my (undef, $self) = @_; # $_[0]: pid
 	$self->{_err} = ''; # for defined check in ->finish
-	if ($?) { # FIXME: redundant
+	if ($?) { # XXX this may be redundant
 		my $status = $? >> 8;
 		my $sig = $? & 127;
 		$self->{_err} .= "exit status=$status";
 		$self->{_err} .= " signal=$sig" if $sig;
 	}
-	finalize($self, $opt) if !$self->{rpipe};
+	finalize($self) if !$self->{rpipe};
 }
 
 sub wait_await { # run_await cb
 	my ($pid, $cmd, $cmd_env, $opt, $self) = @_;
-	waitpid_err($pid, $self, $opt);
+	waitpid_err($pid, $self);
 }
 
 sub yield_chunk { # $_[-1] is sysread buffer (or undef)
@@ -214,26 +211,24 @@ sub yield_pass {
 
 sub parse_hdr_done ($$) {
 	my ($self) = @_;
-	my $ret;
+	my ($ret, $err);
 	if (defined $_[-1]) {
 		my ($bref, $ph_cb, @ph_arg) = @{$self->{yield_parse_hdr}};
 		$$bref .= $_[-1];
 		$ret = eval { $ph_cb->(length($_[-1]), $bref, @ph_arg) };
-		if ($@) {
-			carp "parse_hdr (@{$self->{cmd}}): $@\n";
+		if (($err = $@)) {
 			$ret = psgi_status_err();
 		} elsif (!$ret && $_[-1] eq '') {
-			carp <<EOM;
-EOF parsing headers from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
-EOM
+			$err = 'EOF';
 			$ret = psgi_status_err();
 		}
 	} else {
-		carp <<EOM;
-E: parsing headers: $! from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
-EOM
+		$err = "$!";
 		$ret = psgi_status_err();
 	}
+	carp <<EOM if $err;
+E: $err @{$self->{args}->[0]} ($self->{psgi_env}->{REQUEST_URI})
+EOM
 	$ret; # undef if headers incomplete
 }
 
@@ -300,5 +295,8 @@ sub psgi_yield {
 		start($self, $limiter, \&_yield_start);
 	}
 }
+
+no warnings 'once';
+*DESTROY = \&finalize; # ->finalize is idempotent
 
 1;
