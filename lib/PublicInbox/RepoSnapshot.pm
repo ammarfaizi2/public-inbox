@@ -58,7 +58,7 @@ sub ver_check { # git->check_async callback
 				"--git-dir=$ctx->{git}->{git_dir}", 'archive',
 				"--prefix=$ctx->{snap_pfx}/",
 				"--format=$ctx->{snap_fmt}", $treeish]);
-		$qsp->psgi_return($ctx->{env}, undef, \&archive_hdr, $ctx);
+		$qsp->psgi_yield($ctx->{env}, undef, \&archive_hdr, $ctx);
 	}
 }
 
