@@ -178,9 +178,8 @@ EOM
 }
 
 sub capture { # psgi_qx callback to capture git-for-each-ref
-	my ($bref, $arg) = @_; # arg = [ctx, key, OnDestroy(summary_END)]
-	utf8_maybe($$bref);
-	$arg->[0]->{qx_res}->{$arg->[1]} = $$bref;
+	my ($bref, $ctx, $key) = @_; #  $_[3] = OnDestroy(summary_END)
+	$ctx->{qx_res}->{$key} = $$bref;
 	# summary_END may be called via OnDestroy $arg->[2]
 }
 
@@ -220,8 +219,7 @@ sub summary ($$) {
 		my ($k, $cmd) = @$_;
 		my $qsp = PublicInbox::Qspawn->new($cmd, \%env, \%opt);
 		$qsp->{qsp_err} = $qsp_err;
-		$qsp->psgi_qx($ctx->{env}, undef, \&capture,
-				[$ctx, $k, $END]);
+		$qsp->psgi_qx($ctx->{env}, undef, \&capture, $ctx, $k, $END);
 	}
 	$tip //= 'HEAD';
 	my @try = ("$tip:README", "$tip:README.md"); # TODO: configurable
