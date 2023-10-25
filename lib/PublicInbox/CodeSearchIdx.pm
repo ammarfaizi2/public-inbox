@@ -266,9 +266,9 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
 	sysseek($in, 0, SEEK_SET);
-	my ($rd, $pid) = $git->popen(@LOG_STDIN, undef, { 0 => $in });
+	my $rd = popen_rd($git->cmd(@LOG_STDIN), undef, { 0 => $in },
+				\&cidx_reap_log, $self, $op_p);
 	close $in;
-	awaitpid($pid, \&cidx_reap_log, $self, $op_p);
 	PublicInbox::CidxLogP->new($rd, $self, $git, $roots);
 	# CidxLogP->event_step will call cidx_read_log_p once there's input
 }
