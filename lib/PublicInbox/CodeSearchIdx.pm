@@ -57,7 +57,7 @@ use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
 use PublicInbox::Aspawn qw(run_await);
 use Carp ();
-use autodie qw(pipe open seek sysseek send);
+use autodie qw(pipe open sysread seek sysseek send);
 our $DO_QUIT = 15; # signal number
 our (
 	$LIVE_JOBS, # integer
@@ -385,10 +385,10 @@ sub fp_start ($$$) {
 sub fp_fini { # run_git cb
 	my (undef, $self, $git, $prep_repo) = @_;
 	my $refs = $git->{-repo}->{refs} // die 'BUG: no {-repo}->{refs}';
-	seek($refs, 0, SEEK_SET);
+	sysseek($refs, 0, SEEK_SET);
 	my $buf;
 	my $dig = PublicInbox::SHA->new(256);
-	while (read($refs, $buf, 65536)) { $dig->add($buf) }
+	while (sysread($refs, $buf, 65536)) { $dig->add($buf) }
 	$git->{-repo}->{fp} = $dig->hexdigest;
 }
 
