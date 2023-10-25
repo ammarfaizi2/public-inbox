@@ -174,16 +174,13 @@ sub rd_hdr ($) {
 	my ($self) = @_;
 	# typically used for reading CGI headers
 	# We also need to check EINTR for generic PSGI servers.
-	my $ret;
-	my $total_rd = 0;
-	my $hdr_buf = $self->{hdr_buf};
-	my ($ph_cb, $ph_arg) = @{$self->{parse_hdr}};
+	my ($ret, $total_rd);
+	my ($bref, $ph_cb, @ph_arg) = ($self->{hdr_buf}, @{$self->{parse_hdr}});
 	until (defined($ret)) {
-		my $r = sysread($self->{rpipe}, $$hdr_buf, 4096,
-				length($$hdr_buf));
+		my $r = sysread($self->{rpipe}, $$bref, 4096, length($$bref));
 		if (defined($r)) {
 			$total_rd += $r;
-			eval { $ret = $ph_cb->($total_rd, $hdr_buf, $ph_arg) };
+			eval { $ret = $ph_cb->($total_rd, $bref, @ph_arg) };
 			if ($@) {
 				warn "parse_hdr: $@";
 				$ret = [ 500, [], [ "Internal error\n" ] ];
@@ -207,7 +204,7 @@ EOM
 
 sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
 	my ($self) = @_;
-	my $r = rd_hdr($self) or return;
+	my $r = rd_hdr($self) or return; # incomplete
 	my $env = $self->{psgi_env};
 	my $filter;
 
@@ -277,7 +274,7 @@ sub psgi_return_start { # may run later, much later...
 #
 # $limiter - the Limiter object to use (uses the def_limiter if not given)
 #
-# $parse_hdr - Initial read function; often for parsing CGI header output.
+# @parse_hdr_arg - Initial read cb+args; often for parsing CGI header output.
 #              It will be given the return value of sysread from the pipe
 #              and a string ref of the current buffer.  Returns an arrayref
 #              for PSGI responses.  2-element arrays in PSGI mean the
@@ -285,10 +282,10 @@ sub psgi_return_start { # may run later, much later...
 #              psgix.io.  3-element arrays means the body is available
 #              immediately (or streamed via ->getline (pull-based)).
 sub psgi_return {
-	my ($self, $env, $limiter, $parse_hdr, $hdr_arg) = @_;
+	my ($self, $env, $limiter, @parse_hdr_arg)= @_;
 	$self->{psgi_env} = $env;
 	$self->{hdr_buf} = \(my $hdr_buf = '');
-	$self->{parse_hdr} = [ $parse_hdr, $hdr_arg ];
+	$self->{parse_hdr} = \@parse_hdr_arg;
 	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
 
 	# the caller already captured the PSGI write callback from
