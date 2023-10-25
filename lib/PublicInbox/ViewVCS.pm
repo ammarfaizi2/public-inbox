@@ -101,9 +101,8 @@ sub stream_large_blob ($$) {
 	my ($git, $oid, $type, $size, $di) = @$res;
 	my $cmd = ['git', "--git-dir=$git->{git_dir}", 'cat-file', $type, $oid];
 	my $qsp = PublicInbox::Qspawn->new($cmd);
-	my $env = $ctx->{env};
-	$env->{'qspawn.wcb'} = $ctx->{-wcb};
-	$qsp->psgi_return($env, undef, \&stream_blob_parse_hdr, $ctx);
+	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
+	$qsp->psgi_yield($ctx->{env}, undef, \&stream_blob_parse_hdr, $ctx);
 }
 
 sub show_other_result ($$) { # future-proofing
@@ -341,7 +340,7 @@ sub show_patch ($$) {
 	my $qsp = PublicInbox::Qspawn->new(\@cmd);
 	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
 	$ctx->{patch_oid} = $oid;
-	$qsp->psgi_return($ctx->{env}, undef, \&stream_patch_parse_hdr, $ctx);
+	$qsp->psgi_yield($ctx->{env}, undef, \&stream_patch_parse_hdr, $ctx);
 }
 
 sub show_commit ($$) {
