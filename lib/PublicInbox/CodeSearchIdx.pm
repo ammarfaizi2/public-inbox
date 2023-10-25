@@ -55,6 +55,7 @@ use PublicInbox::CidxLogP;
 use PublicInbox::CidxComm;
 use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
+use PublicInbox::Aspawn qw(run_await);
 use Carp ();
 use autodie qw(pipe open seek sysseek send);
 our (
@@ -526,16 +527,15 @@ sub dump_roots_start {
 	for (@ID2ROOT) { print $fh $_, "\0", ++$nr, "\0" } # mmap-friendly
 	close $fh;
 	# dump_roots | sort -k1,1 | OFS=' ' uniq_fold >to_root_id
-	pipe(my $sort_r, my $sort_w);
-	pipe(my $fold_r, my $fold_w);
+	my ($sort_opt, $fold_opt);
+	pipe($sort_opt->{0}, my $sort_w);
+	pipe($fold_opt->{0}, $sort_opt->{1});
 	my @sort = (@SORT, '-k1,1');
 	my $dst = "$TMPDIR/to_root_id";
-	open $fh, '>', $dst;
-	my $env = { %$CMD_ENV, OFS => ' ' };
-	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fold_w });
-	my $fold_pid = spawn(\@UNIQ_FOLD, $env, { 0 => $fold_r, 1 => $fh });
-	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
-	awaitpid($fold_pid, \&cmd_done, [@UNIQ_FOLD, '(shards)'], $associate);
+	open $fold_opt->{1}, '>', $dst;
+	my $fold_env = { %$CMD_ENV, OFS => ' ' };
+	run_await(\@sort, $CMD_ENV, $sort_opt, \&cmd_done, $associate);
+	run_await(\@UNIQ_FOLD, $fold_env, $fold_opt, \&cmd_done, $associate);
 	my @arg = ((map { ('-A', $_) } @ASSOC_PFX), '-c',
 		'-m', assoc_max_init($self), $root2id, $QRY_STR);
 	for my $d ($self->shard_dirs) {
@@ -565,16 +565,14 @@ EOM
 
 sub dump_ibx_start {
 	my ($self, $associate) = @_;
-	pipe(my $sort_r, $DUMP_IBX_WPIPE);
-	pipe(my $fold_r, my $fold_w);
+	my ($sort_opt, $fold_opt);
+	pipe($sort_opt->{0}, $DUMP_IBX_WPIPE);
+	pipe($fold_opt->{0}, $sort_opt->{1});
 	my @sort = (@SORT, '-k1,1'); # sort only on ASSOC_PFX
 	# pipeline: dump_ibx | sort -k1,1 | uniq_fold >to_ibx_id
-	my $dst = "$TMPDIR/to_ibx_id";
-	open my $fh, '>', $dst;
-	my $sort_pid = spawn(\@sort, $CMD_ENV, { 0 => $sort_r, 1 => $fold_w });
-	my $fold_pid = spawn(\@UNIQ_FOLD, $CMD_ENV, { 0 => $fold_r, 1 => $fh });
-	awaitpid($sort_pid, \&cmd_done, \@sort, $associate);
-	awaitpid($fold_pid, \&cmd_done, [@UNIQ_FOLD, '(ibx)'], $associate);
+	open $fold_opt->{1}, '>', "$TMPDIR/to_ibx_id";
+	run_await(\@sort, $CMD_ENV, $sort_opt, \&cmd_done, $associate);
+	run_await(\@UNIQ_FOLD, $CMD_ENV, $fold_opt, \&cmd_done, $associate);
 }
 
 sub index_next ($) {
@@ -872,8 +870,8 @@ sub prep_alternate_start {
 	awaitpid($pid, \&prep_alternate_end, $o, $out, $run_prune);
 }
 
-sub cmd_done { # awaitpid cb for sort, xapian-delve, sed failures
-	my ($pid, $cmd, $run_on_destroy) = @_;
+sub cmd_done { # run_await cb for sort, xapian-delve, sed failures
+	my ($pid, $cmd, undef, undef, $run_on_destroy) = @_;
 	$? and die "@$cmd failed: \$?=$?";
 	# $run_on_destroy calls associate() or run_prune()
 }
@@ -962,32 +960,28 @@ sub init_prune ($) {
 			comm => \@COMM, awk => \@AWK);
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
 	my $run_prune = PublicInbox::OnDestroy->new($$, \&run_prune, $self);
-	pipe(my $sed_in, my $delve_out);
-	pipe(my $sort_in, my $sed_out);
-	my @sort_u = (@SORT, '-u');
-	open(my $sort_out, '+>', "$TMPDIR/indexed_commits");
-	my $pid = spawn(\@sort_u, $CMD_ENV, { 0 => $sort_in, 1 => $sort_out });
-	awaitpid($pid, \&cmd_done, \@sort_u, $run_prune);
-	$pid = spawn(\@sed, $CMD_ENV, { 0 => $sed_in, 1 => $sed_out });
-	awaitpid($pid, \&cmd_done, \@sed, $run_prune);
-	$pid = spawn(\@delve, undef, { 1 => $delve_out });
-	awaitpid($pid, \&cmd_done, \@delve, $run_prune);
+	my ($sort_opt, $sed_opt, $delve_opt);
+	pipe($sed_opt->{0}, $delve_opt->{1});
+	pipe($sort_opt->{0}, $sed_opt->{1});
+	open($sort_opt->{1}, '+>', "$TMPDIR/indexed_commits");
+	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done, $run_prune);
+	run_await(\@sed, $CMD_ENV, $sed_opt, \&cmd_done, $run_prune);
+	run_await(\@delve, undef, $delve_opt, \&cmd_done, $run_prune);
 	@PRUNE_QUEUE = @{$self->{git_dirs}};
 	for (1..$LIVE_JOBS) {
 		prep_alternate_start(shift(@PRUNE_QUEUE) // last, $run_prune);
 	}
 }
 
-sub dump_git_commits { # awaitpid cb
-	my ($pid, $batch_out) = @_;
+sub dump_git_commits { # run_await cb
+	my ($pid, undef, undef, $batch_opt) = @_;
 	(defined($pid) && $?) and die "E: @PRUNE_BATCH: \$?=$?";
 	return if $DO_QUIT;
 	my ($hexlen) = keys(%ALT_FH) or return; # done
 	close(delete $ALT_FH{$hexlen});
 
 	$PRUNE_BATCH[1] = "--git-dir=$TMPDIR/hexlen$hexlen.git";
-	$pid = spawn(\@PRUNE_BATCH, undef, { 1 => $batch_out });
-	awaitpid($pid, \&dump_git_commits, $batch_out);
+	run_await(\@PRUNE_BATCH, undef, $batch_opt, \&dump_git_commits);
 }
 
 sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
@@ -999,18 +993,14 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	#	git --git-dir=hexlen64.git cat-file \
 	#		--batch-all-objects --batch-check
 	# ) | awk | sort | comm | cidx_read_comm()
-	pipe(my $awk_in, my $batch_out);
-	pipe(my $sort_in, my $awk_out);
-	pipe(my $comm_in, my $sort_out);
-	my $awk_pid = spawn(\@AWK, $CMD_ENV, { 0 => $awk_in, 1 => $awk_out });
-	my @sort_u = (@SORT, '-u');
-	my $sort_pid = spawn(\@sort_u, $CMD_ENV,
-				{ 0 => $sort_in, 1 => $sort_out });
-	my ($comm_rd, $comm_pid) = popen_rd(\@COMM, $CMD_ENV,
-				{ 0 => $comm_in, -C => "$TMPDIR" });
-	awaitpid($awk_pid, \&cmd_done, \@AWK);
-	awaitpid($sort_pid, \&cmd_done, \@sort_u);
-	awaitpid($comm_pid, \&cmd_done, \@COMM);
+	my ($awk_opt, $sort_opt, $batch_opt);
+	my $comm_opt = { -C => "$TMPDIR" };
+	pipe($awk_opt->{0}, $batch_opt->{1});
+	pipe($sort_opt->{0}, $awk_opt->{1});
+	pipe($comm_opt->{0}, $sort_opt->{1});
+	run_await(\@AWK, $CMD_ENV, $awk_opt, \&cmd_done);
+	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done);
+	my $comm_rd = popen_rd(\@COMM, $CMD_ENV, $comm_opt, \&cmd_done, \@COMM);
 	PublicInbox::CidxComm->new($comm_rd, $self); # calls cidx_read_comm
 	my $git_ver = PublicInbox::Git::git_version();
 	push @PRUNE_BATCH, '--buffer' if $git_ver ge v2.6;
@@ -1023,7 +1013,7 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	warn(sprintf(<<EOM, $git_ver)) if $git_ver lt v2.19;
 W: git v2.19+ recommended for high-latency storage (have git v%vd)
 EOM
-	dump_git_commits(undef, $batch_out);
+	dump_git_commits(undef, undef, undef, $batch_opt);
 }
 
 sub cidx_read_comm { # via PublicInbox::CidxComm::event_step
