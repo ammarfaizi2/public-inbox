@@ -1105,6 +1105,15 @@ sub show_roots { # for diagnostics
 	}
 }
 
+sub do_inits { # called via PublicInbox::DS::add_timer
+	my ($self) = @_;
+	init_prune($self);
+	init_associate_postfork($self);
+	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
+	my $max = $TODO{associate} ? max($LIVE_JOBS, $NPROC) : $LIVE_JOBS;
+	index_next($self) for (1..$max);
+}
+
 sub cidx_run { # main entry point
 	my ($self) = @_;
 	my $restore_umask = prep_umask($self);
@@ -1183,18 +1192,14 @@ sub cidx_run { # main entry point
 	local $NPROC = PublicInbox::IPC::detect_nproc();
 	local $LIVE_JOBS = $self->{-opt}->{jobs} || $NPROC || 2;
 	local @RDONLY_XDB = $self->xdb_shards_flat;
-	init_prune($self);
-	init_associate_postfork($self);
-	scan_git_dirs($self) if $self->{-opt}->{scan} // 1;
-	my $max = $TODO{associate} ? max($LIVE_JOBS, $NPROC) : $LIVE_JOBS;
-	index_next($self) for (1..$max);
+	PublicInbox::DS::add_timer(0, \&do_inits, $self);
 
 	# FreeBSD ignores/discards SIGCHLD while signals are blocked and
 	# EVFILT_SIGNAL is inactive, so we pretend we have a SIGCHLD pending
 	PublicInbox::DS::enqueue_reap();
 
 	local @PublicInbox::DS::post_loop_do = (\&shards_active);
-	PublicInbox::DS::event_loop($MY_SIG, $SIGSET) if shards_active();
+	PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
 	PublicInbox::DS->Reset;
 	$self->lock_release(!!$NCHANGE);
 	show_roots($self) if $self->{-opt}->{'show-roots'} # for diagnostics
