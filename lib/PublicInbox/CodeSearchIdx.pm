@@ -858,7 +858,8 @@ sub prep_alternate_start {
 	}
 	my $cmd = [ 'git', "--git-dir=$git_dir",
 			qw(config extensions.objectFormat) ];
-	run_await($cmd, undef, undef, \&prep_alternate_end, $o, $run_prune);
+	my $opt = { quiet => 1 };
+	run_await($cmd, undef, $opt, \&prep_alternate_end, $o, $run_prune);
 }
 
 sub cmd_done { # run_await cb for sort, xapian-delve, sed failures
