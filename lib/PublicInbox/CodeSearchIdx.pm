@@ -993,6 +993,7 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	run_await(\@AWK, $CMD_ENV, $awk_opt, \&cmd_done);
 	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done);
 	my $comm_rd = popen_rd(\@COMM, $CMD_ENV, $comm_opt, \&cmd_done, \@COMM);
+	%$_ = () for ($awk_opt, $sort_opt, $comm_opt); # comm_rd is blocking :<
 	PublicInbox::CidxComm->new($comm_rd, $self); # calls cidx_read_comm
 	my $git_ver = PublicInbox::Git::git_version();
 	push @PRUNE_BATCH, '--buffer' if $git_ver ge v2.6;
