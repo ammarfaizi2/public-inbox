@@ -3,7 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
 use Test::More;
-use PublicInbox::Spawn qw(which spawn popen_rd);
+use PublicInbox::Spawn qw(which spawn popen_rd run_qx);
 require PublicInbox::Sigfd;
 require PublicInbox::DS;
 
@@ -17,6 +17,17 @@ require PublicInbox::DS;
 	ok($pid, 'spawned process');
 	is(waitpid($pid, 0), $pid, 'waitpid succeeds on spawned process');
 	is($?, 0, 'true exited successfully');
+}
+
+{
+	my $opt = { 0 => \'in', 2 => \(my $e) };
+	my $out = run_qx(['sh', '-c', 'echo e >&2; cat'], undef, $opt);
+	is($e, "e\n", 'captured stderr');
+	is($out, 'in', 'stdin read and stdout captured');
+	$opt->{0} = \"IN\n3\nLINES";
+	my @out = run_qx(['sh', '-c', 'echo E >&2; cat'], undef, $opt);
+	is($e, "e\nE\n", 'captured stderr appended to string');
+	is_deeply(\@out, [ "IN\n", "3\n", 'LINES' ], 'stdout array');
 }
 
 SKIP: {

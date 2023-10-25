@@ -22,7 +22,7 @@ use POSIX qw(strftime);
 use Fcntl qw(SEEK_SET);
 use Time::Local qw(timegm);
 use PublicInbox::OverIdx;
-use PublicInbox::Spawn qw(run_wait);
+use PublicInbox::Spawn qw(run_wait run_qx);
 use PublicInbox::Git qw(git_unquote);
 use PublicInbox::MsgTime qw(msg_timestamp msg_datestamp);
 use PublicInbox::Address;
@@ -351,23 +351,18 @@ sub index_diff ($$$) {
 }
 
 sub patch_id {
-	my ($self) = @_; # $_[1] is the diff (may be huge)
-	open(my $fh, '+>:utf8', undef) or die "open: $!";
-	open(my $eh, '+>', undef) or die "open: $!";
-	$fh->autoflush(1);
-	print $fh $_[1] or die "print: $!";
-	sysseek($fh, 0, SEEK_SET) or die "sysseek: $!";
-	my $id = ($self->{ibx} // $self->{eidx} // $self)->git->qx(
-			[qw(patch-id --stable)], {}, { 0 => $fh, 2 => $eh });
-	seek($eh, 0, SEEK_SET) or die "seek: $!";
-	while (<$eh>) { warn $_ }
+	my ($self, $sref) = @_;
+	my $git = ($self->{ibx} // $self->{eidx} // $self)->git;
+	my $opt = { 0 => $sref, 2 => \(my $err) };
+	my $id = run_qx($git->cmd(qw(patch-id --stable)), undef, $opt);
+	warn $err if $err;
 	$id =~ /\A([a-f0-9]{40,})/ ? $1 : undef;
 }
 
 sub index_body_text {
 	my ($self, $doc, $sref) = @_;
 	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms) {
-		my $id = patch_id($self, $$sref);
+		my $id = patch_id($self, $sref);
 		$doc->add_term('XDFID'.$id) if defined($id);
 	}
 

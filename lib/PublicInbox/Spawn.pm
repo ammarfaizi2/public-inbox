@@ -22,8 +22,9 @@ use Fcntl qw(SEEK_SET);
 use IO::Handle ();
 use Carp qw(croak);
 use PublicInbox::ProcessIO;
-our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait);
+our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait run_qx);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
+use autodie qw(open pipe read seek sysseek truncate);
 
 BEGIN {
 	my $all_libc = <<'ALL_LIBC'; # all *nix systems we support
@@ -290,7 +291,6 @@ ALL_LIBC
 	undef $all_libc unless -d $inline_dir;
 	if (defined $all_libc) {
 		local $ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
-		use autodie;
 		# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
 		my $lk = PublicInbox::Lock->new($inline_dir.
 						'/.public-inbox.lock');
@@ -301,7 +301,7 @@ ALL_LIBC
 		open STDERR, '>&', $fh;
 		STDERR->autoflush(1);
 		STDOUT->autoflush(1);
-		CORE::eval 'use Inline C => $all_libc, BUILD_NOISY => 1';
+		eval 'use Inline C => $all_libc, BUILD_NOISY => 1';
 		my $err = $@;
 		open(STDERR, '>&', $olderr);
 		open(STDOUT, '>&', $oldout);
@@ -332,26 +332,34 @@ sub which ($) {
 }
 
 sub spawn ($;$$) {
-	my ($cmd, $env, $opts) = @_;
+	my ($cmd, $env, $opt) = @_;
 	my $f = which($cmd->[0]) // die "$cmd->[0]: command not found\n";
-	my @env;
+	my (@env, @rdr);
 	my %env = (%ENV, $env ? %$env : ());
 	while (my ($k, $v) = each %env) {
 		push @env, "$k=$v" if defined($v);
 	}
-	my $redir = [];
 	for my $child_fd (0..2) {
-		my $parent_fd = $opts->{$child_fd};
-		if (defined($parent_fd) && $parent_fd !~ /\A[0-9]+\z/) {
-			my $fd = fileno($parent_fd) //
-					die "$parent_fd not an IO GLOB? $!";
-			$parent_fd = $fd;
+		my $pfd = $opt->{$child_fd};
+		if ('SCALAR' eq ref($pfd)) {
+			open my $fh, '+>:utf8', undef;
+			$opt->{"fh.$child_fd"} = $fh;
+			if ($child_fd == 0) {
+				print $fh $$pfd;
+				$fh->flush or die "flush: $!";
+				sysseek($fh, 0, SEEK_SET);
+			}
+			$pfd = fileno($fh);
+		} elsif (defined($pfd) && $pfd !~ /\A[0-9]+\z/) {
+			my $fd = fileno($pfd) //
+					die "$pfd not an IO GLOB? $!";
+			$pfd = $fd;
 		}
-		$redir->[$child_fd] = $parent_fd // $child_fd;
+		$rdr[$child_fd] = $pfd // $child_fd;
 	}
 	my $rlim = [];
 	foreach my $l (@RLIMITS) {
-		my $v = $opts->{$l} // next;
+		my $v = $opt->{$l} // next;
 		my $r = eval "require BSD::Resource; BSD::Resource::$l();";
 		unless (defined $r) {
 			warn "$l undefined by BSD::Resource: $@\n";
@@ -359,37 +367,62 @@ sub spawn ($;$$) {
 		}
 		push @$rlim, $r, @$v;
 	}
-	my $cd = $opts->{'-C'} // ''; # undef => NULL mapping doesn't work?
-	my $pgid = $opts->{pgid} // -1;
-	my $pid = pi_fork_exec($redir, $f, $cmd, \@env, $rlim, $cd, $pgid);
+	my $cd = $opt->{'-C'} // ''; # undef => NULL mapping doesn't work?
+	my $pgid = $opt->{pgid} // -1;
+	my $pid = pi_fork_exec(\@rdr, $f, $cmd, \@env, $rlim, $cd, $pgid);
 	die "fork_exec @$cmd failed: $!\n" unless $pid > 0;
 	$pid;
 }
 
 sub popen_rd {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
-	pipe(my $r, local $opt->{1}) or die "pipe: $!\n";
+	pipe(my $r, local $opt->{1});
 	my $pid = spawn($cmd, $env, $opt);
 	PublicInbox::ProcessIO->maybe_new($pid, $r, @cb_arg);
 }
 
 sub popen_wr {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
-	pipe(local $opt->{0}, my $w) or die "pipe: $!\n";
+	pipe(local $opt->{0}, my $w);
 	$w->autoflush(1);
 	my $pid = spawn($cmd, $env, $opt);
 	PublicInbox::ProcessIO->maybe_new($pid, $w, @cb_arg)
 }
 
+sub read_out_err ($) {
+	my ($opt) = @_;
+	for my $fd (1, 2) { # read stdout/stderr
+		my $fh = delete($opt->{"fh.$fd"}) // next;
+		seek($fh, 0, SEEK_SET);
+		read($fh, ${$opt->{$fd}}, -s $fh, length(${$opt->{$fd}} // ''));
+	}
+}
+
 sub run_wait ($;$$) {
 	my ($cmd, $env, $opt) = @_;
 	waitpid(spawn($cmd, $env, $opt), 0);
+	read_out_err($opt);
 	$?
 }
 
 sub run_die ($;$$) {
 	my ($cmd, $env, $rdr) = @_;
 	run_wait($cmd, $env, $rdr) and croak "E: @$cmd failed: \$?=$?";
+}
+
+sub run_qx {
+	my ($cmd, $env, $opt) = @_;
+	my $fh = popen_rd($cmd, $env, $opt);
+	my @ret;
+	if (wantarray) {
+		@ret = <$fh>;
+	} else {
+		local $/;
+		$ret[0] = <$fh>;
+	}
+	close $fh; # caller should check $?
+	read_out_err($opt);
+	wantarray ? @ret : $ret[0];
 }
 
 1;

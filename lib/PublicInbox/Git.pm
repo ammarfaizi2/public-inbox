@@ -69,6 +69,7 @@ sub check_git_exe () {
 		$GIT_VER = eval("v$1") // die "BUG: bad vstring: $1 ($v)";
 		$EXE_ST = $st;
 	}
+	$GIT_EXE;
 }
 
 sub git_version {
@@ -420,6 +421,11 @@ sub async_err ($$$$$) {
 	$req = $$req if ref($req); # retried
 	my $msg = "E: $action $req ($oid): $err";
 	$async_warn ? carp($msg) : $self->fail($msg);
+}
+
+sub cmd {
+	my $self = shift;
+	[ $GIT_EXE // check_git_exe(), "--git-dir=$self->{git_dir}", @_ ]
 }
 
 # $git->popen(qw(show f00)); # or
