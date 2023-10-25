@@ -145,16 +145,12 @@ sub parse_cgi_headers { # {parse_hdr} for Qspawn
 		}
 	}
 
-	# fallback to WwwCoderepo if cgit 404s.  Duplicating $ctx prevents
-	# ->finalize from the current Qspawn from using qspawn.wcb.
-	# This makes qspawn skip ->async_pass and causes
-	# PublicInbox::HTTPD::Async::event_step to close shortly after
+	# fallback to WwwCoderepo if cgit 404s
 	if ($code == 404 && $ctx->{www} && !$ctx->{_coderepo_tried}++) {
 		my $wcb = delete $ctx->{env}->{'qspawn.wcb'};
 		$ctx->{env}->{'plack.skip-deflater'} = 1; # prevent 2x gzip
 		$ctx->{env}->{'qspawn.fallback'} = $code;
 		my $res = $ctx->{www}->coderepo->srv($ctx);
-		# for ->psgi_return_init_cb
 		$ctx->{env}->{'qspawn.wcb'} = $wcb;
 		$res; # CODE or ARRAY ref
 	} else {

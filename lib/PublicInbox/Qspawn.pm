@@ -176,48 +176,6 @@ sub psgi_qx {
 	start($self, $limiter, undef);
 }
 
-# this is called on pipe EOF to reap the process, may be called
-# via PublicInbox::DS event loop OR via GetlineBody for generic
-# PSGI servers.
-sub event_step {
-	my ($self) = @_;
-	finish($self);
-	my $fh = delete $self->{qfh};
-	$fh->close if $fh; # async-only (psgi_return)
-}
-
-sub rd_hdr ($) {
-	my ($self) = @_;
-	# typically used for reading CGI headers
-	# We also need to check EINTR for generic PSGI servers.
-	my ($ret, $total_rd);
-	my ($bref, $ph_cb, @ph_arg) = ($self->{hdr_buf}, @{$self->{parse_hdr}});
-	until (defined($ret)) {
-		my $r = sysread($self->{rpipe}, $$bref, 4096, length($$bref));
-		if (defined($r)) {
-			$total_rd += $r;
-			eval { $ret = $ph_cb->($total_rd, $bref, @ph_arg) };
-			if ($@) {
-				warn "parse_hdr: $@";
-				$ret = [ 500, [], [ "Internal error\n" ] ];
-			} elsif (!defined($ret) && !$r) {
-				warn <<EOM;
-EOF parsing headers from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
-EOM
-				$ret = [ 500, [], [ "Internal error\n" ] ];
-			}
-		} else {
-			# caller should notify us when it's ready:
-			return if $! == EAGAIN;
-			next if $! == EINTR; # immediate retry
-			warn "error reading header: $!";
-			$ret = [ 500, [], [ "Internal error\n" ] ];
-		}
-	}
-	delete $self->{parse_hdr}; # done parsing headers
-	$ret;
-}
-
 sub yield_pass {
 	my ($self, $ipipe, $res) = @_; # $ipipe = InputPipe
 	my $env = $self->{psgi_env};
@@ -249,62 +207,6 @@ sub yield_pass {
 	my ($bref) = @{delete $self->{yield_parse_hdr}};
 	$qfh->write($$bref) if $$bref ne '';
 	$self->{qfh} = $qfh; # keep $ipipe open
-}
-
-sub psgi_return_init_cb { # this may be PublicInbox::HTTPD::Async {cb}
-	my ($self) = @_;
-	my $r = rd_hdr($self) or return; # incomplete
-	my $env = $self->{psgi_env};
-	my $filter;
-
-	# this is for RepoAtom since that can fire after parse_cgi_headers
-	if (ref($r) eq 'ARRAY' && blessed($r->[2]) && $r->[2]->can('attach')) {
-		$filter = pop @$r;
-	}
-	$filter //= delete($env->{'qspawn.filter'}) // (ref($r) eq 'ARRAY' ?
-		PublicInbox::GzipFilter::qsp_maybe($r->[1], $env) : undef);
-
-	my $wcb = delete $env->{'qspawn.wcb'};
-	my $async = delete $self->{async}; # PublicInbox::HTTPD::Async
-	if (ref($r) ne 'ARRAY' || scalar(@$r) == 3) { # error
-		if ($async) { # calls rpipe->close && ->event_step
-			$async->close; # PublicInbox::HTTPD::Async::close
-		} else { # generic PSGI, use PublicInbox::ProcessIO::CLOSE
-			delete($self->{rpipe})->close;
-			event_step($self);
-		}
-		if (ref($r) eq 'ARRAY') { # error
-			$wcb->($r)
-		} elsif (ref($r) eq 'CODE') { # chain another command
-			$r->($wcb);
-			$self->{passed} = 1;
-		}
-		# else do nothing
-	} elsif ($async) {
-		# done reading headers, handoff to read body
-		my $fh = $wcb->($r); # scalar @$r == 2
-		$fh = $filter->attach($fh) if $filter;
-		$self->{qfh} = $fh;
-		$async->async_pass($env->{'psgix.io'}, $fh,
-					delete($self->{hdr_buf}));
-	} else { # for synchronous PSGI servers
-		require PublicInbox::GetlineBody;
-		my $buf = delete $self->{hdr_buf};
-		$r->[2] = PublicInbox::GetlineBody->new($self->{rpipe},
-					\&event_step, $self, $$buf, $filter);
-		$wcb->($r);
-	}
-}
-
-sub psgi_return_start { # may run later, much later...
-	my ($self) = @_;
-	if (my $cb = $self->{psgi_env}->{'pi-httpd.async'}) {
-		# PublicInbox::HTTPD::Async->new(rpipe, $cb, $cb_arg, $end_obj)
-		$self->{async} = $cb->($self->{rpipe},
-					\&psgi_return_init_cb, $self, $self);
-	} else { # generic PSGI
-		psgi_return_init_cb($self) while $self->{parse_hdr};
-	}
 }
 
 sub r500 () { [ 500, [], [ "Internal error\n" ] ] }
@@ -363,7 +265,7 @@ sub _yield_start { # may run later, much later...
 #   $env->{'qspawn.wcb'} - the write callback from the PSGI server
 #                          optional, use this if you've already
 #                          captured it elsewhere.  If not given,
-#                          psgi_return will return an anonymous
+#                          psgi_yield will return an anonymous
 #                          sub for the PSGI server to call
 #
 #   $env->{'qspawn.filter'} - filter object, responds to ->attach for
@@ -379,27 +281,6 @@ sub _yield_start { # may run later, much later...
 #              body will be streamed, later, via writes (push-based) to
 #              psgix.io.  3-element arrays means the body is available
 #              immediately (or streamed via ->getline (pull-based)).
-sub psgi_return {
-	my ($self, $env, $limiter, @parse_hdr_arg)= @_;
-	$self->{psgi_env} = $env;
-	$self->{hdr_buf} = \(my $hdr_buf = '');
-	$self->{parse_hdr} = \@parse_hdr_arg;
-	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
-
-	# the caller already captured the PSGI write callback from
-	# the PSGI server, so we can call ->start, here:
-	$env->{'qspawn.wcb'} and
-		return start($self, $limiter, \&psgi_return_start);
-
-	# the caller will return this sub to the PSGI server, so
-	# it can set the response callback (that is, for
-	# PublicInbox::HTTP, the chunked_wcb or identity_wcb callback),
-	# but other HTTP servers are supported:
-	sub {
-		$env->{'qspawn.wcb'} = $_[0];
-		start($self, $limiter, \&psgi_return_start);
-	}
-}
 
 sub psgi_yield {
 	my ($self, $env, $limiter, @parse_hdr_arg)= @_;

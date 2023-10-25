@@ -40,7 +40,7 @@ EOM
 # called by GzipFilter->close
 sub zflush { $_[0]->SUPER::zflush('</feed>') }
 
-# called by GzipFilter->write or GetlineBody->getline
+# called by GzipFilter->write or GetlineResponse->getline
 sub translate {
 	my $self = shift;
 	my $rec = $_[0] // return $self->zflush; # getline

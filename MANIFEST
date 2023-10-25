@@ -203,7 +203,6 @@ lib/PublicInbox/Filter/SubjectTag.pm
 lib/PublicInbox/Filter/Vger.pm
 lib/PublicInbox/Gcf2.pm
 lib/PublicInbox/Gcf2Client.pm
-lib/PublicInbox/GetlineBody.pm
 lib/PublicInbox/GetlineResponse.pm
 lib/PublicInbox/Git.pm
 lib/PublicInbox/GitAsyncCat.pm
@@ -212,7 +211,6 @@ lib/PublicInbox/GitHTTPBackend.pm
 lib/PublicInbox/GzipFilter.pm
 lib/PublicInbox/HTTP.pm
 lib/PublicInbox/HTTPD.pm
-lib/PublicInbox/HTTPD/Async.pm
 lib/PublicInbox/HlMod.pm
 lib/PublicInbox/Hval.pm
 lib/PublicInbox/IMAP.pm

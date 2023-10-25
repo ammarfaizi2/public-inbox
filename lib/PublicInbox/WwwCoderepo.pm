@@ -230,7 +230,7 @@ sub summary ($$) {
 # called by GzipFilter->close after translate
 sub zflush { $_[0]->SUPER::zflush('</pre>', $_[0]->_html_end) }
 
-# called by GzipFilter->write or GetlineBody->getline
+# called by GzipFilter->write or GetlineResponse->getline
 sub translate {
 	my $ctx = shift;
 	my $rec = $_[0] // return zflush($ctx); # getline

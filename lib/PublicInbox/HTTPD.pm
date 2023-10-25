@@ -9,9 +9,6 @@ use strict;
 use Plack::Util ();
 use Plack::Builder;
 use PublicInbox::HTTP;
-use PublicInbox::HTTPD::Async;
-
-sub pi_httpd_async { PublicInbox::HTTPD::Async->new(@_) }
 
 # we have a different env for ever listener socket for
 # SERVER_NAME, SERVER_PORT and psgi.url_scheme
@@ -45,7 +42,7 @@ sub env_for ($$$) {
 		# this to limit git-http-backend(1) parallelism.
 		# We also check for the truthiness of this to
 		# detect when to use async paths for slow blobs
-		'pi-httpd.async' => \&pi_httpd_async,
+		'pi-httpd.async' => 1,
 		'pi-httpd.app' => $self->{app},
 		'pi-httpd.warn_cb' => $self->{warn_cb},
 	}

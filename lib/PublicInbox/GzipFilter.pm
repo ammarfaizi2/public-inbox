@@ -93,7 +93,7 @@ sub gone { # what: search/over/mm
 	undef;
 }
 
-# for GetlineBody (via Qspawn) when NOT using $env->{'pi-httpd.async'}
+# for GetlineResponse (via Qspawn) when NOT using $env->{'pi-httpd.async'}
 # Also used for ->getline callbacks
 sub translate {
 	my $self = shift; # $_[1] => input

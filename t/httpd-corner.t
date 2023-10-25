@@ -374,13 +374,13 @@ SKIP: {
 	is($non_zero, 0, 'read all zeros');
 
 	require_mods(@zmods, 4);
-	my $buf = xqx([$curl, '-gsS', "$base/psgi-return-gzip"]);
+	my $buf = xqx([$curl, '-gsS', "$base/psgi-yield-gzip"]);
 	is($?, 0, 'curl succesful');
 	IO::Uncompress::Gunzip::gunzip(\$buf => \(my $out));
 	is($out, "hello world\n");
 	my $curl_rdr = { 2 => \(my $curl_err = '') };
 	$buf = xqx([$curl, qw(-gsSv --compressed),
-			"$base/psgi-return-compressible"], undef, $curl_rdr);
+			"$base/psgi-yield-compressible"], undef, $curl_rdr);
 	is($?, 0, 'curl --compressed successful');
 	is($buf, "goodbye world\n", 'gzipped response as expected');
 	like($curl_err, qr/\bContent-Encoding: gzip\b/,
@@ -388,8 +388,8 @@ SKIP: {
 }
 
 {
-	my $conn = conn_for($sock, 'psgi_return ENOENT');
-	print $conn "GET /psgi-return-enoent HTTP/1.1\r\n\r\n" or die;
+	my $conn = conn_for($sock, 'psgi_yield ENOENT');
+	print $conn "GET /psgi-yield-enoent HTTP/1.1\r\n\r\n" or die;
 	my $buf = '';
 	sysread($conn, $buf, 16384, length($buf)) until $buf =~ /\r\n\r\n/;
 	like($buf, qr!HTTP/1\.[01] 500\b!, 'got 500 error on ENOENT');
@@ -678,13 +678,13 @@ SKIP: {
 	my $app = require $psgi;
 	test_psgi($app, sub {
 		my ($cb) = @_;
-		my $req = GET('http://example.com/psgi-return-gzip');
+		my $req = GET('http://example.com/psgi-yield-gzip');
 		my $res = $cb->($req);
 		my $buf = $res->content;
 		IO::Uncompress::Gunzip::gunzip(\$buf => \(my $out));
 		is($out, "hello world\n", 'got expected output');
 
-		$req = GET('http://example.com/psgi-return-enoent');
+		$req = GET('http://example.com/psgi-yield-enoent');
 		$res = $cb->($req);
 		is($res->code, 500, 'got error on ENOENT');
 		seek($tmperr, 0, SEEK_SET) or die;

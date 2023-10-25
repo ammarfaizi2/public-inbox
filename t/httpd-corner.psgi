@@ -92,34 +92,34 @@ my $app = sub {
 		my $rdr = { 2 => fileno($null) };
 		my $cmd = [qw(dd if=/dev/zero count=30 bs=1024k)];
 		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);
-		return $qsp->psgi_return($env, undef, sub {
+		return $qsp->psgi_yield($env, undef, sub {
 			my ($r, $bref) = @_;
 			# make $rd_hdr retry sysread + $parse_hdr in Qspawn:
 			return until length($$bref) > 8000;
 			close $null;
 			[ 200, [ qw(Content-Type application/octet-stream) ]];
 		});
-	} elsif ($path eq '/psgi-return-gzip') {
+	} elsif ($path eq '/psgi-yield-gzip') {
 		require PublicInbox::Qspawn;
 		require PublicInbox::GzipFilter;
 		my $cmd = [qw(echo hello world)];
 		my $qsp = PublicInbox::Qspawn->new($cmd);
 		$env->{'qspawn.filter'} = PublicInbox::GzipFilter->new;
-		return $qsp->psgi_return($env, undef, sub {
+		return $qsp->psgi_yield($env, undef, sub {
 			[ 200, [ qw(Content-Type application/octet-stream)]]
 		});
-	} elsif ($path eq '/psgi-return-compressible') {
+	} elsif ($path eq '/psgi-yield-compressible') {
 		require PublicInbox::Qspawn;
 		my $cmd = [qw(echo goodbye world)];
 		my $qsp = PublicInbox::Qspawn->new($cmd);
-		return $qsp->psgi_return($env, undef, sub {
+		return $qsp->psgi_yield($env, undef, sub {
 			[200, [qw(Content-Type text/plain)]]
 		});
-	} elsif ($path eq '/psgi-return-enoent') {
+	} elsif ($path eq '/psgi-yield-enoent') {
 		require PublicInbox::Qspawn;
 		my $cmd = [ 'this-better-not-exist-in-PATH'.rand ];
 		my $qsp = PublicInbox::Qspawn->new($cmd);
-		return $qsp->psgi_return($env, undef, sub {
+		return $qsp->psgi_yield($env, undef, sub {
 			[ 200, [ qw(Content-Type application/octet-stream)]]
 		});
 	} elsif ($path eq '/pid') {
