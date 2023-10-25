@@ -74,6 +74,11 @@ sub _do_spawn {
 	finish($self, $@) if $@;
 }
 
+sub psgi_status_err { # Qspawn itself is useful w/o PSGI
+	require PublicInbox::WwwStatic;
+	PublicInbox::WwwStatic::r($_[0] // 500);
+}
+
 sub finalize ($;$) {
 	my ($self, $opt) = @_;
 
@@ -104,9 +109,7 @@ sub finalize ($;$) {
 	return if $self->{passed}; # another command chained it
 	if (my $wcb = delete $env->{'qspawn.wcb'}) {
 		# have we started writing, yet?
-		my $code = delete $env->{'qspawn.fallback'} // 500;
-		require PublicInbox::WwwStatic;
-		$wcb->(PublicInbox::WwwStatic::r($code));
+		$wcb->(psgi_status_err($env->{'qspawn.fallback'}));
 	}
 }
 
@@ -209,8 +212,6 @@ sub yield_pass {
 	$self->{qfh} = $qfh; # keep $ipipe open
 }
 
-sub r500 () { [ 500, [], [ "Internal error\n" ] ] }
-
 sub parse_hdr_done ($$) {
 	my ($self) = @_;
 	my $ret;
@@ -220,18 +221,18 @@ sub parse_hdr_done ($$) {
 		$ret = eval { $ph_cb->(length($_[-1]), $bref, @ph_arg) };
 		if ($@) {
 			carp "parse_hdr (@{$self->{cmd}}): $@\n";
-			$ret = r500();
+			$ret = psgi_status_err();
 		} elsif (!$ret && $_[-1] eq '') {
 			carp <<EOM;
 EOF parsing headers from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
 EOM
-			$ret = r500();
+			$ret = psgi_status_err();
 		}
 	} else {
 		carp <<EOM;
 E: parsing headers: $! from @{$self->{cmd}} ($self->{psgi_env}->{REQUEST_URI})
 EOM
-		$ret = r500();
+		$ret = psgi_status_err();
 	}
 	$ret; # undef if headers incomplete
 }
