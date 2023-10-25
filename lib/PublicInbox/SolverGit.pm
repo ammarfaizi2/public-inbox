@@ -386,12 +386,9 @@ sub event_step ($) {
 }
 
 sub next_step ($) {
-	my ($self) = @_;
 	# if outside of public-inbox-httpd, caller is expected to be
 	# looping event_step, anyways
-	my $async = $self->{psgi_env}->{'pi-httpd.async'} or return;
-	# PublicInbox::HTTPD::Async->new
-	$async->(undef, undef, $self);
+	PublicInbox::DS::requeue($_[0]) if $_[0]->{psgi_env}->{'pi-httpd.async'}
 }
 
 sub mark_found ($$$) {
@@ -690,9 +687,8 @@ sub solve ($$$$$) {
 	$self->{found} = {}; # { abbr => [ ::Git, oid, type, size, $di ] }
 
 	dbg($self, "solving $oid_want ...");
-	if (my $async = $env->{'pi-httpd.async'}) {
-		# PublicInbox::HTTPD::Async->new
-		$async->(undef, undef, $self);
+	if ($env->{'pi-httpd.async'}) {
+		PublicInbox::DS::requeue($self);
 	} else {
 		event_step($self) while $self->{user_cb};
 	}

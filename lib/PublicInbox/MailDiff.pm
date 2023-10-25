@@ -59,8 +59,7 @@ sub next_smsg ($) {
 		$ctx->write($ctx->_html_end);
 		return $ctx->close;
 	}
-	my $async = $self->{ctx}->{env}->{'pi-httpd.async'};
-	$async->(undef, undef, $self) if $async # PublicInbox::HTTPD::Async->new
+	PublicInbox::DS::requeue($self) if $ctx->{env}->{'pi-httpd.async'};
 }
 
 sub emit_msg_diff {
@@ -125,8 +124,8 @@ sub event_step {
 
 sub begin_mail_diff {
 	my ($self) = @_;
-	if (my $async = $self->{ctx}->{env}->{'pi-httpd.async'}) {
-		$async->(undef, undef, $self); # PublicInbox::HTTPD::Async->new
+	if ($self->{ctx}->{env}->{'pi-httpd.async'}) {
+		PublicInbox::DS::requeue($self);
 	} else {
 		event_step($self) while $self->{smsg};
 	}

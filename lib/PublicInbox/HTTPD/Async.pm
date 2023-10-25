@@ -25,14 +25,6 @@ use PublicInbox::ProcessIONBF;
 # bidirectional socket in the future.
 sub new {
 	my ($class, $io, $cb, $arg, $end_obj) = @_;
-
-	# no $io? call $cb at the top of the next event loop to
-	# avoid recursion:
-	unless (defined($io)) {
-		PublicInbox::DS::requeue($cb ? $cb : $arg);
-		die '$end_obj unsupported w/o $io' if $end_obj;
-		return;
-	}
 	my $self = bless {
 		cb => $cb, # initial read callback
 		arg => $arg, # arg for $cb
