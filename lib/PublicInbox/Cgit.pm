@@ -110,7 +110,7 @@ sub call {
 	my $rdr = input_prepare($env) or return r(500);
 	my $qsp = PublicInbox::Qspawn->new($self->{cmd}, $cgi_env, $rdr);
 	my $limiter = $self->{pi_cfg}->limiter('-cgit');
-	$qsp->psgi_return($env, $limiter, $parse_cgi_headers, $ctx);
+	$qsp->psgi_yield($env, $limiter, $parse_cgi_headers, $ctx);
 }
 
 1;
