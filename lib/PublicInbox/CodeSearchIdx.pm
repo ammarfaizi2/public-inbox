@@ -829,20 +829,18 @@ sub prep_umask ($) {
 	}
 }
 
-sub prep_alternate_end { # awaitpid callback for config extensions.objectFormat
-	my ($pid, $objdir, $out, $run_prune) = @_;
-	my $status = $? >> 8;
+sub prep_alternate_end { # run_await cb for config extensions.objectFormat
+	my ($pid, $cmd, undef, $opt, $objdir, $run_prune) = @_;
+	my ($status, $sig) = ($? >> 8, $? & 127);
 	my $next_dir = shift(@PRUNE_QUEUE);
 	prep_alternate_start($next_dir, $run_prune) if defined($next_dir);
 	my $fmt;
-	if ($status == 1) { # unset, default is '' (SHA-1)
+	if (!$sig && $status == 1) { # unset, default is '' (SHA-1)
 		$fmt = 'sha1';
-	} elsif ($status == 0) {
-		seek($out, 0, SEEK_SET);
-		chomp($fmt = <$out> // 'sha1');
-	} else {
-		return warn("git config \$?=$? for objdir=$objdir");
+	} elsif (!$sig && $status == 0) {
+		chomp($fmt = ${$opt->{1}} || 'sha1');
 	}
+	$fmt // return warn("git config \$?=$? for objdir=$objdir");
 	my $hexlen = $OFMT2HEXLEN{$fmt} // return warn <<EOM;
 E: ignoring objdir=$objdir, unknown extensions.objectFormat=$fmt
 EOM
@@ -850,8 +848,7 @@ EOM
 		require PublicInbox::Import;
 		my $git_dir = "$TMPDIR/hexlen$hexlen.git";
 		PublicInbox::Import::init_bare($git_dir, 'cidx-all', $fmt);
-		my $f = "$git_dir/objects/info/alternates";
-		open $ALT_FH{$hexlen}, '>', $f;
+		open $ALT_FH{$hexlen}, '>', "$git_dir/objects/info/alternates";
 	}
 	say { $ALT_FH{$hexlen} } $objdir or die "say: $!";
 }
@@ -865,9 +862,7 @@ sub prep_alternate_start {
 	}
 	my $cmd = [ 'git', "--git-dir=$git_dir",
 			qw(config extensions.objectFormat) ];
-	open my $out, '+>', undef;
-	my $pid = spawn($cmd, undef, { 1 => $out });
-	awaitpid($pid, \&prep_alternate_end, $o, $out, $run_prune);
+	run_await($cmd, undef, undef, \&prep_alternate_end, $o, $run_prune);
 }
 
 sub cmd_done { # run_await cb for sort, xapian-delve, sed failures
