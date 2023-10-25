@@ -277,7 +277,7 @@ sub refs_foo { # /$REPO/refs/{heads,tags} endpoints
 	$ctx->{-heads} = 1 if $pfx eq 'refs/heads';
 	my $qsp = PublicInbox::Qspawn->new([@EACH_REF, $pfx ],
 					{ GIT_DIR => $ctx->{git}->{git_dir} });
-	$qsp->psgi_return($ctx->{env}, undef, \&_refs_parse_hdr, $ctx);
+	$qsp->psgi_yield($ctx->{env}, undef, \&_refs_parse_hdr, $ctx);
 }
 
 sub srv { # endpoint called by PublicInbox::WWW
