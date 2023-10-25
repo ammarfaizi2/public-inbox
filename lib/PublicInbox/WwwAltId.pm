@@ -1,9 +1,9 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # dumps using the ".dump" command of sqlite3(1)
 package PublicInbox::WwwAltId;
-use strict;
+use v5.12;
 use PublicInbox::Qspawn;
 use PublicInbox::WwwStream qw(html_oneshot);
 use PublicInbox::AltId;
@@ -71,7 +71,7 @@ EOF
 	my $qsp = PublicInbox::Qspawn->new([$sqlite3, $fn], undef, { 0 => $r });
 	$ctx->{altid_pfx} = $altid_pfx;
 	$env->{'qspawn.filter'} = PublicInbox::GzipFilter->new;
-	$qsp->psgi_return($env, undef, \&check_output, $ctx);
+	$qsp->psgi_yield($env, undef, \&check_output, $ctx);
 }
 
 1;
