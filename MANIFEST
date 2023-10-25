@@ -161,6 +161,7 @@ lib/PublicInbox/AddressPP.pm
 lib/PublicInbox/Admin.pm
 lib/PublicInbox/AdminEdit.pm
 lib/PublicInbox/AltId.pm
+lib/PublicInbox/Aspawn.pm
 lib/PublicInbox/AutoReap.pm
 lib/PublicInbox/Cgit.pm
 lib/PublicInbox/CidxComm.pm
