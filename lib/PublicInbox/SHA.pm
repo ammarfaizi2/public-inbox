@@ -12,7 +12,8 @@
 package PublicInbox::SHA;
 use v5.12;
 require Exporter;
-our @EXPORT_OK = qw(sha1_hex sha256_hex sha256);
+our @EXPORT_OK = qw(sha1_hex sha256_hex sha256 sha_all);
+use autodie qw(sysread);
 our @ISA;
 
 BEGIN {
@@ -55,4 +56,12 @@ EOM
 }
 
 } # /BEGIN
+
+sub sha_all ($$) {
+	my ($n, $fh) = @_;
+	my ($dig, $buf) = (PublicInbox::SHA->new($n));
+	while (sysread($fh, $buf, 65536)) { $dig->add($buf) }
+	$dig
+}
+
 1;

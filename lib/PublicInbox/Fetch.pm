@@ -10,6 +10,7 @@ use PublicInbox::Admin;
 use PublicInbox::LEI;
 use PublicInbox::LeiCurl;
 use PublicInbox::LeiMirror;
+use PublicInbox::SHA qw(sha_all);
 use File::Temp ();
 
 sub new { bless {}, __PACKAGE__ }
@@ -92,9 +93,8 @@ sub do_manifest ($$$) {
 
 sub get_fingerprint2 {
 	my ($git_dir) = @_;
-	require PublicInbox::SHA;
 	my $rd = popen_rd([qw(git show-ref)], undef, { -C => $git_dir });
-	PublicInbox::SHA::sha256(do { local $/; <$rd> });
+	sha_all(256, $rd)->digest; # ignore show-ref errors
 }
 
 sub writable_dir ($) {

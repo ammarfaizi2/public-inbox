@@ -23,7 +23,7 @@ use PublicInbox::ProcessIONBF;
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
-use PublicInbox::SHA ();
+use PublicInbox::SHA qw(sha_all);
 our %HEXLEN2SHA = (40 => 1, 64 => 256);
 our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
 our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN read_all);
@@ -620,10 +620,8 @@ sub manifest_entry {
 			$ent->{reference} = $buf;
 		}
 	}
-	my $dig = PublicInbox::SHA->new(1);
-	while (CORE::read($sr, $buf, 65536)) { $dig->add($buf) }
+	$ent->{fingerprint} = sha_all(1, $sr)->hexdigest;
 	CORE::close $sr or return; # empty, uninitialized git repo
-	$ent->{fingerprint} = $dig->hexdigest;
 	$ent->{modified} = modified(undef, $mod);
 	chomp($buf = <$own> // '');
 	utf8::decode($buf);

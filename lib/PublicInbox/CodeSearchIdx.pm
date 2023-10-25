@@ -45,7 +45,7 @@ use POSIX qw(WNOHANG SEEK_SET);
 use File::Path ();
 use File::Spec ();
 use List::Util qw(max);
-use PublicInbox::SHA qw(sha256_hex);
+use PublicInbox::SHA qw(sha256_hex sha_all);
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::SearchIdx qw(add_val);
 use PublicInbox::Config qw(glob2re rel2abs_collapsed);
@@ -386,10 +386,7 @@ sub fp_fini { # run_git cb
 	my (undef, $self, $git, $prep_repo) = @_;
 	my $refs = $git->{-repo}->{refs} // die 'BUG: no {-repo}->{refs}';
 	sysseek($refs, 0, SEEK_SET);
-	my $buf;
-	my $dig = PublicInbox::SHA->new(256);
-	while (sysread($refs, $buf, 65536)) { $dig->add($buf) }
-	$git->{-repo}->{fp} = $dig->hexdigest;
+	$git->{-repo}->{fp} = sha_all(256, $refs)->hexdigest;
 }
 
 sub ct_start ($$$) {

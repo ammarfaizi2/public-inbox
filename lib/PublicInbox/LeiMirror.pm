@@ -19,10 +19,10 @@ use PublicInbox::Inbox;
 use PublicInbox::Git qw(read_all);
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
-use PublicInbox::SHA qw(sha256_hex sha1_hex);
+use PublicInbox::SHA qw(sha256_hex sha_all);
 use POSIX qw(strftime);
-use autodie qw(chdir chmod close open pipe readlink seek symlink sysopen
-		truncate unlink);
+use autodie qw(chdir chmod close open pipe readlink
+		seek symlink sysopen sysseek truncate unlink);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
@@ -533,10 +533,10 @@ sub fp_done {
 	}
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
-	seek($fh, SEEK_SET, 0);
+	sysseek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
-	my $B = sha1_hex(read_all($fh));
+	my $B = sha_all(1, $fh)->hexdigest;
 	return $cb->($self, @arg) if $A ne $B;
 	$self->{lei}->qerr("# $self->{-key} up-to-date");
 }
@@ -730,10 +730,10 @@ sub up_fp_done {
 	my ($self) = @_;
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref_up} // die 'BUG: no show-ref output';
-	seek($fh, SEEK_SET, 0);
+	sysseek($fh, SEEK_SET, 0);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
-	my $B = sha1_hex(read_all($fh));
+	my $B = sha_all(1, $fh)->hexdigest;
 	return if $A eq $B;
 	$self->{-ent}->{fingerprint} = $B;
 	push @{$self->{chg}->{fp_mismatch}}, $self->{-key};
