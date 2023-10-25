@@ -163,8 +163,7 @@ sub psgi_qx {
 # via PublicInbox::DS event loop OR via GetlineBody for generic
 # PSGI servers.
 sub event_step {
-	my ($self, $err) = @_; # $err: $!
-	warn "psgi_{return,qx} $err" if defined($err);
+	my ($self) = @_;
 	finish($self);
 	my $fh = delete $self->{qfh};
 	$fh->close if $fh; # async-only (psgi_return)
