@@ -1567,7 +1567,7 @@ sub request_umask {
 }
 
 sub _stdin_cb { # PublicInbox::InputPipe::consume callback for --stdin
-	my ($lei, $cb) = @_; # $_[-1] = $rbuf
+	my (undef, $lei, $cb) = @_; # $_[-1] = $rbuf
 	$_[1] // return $lei->fail("error reading stdin: $!");
 	$lei->{stdin_buf} .= $_[-1];
 	do_env($lei, $cb) if $_[-1] eq '';

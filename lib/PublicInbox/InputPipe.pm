@@ -39,14 +39,16 @@ sub consume {
 	if ($@) { # regular file (but not w/ select|IO::Poll backends)
 		$self->{-need_rq} = 1;
 		$self->requeue;
-	} elsif (-p $in || -S _) { # O_NONBLOCK for sockets and pipes
+	} elsif (do { no warnings 'unopened'; !stat($in) }) { # ProcessIONBF
+	} elsif (-p _ || -S _) { # O_NONBLOCK for sockets and pipes
 		$in->blocking(0);
 	} elsif (-t $in) { # isatty(3) can't use `_' stat cache
 		unblock_tty($self);
 	}
+	$self;
 }
 
-sub close {
+sub close { # idempotent
 	my ($self) = @_;
 	if (my $t = delete($self->{restore_termios})) {
 		my $fd = fileno($self->{sock} // return);
@@ -60,16 +62,16 @@ sub event_step {
 	my $r = sysread($self->{sock} // return, my $rbuf, 65536);
 	eval {
 		if ($r) {
-			$self->{cb}->(@{$self->{args}}, $rbuf);
+			$self->{cb}->($self, @{$self->{args}}, $rbuf);
 			$self->requeue if $self->{-need_rq};
 		} elsif (defined($r)) { # EOF
-			$self->{cb}->(@{$self->{args}}, '');
+			$self->{cb}->($self, @{$self->{args}}, '');
 			$self->close
 		} elsif ($!{EAGAIN}) { # rely on EPOLLIN
 		} elsif ($!{EINTR}) { # rely on EPOLLIN for sockets/pipes/tty
 			$self->requeue if $self->{-need_rq};
 		} else { # another error
-			$self->{cb}->(@{$self->{args}}, undef);
+			$self->{cb}->($self, @{$self->{args}}, undef);
 			$self->close;
 		}
 	};

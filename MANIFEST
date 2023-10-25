@@ -204,6 +204,7 @@ lib/PublicInbox/Filter/Vger.pm
 lib/PublicInbox/Gcf2.pm
 lib/PublicInbox/Gcf2Client.pm
 lib/PublicInbox/GetlineBody.pm
+lib/PublicInbox/GetlineResponse.pm
 lib/PublicInbox/Git.pm
 lib/PublicInbox/GitAsyncCat.pm
 lib/PublicInbox/GitCredential.pm

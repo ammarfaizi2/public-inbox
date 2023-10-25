@@ -455,11 +455,12 @@ sub next_step {
 # They may be exposed to the PSGI application when the PSGI app
 # returns a CODE ref for "push"-based responses
 package PublicInbox::HTTP::Chunked;
-use strict;
+use v5.12;
 
 sub write {
 	# ([$http], $buf) = @_;
-	PublicInbox::HTTP::chunked_write($_[0]->[0], $_[1])
+	PublicInbox::HTTP::chunked_write($_[0]->[0], $_[1]);
+	$_[0]->[0]->{sock} ? length($_[1]) : undef;
 }
 
 sub close {
@@ -468,12 +469,13 @@ sub close {
 }
 
 package PublicInbox::HTTP::Identity;
-use strict;
+use v5.12;
 our @ISA = qw(PublicInbox::HTTP::Chunked);
 
 sub write {
 	# ([$http], $buf) = @_;
 	PublicInbox::HTTP::identity_write($_[0]->[0], $_[1]);
+	$_[0]->[0]->{sock} ? length($_[1]) : undef;
 }
 
 1;

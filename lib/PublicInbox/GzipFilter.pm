@@ -123,9 +123,10 @@ sub http_out ($) {
 	};
 }
 
+# returns undef if HTTP client disconnected, may return 0
+# because ->translate can return ''
 sub write {
 	my $self = shift;
-	# my $ret = bytes::length($_[1]); # XXX does anybody care?
 	http_out($self)->write($self->translate(@_));
 }
 
