@@ -74,7 +74,6 @@ our (
 	$PRUNE_DONE, # marks off prune completions
 	$NCHANGE, # current number of changes
 	$NPROC,
-	$XH_PID, # XapHelper PID
 	$XHC, # XapClient
 	$REPO_CTX, # current repo being indexed in shards
 	$IDX_TODO, # [ $git0, $root0, $git1, $root1, ...]
@@ -514,8 +513,8 @@ sub assoc_max_init ($) {
 
 sub dump_roots_start {
 	my ($self, $associate) = @_;
-	($XHC, $XH_PID) = PublicInbox::XapClient::start_helper("-j$NPROC");
-	awaitpid($XH_PID, \&cmd_done, ['xap_helper', "-j$NPROC"]);
+	($XHC, my $pid) = PublicInbox::XapClient::start_helper("-j$NPROC");
+	awaitpid($pid, \&cmd_done, ['xap_helper', "-j$NPROC"]);
 	$associate // die 'BUG: no $associate';
 	$TODO{associating} = 1; # keep shards_active() happy
 	progress($self, 'dumping IDs from coderepos');
@@ -1113,7 +1112,7 @@ sub cidx_run { # main entry point
 	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNE_QUEUE,
 		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, $CMD_ENV,
 		%TODO, @IBXQ, @IBX, @JOIN, @ASSOC_PFX, $DUMP_IBX_WPIPE,
-		@ID2ROOT, $XH_PID, $XHC, @SORT);
+		@ID2ROOT, $XHC, @SORT);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local $self->{ASSOC_PFX} = \@ASSOC_PFX;
