@@ -33,9 +33,6 @@ sub do_cleanup {
 	}
 	my $srch = $ibx->{search} // $ibx;
 	delete @$srch{qw(xdb qp)};
-	for my $git (@{$ibx->{-repo_objs} // []}) {
-		$live = 1 if $git->cleanup(1);
-	}
 	PublicInbox::DS::add_uniq_timer($ibx+0, 5, \&do_cleanup, $ibx) if $live;
 }
 
@@ -116,7 +113,6 @@ sub git {
 		my $g = PublicInbox::Git->new($git_dir);
 		my $lim = $self->{-httpbackend_limiter};
 		$g->{-httpbackend_limiter} = $lim if $lim;
-		_cleanup_later($self);
 		$g;
 	};
 }

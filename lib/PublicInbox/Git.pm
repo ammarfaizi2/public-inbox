@@ -668,8 +668,10 @@ sub event_step {
 
 # idempotently registers with DS epoll/kqueue/select/poll
 sub watch_async ($) {
-	$_[0]->{epwatch} //= do {
-		$_[0]->SUPER::new($_[0]->{sock}, EPOLLIN);
+	my ($self) = @_;
+	PublicInbox::DS::add_uniq_timer($self+0, 30, \&cleanup, $self, 1);
+	$self->{epwatch} //= do {
+		$self->SUPER::new($self->{sock}, EPOLLIN);
 		\undef;
 	}
 }
