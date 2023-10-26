@@ -249,12 +249,12 @@ EOM
 }
 
 sub cidx_reap_log { # awaitpid cb
-	my ($pid, $self, $op_p) = @_;
+	my ($pid, $cmd, $self, $op_p) = @_;
 	if (!$? || ($DO_QUIT && (($? & 127) == $DO_QUIT ||
 				($? & 127) == POSIX::SIGPIPE))) {
 		send($op_p, "shard_done $self->{shard}", 0);
 	} else {
-		warn "E: git @LOG_STDIN: \$?=$?\n";
+		warn "W: @$cmd (\$?=$?)\n";
 		$self->{xdb}->cancel_transaction;
 	}
 }
@@ -265,8 +265,9 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
 	sysseek($in, 0, SEEK_SET);
-	my $rd = popen_rd($git->cmd(@LOG_STDIN), undef, { 0 => $in },
-				\&cidx_reap_log, $self, $op_p);
+	my $cmd = $git->cmd(@LOG_STDIN);
+	my $rd = popen_rd($cmd, undef, { 0 => $in },
+				\&cidx_reap_log, $cmd, $self, $op_p);
 	close $in;
 	PublicInbox::CidxLogP->new($rd, $self, $git, $roots);
 	# CidxLogP->event_step will call cidx_read_log_p once there's input
@@ -372,7 +373,7 @@ sub docids_by_postlist ($$) { # consider moving to PublicInbox::Search
 sub _cb { # run_await cb
 	my ($pid, $cmd, undef, $opt, $cb, $self, $git, @arg) = @_;
 	return if $DO_QUIT;
-	($git->{-cidx_err} = $?) ? warn("@$cmd error: \$?=$?\n") :
+	($git->{-cidx_err} = $?) ? warn("W: @$cmd (\$?=$?)\n") :
 				$cb->($opt, $self, $git, @arg);
 }
 
@@ -864,7 +865,7 @@ sub prep_alternate_start {
 
 sub cmd_done { # run_await cb for sort, xapian-delve, sed failures
 	my ($pid, $cmd, undef, undef, $run_on_destroy) = @_;
-	$? and die "@$cmd failed: \$?=$?";
+	$? and die "fatal: @$cmd (\$?=$?)\n";
 	# $run_on_destroy calls associate() or run_prune()
 }
 
