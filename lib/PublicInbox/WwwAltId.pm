@@ -61,14 +61,9 @@ The administrator needs to install the sqlite3(1) binary
 to support gzipped sqlite3 dumps.</pre>
 EOF
 
-	# setup stdin, POSIX requires writes <= 512 bytes to succeed so
-	# we can close the pipe right away.
-	pipe(my ($r, $w)) or die "pipe: $!";
-	syswrite($w, ".dump\n") == 6 or die "write: $!";
-	close($w) or die "close: $!";
-
 	# TODO: use -readonly if available with newer sqlite3(1)
-	my $qsp = PublicInbox::Qspawn->new([$sqlite3, $fn], undef, { 0 => $r });
+	my $qsp = PublicInbox::Qspawn->new([$sqlite3, $fn], undef,
+							{ 0 => \".dump\n" });
 	$ctx->{altid_pfx} = $altid_pfx;
 	$env->{'qspawn.filter'} = PublicInbox::GzipFilter->new;
 	$qsp->psgi_yield($env, undef, \&check_output, $ctx);
