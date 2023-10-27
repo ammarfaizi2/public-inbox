@@ -89,7 +89,7 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	AV *env = (AV *)SvRV(envref);
 	AV *rlim = (AV *)SvRV(rlimref);
 	const char *filename = SvPV_nolen(file);
-	pid_t pid;
+	pid_t pid = -1;
 	char **argv, **envp;
 	sigset_t set, old;
 	int ret, perrnum;
@@ -100,17 +100,17 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	AV2C_COPY(argv, cmd);
 	AV2C_COPY(envp, env);
 
-	if (sigfillset(&set)) return -1;
-	if (sigdelset(&set, SIGABRT)) return -1;
-	if (sigdelset(&set, SIGBUS)) return -1;
-	if (sigdelset(&set, SIGFPE)) return -1;
-	if (sigdelset(&set, SIGILL)) return -1;
-	if (sigdelset(&set, SIGSEGV)) return -1;
+	if (sigfillset(&set)) goto out;
+	if (sigdelset(&set, SIGABRT)) goto out;
+	if (sigdelset(&set, SIGBUS)) goto out;
+	if (sigdelset(&set, SIGFPE)) goto out;
+	if (sigdelset(&set, SIGILL)) goto out;
+	if (sigdelset(&set, SIGSEGV)) goto out;
 	/* no XCPU/XFSZ here */
-	if (sigprocmask(SIG_SETMASK, &set, &old)) return -1;
+	if (sigprocmask(SIG_SETMASK, &set, &old)) goto out;
 	chld_is_member = sigismember(&old, SIGCHLD);
-	if (chld_is_member < 0) return -1;
-	if (chld_is_member > 0 && sigdelset(&old, SIGCHLD)) return -1;
+	if (chld_is_member < 0) goto out;
+	if (chld_is_member > 0 && sigdelset(&old, SIGCHLD)) goto out;
 
 	pid = vfork();
 	if (pid == 0) {
@@ -171,6 +171,8 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	} else if (perrnum) {
 		errno = perrnum;
 	}
+out:
+	if (pid < 0) croak("E: fork_exec %s: %s\n", filename, strerror(errno));
 	return (int)pid;
 }
 
@@ -369,9 +371,7 @@ sub spawn ($;$$) {
 	}
 	my $cd = $opt->{'-C'} // ''; # undef => NULL mapping doesn't work?
 	my $pgid = $opt->{pgid} // -1;
-	my $pid = pi_fork_exec(\@rdr, $f, $cmd, \@env, $rlim, $cd, $pgid);
-	die "fork_exec @$cmd failed: $!\n" unless $pid > 0;
-	$pid;
+	pi_fork_exec(\@rdr, $f, $cmd, \@env, $rlim, $cd, $pgid);
 }
 
 sub popen_rd {
