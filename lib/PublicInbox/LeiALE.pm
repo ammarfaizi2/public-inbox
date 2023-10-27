@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # All Locals Ever: track lei/store + externals ever used as
@@ -6,10 +6,10 @@
 # and --only targets that haven't been through "lei add-external".
 # Typically: ~/.cache/lei/all_locals_ever.git
 package PublicInbox::LeiALE;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::LeiSearch PublicInbox::Lock);
 use PublicInbox::Git qw(read_all);
+use autodie qw(close open rename seek truncate);
 use PublicInbox::Import;
 use PublicInbox::LeiXSearch;
 use Fcntl qw(SEEK_SET);
@@ -77,18 +77,16 @@ sub refresh_externals {
 	if ($new ne '' || $gone) {
 		$self->{lockfh}->autoflush(1);
 		if ($gone) {
-			seek($self->{lockfh}, 0, SEEK_SET) or die "seek: $!";
-			truncate($self->{lockfh}, 0) or die "truncate: $!";
+			seek($self->{lockfh}, 0, SEEK_SET);
+			truncate($self->{lockfh}, 0);
 		} else {
 			$old = '';
 		}
 		print { $self->{lockfh} } $old, $new or die "print: $!";
 	}
-	$new = $old = '';
+	$new = '';
 	my $f = $self->git->{git_dir}.'/objects/info/alternates';
-	if (open my $fh, '<', $f) {
-		read_all($fh, -s $fh, \$old);
-	}
+	$old = PublicInbox::Git::try_cat($f);
 	for my $x (@ibxish) {
 		$new .= $lei->canonpath_harder($x->git->{git_dir})."/objects\n";
 	}
@@ -98,10 +96,10 @@ sub refresh_externals {
 	# this needs to be atomic since child processes may start
 	# git-cat-file at any time
 	my $tmp = "$f.$$.tmp";
-	open my $fh, '>', $tmp or die "open($tmp): $!";
-	print $fh $new or die "print($tmp): $!";
-	close $fh or die "close($tmp): $!";
-	rename($tmp, $f) or die "rename($tmp, $f): $!";
+	open my $fh, '>', $tmp;
+	print $fh $new;
+	close $fh;
+	rename($tmp, $f)
 }
 
 1;
