@@ -40,6 +40,7 @@ $GLP_PASS->configure(qw(gnu_getopt no_ignore_case auto_abbrev pass_through));
 our (%PATH2CFG, # persistent for socket daemon
 $MDIR2CFGPATH, # /path/to/maildir => { /path/to/config => [ ino watches ] }
 $OPT, # shared between optparse and opt_dash callback (for Getopt::Long)
+$daemon_pid
 );
 
 # TBD: this is a documentation mechanism to show a subcommand
@@ -486,7 +487,7 @@ sub x_it ($$) {
 	stop_pager($self);
 	if ($self->{pkt_op_p}) { # worker => lei-daemon
 		$self->{pkt_op_p}->pkt_do('x_it', $code);
-		exit($code >> 8);
+		exit($code >> 8) if $$ != $daemon_pid;
 	} elsif ($self->{sock}) { # lei->daemon => lei(1) client
 		send($self->{sock}, "x_it $code", 0);
 	} elsif ($quit == \&CORE::exit) { # an admin (one-shot) command
@@ -1341,8 +1342,8 @@ sub lazy_start {
 	my $pid = fork;
 	return if $pid;
 	$0 = "lei-daemon $path";
-	local %PATH2CFG;
-	local $MDIR2CFGPATH;
+	local (%PATH2CFG, $MDIR2CFGPATH);
+	local $daemon_pid = $$;
 	$listener->blocking(0);
 	my $exit_code;
 	my $pil = PublicInbox::Listener->new($listener, \&accept_dispatch);
