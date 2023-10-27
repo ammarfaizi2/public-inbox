@@ -1,15 +1,13 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
-use Test::More;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 use PublicInbox::Inbox;
 use List::Util qw(max);
 use Benchmark qw(:all :hireswallclock);
-use PublicInbox::Spawn qw(popen_rd);
 use Carp ();
 require_git(2.19); # for --unordered
 require_mods(qw(BSD::Resource));
