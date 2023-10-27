@@ -13,7 +13,7 @@ use v5.10.1;
 use parent qw(Exporter);
 our @EXPORT_OK = qw(glob2re rel2abs_collapsed);
 use PublicInbox::Inbox;
-use PublicInbox::Spawn qw(popen_rd);
+use PublicInbox::Spawn qw(popen_rd run_qx);
 our $LD_PRELOAD = $ENV{LD_PRELOAD}; # only valid at startup
 our $DEDUPE; # set to {} to dedupe or clear cache
 
@@ -576,23 +576,21 @@ sub urlmatch {
 	my (%env, %opt);
 	my $cmd = $self->config_cmd(\%env, \%opt);
 	push @$cmd, @bool, qw(--includes -z --get-urlmatch), $key, $url;
-	my $fh = popen_rd($cmd, \%env, \%opt);
-	local $/ = "\0";
-	my $val = <$fh>;
-	if (!close($fh)) {
+	my $val = run_qx($cmd, \%env, \%opt);
+	if ($?) {
 		undef $val;
 		if (@bool && ($? >> 8) == 128) { # not boolean
 		} elsif (($? >> 8) != 1) {
 			$urlmatch_broken = 1;
 		} elsif ($try_git) { # n.b. this takes cwd into account
-			$fh = popen_rd([qw(git config), @bool,
+			$val = run_qx([qw(git config), @bool,
 					qw(-z --get-urlmatch), $key, $url]);
-			$val = <$fh>;
-			close($fh) or undef($val);
+			undef $val if $?;
 		}
 	}
 	$? = 0; # don't influence lei exit status
 	if (defined($val)) {
+		local $/ = "\0";
 		chomp $val;
 		$val = git_bool($val) if @bool;
 	}

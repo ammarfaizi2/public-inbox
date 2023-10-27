@@ -6,7 +6,7 @@ use PublicInbox::TestCommon;
 use Cwd qw(abs_path);
 require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
-use PublicInbox::Spawn qw(popen_rd);
+use PublicInbox::Spawn qw(run_qx);
 require_mods(qw(DBD::SQLite Xapian URI::Escape));
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
@@ -234,13 +234,9 @@ SKIP: {
 		my $cmd = [ qw(git hash-object -w --stdin) ];
 		my $env = { GIT_DIR => $binfoo };
 		while (my ($label, $size) = each %bin) {
-			pipe(my ($rin, $win)) or BAIL_OUT;
-			my $rout = popen_rd($cmd , $env, { 0 => $rin });
-			$rin = undef;
-			print { $win } ("\0" x $size) or BAIL_OUT;
-			close $win or BAIL_OUT;
-			chomp(my $x = <$rout>);
-			close $rout or BAIL_OUT "$?";
+			my $rdr = { 0 => \("\0" x $size) };
+			chomp(my $x = run_qx($cmd , $env, $rdr));
+			xbail "@$cmd: \$?=$?" if $?;
 			$oid{$label} = $x;
 		}
 

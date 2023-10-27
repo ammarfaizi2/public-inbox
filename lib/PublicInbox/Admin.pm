@@ -9,7 +9,7 @@ use parent qw(Exporter);
 our @EXPORT_OK = qw(setup_signals);
 use PublicInbox::Config;
 use PublicInbox::Inbox;
-use PublicInbox::Spawn qw(popen_rd);
+use PublicInbox::Spawn qw(run_qx);
 use PublicInbox::Eml;
 *rel2abs_collapsed = \&PublicInbox::Config::rel2abs_collapsed;
 
@@ -67,9 +67,8 @@ sub resolve_git_dir {
 	my ($cd) = @_;
 	# try v1 bare git dirs
 	my $cmd = [ qw(git rev-parse --git-dir) ];
-	my $fh = popen_rd($cmd, undef, {-C => $cd});
-	my $dir = do { local $/; <$fh> };
-	close $fh or die "error in @$cmd (cwd:${\($cd // '.')}): $?\n";
+	my $dir = run_qx($cmd, undef, {-C => $cd});
+	die "error in @$cmd (cwd:${\($cd // '.')}): $?\n" if $?;
 	chomp $dir;
 	# --absolute-git-dir requires git v2.13.0+
 	$dir = rel2abs_collapsed($dir, $cd) if $dir !~ m!\A/!;

@@ -7,7 +7,7 @@ use v5.12;
 use parent qw(PublicInbox::IPC);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
-use PublicInbox::Spawn qw(popen_rd spawn run_wait run_die);
+use PublicInbox::Spawn qw(spawn run_wait run_die run_qx);
 use File::Path ();
 use File::Temp ();
 use File::Spec ();
@@ -57,9 +57,8 @@ sub try_scrape {
 	my $curl = $self->{curl} //= PublicInbox::LeiCurl->new($lei) or return;
 	my $cmd = $curl->for_uri($lei, $uri, '--compressed');
 	my $opt = { 0 => $lei->{0}, 2 => $lei->{2} };
-	my $fh = popen_rd($cmd, undef, $opt);
-	my $html = do { local $/; <$fh> } // die "read(curl $uri): $!";
-	CORE::close($fh) or return $lei->child_error($?, "@$cmd failed");
+	my $html = run_qx($cmd, undef, $opt);
+	return $lei->child_error($?, "@$cmd failed") if $?;
 
 	# we grep with URL below, we don't want Subject/From headers
 	# making us clone random URLs.  This assumes remote instances

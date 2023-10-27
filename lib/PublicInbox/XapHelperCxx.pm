@@ -7,7 +7,7 @@
 # The resulting executable is not linked to Perl in any way.
 package PublicInbox::XapHelperCxx;
 use v5.12;
-use PublicInbox::Spawn qw(popen_rd which);
+use PublicInbox::Spawn qw(run_qx which);
 use PublicInbox::Git qw(read_all);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
@@ -29,14 +29,9 @@ my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -O0') . ' ' .
 my $xap_modversion;
 
 sub xap_cfg (@) {
-	use autodie qw(open seek);
-	open my $err, '+>', undef;
 	my $cmd = [ $ENV{PKG_CONFIG} // 'pkg-config', @_, 'xapian-core' ];
-	my $rd = popen_rd($cmd, undef, { 2 => $err });
-	chomp(my $ret = do { local $/; <$rd> });
-	return $ret if close($rd);
-	seek($err, 0, SEEK_SET);
-	$err = read_all($err);
+	chomp(my $ret = run_qx($cmd, undef, { 2 => \(my $err) }));
+	return $ret if !$?;
 	die <<EOM;
 @$cmd failed: Xapian development files missing? (\$?=$?)
 $err

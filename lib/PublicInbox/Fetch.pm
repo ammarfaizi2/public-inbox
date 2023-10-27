@@ -5,7 +5,7 @@ package PublicInbox::Fetch;
 use v5.12;
 use parent qw(PublicInbox::IPC);
 use URI ();
-use PublicInbox::Spawn qw(popen_rd run_wait);
+use PublicInbox::Spawn qw(popen_rd run_qx run_wait);
 use PublicInbox::Admin;
 use PublicInbox::LEI;
 use PublicInbox::LeiCurl;
@@ -20,9 +20,8 @@ sub remote_url ($$) {
 	my $rn = $lei->{opt}->{'try-remote'} // [ 'origin', '_grokmirror' ];
 	for my $r (@$rn) {
 		my $cmd = [ qw(git config), "remote.$r.url" ];
-		my $fh = popen_rd($cmd, undef, { -C => $dir, 2 => $lei->{2} });
-		my $url = <$fh>;
-		close $fh or next;
+		my $url = run_qx($cmd, undef, { -C => $dir, 2 => $lei->{2} });
+		next if $?;
 		$url =~ s!/*\n!!s;
 		return $url;
 	}

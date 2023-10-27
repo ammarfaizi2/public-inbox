@@ -4,7 +4,7 @@
 # Default spam filter class for wrapping spamc(1)
 package PublicInbox::Spamcheck::Spamc;
 use v5.12;
-use PublicInbox::Spawn qw(popen_rd run_wait);
+use PublicInbox::Spawn qw(run_qx run_wait);
 use IO::Handle;
 use Fcntl qw(SEEK_SET);
 
@@ -20,14 +20,9 @@ sub new {
 sub spamcheck {
 	my ($self, $msg, $out) = @_;
 
+	$out = \(my $buf = '') unless ref($out);
 	my $rdr = { 0 => _msg_to_fh($self, $msg) };
-	my $fh = popen_rd($self->{checkcmd}, undef, $rdr);
-	unless (ref $out) {
-		my $buf = '';
-		$out = \$buf;
-	}
-	$$out = do { local $/; <$fh> };
-	close $fh; # PublicInbox::ProcessIO::CLOSE
+	$$out = run_qx($self->{checkcmd}, undef, $rdr);
 	($? || $$out eq '') ? 0 : 1;
 }
 

@@ -8,7 +8,7 @@
 package PublicInbox::Import;
 use v5.12;
 use parent qw(PublicInbox::Lock);
-use PublicInbox::Spawn qw(run_die popen_rd spawn);
+use PublicInbox::Spawn qw(run_die run_qx spawn);
 use PublicInbox::MID qw(mids mid2path);
 use PublicInbox::Address;
 use PublicInbox::Smsg;
@@ -25,10 +25,8 @@ use PublicInbox::Git qw(read_all);
 
 sub default_branch () {
 	state $default_branch = do {
-		my $r = popen_rd([qw(git config --global init.defaultBranch)],
+		my $h = run_qx([qw(git config --global init.defaultBranch)],
 				 { GIT_CONFIG => undef });
-		chomp(my $h = <$r> // '');
-		CORE::close $r;
 		$h eq '' ? 'refs/heads/master' : "refs/heads/$h";
 	}
 }

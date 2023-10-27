@@ -7,7 +7,7 @@ package PublicInbox::LeiBlob;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
-use PublicInbox::Spawn qw(run_wait popen_rd which);
+use PublicInbox::Spawn qw(run_wait run_qx which);
 use PublicInbox::DS;
 use PublicInbox::Eml;
 use PublicInbox::Git qw(read_all);
@@ -23,9 +23,8 @@ sub get_git_dir ($$) {
 	} else { # implicit --cwd, quiet errors
 		open $opt->{2}, '>', '/dev/null' or die "open /dev/null: $!";
 	}
-	my $r = popen_rd($cmd, {GIT_DIR => undef}, $opt);
-	chomp(my $gd = do { local $/; <$r> });
-	close($r) ? $gd : undef;
+	chomp(my $git_dir = run_qx($cmd, {GIT_DIR => undef}, $opt));
+	$? ? undef : $git_dir;
 }
 
 sub solver_user_cb { # called by solver when done
@@ -122,9 +121,8 @@ sub lei_blob {
 		my $cmd = [ 'git', '--git-dir='.$lei->ale->git->{git_dir},
 				'cat-file', 'blob', $blob ];
 		if (defined $lei->{-attach_idx}) {
-			my $fh = popen_rd($cmd, $lei->{env}, $rdr);
-			my $buf = do { local $/; <$fh> };
-			return extract_attach($lei, $blob, \$buf) if close($fh);
+			my $buf = run_qx($cmd, $lei->{env}, $rdr);
+			return extract_attach($lei, $blob, \$buf) unless $?;
 		}
 		$rdr->{1} = $lei->{1};
 		my $cerr = run_wait($cmd, $lei->{env}, $rdr) or return;
