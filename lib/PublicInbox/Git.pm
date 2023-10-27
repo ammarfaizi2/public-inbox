@@ -17,7 +17,6 @@ use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
 use Errno qw(EINTR EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
-use Time::HiRes qw(stat);
 use PublicInbox::Spawn qw(spawn popen_rd run_qx which);
 use PublicInbox::ProcessIONBF;
 use PublicInbox::Tmpfile;
@@ -53,13 +52,13 @@ my %GIT_ESC = (
 );
 my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
 
-my $EXE_ST = ''; # pack('dd', st_ctime, st_size);
+my $EXE_ST = ''; # pack('dd', st_dev, st_ino); # no `q' in some 32-bit builds
 my ($GIT_EXE, $GIT_VER);
 
 sub check_git_exe () {
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
-	my @st = stat($GIT_EXE) or die "stat($GIT_EXE): $!";
-	my $st = pack('dd', $st[10], $st[7]);
+	my @st = stat(_) or die "stat($GIT_EXE): $!"; # can't do HiRes w/ _
+	my $st = pack('dd', $st[0], $st[1]);
 	if ($st ne $EXE_ST) {
 		my $v = run_qx([ $GIT_EXE, '--version' ]);
 		die "$GIT_EXE --version: \$?=$?" if $?;
@@ -117,6 +116,7 @@ sub git_path ($$) {
 sub alternates_changed {
 	my ($self) = @_;
 	my $alt = git_path($self, 'objects/info/alternates');
+	use Time::HiRes qw(stat);
 	my @st = stat($alt) or return 0;
 
 	# can't rely on 'q' on some 32-bit builds, but `d' works
