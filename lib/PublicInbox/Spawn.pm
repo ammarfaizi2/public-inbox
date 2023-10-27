@@ -6,10 +6,8 @@
 # is explicitly defined in the environment (and writable).
 # Under Linux, vfork can make a big difference in spawning performance
 # as process size increases (fork still needs to mark pages for CoW use).
-# Currently, we only use this for code intended for long running
-# daemons (inside the PSGI code (-httpd) and -nntpd).  The short-lived
-# scripts (-mda, -index, -learn, -init) either use IPC::run or standard
-# Perl routines.
+# None of this is intended to be thread-safe since Perl5 maintainers
+# officially discourage the use of threads.
 #
 # There'll probably be more OS-level C stuff here, down the line.
 # We don't want too many DSOs: https://udrepper.livejournal.com/8790.html
@@ -39,12 +37,6 @@ BEGIN {
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
-
-/* some platforms need alloca.h, but some don't */
-#if defined(__GNUC__) && !defined(alloca)
-#  define alloca(sz) __builtin_alloca(sz)
-#endif
-
 #include <signal.h>
 #include <assert.h>
 
@@ -56,11 +48,17 @@ BEGIN {
  *   This is unlike "sv_len", which returns what you would expect.
  */
 #define AV2C_COPY(dst, src) do { \
+	static size_t dst##__capa; \
 	I32 i; \
 	I32 top_index = av_len(src); \
 	I32 real_len = top_index + 1; \
 	I32 capa = real_len + 1; \
-	dst = alloca(capa * sizeof(char *)); \
+	if (capa > dst##__capa) { \
+		dst##__capa = 0; /* in case Newx croaks */ \
+		Safefree(dst); \
+		Newx(dst, capa, char *); \
+		dst##__capa = capa; \
+	} \
 	for (i = 0; i < real_len; i++) { \
 		SV **sv = av_fetch(src, i, 0); \
 		dst[i] = SvPV_nolen(*sv); \
@@ -90,7 +88,7 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 	AV *rlim = (AV *)SvRV(rlimref);
 	const char *filename = SvPV_nolen(file);
 	pid_t pid = -1;
-	char **argv, **envp;
+	static char **argv, **envp;
 	sigset_t set, old;
 	int ret, perrnum;
 	volatile int cerrnum = 0; /* shared due to vfork */
@@ -172,7 +170,8 @@ int pi_fork_exec(SV *redirref, SV *file, SV *cmdref, SV *envref, SV *rlimref,
 		errno = perrnum;
 	}
 out:
-	if (pid < 0) croak("E: fork_exec %s: %s\n", filename, strerror(errno));
+	if (pid < 0)
+		croak("E: fork_exec %s: %s\n", filename, strerror(errno));
 	return (int)pid;
 }
 
