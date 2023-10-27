@@ -18,7 +18,7 @@ use Errno qw(EINTR EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use Time::HiRes qw(stat);
-use PublicInbox::Spawn qw(spawn popen_rd which);
+use PublicInbox::Spawn qw(spawn popen_rd run_qx which);
 use PublicInbox::ProcessIONBF;
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
@@ -61,9 +61,8 @@ sub check_git_exe () {
 	my @st = stat($GIT_EXE) or die "stat($GIT_EXE): $!";
 	my $st = pack('dd', $st[10], $st[7]);
 	if ($st ne $EXE_ST) {
-		my $rd = popen_rd([ $GIT_EXE, '--version' ]);
-		my $v = readline($rd);
-		CORE::close($rd) or die "$GIT_EXE --version: $?";
+		my $v = run_qx([ $GIT_EXE, '--version' ]);
+		die "$GIT_EXE --version: \$?=$?" if $?;
 		$v =~ /\b([0-9]+(?:\.[0-9]+){2})/ or die
 			"$GIT_EXE --version output: $v # unparseable";
 		$GIT_VER = eval("v$1") // die "BUG: bad vstring: $1 ($v)";
