@@ -5,11 +5,11 @@
 # other libgit2 stuff may go here, too.
 package PublicInbox::Gcf2;
 use v5.12;
-use PublicInbox::Spawn qw(which popen_rd); # may set PERL_INLINE_DIRECTORY
+use PublicInbox::Spawn qw(which run_qx); # may set PERL_INLINE_DIRECTORY
 use Fcntl qw(SEEK_SET);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
-use PublicInbox::Git qw(read_all);
+use PublicInbox::Git;
 use PublicInbox::Lock;
 
 BEGIN {
@@ -27,29 +27,16 @@ BEGIN {
 	my $pc = which($ENV{PKG_CONFIG} // 'pkg-config') //
 		die "pkg-config missing for libgit2";
 	my ($dir) = (__FILE__ =~ m!\A(.+?)/[^/]+\z!);
-	open my $err, '+>', "$inline_dir/.public-inbox.pkg-config.err";
 	my $vals = {};
-	my $rdr = { 2 => $err };
+	my $rdr = { 2 => \(my $err) };
 	my @switches = qw(modversion cflags libs);
 	for my $k (@switches) {
-		my $rd = popen_rd([$pc, "--$k", 'libgit2'], undef, $rdr);
-		chomp(my $val = do { local $/; <$rd> });
-		CORE::close($rd) or last; # checks for error and sets $?
+		chomp(my $val = run_qx([$pc, "--$k", 'libgit2'], undef, $rdr));
+		die "E: libgit2 not installed: $err\n" if $?;
 		$vals->{$k} = $val;
 	}
-	if (!$?) {
-		# note: we name C source files .h to prevent
-		# ExtUtils::MakeMaker from automatically trying to
-		# build them.
-		my $f = "$dir/gcf2_libgit2.h";
-		open my $src, '<', $f;
-		$c_src = read_all($src);
-	}
-	unless ($c_src) {
-		seek($err, 0, SEEK_SET);
-		$err = read_all($err);
-		die "E: libgit2 not installed: $err\n";
-	}
+	my $f = "$dir/gcf2_libgit2.h";
+	$c_src = PublicInbox::Git::try_cat($f) or die "cat $f: $!";
 	# append pkg-config results to the source to ensure Inline::C
 	# can rebuild if there's changes (it doesn't seem to detect
 	# $CFG{CCFLAGSEX} nor $CFG{CPPFLAGS} changes)
