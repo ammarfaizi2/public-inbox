@@ -22,7 +22,7 @@ use Carp qw(croak);
 use PublicInbox::ProcessIO;
 our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait run_qx);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
-use autodie qw(open pipe read seek sysseek truncate);
+use autodie qw(open pipe seek sysseek truncate);
 
 BEGIN {
 	my $all_libc = <<'ALL_LIBC'; # all *nix systems we support
@@ -390,10 +390,12 @@ sub popen_wr {
 
 sub read_out_err ($) {
 	my ($opt) = @_;
+	local $/;
 	for my $fd (1, 2) { # read stdout/stderr
 		my $fh = delete($opt->{"fh.$fd"}) // next;
 		seek($fh, 0, SEEK_SET);
-		read($fh, ${$opt->{$fd}}, -s $fh, length(${$opt->{$fd}} // ''));
+		${$opt->{$fd}} .= <$fh>;
+		$fh->error and croak "E: read(FD=$fd): $!";
 	}
 }
 
