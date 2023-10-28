@@ -32,7 +32,7 @@ NonBlocking = true
 Sockets = public-inbox-imapd.socket
 
 KillSignal = SIGQUIT
-User = nobody
+User = news
 Group = ssl-cert
 ExecReload = /bin/kill -HUP $MAINPID
 TimeoutStopSec = 86400

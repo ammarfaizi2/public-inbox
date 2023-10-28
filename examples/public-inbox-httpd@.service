@@ -32,8 +32,8 @@ NonBlocking = true
 Sockets = public-inbox-httpd.socket
 
 KillSignal = SIGQUIT
-User = nobody
-Group = nogroup
+User = news
+Group = ssl-cert
 ExecReload = /bin/kill -HUP $MAINPID
 TimeoutStopSec = 86400
 KillMode = process
