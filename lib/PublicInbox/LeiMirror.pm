@@ -171,7 +171,7 @@ sub _get_txt_done { # returns true on error (non-fatal), undef on success
 	$? = 0; # don't influence normal lei exit
 	return warn("$uri missing\n") if ($cerr >> 8) == 22;
 	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
-	seek($fh, SEEK_SET, 0);
+	seek($fh, 0, SEEK_SET);
 	$self->{"mtime.$endpoint"} = (stat($fh))[9];
 	$self->{"txt.$endpoint"} = read_all($fh, -s _);
 	undef; # success
@@ -305,8 +305,8 @@ sub fgrp_update {
 	return if !keep_going($fgrp);
 	my $srcfh = delete $fgrp->{srcfh} or return;
 	my $dstfh = delete $fgrp->{dstfh} or return;
-	seek($srcfh, SEEK_SET, 0);
-	seek($dstfh, SEEK_SET, 0);
+	seek($srcfh, 0, SEEK_SET);
+	seek($dstfh, 0, SEEK_SET);
 	my %src = map { chomp; split(/\0/) } (<$srcfh>);
 	close $srcfh;
 	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
@@ -512,7 +512,7 @@ EOM
 		my $f = "$o/info/alternates";
 		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
 		open my $fh, '+>>', $f;
-		seek($fh, SEEK_SET, 0);
+		seek($fh, 0, SEEK_SET);
 		chomp(my @cur = <$fh>);
 		if (!grep(/\A\Q$l\E\z/, @cur)) {
 			say $fh $l;
@@ -532,7 +532,7 @@ sub fp_done {
 	}
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref} // die 'BUG: no show-ref output';
-	sysseek($fh, SEEK_SET, 0);
+	sysseek($fh, 0, SEEK_SET);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
 	my $B = sha_all(1, $fh)->hexdigest;
@@ -729,7 +729,7 @@ sub up_fp_done {
 	my ($self) = @_;
 	return if !keep_going($self);
 	my $fh = delete $self->{-show_ref_up} // die 'BUG: no show-ref output';
-	sysseek($fh, SEEK_SET, 0);
+	sysseek($fh, 0, SEEK_SET);
 	$self->{-ent} // die 'BUG: no -ent';
 	my $A = $self->{-ent}->{fingerprint} // die 'BUG: no fingerprint';
 	my $B = sha_all(1, $fh)->hexdigest;
@@ -1083,7 +1083,7 @@ sub dump_manifest ($$) {
 	# epoch they no longer want to skip
 	my $json = PublicInbox::Config->json->encode($m);
 	my $mtime = (stat($ft))[9];
-	seek($ft, SEEK_SET, 0);
+	seek($ft, 0, SEEK_SET);
 	truncate($ft, 0);
 	gzip(\$json => $ft) or die "gzip($ft): $GzipError";
 	$ft->flush or die "flush($ft): $!";
