@@ -5,6 +5,7 @@ use v5.12;
 use PublicInbox::PktOp;
 use Fcntl qw(SEEK_SET);
 use autodie qw(open seek);
+use PublicInbox::Git qw(read_all);
 
 sub cfg_do_edit ($;$) {
 	my ($self, $reason) = @_;
