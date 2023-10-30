@@ -20,7 +20,8 @@ sub ep_wait {
 	}
 	@$events = ();
 	my $n = select($rvec, $wvec, undef, $msec < 0 ? undef : ($msec/1000));
-	return if $n <= 0;
+	return if $n == 0;
+	die "select: $!" if $n < 0;
 	while (my ($fd, $ev) = each %$self) {
 		if (vec($rvec, $fd, 1) || vec($wvec, $fd, 1)) {
 			delete($self->{$fd}) if $ev & EPOLLONESHOT;

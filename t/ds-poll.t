@@ -6,13 +6,14 @@
 use v5.12;
 use Test::More;
 use PublicInbox::Syscall qw(EPOLLIN EPOLLOUT EPOLLONESHOT);
+use autodie qw(close pipe syswrite);
 my $cls = $ENV{TEST_IOPOLLER} // 'PublicInbox::DSPoll';
 use_ok $cls;
 my $p = $cls->new;
 
 my ($r, $w, $x, $y);
-pipe($r, $w) or die;
-pipe($x, $y) or die;
+pipe($r, $w);
+pipe($x, $y);
 is($p->ep_add($r, EPOLLIN), 0, 'add EPOLLIN');
 my $events = [];
 $p->ep_wait(9, 0, $events);
@@ -43,5 +44,21 @@ is_deeply(\@fds, \@exp, 'got both ready FDs');
 is($p->ep_del($r, 0), 0, 'EPOLL_CTL_DEL OK');
 $p->ep_wait(9, 0, $events);
 is(scalar @$events, 0, 'nothing ready after EPOLL_CTL_DEL');
+
+is($p->ep_add($r, EPOLLIN), 0, 're-add');
+SKIP: {
+	$cls =~ m!::(?:DSPoll|Select)\z! or
+		skip 'EBADF test for select|poll only';
+	my $old_fd = fileno($r);
+	close $r;
+	my @w;
+	eval {
+		local $SIG{__WARN__} = sub { push @w, @_ };
+		$p->ep_wait(9, 0, $events);
+	};
+	ok($@, 'error detected from bad FD');
+	ok($!{EBADF}, 'EBADF errno set');
+	@w and ok(grep(/\bFD=$old_fd invalid/, @w), 'carps invalid FD');
+}
 
 done_testing;

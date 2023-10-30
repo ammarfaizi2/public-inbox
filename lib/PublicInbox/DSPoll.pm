@@ -12,30 +12,39 @@ package PublicInbox::DSPoll;
 use v5.12;
 use IO::Poll;
 use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
+use Carp qw(carp);
+use Errno ();
 
 sub new { bless {}, __PACKAGE__ } # fd => events
 
 sub ep_wait {
 	my ($self, $maxevents, $timeout_msec, $events) = @_;
-	my @pset;
+	my (@pset, $n, $fd, $revents, $nval);
 	while (my ($fd, $events) = each %$self) {
 		my $pevents = $events & EPOLLIN ? POLLIN : 0;
 		$pevents |= $events & EPOLLOUT ? POLLOUT : 0;
 		push(@pset, $fd, $pevents);
 	}
 	@$events = ();
-	my $n = IO::Poll::_poll($timeout_msec, @pset);
-	if ($n >= 0) {
-		for (my $i = 0; $i < @pset; ) {
-			my $fd = $pset[$i++];
-			my $revents = $pset[$i++] or next;
-			delete($self->{$fd}) if $self->{$fd} & EPOLLONESHOT;
+	do {
+		$n = IO::Poll::_poll($timeout_msec, @pset);
+	} while ($n < 0 && $! == Errno::EINTR);
+	die "poll: $!" if $n < 0;
+	return if $n == 0;
+	while (defined($fd = shift @pset)) {
+		$revents = shift @pset or next; # no event
+		if ($revents & POLLNVAL) {
+			carp "E: FD=$fd invalid in poll";
+			delete $self->{$fd};
+			$nval = 1;
+		} else {
+			delete $self->{$fd} if $self->{$fd} & EPOLLONESHOT;
 			push @$events, $fd;
 		}
-		my $nevents = scalar @$events;
-		if ($n != $nevents) {
-			warn "BUG? poll() returned $n, but got $nevents";
-		}
+	}
+	if ($nval && !@$events) {
+		$! = Errno::EBADF;
+		die "poll: $!";
 	}
 }
 
