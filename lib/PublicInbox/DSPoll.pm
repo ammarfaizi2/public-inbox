@@ -18,7 +18,7 @@ use Errno ();
 sub new { bless {}, __PACKAGE__ } # fd => events
 
 sub ep_wait {
-	my ($self, $maxevents, $timeout_msec, $events) = @_;
+	my ($self, $timeout_msec, $events) = @_;
 	my (@pset, $n, $fd, $revents, $nval);
 	while (my ($fd, $events) = each %$self) {
 		my $pevents = $events & EPOLLIN ? POLLIN : 0;

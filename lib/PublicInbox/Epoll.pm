@@ -18,6 +18,9 @@ sub new {
 sub ep_add { epoll_ctl(fileno(${$_[0]}), EPOLL_CTL_ADD, fileno($_[1]), $_[2]) }
 sub ep_mod { epoll_ctl(fileno(${$_[0]}), EPOLL_CTL_MOD, fileno($_[1]), $_[2]) }
 sub ep_del { epoll_ctl(fileno(${$_[0]}), EPOLL_CTL_DEL, fileno($_[1]), 0) }
-sub ep_wait { epoll_wait(fileno(${$_[0]}), @_[1, 2, 3]) }
+
+# n.b. maxevents=1000 is the historical default.  maxevents=1 (yes, one)
+# is more fair under load with multiple worker processes sharing one listener
+sub ep_wait { epoll_wait(fileno(${$_[0]}), 1000, @_[1, 2]) }
 
 1;

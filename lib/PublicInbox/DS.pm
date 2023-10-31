@@ -287,8 +287,8 @@ sub event_loop (;$$) {
 	do {
 		my $timeout = RunTimers();
 
-		# get up to 1000 FDs representing events
-		$Poller->ep_wait(1000, $timeout, \@active);
+		# grab whatever FDs are ready
+		$Poller->ep_wait($timeout, \@active);
 
 		# map all FDs to their associated Perl object
 		@active = @DescriptorMap{@active};

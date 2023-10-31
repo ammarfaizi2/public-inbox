@@ -117,7 +117,8 @@ sub ep_del {
 }
 
 sub ep_wait {
-	my ($self, $maxevents, $timeout_msec, $events) = @_;
+	my ($self, $timeout_msec, $events) = @_;
+	# n.b.: IO::KQueue is hard-coded to return up to 1000 events
 	@$events = eval { $self->{kq}->kevent($timeout_msec) };
 	if (my $err = $@) {
 		# workaround https://rt.cpan.org/Ticket/Display.html?id=116615

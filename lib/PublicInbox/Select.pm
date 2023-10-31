@@ -12,7 +12,7 @@ use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
 sub new { bless {}, __PACKAGE__ } # fd => events
 
 sub ep_wait {
-	my ($self, $maxevents, $msec, $events) = @_;
+	my ($self, $msec, $events) = @_;
 	my ($rvec, $wvec) = ('', ''); # we don't use EPOLLERR
 	while (my ($fd, $ev) = each %$self) {
 		vec($rvec, $fd, 1) = 1 if $ev & EPOLLIN;

@@ -12,11 +12,11 @@ pipe(my $r, my $w);
 is($ep->ep_add($w, EPOLLOUT), 0, 'epoll_ctl pipe EPOLLOUT');
 
 my @events;
-$ep->ep_wait(100, 10000, \@events);
+$ep->ep_wait(10000, \@events);
 is(scalar(@events), 1, 'got one event');
 is($events[0], fileno($w), 'got expected FD');
 close $w;
-$ep->ep_wait(100, 0, \@events);
+$ep->ep_wait(0, \@events);
 is(scalar(@events), 0, 'epoll_wait timeout');
 
 done_testing;
