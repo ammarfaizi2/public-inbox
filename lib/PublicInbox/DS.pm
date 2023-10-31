@@ -354,37 +354,21 @@ sub greet {
 	$self;
 }
 
-#####################################################################
-### I N S T A N C E   M E T H O D S
-#####################################################################
-
 sub requeue ($) { push @$nextq, $_[0] } # autovivifies
 
-=head2 C<< $obj->close >>
-
-Close the socket.
-
-=cut
+# drop the IO::Handle ref, true if successful, false if not (or already dropped)
+# (this is closer to CORE::close than Danga::Socket::close)
 sub close {
-    my ($self) = @_;
-    my $sock = delete $self->{sock} or return;
+	my ($self) = @_;
+	my $sock = delete $self->{sock} or return;
 
-    # we need to flush our write buffer, as there may
-    # be self-referential closures (sub { $client->close })
-    # preventing the object from being destroyed
-    delete $self->{wbuf};
+	# we need to clear our write buffer, as there may
+	# be self-referential closures (sub { $client->close })
+	# preventing the object from being destroyed
+	delete $self->{wbuf};
+	delete $DescriptorMap{fileno($sock)};
 
-    delete $DescriptorMap{fileno($sock)};
-
-    # if we're using epoll, we have to remove this from our epoll fd so we
-    # stop getting notifications about it
-    $Poller->ep_del($sock) and croak("EPOLL_CTL_DEL($self/$sock): $!");
-    # let refcount drop to zero..
-
-    # FIXME this is the opposite of CORE::close return value
-    # TODO: callers need to be updated to expect true on success like
-    # CORE::close (and false otherwise)
-    0;
+	!$Poller->ep_del($sock); # stop getting notifications
 }
 
 # portable, non-thread-safe sendfile emulation (no pread, yet)
@@ -430,8 +414,7 @@ next_buf:
                         shift @$wbuf;
                         goto next_buf;
                     }
-                } elsif ($! == EAGAIN) {
-                    my $ev = epbit($sock, EPOLLOUT) or return $self->close;
+                } elsif ($! == EAGAIN && (my $ev = epbit($sock, EPOLLOUT))) {
                     epwait($sock, $ev | EPOLLONESHOT);
                     return 0;
                 } else {
@@ -461,28 +444,28 @@ sub rbuf_idle ($$) {
     }
 }
 
+# returns true if bytes are read, false otherwise
 sub do_read ($$$;$) {
-    my ($self, $rbuf, $len, $off) = @_;
-    my $r = sysread(my $sock = $self->{sock}, $$rbuf, $len, $off // 0);
-    return ($r == 0 ? $self->close : $r) if defined $r;
-    # common for clients to break connections without warning,
-    # would be too noisy to log here:
-    if ($! == EAGAIN) {
-        my $ev = epbit($sock, EPOLLIN) or return $self->close;
-        epwait($sock, $ev | EPOLLONESHOT);
-        rbuf_idle($self, $rbuf);
-        0;
-    } else {
-        $self->close;
-    }
+	my ($self, $rbuf, $len, $off) = @_;
+	my ($ev, $r, $s);
+	$r = sysread($s = $self->{sock}, $$rbuf, $len, $off // 0) and return $r;
+
+	if (!defined($r) && $! == EAGAIN && ($ev = epbit($s, EPOLLIN))) {
+		epwait($s, $ev | EPOLLONESHOT);
+		rbuf_idle($self, $rbuf);
+	} else {
+		$self->close;
+	}
+	undef;
 }
 
 # drop the socket if we hit unrecoverable errors on our system which
 # require BOFH attention: ENOSPC, EFBIG, EIO, EMFILE, ENFILE...
 sub drop {
-    my $self = shift;
-    carp(@_);
-    $self->close;
+	my $self = shift;
+	carp(@_);
+	$self->close;
+	undef;
 }
 
 sub tmpio ($$$) {
@@ -603,7 +586,7 @@ sub accept_tls_step ($) {
     0;
 }
 
-# return true if complete, false if incomplete (or failure)
+# return value irrelevant
 sub shutdn_tls_step ($) {
     my ($self) = @_;
     my $sock = $self->{sock} or return;
@@ -612,19 +595,14 @@ sub shutdn_tls_step ($) {
     my $ev = PublicInbox::TLS::epollbit() or return $self->close;
     epwait($sock, $ev | EPOLLONESHOT);
     unshift(@{$self->{wbuf}}, \&shutdn_tls_step); # autovivifies
-    0;
 }
 
 # don't bother with shutdown($sock, 2), we don't fork+exec w/o CLOEXEC
 # or fork w/o exec, so no inadvertent socket sharing
 sub shutdn ($) {
-    my ($self) = @_;
-    my $sock = $self->{sock} or return;
-    if ($sock->can('stop_SSL')) {
-        shutdn_tls_step($self);
-    } else {
-	$self->close;
-    }
+	my ($self) = @_;
+	my $sock = $self->{sock} or return;
+	$sock->can('stop_SSL') ? shutdn_tls_step($self) : $self->close;
 }
 
 sub dflush {} # overridden by DSdeflate

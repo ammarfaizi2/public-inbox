@@ -21,7 +21,7 @@ sub new {
 sub event_step {
 	my ($self) = @_;
 	my $rd = $self->{sock} // return warn('BUG?: no {sock}');
-	$self->close; # PublicInbox::DS::close, deferred, so $sock is usable
+	$self->close; # EPOLL_CTL_DEL
 	delete($self->{cidx})->cidx_read_comm($rd);
 }
 
