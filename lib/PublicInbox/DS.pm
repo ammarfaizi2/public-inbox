@@ -39,7 +39,7 @@ our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
 my $nextq; # queue for next_tick
 my $reap_armed;
-my $ToClose; # sockets to close when event loop is done
+my @active; # FDs (or objs) returned by epoll/kqueue
 our (%AWAIT_PIDS, # pid => [ $callback, @args ]
 	$cur_runq, # only set inside next_tick
      %DescriptorMap,             # fd (num) -> PublicInbox::DS object
@@ -81,10 +81,11 @@ sub Reset {
 
 		# we may be called from an *atfork_child inside next_tick:
 		@$cur_runq = () if $cur_runq;
-		$nextq = $ToClose = undef; # may call ep_del
+		@active = ();
+		$nextq = undef; # may call ep_del
 		%AWAIT_PIDS = ();
 	} while (@Timers || $nextq || keys(%AWAIT_PIDS) ||
-		$ToClose || keys(%DescriptorMap) ||
+		@active || keys(%DescriptorMap) ||
 		@post_loop_do || keys(%UniqTimer) ||
 		scalar(@{$cur_runq // []})); # do not vivify cur_runq
 
@@ -149,7 +150,7 @@ sub next_tick () {
 sub RunTimers {
 	next_tick();
 
-	return (($nextq || $ToClose) ? 0 : $loop_timeout) unless @Timers;
+	return ($nextq ? 0 : $loop_timeout) unless @Timers;
 
 	my $now = now();
 
@@ -161,7 +162,7 @@ sub RunTimers {
 	}
 
 	# timers may enqueue into nextq:
-	return 0 if ($nextq || $ToClose);
+	return 0 if $nextq;
 
 	return $loop_timeout unless @Timers;
 
@@ -236,18 +237,6 @@ sub close_non_busy () {
 # for pushed-back data, and close pending connections.  returns 1
 # if event loop should continue, or 0 to shut it all down.
 sub PostEventLoop () {
-	# now we can close sockets that wanted to close during our event
-	# processing.  (we didn't want to close them during the loop, as we
-	# didn't want fd numbers being reused and confused during the event
-	# loop)
-	if (my $close_now = $ToClose) {
-		$ToClose = undef; # will be autovivified on push
-		@$close_now = map { fileno($_) } @$close_now;
-
-		# ->DESTROY methods may populate ToClose
-		delete @DescriptorMap{@$close_now};
-	}
-
 	# by default we keep running, unless a postloop callback cancels it
 	@post_loop_do ? $post_loop_do[0]->(@post_loop_do[1..$#post_loop_do]) : 1
 }
@@ -295,21 +284,16 @@ sub event_loop (;$$) {
 	}
 	$_[0] = $sigfd = $sig = undef; # $_[0] == sig
 	local $in_loop = 1;
-	my @events;
 	do {
 		my $timeout = RunTimers();
 
-		# get up to 1000 events
-		$Poller->ep_wait(1000, $timeout, \@events);
-		for my $fd (@events) {
-			# it's possible epoll_wait returned many events,
-			# including some at the end that ones in the front
-			# triggered unregister-interest actions.  if we can't
-			# find the %sock entry, it's because we're no longer
-			# interested in that event.
+		# get up to 1000 FDs representing events
+		$Poller->ep_wait(1000, $timeout, \@active);
 
-			# guard stack-not-refcounted w/ Carp + @DB::args
-			my $obj = $DescriptorMap{$fd};
+		# map all FDs to their associated Perl object
+		@active = @DescriptorMap{@active};
+
+		while (my $obj = shift @active) {
 			$obj->event_step;
 		}
 	} while (PostEventLoop());
@@ -390,24 +374,17 @@ sub close {
     # preventing the object from being destroyed
     delete $self->{wbuf};
 
-    # if we're using epoll, we have to remove this from our epoll fd so we stop getting
-    # notifications about it
+    delete $DescriptorMap{fileno($sock)};
+
+    # if we're using epoll, we have to remove this from our epoll fd so we
+    # stop getting notifications about it
     $Poller->ep_del($sock) and croak("EPOLL_CTL_DEL($self/$sock): $!");
+    # let refcount drop to zero..
 
-    # we explicitly don't delete from DescriptorMap here until we
-    # actually close the socket, as we might be in the middle of
-    # processing an epoll_wait/etc that returned hundreds of fds, one
-    # of which is not yet processed and is what we're closing.  if we
-    # keep it in DescriptorMap, then the event harnesses can just
-    # looked at $pob->{sock} == undef and ignore it.  but if it's an
-    # un-accounted for fd, then it (understandably) freak out a bit
-    # and emit warnings, thinking their state got off.
-
-    # defer closing the actual socket until the event loop is done
-    # processing this round of events.  (otherwise we might reuse fds)
-    push @$ToClose, $sock; # autovivifies $ToClose
-
-    return 0;
+    # FIXME this is the opposite of CORE::close return value
+    # TODO: callers need to be updated to expect true on success like
+    # CORE::close (and false otherwise)
+    0;
 }
 
 # portable, non-thread-safe sendfile emulation (no pread, yet)
