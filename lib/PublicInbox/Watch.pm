@@ -256,9 +256,8 @@ sub quit { # may be called in IMAP/NNTP children
 	%{$self->{opendirs}} = ();
 	_done_for_now($self);
 	quit_done($self);
-	if (defined(my $fd = delete $self->{dir_idle_fd})) {
-		my $di = $PublicInbox::DS::DescriptorMap{$fd};
-		$di->close if $di && $di->can('add_watches');
+	if (my $dir_idle = delete $self->{dir_idle}) {
+		$dir_idle->close if $dir_idle;
 	}
 	if (my $idle_mic = delete $self->{idle_mic}) { # IMAP child
 		return unless $idle_mic->IsConnected && $idle_mic->Socket;
@@ -283,8 +282,7 @@ sub watch_fs_init ($) {
 	};
 	require PublicInbox::DirIdle;
 	# inotify_create + EPOLL_CTL_ADD
-	my $dir_idle = PublicInbox::DirIdle->new($cb);
-	$self->{dir_idle_fd} = fileno($dir_idle->{sock}) if $dir_idle->{sock};
+	my $dir_idle = $self->{dir_idle} = PublicInbox::DirIdle->new($cb);
 	$dir_idle->add_watches([keys %{$self->{mdmap}}]);
 }
 
@@ -383,8 +381,7 @@ sub watch_imap_idle_1 ($$$) {
 
 sub watch_atfork_child ($) {
 	my ($self) = @_;
-	delete $self->{pids};
-	delete $self->{opendirs};
+	delete @$self{qw(dir_idle pids opendirs)};
 	my $sig = delete $self->{sig};
 	$sig->{CHLD} = $sig->{HUP} = $sig->{USR1} = 'DEFAULT';
 	# TERM/QUIT/INT call ->quit, which works in both parent+child
