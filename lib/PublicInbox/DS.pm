@@ -136,16 +136,12 @@ sub _InitPoller () {
 sub now () { clock_gettime(CLOCK_MONOTONIC) }
 
 sub next_tick () {
-	local $cur_runq = $nextq or return;
+	$cur_runq = $nextq or return;
 	$nextq = undef;
-	for my $obj (@$cur_runq) {
+	while (my $obj = shift @$cur_runq) {
 		# avoid "ref" on blessed refs to workaround a Perl 5.16.3 leak:
 		# https://rt.perl.org/Public/Bug/Display.html?id=114340
-		if (blessed($obj)) {
-			$obj->event_step;
-		} else {
-			$obj->();
-		}
+		blessed($obj) ? $obj->event_step : $obj->();
 	}
 }
 
