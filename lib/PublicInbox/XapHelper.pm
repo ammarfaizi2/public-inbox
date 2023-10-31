@@ -179,11 +179,13 @@ sub recv_loop {
 	local $SIG{TERM} = sub { undef $in };
 	while (defined($in)) {
 		PublicInbox::DS::sig_setmask($workerset);
-		my @fds = do { # we undef $in in SIG{TERM}
-			no strict 'refs';
-			no warnings 'uninitialized';
+		my @fds = eval { # we undef $in in SIG{TERM}
 			$PublicInbox::IPC::recv_cmd->($in, $rbuf, 4096*33)
 		};
+		if ($@) {
+			exit if !$in; # hit by SIGTERM
+			die;
+		}
 		scalar(@fds) or exit(66); # EX_NOINPUT
 		die "recvmsg: $!" if !defined($fds[0]);
 		PublicInbox::DS::block_signals();
