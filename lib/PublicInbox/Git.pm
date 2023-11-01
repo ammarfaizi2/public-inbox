@@ -476,7 +476,8 @@ sub async_wait_all ($) {
 # returns true if there are pending "git cat-file" processes
 sub cleanup {
 	my ($self, $lazy) = @_;
-	return 1 if $lazy && _active($self);
+	($lazy && _active($self)) and
+		return $self->{epwatch} ? watch_async($self) : 1;
 	local $in_cleanup = 1;
 	async_wait_all($self);
 	$_->close for ($self, (delete($self->{ck}) // ()));
