@@ -10,6 +10,7 @@ use PublicInbox::Import;
 use File::Temp 0.19;
 use List::Util qw(max);
 use PublicInbox::Git qw(read_all);
+use autodie qw(chmod close rename);
 
 sub new {
 	my ($cls, $topdir, $all, $epfx) = @_;
@@ -68,12 +69,10 @@ sub write_alternates {
 	my $out = join('', sort { $alt->{$b} <=> $alt->{$a} } keys %$alt);
 	my $info_dir = "$all_dir/objects/info";
 	my $fh = File::Temp->new(TEMPLATE => 'alt-XXXX', DIR => $info_dir);
-	my $f = $fh->filename;
-	print $fh $out, @new or die "print($f): $!";
-	chmod($mode, $fh) or die "fchmod($f): $!";
-	close $fh or die "close($f): $!";
-	my $fn = "$info_dir/alternates";
-	rename($f, $fn) or die "rename($f, $fn): $!";
+	print $fh $out, @new;
+	chmod($mode, $fh);
+	close $fh;
+	rename($fh->filename, "$info_dir/alternates");
 	$fh->unlink_on_destroy(0);
 }
 
