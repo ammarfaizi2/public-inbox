@@ -12,6 +12,7 @@ use PublicInbox::Spawn qw(spawn);
 use IO::Handle; # ->autoflush
 use Fcntl qw(SEEK_SET SEEK_END O_CREAT O_EXCL O_WRONLY);
 use PublicInbox::Syscall qw(rename_noreplace);
+use autodie qw(open seek close);
 
 my %kw2char = ( # Maildir characters
 	draft => 'D',
@@ -255,7 +256,7 @@ sub _buf2maildir ($$$$) {
 		$tmp = $dst.'tmp/'.$rand.$common;
 	} while (!($ok = sysopen($fh, $tmp, O_CREAT|O_EXCL|O_WRONLY)) &&
 		$!{EEXIST} && ($rand = _rand.','));
-	if ($ok && print $fh $$buf and close($fh)) {
+	if ($ok && print $fh $$buf and $fh->close) {
 		$dst .= $dir; # 'new/' or 'cur/'
 		$rand = '';
 		do {
@@ -458,7 +459,7 @@ sub _pre_augment_maildir {
 	require File::Path;
 	File::Path::make_path(map { $dst.$_ } qw(tmp new cur));
 	# for utime, so no opendir
-	open $self->{poke_dh}, '<', "${dst}cur" or die "open ${dst}cur: $!";
+	open $self->{poke_dh}, '<', "${dst}cur";
 }
 
 sub clobber_dst_prepare ($;$) {
@@ -538,11 +539,11 @@ sub _pre_augment_text {
 		$out = $lei->{$devfd};
 	} else { # normal-looking path
 		if (-p $dst) {
-			open $out, '>', $dst or die "open($dst): $!";
+			open $out, '>', $dst;
 		} elsif (-f _ || !-e _) {
 			# text allows augment, HTML/Atom won't
 			my $mode = $lei->{opt}->{augment} ? '>>' : '>';
-			open $out, $mode, $dst or die "open($mode, $dst): $!";
+			open $out, $mode, $dst;
 		} else {
 			die "$dst is not a file or FIFO\n";
 		}
@@ -561,7 +562,7 @@ sub _pre_augment_mbox {
 		$out = $lei->{$devfd};
 	} else { # normal-looking path
 		if (-p $dst) {
-			open $out, '>', $dst or die "open($dst): $!";
+			open $out, '>', $dst;
 		} elsif (-f _ || !-e _) {
 			require PublicInbox::MboxLock;
 			my $m = $lei->{opt}->{'lock'} //
@@ -574,7 +575,7 @@ sub _pre_augment_mbox {
 		$lei->{old_1} = $lei->{1}; # keep for spawning MUA
 	}
 	# Perl does SEEK_END even with O_APPEND :<
-	$self->{seekable} = seek($out, 0, SEEK_SET);
+	$self->{seekable} = $out->seek(0, SEEK_SET);
 	if (!$self->{seekable} && !$!{ESPIPE} && !defined($devfd)) {
 		die "seek($dst): $!\n";
 	}
@@ -616,7 +617,7 @@ sub _do_augment_mbox {
 	if (my $zsfx = $self->{zsfx}) {
 		$rd = PublicInbox::MboxReader::zsfxcat($out, $zsfx, $lei);
 	} else {
-		open($rd, '+>>&', $out) or die "dup: $!";
+		open($rd, '+>>&', $out);
 	}
 	my $dedupe;
 	if ($opt->{augment}) {
@@ -636,7 +637,7 @@ sub _do_augment_mbox {
 		PublicInbox::MboxReader->$fmt($rd, \&_augment, $lei);
 	}
 	# maybe some systems don't honor O_APPEND, Perl does this:
-	seek($out, 0, SEEK_END) or die "seek $dst: $!";
+	seek($out, 0, SEEK_END);
 	$dedupe->pause_dedupe if $dedupe;
 }
 
@@ -672,12 +673,12 @@ sub _pre_augment_v2 {
 	$lei->{v2w} = $v2w;
 	return if !$lei->{opt}->{shared};
 	my $d = "$lei->{ale}->{git}->{git_dir}/objects";
-	my $al = "$dir/git/0.git/objects/info/alternates";
-	open my $fh, '+>>', $al or die "open($al): $!";
-	seek($fh, 0, SEEK_SET) or die "seek($al): $!";
-	grep(/\A\Q$d\E\n/, <$fh>) and return;
-	print $fh "$d\n" or die "print($al): $!";
-	close $fh or die "close($al): $!";
+	open my $fh, '+>>', my $f = "$dir/git/0.git/objects/info/alternates";
+	seek($fh, 0, SEEK_SET); # Perl did SEEK_END when it saw '>>'
+	my $seen = grep(/\A\Q$d\E\n/, <$fh>);
+	eof($fh) or die "not at `$f' EOF ($!)"; # $! was set by readline
+	print $fh "$d\n" if !$seen;
+	close $fh;
 }
 
 sub pre_augment { # fast (1 disk seek), runs in same process as post_augment

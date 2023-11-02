@@ -506,14 +506,12 @@ EOM
 	if (!$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
 		my $o = "$self->{cur_dst}/objects";
-		my $f = "$o/info/alternates";
 		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
-		open my $fh, '+>>', $f;
-		seek($fh, 0, SEEK_SET);
-		chomp(my @cur = <$fh>);
-		if (!grep(/\A\Q$l\E\z/, @cur)) {
-			say $fh $l;
-		}
+		open my $fh, '+>>', my $f = "$o/info/alternates";
+		seek($fh, 0, SEEK_SET); # Perl did SEEK_END when it saw '>>'
+		my $seen = grep(/\A\Q$l\E\n/, <$fh>); # error check with eof
+		eof($fh) or die "not at `$f' EOF ($!)"; # $! was set by readline
+		print $fh "$l\n" if !$seen;
 		close $fh;
 	}
 	bless {
