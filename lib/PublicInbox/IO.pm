@@ -4,8 +4,9 @@
 # supports reaping of children tied to a pipe or socket
 package PublicInbox::IO;
 use v5.12;
-use parent qw(IO::Handle);
+use parent qw(IO::Handle Exporter);
 use PublicInbox::DS qw(awaitpid);
+our @EXPORT_OK = qw(write_file);
 
 # TODO: this can probably be the new home for read_all, try_cat
 # and maybe even buffered read/readline...
@@ -49,6 +50,13 @@ sub DESTROY {
 		awaitpid($reap->[1]);
 	}
 	$io->SUPER::DESTROY;
+}
+
+sub write_file ($$@) { # mode, filename, LIST (for print)
+	use autodie qw(open close);
+	open(my $fh, shift, shift);
+	print $fh @_;
+	defined(wantarray) && !wantarray ? $fh : close $fh;
 }
 
 1;

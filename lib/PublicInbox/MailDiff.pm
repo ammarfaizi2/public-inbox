@@ -9,14 +9,14 @@ use PublicInbox::ViewDiff qw(flush_diff);
 use PublicInbox::GitAsyncCat;
 use PublicInbox::ContentDigestDbg;
 use PublicInbox::Qspawn;
+use PublicInbox::IO qw(write_file);
+use autodie qw(close mkdir);
 
 sub write_part { # Eml->each_part callback
 	my ($ary, $self) = @_;
 	my ($part, $depth, $idx) = @$ary;
 	if ($idx ne '1' || $self->{-raw_hdr}) { # lei mail-diff --raw-header
-		open my $fh, '>', "$self->{curdir}/$idx.hdr" or die "open: $!";
-		print $fh ${$part->{hdr}} or die "print $!";
-		close $fh or die "close $!";
+		write_file '>', "$self->{curdir}/$idx.hdr", ${$part->{hdr}};
 	}
 	my $ct = $part->content_type || 'text/plain';
 	my ($s, $err) = msg_part_text($part, $ct);
@@ -24,22 +24,20 @@ sub write_part { # Eml->each_part callback
 	$s //= $part->body;
 	$s =~ s/\r\n/\n/gs; # TODO: consider \r+\n to match View
 	$s =~ s/\s*\z//s;
-	open my $fh, '>:utf8', "$self->{curdir}/$idx.$sfx" or die "open: $!";
-	print $fh $s or die "print $!";
-	close $fh or die "close $!";
+	write_file '>:utf8', "$self->{curdir}/$idx.$sfx", $s;
 }
 
 # public
 sub dump_eml ($$$) {
 	my ($self, $dir, $eml) = @_;
 	local $self->{curdir} = $dir;
-	mkdir $dir or die "mkdir($dir): $!";
+	mkdir $dir;
 	$eml->each_part(\&write_part, $self);
-	open my $fh, '>', "$dir/content_digest" or die "open: $!";
+	my $fh = write_file '>', "$dir/content_digest";
 	my $dig = PublicInbox::ContentDigestDbg->new($fh);
 	content_digest($eml, $dig);
-	print $fh "\n", $dig->hexdigest, "\n" or die "print $!";
-	close $fh or die "close: $!";
+	say $fh "\n", $dig->hexdigest;
+	close $fh;
 }
 
 # public

@@ -11,8 +11,10 @@ package PublicInbox::SolverGit;
 use strict;
 use v5.10.1;
 use File::Temp 0.19 (); # 0.19 for ->newdir
+use autodie qw(mkdir);
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Git qw(git_unquote git_quote);
+use PublicInbox::IO qw(write_file);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::Qspawn;
 use PublicInbox::Tmpfile;
@@ -199,9 +201,7 @@ sub extract_diff ($$) {
 	my $path = ++$self->{tot};
 	$di->{n} = $path;
 	my $f = _tmp($self)->dirname."/$path";
-	open(my $tmp, '>:utf8', $f) or die "open($f): $!";
-	print $tmp $di->{hdr_lines}, $patch or die "print(tmp): $!";
-	close $tmp or die "close(tmp): $!";
+	write_file '>:utf8', $f, $di->{hdr_lines}, $patch;
 
 	# for debugging/diagnostics:
 	$di->{ibx} = $want->{cur_ibx};
@@ -291,36 +291,24 @@ sub do_git_init ($) {
 	my ($self) = @_;
 	my $git_dir = _tmp($self)->dirname.'/git';
 
-	foreach ('', qw(objects refs objects/info refs/heads)) {
-		mkdir("$git_dir/$_") or die "mkdir $_: $!";
-	}
-	open my $fh, '>', "$git_dir/config" or die "open git/config: $!";
+	mkdir("$git_dir/$_") for ('', qw(objects refs objects/info refs/heads));
 	my $first = $self->{gits}->[0];
 	my $fmt = $first->object_format;
-	my $v = defined($$fmt) ? 1 : 0;
-	print $fh <<EOF or die "print git/config $!";
+	my ($v, @ext) = defined($$fmt) ? (1, <<EOM) : (0);
+[extensions]
+	objectformat = $$fmt
+EOM
+	write_file '>', "$git_dir/config", <<EOF, @ext;
 [core]
 	repositoryFormatVersion = $v
 	filemode = true
 	bare = false
 	logAllRefUpdates = false
 EOF
-	print $fh <<EOM if defined($$fmt);
-[extensions]
-	objectformat = $$fmt
-EOM
-	close $fh or die "close git/config: $!";
-
-	open $fh, '>', "$git_dir/HEAD" or die "open git/HEAD: $!";
-	print $fh "ref: refs/heads/master\n" or die "print git/HEAD: $!";
-	close $fh or die "close git/HEAD: $!";
-
-	my $f = 'objects/info/alternates';
-	open $fh, '>', "$git_dir/$f" or die "open: $f: $!";
-	foreach my $git (@{$self->{gits}}) {
-		print $fh $git->git_path('objects'),"\n" or die "print $f: $!";
-	}
-	close $fh or die "close: $f: $!";
+	write_file '>', "$git_dir/HEAD", "ref: refs/heads/master\n";
+	write_file '>', "$git_dir/objects/info/alternates", map {
+			$_->git_path('objects')."\n"
+		} @{$self->{gits}};
 	my $tmp_git = $self->{tmp_git} = PublicInbox::Git->new($git_dir);
 	$tmp_git->{-tmp} = $self->{tmp};
 	$self->{git_env} = {

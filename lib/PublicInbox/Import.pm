@@ -18,7 +18,7 @@ use PublicInbox::MDA;
 use PublicInbox::Eml;
 use PublicInbox::IO;
 use POSIX qw(strftime);
-use autodie qw(read close socketpair);
+use autodie qw(socketpair);
 use Carp qw(croak);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Git qw(read_all);
@@ -462,9 +462,7 @@ EOM
 	while (my ($fn, $contents) = splice(@fn_contents, 0, 2)) {
 		my $f = $dir.'/'.$fn;
 		next if -f $f;
-		open my $fh, '>', $f;
-		print $fh $contents;
-		close $fh;
+		PublicInbox::IO::write_file '>', $f, $contents;
 	}
 }
 

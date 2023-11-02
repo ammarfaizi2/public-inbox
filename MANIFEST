@@ -488,6 +488,7 @@ t/index-git-times.t
 t/indexlevels-mirror-v1.t
 t/indexlevels-mirror.t
 t/init.t
+t/io.t
 t/ipc.t
 t/iso-2202-jp.eml
 t/kqnotify.t

@@ -8,6 +8,7 @@ use parent qw(PublicInbox::IPC);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use IO::Compress::Gzip qw(gzip $GzipError);
 use PublicInbox::Spawn qw(spawn run_wait run_die run_qx);
+use PublicInbox::IO qw(write_file);
 use File::Path ();
 use File::Temp ();
 use File::Spec ();
@@ -481,21 +482,18 @@ sub forkgroup_prep {
 	my $dir = "$os/$fg.git";
 	if (!-d $dir && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($dir);
-		open my $fh, '+>>', "$dir/config";
-		print $fh <<EOM;
+		write_file '+>>', "$dir/config", <<EOM;
 [repack]
 	useDeltaIslands = true
 [pack]
 	island = refs/remotes/([^/]+)/
 EOM
-		close $fh;
 	}
 	my $key = $self->{-key} // die 'BUG: no -key';
 	my $rn = substr(sha256_hex($key), 0, 16);
 	if (!-d $self->{cur_dst} && !$self->{dry_run}) {
 		PublicInbox::Import::init_bare($self->{cur_dst});
-		open my $fh, '+>>', "$self->{cur_dst}/config";
-		print $fh <<EOM;
+		write_file '+>>', "$self->{cur_dst}/config", <<EOM;
 ; rely on the "$rn" remote in the
 ; $fg fork group for fetches
 ; only uncomment the following iff you detach from fork groups
@@ -504,7 +502,6 @@ EOM
 ;	fetch = +refs/*:refs/*
 ;	mirror = true
 EOM
-		close $fh;
 	}
 	if (!$self->{dry_run}) {
 		my $alt = File::Spec->rel2abs("$dir/objects");
@@ -691,9 +688,11 @@ EOM
 sub init_placeholder ($$$) {
 	my ($src, $edst, $ent) = @_;
 	PublicInbox::Import::init_bare($edst);
-	my $f = "$edst/config";
-	open my $fh, '>>', $f;
-	print $fh <<EOM;
+	my @owner = defined($ent->{owner}) ? (<<EOM) : ();
+[gitweb]
+	owner = $ent->{owner}
+EOM
+	write_file '>>', "$edst/config", <<EOM, @owner;
 [remote "origin"]
 	url = $src
 	fetch = +refs/*:refs/*
@@ -703,18 +702,11 @@ sub init_placeholder ($$$) {
 ; will not fetch updates for it unless write permission is added.
 ; Hint: chmod +w $edst
 EOM
-	print $fh <<EOM if defined($ent->{owner});
-[gitweb]
-	owner = $ent->{owner}
-EOM
-	close $fh;
 	my %map = (head => 'HEAD', description => undef);
 	while (my ($key, $fn) = each %map) {
 		my $val = $ent->{$key} // next;
 		$fn //= $key;
-		open $fh, '>', "$edst/$fn";
-		say $fh $val;
-		close $fh;
+		write_file '>', "$edst/$fn", $val;
 	}
 }
 

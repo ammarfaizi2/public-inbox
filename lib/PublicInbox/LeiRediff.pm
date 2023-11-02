@@ -114,12 +114,9 @@ EOM
 	if (!$rw->{-tmp}) {
 		my $d = "$self->{rdtmp}/for_tree.git";
 		-d $d or PublicInbox::Import::init_bare($d);
-		my $f = "$d/objects/info/alternates"; # always overwrite
-		open my $fh, '>', $f or die "open $f: $!";
-		for my $git (@{$self->{gits}}) {
-			print $fh $git->git_path('objects'),"\n";
-		}
-		close $fh or die "close $f: $!";
+		# always overwrite
+		PublicInbox::IO::write_file '>', "$d/objects/info/alternates",
+			map { $_->git_path('objects')."\n" } @{$self->{gits}};
 		$rw = PublicInbox::Git->new($d);
 	}
 	my $w = popen_wr(['git', "--git-dir=$rw->{git_dir}",
