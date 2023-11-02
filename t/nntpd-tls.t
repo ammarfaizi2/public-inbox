@@ -185,6 +185,10 @@ for my $args (
 		is($x, undef, 'no BSD accept filter for plain NNTP');
 	};
 
+	my $s = tcp_connect($nntps);
+	syswrite($s, '->accept_SSL_ will fail on this!');
+	ok(!sysread($s, my $rbuf, 128), 'EOF or ECONNRESET on ->accept_SSL fail');
+
 	$c = undef;
 	$td->kill;
 	$td->join;
@@ -195,6 +199,7 @@ for my $args (
 		<$fh>;
 	};
 	unlike($eout, qr/wide/i, 'no Wide character warnings');
+	unlike($eout, qr/^E:/, 'no other errors');
 }
 done_testing();
 

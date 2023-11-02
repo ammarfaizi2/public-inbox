@@ -341,8 +341,7 @@ sub greet {
 	my $ev = EPOLLIN;
 	my $wbuf;
 	if ($sock->can('accept_SSL') && !$sock->accept_SSL) {
-		return $sock->close if $! != EAGAIN;
-		$ev = PublicInbox::TLS::epollbit() or return $sock->close;
+		return if $! != EAGAIN || !($ev = PublicInbox::TLS::epollbit());
 		$wbuf = [ \&accept_tls_step, $self->can('do_greet')];
 	}
 	new($self, $sock, $ev | EPOLLONESHOT);
