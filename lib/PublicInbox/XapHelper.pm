@@ -216,14 +216,9 @@ sub reap_worker { # awaitpid CB
 
 sub start_worker ($) {
 	my ($nr) = @_;
-	my $pid = fork;
-	if (!defined($pid)) {
-		warn("fork: $!");
-		return undef;
-	};
+	my $pid = eval { PublicInbox::DS::do_fork } // return(warn($@));
 	if ($pid == 0) {
 		undef %WORKERS;
-		PublicInbox::DS::Reset();
 		$SIG{TTIN} = $SIG{TTOU} = 'IGNORE';
 		$SIG{CHLD} = 'DEFAULT'; # Xapian may use this
 		recv_loop();
