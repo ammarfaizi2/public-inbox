@@ -19,7 +19,7 @@ use PublicInbox::Lock;
 use Fcntl qw(SEEK_SET);
 use IO::Handle ();
 use Carp qw(croak);
-use PublicInbox::ProcessIO;
+use PublicInbox::IO;
 our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait run_qx);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
 use autodie qw(open pipe seek sysseek truncate);
@@ -377,7 +377,7 @@ sub popen_rd {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(my $r, local $opt->{1});
 	my $pid = spawn($cmd, $env, $opt);
-	PublicInbox::ProcessIO->maybe_new($pid, $r, @cb_arg);
+	wantarray ? ($r, $pid) : PublicInbox::IO::attach_pid($r, $pid, @cb_arg)
 }
 
 sub popen_wr {
@@ -385,7 +385,7 @@ sub popen_wr {
 	pipe(local $opt->{0}, my $w);
 	$w->autoflush(1);
 	my $pid = spawn($cmd, $env, $opt);
-	PublicInbox::ProcessIO->maybe_new($pid, $w, @cb_arg)
+	wantarray ? ($w, $pid) : PublicInbox::IO::attach_pid($w, $pid, @cb_arg)
 }
 
 sub read_out_err ($) {

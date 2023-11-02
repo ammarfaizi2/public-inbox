@@ -107,34 +107,35 @@ EOF
 
 {
 	my $fh = popen_rd([qw(echo hello)]);
-	ok(fileno($fh) >= 0, 'tied fileno works');
+	ok(fileno($fh) >= 0, 'fileno works');
 	my $l = <$fh>;
-	is($l, "hello\n", 'tied readline works');
+	is($l, "hello\n", 'readline works');
 	$l = <$fh>;
-	ok(!$l, 'tied readline works for EOF');
+	ok(!$l, 'readline works for EOF');
 }
 
 {
 	my $fh = popen_rd([qw(printf foo\nbar)]);
-	ok(fileno($fh) >= 0, 'tied fileno works');
-	my $tfh = (tied *$fh)->{fh};
-	is($tfh->blocking(0), 1, '->blocking was true');
-	is($tfh->blocking, 0, '->blocking is false');
-	is($tfh->blocking(1), 0, '->blocking was true');
-	is($tfh->blocking, 1, '->blocking is true');
+	ok(fileno($fh) >= 0, 'fileno works');
+	is($fh->blocking(0), 1, '->blocking was true');
+	is($fh->blocking, 0, '->blocking is false');
+	is($fh->blocking(1), 0, '->blocking was true');
+	is($fh->blocking, 1, '->blocking is true');
 	my @line = <$fh>;
 	is_deeply(\@line, [ "foo\n", 'bar' ], 'wantarray works on readline');
 }
 
 {
 	my $fh = popen_rd([qw(echo hello)]);
+	like($fh->attached_pid, qr/\A[0-9]+\z/, 'have a PID');
 	my $buf;
 	is(sysread($fh, $buf, 6), 6, 'sysread got 6 bytes');
-	is($buf, "hello\n", 'tied gets works');
+	is($buf, "hello\n", 'sysread works');
 	is(sysread($fh, $buf, 6), 0, 'sysread got EOF');
 	$? = 1;
 	ok($fh->close, 'close succeeds');
 	is($?, 0, '$? set properly');
+	is($fh->attached_pid, undef, 'attached_pid cleared after close');
 }
 
 {
@@ -160,8 +161,8 @@ EOF
 	$fh = popen_rd(['true'], undef, undef, sub { @c = caller });
 	undef $fh; # ->DESTROY
 	ok(scalar(@c), 'callback fired by ->DESTROY');
-	ok(grep(!m[/PublicInbox/ProcessIO\.pm\z], @c),
-		'callback not invoked by ProcessIO');
+	ok(grep(!m[/PublicInbox/IO\.pm\z], @c),
+		'callback not invoked by PublicInbox::IO');
 }
 
 { # children don't wait on siblings
@@ -170,7 +171,6 @@ EOF
 	my @arg;
 	my $fh = popen_rd(['cat'], undef, { 0 => $r },
 			sub { @arg = @_; warn "x=$$\n" }, 'hi');
-	my $pp = tied *$fh;
 	my $pid = fork // BAIL_OUT $!;
 	local $SIG{__WARN__} = sub { _exit(1) };
 	if ($pid == 0) {

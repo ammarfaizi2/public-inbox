@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
 use PublicInbox::Eml;
-use PublicInbox::ProcessIO;
+use PublicInbox::IO;
 use PublicInbox::Spawn qw(spawn);
 use IO::Handle; # ->autoflush
 use Fcntl qw(SEEK_SET SEEK_END O_CREAT O_EXCL O_WRONLY);
@@ -160,8 +160,7 @@ sub _post_augment_mbox { # open a compressor process from top-level lei-daemon
 	my $cmd = PublicInbox::MboxReader::zsfx2cmd($zsfx, undef, $lei);
 	my ($r, $w) = @{delete $lei->{zpipe}};
 	my $rdr = { 0 => $r, 1 => $lei->{1}, 2 => $lei->{2}, pgid => 0 };
-	my $pid = spawn($cmd, undef, $rdr);
-	$lei->{1} = PublicInbox::ProcessIO->maybe_new($pid, $w,
+	$lei->{1} = PublicInbox::IO::attach_pid($w, spawn($cmd, undef, $rdr),
 				\&reap_compress, $lei, $cmd, $lei->{1});
 }
 

@@ -16,7 +16,7 @@ use PublicInbox::MsgTime qw(msg_datestamp);
 use PublicInbox::ContentHash qw(content_digest);
 use PublicInbox::MDA;
 use PublicInbox::Eml;
-use PublicInbox::ProcessIO;
+use PublicInbox::IO;
 use POSIX qw(strftime);
 use autodie qw(read close socketpair);
 use Carp qw(croak);
@@ -77,7 +77,7 @@ sub gfi_start {
 				--quiet --done --date-format=raw) ];
 		my $pid = spawn($gfi, undef, { 0 => $s2, 1 => $s2 });
 		$self->{nchg} = 0;
-		$self->{io} = PublicInbox::ProcessIO->maybe_new($pid, $io);
+		$self->{io} = PublicInbox::IO::attach_pid($io, $pid);
 	};
 	if ($@) {
 		$self->lock_release;

@@ -18,7 +18,7 @@ use Errno qw(EINTR EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use PublicInbox::Spawn qw(spawn popen_rd run_qx which);
-use PublicInbox::ProcessIONBF;
+use PublicInbox::IO;
 use PublicInbox::Tmpfile;
 use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
@@ -146,6 +146,7 @@ sub _sock_cmd {
 	my ($self, $batch, $err_c) = @_;
 	$self->{sock} and Carp::confess('BUG: {sock} exists');
 	socketpair(my $s1, my $s2, AF_UNIX, SOCK_STREAM, 0);
+	$s1->blocking(0);
 	my $opt = { pgid => 0, 0 => $s2, 1 => $s2 };
 	my $gd = $self->{git_dir};
 	if ($gd =~ s!/([^/]+/[^/]+)\z!/!) {
@@ -164,7 +165,7 @@ sub _sock_cmd {
 						$self->fail("tmpfile($id): $!");
 	}
 	my $pid = spawn(\@cmd, undef, $opt);
-	$self->{sock} = PublicInbox::ProcessIONBF->new($pid, $s1);
+	$self->{sock} = PublicInbox::IO::attach_pid($s1, $pid);
 }
 
 sub poll_in ($) { IO::Poll::_poll($RDTIMEO, fileno($_[0]), my $ev = POLLIN) }
@@ -638,8 +639,7 @@ sub cleanup_if_unlinked {
 	my $ret = 0;
 	for my $obj ($self, ($self->{ck} // ())) {
 		my $sock = $obj->{sock} // next;
-		my PublicInbox::ProcessIONBF $p = tied *$sock; # ProcessIONBF
-		my $pid = $p->{pid} // next;
+		my $pid = $sock->attached_pid // next;
 		open my $fh, '<', "/proc/$pid/maps" or return cleanup($self, 1);
 		while (<$fh>) {
 			# n.b. we do not restart for unlinked multi-pack-index

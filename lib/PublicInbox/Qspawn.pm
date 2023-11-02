@@ -149,7 +149,7 @@ sub finish ($;$) {
 
 	# we can safely finalize if pipe was closed before, or if
 	# {_err} is defined by waitpid_err.  Deleting {rpipe} will
-	# trigger PublicInbox::ProcessIO::DESTROY -> waitpid_err,
+	# trigger PublicInbox::IO::DESTROY -> waitpid_err,
 	# but it may not fire right away if inside the event loop.
 	my $closed_before = !delete($self->{rpipe});
 	finalize($self) if $closed_before || defined($self->{_err});
@@ -244,9 +244,8 @@ sub ipipe_cb { # InputPipe callback
 sub _yield_start { # may run later, much later...
 	my ($self) = @_;
 	if ($self->{psgi_env}->{'pi-httpd.async'}) {
-		require PublicInbox::ProcessIONBF;
 		my $rpipe = $self->{rpipe};
-		PublicInbox::ProcessIONBF->replace($rpipe);
+		$rpipe->blocking(0);
 		PublicInbox::InputPipe::consume($rpipe, \&ipipe_cb, $self);
 	} else {
 		require PublicInbox::GetlineResponse;
