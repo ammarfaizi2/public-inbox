@@ -8,7 +8,7 @@ use v5.12;
 use Fcntl qw(:seek);
 use constant PACK_FMT => eval { pack('Q', 1) } ? 'A1QQH*H*' : 'A1IIH*H*';
 use autodie qw(open seek);
-use PublicInbox::Git qw(read_all);
+use PublicInbox::IO qw(read_all);
 
 # start off in write-only mode
 sub new {

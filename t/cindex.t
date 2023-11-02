@@ -46,7 +46,7 @@ ok(run_script([qw(-cindex --dangerous -q), "$tmp/wt0"]), 'cindex internal');
 # (see c4201214cbf10636e2c1ab9131573f735b42c8d4 in linux.git)
 my $zp = create_coderepo 'NUL in patch', sub {
 	require PublicInbox::Git;
-	my $src = PublicInbox::Git::try_cat("$pwd/COPYING");
+	my $src = PublicInbox::IO::try_cat("$pwd/COPYING");
 	xsys_e([qw(git init -q)]);
 
 	# needs to be further than FIRST_FEW_BYTES (8000) in git.git

@@ -6,10 +6,9 @@ package PublicInbox::IO;
 use v5.12;
 use parent qw(IO::Handle Exporter);
 use PublicInbox::DS qw(awaitpid);
-our @EXPORT_OK = qw(write_file);
-
-# TODO: this can probably be the new home for read_all, try_cat
-# and maybe even buffered read/readline...
+our @EXPORT_OK = qw(poll_in read_all try_cat write_file);
+use Carp qw(croak);
+use IO::Poll qw(POLLIN);
 
 sub waitcb { # awaitpid callback
 	my ($pid, $errref, $cb, @args) = @_;
@@ -57,6 +56,25 @@ sub write_file ($$@) { # mode, filename, LIST (for print)
 	open(my $fh, shift, shift);
 	print $fh @_;
 	defined(wantarray) && !wantarray ? $fh : close $fh;
+}
+
+sub poll_in ($;$) {
+	IO::Poll::_poll($_[1] // -1, fileno($_[0]), my $ev = POLLIN);
+}
+
+sub read_all ($;$$) {
+	use autodie qw(read);
+	my ($io, $len, $bref) = @_;
+	$bref //= \(my $buf);
+	my $r = read($io, $$bref, $len //= -s $io);
+	croak("read($io) ($r != $len)") if $len != $r;
+	$$bref;
+}
+
+sub try_cat ($) {
+	my ($path) = @_;
+	open(my $fh, '<', $path) or return '';
+	read_all $fh;
 }
 
 1;

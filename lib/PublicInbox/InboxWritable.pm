@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Inbox PublicInbox::Umask Exporter);
 use PublicInbox::Import;
-use PublicInbox::Git qw(read_all);
+use PublicInbox::IO qw(read_all);
 use PublicInbox::Filter::Base qw(REJECT);
 use Errno qw(ENOENT);
 our @EXPORT_OK = qw(eml_from_path);

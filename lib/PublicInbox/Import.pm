@@ -21,7 +21,7 @@ use POSIX qw(strftime);
 use autodie qw(socketpair);
 use Carp qw(croak);
 use Socket qw(AF_UNIX SOCK_STREAM);
-use PublicInbox::Git qw(read_all);
+use PublicInbox::IO qw(read_all);
 
 sub default_branch () {
 	state $default_branch = do {

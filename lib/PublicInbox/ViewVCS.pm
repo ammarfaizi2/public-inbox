@@ -17,7 +17,7 @@ use strict;
 use v5.10.1;
 use File::Temp 0.19 (); # newdir
 use PublicInbox::SolverGit;
-use PublicInbox::Git qw(read_all);
+use PublicInbox::Git;
 use PublicInbox::GitAsyncCat;
 use PublicInbox::WwwStream qw(html_oneshot);
 use PublicInbox::Linkify;
@@ -62,7 +62,7 @@ sub dbg_log ($) {
 		warn "seek(log): $!";
 		return '<pre>debug log seek error</pre>';
 	}
-	$log = eval { read_all($log) } // do {
+	$log = eval { PublicInbox::IO::read_all $log } // do {
 		warn "read(log): $@";
 		return '<pre>debug log read error</pre>';
 	};
@@ -248,7 +248,7 @@ EOM
 	if (-s $fh > $MAX_SIZE) {
 		print $zfh "---\n patch is too large to show\n";
 	} else { # prepare flush_diff:
-		read_all($fh, -s _, \$x);
+		PublicInbox::IO::read_all $fh, -s _, \$x;
 		utf8_maybe($x);
 		$ctx->{-apfx} = $ctx->{-spfx} = $upfx;
 		$x =~ s/\r?\n/\n/gs;

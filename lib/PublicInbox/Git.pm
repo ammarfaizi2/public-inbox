@@ -18,16 +18,14 @@ use Errno qw(EINTR EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use PublicInbox::Spawn qw(spawn popen_rd run_qx which);
-use PublicInbox::IO;
+use PublicInbox::IO qw(poll_in read_all try_cat);
 use PublicInbox::Tmpfile;
-use IO::Poll qw(POLLIN);
 use Carp qw(croak carp);
 use PublicInbox::SHA qw(sha_all);
 our %HEXLEN2SHA = (40 => 1, 64 => 256);
 our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
-our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN read_all);
+our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN);
 our $in_cleanup;
-our $RDTIMEO = 60_000; # milliseconds
 our $async_warn; # true in read-only daemons
 
 # committerdate:unix is git 2.9.4+ (2017-05-05), so using raw instead
@@ -167,8 +165,6 @@ sub _sock_cmd {
 	my $pid = spawn(\@cmd, undef, $opt);
 	$self->{sock} = PublicInbox::IO::attach_pid($s1, $pid);
 }
-
-sub poll_in ($) { IO::Poll::_poll($RDTIMEO, fileno($_[0]), my $ev = POLLIN) }
 
 sub my_read ($$$) {
 	my ($fh, $rbuf, $len) = @_;
@@ -553,22 +549,6 @@ sub cat_async ($$$;$) {
 sub modified ($;$) {
 	my $fh = $_[1] // popen($_[0], @MODIFIED_DATE);
 	(split(/ /, <$fh> // time))[0] + 0; # integerize for JSON
-}
-
-# read_all/try_cat can probably be moved somewhere else...
-
-sub read_all ($;$$) {
-	my ($fh, $len, $bref) = @_;
-	$bref //= \(my $buf);
-	my $r = read($fh, $$bref, $len //= -s $fh);
-	croak("$fh read ($r != $len)") if $len != $r;
-	$$bref;
-}
-
-sub try_cat {
-	my ($path) = @_;
-	open(my $fh, '<', $path) or return '';
-	read_all($fh);
 }
 
 sub cat_desc ($) {

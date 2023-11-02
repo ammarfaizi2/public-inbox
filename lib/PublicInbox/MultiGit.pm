@@ -9,7 +9,7 @@ use PublicInbox::Spawn qw(run_die run_qx);
 use PublicInbox::Import;
 use File::Temp 0.19;
 use List::Util qw(max);
-use PublicInbox::Git qw(read_all);
+use PublicInbox::IO qw(read_all);
 use autodie qw(chmod close rename);
 
 sub new {

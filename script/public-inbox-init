@@ -126,12 +126,12 @@ my $auto_unlink = PublicInbox::OnDestroy->new($$, sub { unlink $lockfile });
 my $perm = 0644 & ~umask;
 my %seen;
 if (-e $pi_config) {
-	require PublicInbox::Git;
+	require PublicInbox::IO;
 	open(my $oh, '<', $pi_config);
 	my @st = stat($oh) or die "(f)stat failed on $pi_config: $!\n";
 	$perm = $st[2];
 	chmod($perm & 07777, $fh);
-	print $fh PublicInbox::Git::read_all($oh);
+	print $fh PublicInbox::IO::read_all($oh);
 	close $oh;
 
 	# yes, this conflict checking is racy if multiple instances of this

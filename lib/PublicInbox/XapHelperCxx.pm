@@ -8,7 +8,6 @@
 package PublicInbox::XapHelperCxx;
 use v5.12;
 use PublicInbox::Spawn qw(run_qx which);
-use PublicInbox::Git qw(read_all);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
@@ -67,7 +66,7 @@ sub build () {
 	for (@srcs) {
 		say $fh qq(# line 1 "$_");
 		open my $rfh, '<', $_;
-		print $fh read_all($rfh);
+		print $fh PublicInbox::IO::read_all $rfh;
 	}
 	print $fh PublicInbox::Search::generate_cxx();
 	print $fh PublicInbox::CodeSearch::generate_cxx();

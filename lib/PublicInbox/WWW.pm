@@ -588,7 +588,7 @@ sub stylesheets_prepare ($$) {
 				next;
 			};
 			my $ctime = 0;
-			my $local = PublicInbox::Git::read_all($fh, -s $fh);
+			my $local = PublicInbox::IO::read_all $fh; # sets _
 			if ($local =~ /\S/) {
 				$ctime = sprintf('%x',(stat(_))[10]);
 				$local = $mini->($local);

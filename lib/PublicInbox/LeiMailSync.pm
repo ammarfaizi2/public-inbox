@@ -10,7 +10,8 @@ use PublicInbox::Compat qw(uniqstr);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::ContentHash qw(git_sha);
 use Carp ();
-use PublicInbox::Git qw(%HEXLEN2SHA read_all);
+use PublicInbox::Git qw(%HEXLEN2SHA);
+use PublicInbox::IO qw(read_all);
 
 sub dbh_new {
 	my ($self) = @_;

@@ -189,7 +189,7 @@ sub cloneurl {
 	my ($self) = @_;
 	$self->{cloneurl} // do {
 		my @urls = split(/\s+/s,
-		  PublicInbox::Git::try_cat("$self->{inboxdir}/cloneurl"));
+			PublicInbox::IO::try_cat "$self->{inboxdir}/cloneurl");
 		scalar(@urls) ? ($self->{cloneurl} = \@urls) : undef;
 	} // [];
 }

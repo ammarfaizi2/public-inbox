@@ -10,7 +10,8 @@ use parent qw(PublicInbox::IPC);
 use PublicInbox::Spawn qw(run_wait run_qx which);
 use PublicInbox::DS;
 use PublicInbox::Eml;
-use PublicInbox::Git qw(read_all);
+use PublicInbox::Git;
+use PublicInbox::IO qw(read_all);
 
 sub get_git_dir ($$) {
 	my ($lei, $d) = @_;

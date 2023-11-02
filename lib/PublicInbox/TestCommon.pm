@@ -48,8 +48,8 @@ sub require_bsd (;$) {
 sub xbail (@) { BAIL_OUT join(' ', map { ref() ? (explain($_)) : ($_) } @_) }
 
 sub read_all ($;$$) {
-	require PublicInbox::Git;
-	PublicInbox::Git::read_all($_[0], $_[1], $_[2])
+	require PublicInbox::IO;
+	PublicInbox::IO::read_all($_[0], $_[1], $_[2])
 }
 
 sub eml_load ($) {

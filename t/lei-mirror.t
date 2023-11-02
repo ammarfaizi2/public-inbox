@@ -23,7 +23,7 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	lei_ok('add-external', $t1, '--mirror', "$http/t1/", \'--mirror v1');
 	my $mm_dup = "$t1/public-inbox/msgmap.sqlite3";
 	ok(-f $mm_dup, 't1-mirror indexed');
-	is(PublicInbox::Git::try_cat("$t1/description"),
+	is(PublicInbox::IO::try_cat("$t1/description"),
 		"mirror of $http/t1/\n", 'description set');
 	ok(-f "$t1/Makefile", 'convenience Makefile added (v1)');
 	SKIP: {
@@ -51,7 +51,7 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	ok(-f $mm_dup, 't2-mirror indexed');
 	ok(-f "$t2/description", 't2 description');
 	ok(-f "$t2/Makefile", 'convenience Makefile added (v2)');
-	is(PublicInbox::Git::try_cat("$t2/description"),
+	is(PublicInbox::IO::try_cat("$t2/description"),
 		"mirror of $http/t2/\n", 'description set');
 	$tb = PublicInbox::Msgmap->new_file($mm_dup)->created_at;
 	is($tb, $created{v2}, 'created_at matched in v2 mirror');
@@ -207,14 +207,14 @@ $td->join;
 	my $exp = "mirror of https://example.com/src/\n";
 	my $f = "$tmpdir/description";
 	PublicInbox::LeiMirror::set_description($mrr);
-	is(PublicInbox::Git::try_cat($f), $exp, 'description set on ENOENT');
+	is(PublicInbox::IO::try_cat($f), $exp, 'description set on ENOENT');
 
 	my $fh;
 	(open($fh, '>', $f) and close($fh)) or xbail $!;
 	PublicInbox::LeiMirror::set_description($mrr);
-	is(PublicInbox::Git::try_cat($f), $exp, 'description set on empty');
+	is(PublicInbox::IO::try_cat($f), $exp, 'description set on empty');
 	(open($fh, '>', $f) and print $fh "x\n" and close($fh)) or xbail $!;
-	is(PublicInbox::Git::try_cat($f), "x\n",
+	is(PublicInbox::IO::try_cat($f), "x\n",
 		'description preserved if non-default');
 }
 

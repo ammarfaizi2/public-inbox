@@ -37,7 +37,7 @@ BEGIN {
 		$vals->{$k} = $val;
 	}
 	my $f = "$dir/gcf2_libgit2.h";
-	$c_src = PublicInbox::Git::try_cat($f) or die "cat $f: $!";
+	$c_src = PublicInbox::IO::try_cat $f or die "cat $f: $!";
 	# append pkg-config results to the source to ensure Inline::C
 	# can rebuild if there's changes (it doesn't seem to detect
 	# $CFG{CCFLAGSEX} nor $CFG{CPPFLAGS} changes)

@@ -95,7 +95,7 @@ is(xqx([qw(git config gitweb.owner)], { GIT_DIR => "$tmpdir/dst/a.git" }),
 	"\xc4\x80lice\n", 'a.git gitweb.owner set');
 is(xqx([qw(git config gitweb.owner)], { GIT_DIR => "$tmpdir/dst/b.git" }),
 	"Bob\n", 'b.git gitweb.owner set');
-my $desc = PublicInbox::Git::try_cat("$tmpdir/dst/a.git/description");
+my $desc = PublicInbox::IO::try_cat("$tmpdir/dst/a.git/description");
 is($desc, "\xc4\x80lice's repo\n", 'description set');
 
 my $dst_pl = "$tmpdir/dst/projects.list";
@@ -104,7 +104,7 @@ ok(!-d "$tmpdir/dst/objstore", 'no objstore created w/o forkgroups');
 my $r = $read_manifest->($dst_mf);
 is_deeply($r, $m, 'manifest matches');
 
-is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
+is(PublicInbox::IO::try_cat($dst_pl), "a.git\nb.git\n",
 	'wrote projects.list');
 
 { # check symlinks
@@ -113,7 +113,7 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	utime($t0, $t0, $dst_mf) or xbail "utime: $!";
 	ok(run_script($cmd), 'clone again +symlinks');
 	ok(-l "$tmpdir/dst/old/a.git", 'symlink created');
-	is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
+	is(PublicInbox::IO::try_cat($dst_pl), "a.git\nb.git\n",
 		'projects.list does not include symlink by default');
 
 	$r = $read_manifest->($dst_mf);
@@ -127,7 +127,7 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	utime($t0, $t0, $dst_mf) or xbail "utime: $!";
 	my $rdr = { 2 => \(my $err = '') };
 	ok(run_script($cmd, undef, $rdr), 'clone again for expired gone.git');
-	is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
+	is(PublicInbox::IO::try_cat($dst_pl), "a.git\nb.git\n",
 		'project list cleaned');
 	like($err, qr/no longer exist.*\bgone\.git\b/s, 'gone.git noted');
 }
@@ -146,7 +146,7 @@ is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
 	my $rdr = { 2 => \(my $err = '') };
 	my $xcmd = [ @$cmd, '--purge' ];
 	ok(run_script($xcmd, undef, $rdr), 'clone again for expired gone.git');
-	is(PublicInbox::Git::try_cat($dst_pl), "a.git\nb.git\n",
+	is(PublicInbox::IO::try_cat($dst_pl), "a.git\nb.git\n",
 		'project list cleaned');
 	like($err, qr!ignored/gone.*?\bgone-rdonly\.git\b!s,
 		'gone-rdonly.git noted');

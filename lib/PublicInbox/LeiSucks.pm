@@ -12,7 +12,7 @@ use Config;
 use POSIX ();
 use PublicInbox::Config;
 use PublicInbox::IPC;
-use PublicInbox::Git qw(read_all);
+use PublicInbox::IO qw(read_all);
 
 sub lei_sucks {
 	my ($lei, @argv) = @_;

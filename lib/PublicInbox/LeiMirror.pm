@@ -17,7 +17,6 @@ use Carp qw(croak);
 use URI;
 use PublicInbox::Config qw(glob2re);
 use PublicInbox::Inbox;
-use PublicInbox::Git qw(read_all);
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha_all);
@@ -174,7 +173,7 @@ sub _get_txt_done { # returns true on error (non-fatal), undef on success
 	return warn("# @$cmd failed (non-fatal)\n") if $cerr;
 	seek($fh, 0, SEEK_SET);
 	$self->{"mtime.$endpoint"} = (stat($fh))[9];
-	$self->{"txt.$endpoint"} = read_all($fh, -s _);
+	$self->{"txt.$endpoint"} = PublicInbox::IO::read_all $fh, -s _;
 	undef; # success
 }
 
@@ -207,7 +206,7 @@ sub _write_inbox_config {
 sub set_description ($) {
 	my ($self) = @_;
 	my $dst = $self->{cur_dst} // $self->{dst};
-	chomp(my $orig = PublicInbox::Git::try_cat("$dst/description"));
+	chomp(my $orig = PublicInbox::IO::try_cat("$dst/description"));
 	my $d = $orig;
 	while (defined($d) && ($d =~ m!^\(\$INBOX_DIR/description missing\)! ||
 			$d =~ /^Unnamed repository/ || $d !~ /\S/)) {
@@ -806,7 +805,7 @@ sub update_ent {
 	}
 	if (defined(my $t = $self->{-ent}->{modified})) {
 		my ($dn, $bn) = ("$dst/info/web", 'last-modified');
-		my $orig = PublicInbox::Git::try_cat("$dn/$bn");
+		my $orig = PublicInbox::IO::try_cat("$dn/$bn");
 		$t = strftime('%F %T', gmtime($t))." +0000\n";
 		File::Path::mkpath($dn);
 		atomic_write($dn, $bn, $t) if $orig ne $t;
@@ -936,7 +935,7 @@ failed to extract epoch number from $src
 sub decode_manifest ($$$) {
 	my ($fh, $fn, $uri) = @_;
 	my $js;
-	my $gz = read_all($fh);
+	my $gz = PublicInbox::IO::read_all $fh;
 	gunzip(\$gz => \$js, MultiStream => 1) or
 		die "gunzip($uri): $GunzipError\n";
 	my $m = eval { PublicInbox::Config->json->decode($js) };
@@ -1083,7 +1082,7 @@ sub dump_manifest ($$) {
 sub dump_project_list ($$) {
 	my ($self, $m) = @_;
 	my $f = $self->{'-project-list'};
-	my $old = defined($f) ? PublicInbox::Git::try_cat($f) : '';
+	my $old = defined($f) ? PublicInbox::IO::try_cat($f) : '';
 	my %new;
 
 	open my $dh, '<', '.';
