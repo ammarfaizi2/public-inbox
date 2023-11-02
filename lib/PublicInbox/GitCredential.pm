@@ -5,19 +5,20 @@
 package PublicInbox::GitCredential;
 use v5.12;
 use PublicInbox::Spawn qw(popen_rd);
+use autodie qw(close pipe);
 
 sub run ($$;$) {
 	my ($self, $op, $lei) = @_;
 	my ($in_r, $in_w, $out_r);
 	my $cmd = [ qw(git credential), $op ];
-	pipe($in_r, $in_w) or die "pipe: $!";
+	pipe($in_r, $in_w);
 	if ($lei) { # we'll die if disconnected:
-		pipe($out_r, my $out_w) or die "pipe: $!";
+		pipe($out_r, my $out_w);
 		$lei->send_exec_cmd([ $in_r, $out_w ], $cmd, {});
 	} else {
 		$out_r = popen_rd($cmd, undef, { 0 => $in_r });
 	}
-	close $in_r or die "close in_r: $!";
+	close $in_r;
 
 	my $out = '';
 	for my $k (qw(url protocol host username password)) {
@@ -25,9 +26,8 @@ sub run ($$;$) {
 		die "`$k' contains `\\n' or `\\0'\n" if $v =~ /[\n\0]/;
 		$out .= "$k=$v\n";
 	}
-	$out .= "\n";
-	print $in_w $out or die "print (git credential $op): $!";
-	close $in_w or die "close (git credential $op): $!";
+	say $in_w $out;
+	close $in_w;
 	return $out_r if $op eq 'fill';
 	<$out_r> and die "unexpected output from `git credential $op'\n";
 	$out_r->close or die "`git credential $op' failed: \$!=$! \$?=$?\n";
