@@ -480,11 +480,11 @@ sub partition_refs ($$$) {
 			$seen = 0;
 		}
 		if ($DO_QUIT) {
-			CORE::close($rfh);
+			$rfh->close;
 			return ();
 		}
 	}
-	CORE::close($rfh);
+	$rfh->close;
 	return () if $DO_QUIT;
 	if (!$? || (($? & 127) == POSIX::SIGPIPE && $seen > $SEEN_MAX)) {
 		my $n = $NCHANGE - $n0;
@@ -887,7 +887,7 @@ sub associate {
 			++$score{"$ibx_id $_"} for @root_ids;
 		}
 	}
-	CORE::close $rd or die "@join failed: $?=$?";
+	$rd->close or die "fatal: @join failed: \$?=$?";
 	my $min = $self->{-opt}->{'assoc-min'} // 10;
 	progress($self, scalar(keys %score).' potential pairings...');
 	for my $k (keys %score) {

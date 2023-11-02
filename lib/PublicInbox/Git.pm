@@ -441,12 +441,12 @@ sub qx {
 	my $fh = popen(@_);
 	if (wantarray) {
 		my @ret = <$fh>;
-		CORE::close $fh; # caller should check $?
+		$fh->close; # caller should check $?
 		@ret;
 	} else {
 		local $/;
 		my $ret = <$fh>;
-		CORE::close $fh; # caller should check $?
+		$fh->close; # caller should check $?
 		$ret;
 	}
 }
@@ -621,7 +621,7 @@ sub manifest_entry {
 		}
 	}
 	$ent->{fingerprint} = sha_all(1, $sr)->hexdigest;
-	CORE::close $sr or return; # empty, uninitialized git repo
+	$sr->close or return; # empty, uninitialized git repo
 	$ent->{modified} = modified(undef, $mod);
 	chomp($buf = <$own> // '');
 	utf8::decode($buf);

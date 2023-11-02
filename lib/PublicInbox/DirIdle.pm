@@ -89,7 +89,7 @@ sub force_close {
 	my ($self) = @_;
 	my $inot = delete $self->{inot} // return;
 	if ($inot->can('fh')) { # Linux::Inotify2 2.3+
-		CORE::close($inot->fh) or warn "CLOSE ERROR: $!";
+		$inot->fh->close or warn "CLOSE ERROR: $!";
 	} elsif ($inot->isa('Linux::Inotify2')) {
 		require PublicInbox::LI2Wrap;
 		PublicInbox::LI2Wrap::wrapclose($inot);

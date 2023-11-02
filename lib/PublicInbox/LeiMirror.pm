@@ -334,7 +334,7 @@ sub fgrp_update {
 			upr($lei, $w, 'create', $ref, $oid);
 		}
 	}
-	CORE::close($w) or upref_warn();
+	$w->close or upref_warn();
 }
 
 sub satellite_done {
@@ -344,7 +344,7 @@ sub satellite_done {
 		while (my ($ref, $oid) = each %$create) {
 			upr($fgrp->{lei}, $w, 'create', $ref, $oid);
 		}
-		CORE::close($w) or upref_warn();
+		$w->close or upref_warn();
 	} else {
 		pack_refs($fgrp, $fgrp->{cur_dst});
 		run_puh($fgrp);
