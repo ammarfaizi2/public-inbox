@@ -47,7 +47,7 @@ sub event_step {
 	return ($!{EAGAIN} ? 0 : $self->close) if !defined($n);
 	return $self->close if !$n;
 	my $printed;
-	for my $lei (values %PublicInbox::DS::DescriptorMap) {
+	for my $lei (grep defined, @PublicInbox::DS::FD_MAP) {
 		my $cb = $lei->can('store_path') // next;
 		next if $cb->($lei) ne $self->{store_path};
 		emit($lei->{2} // next, $buf) and $printed = 1;

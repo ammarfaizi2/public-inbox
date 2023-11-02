@@ -42,7 +42,7 @@ my $reap_armed;
 my @active; # FDs (or objs) returned by epoll/kqueue
 our (%AWAIT_PIDS, # pid => [ $callback, @args ]
 	$cur_runq, # only set inside next_tick
-     %DescriptorMap,             # fd (num) -> PublicInbox::DS object
+     @FD_MAP, # fd (num) -> PublicInbox::DS object
      $Poller, # global Select, Epoll, DSPoll, or DSKQXS ref
 
      @post_loop_do,              # subref + args to call at the end of each loop
@@ -74,7 +74,7 @@ sub Reset {
 		# clobbering $Poller may call DSKQXS::DESTROY,
 		# we must always have this set to something to avoid
 		# needing branches before ep_del/ep_mod calls (via ->close).
-		%DescriptorMap = (); # likely to call ep_del
+		@FD_MAP = ();
 		@Timers = ();
 		%UniqTimer = ();
 		@post_loop_do = ();
@@ -85,7 +85,7 @@ sub Reset {
 		$nextq = undef; # may call ep_del
 		%AWAIT_PIDS = ();
 	} while (@Timers || $nextq || keys(%AWAIT_PIDS) ||
-		@active || keys(%DescriptorMap) ||
+		@active || @FD_MAP ||
 		@post_loop_do || keys(%UniqTimer) ||
 		scalar(@{$cur_runq // []})); # do not vivify cur_runq
 
@@ -226,7 +226,7 @@ sub in_loop () { $in_loop }
 # use inside @post_loop_do, returns number of busy clients
 sub close_non_busy () {
 	my $n = 0;
-	for my $s (values %DescriptorMap) {
+	for my $s (grep defined, @FD_MAP) {
 		# close as much as possible, early as possible
 		($s->busy ? ++$n : $s->close) if $s->can('busy');
 	}
@@ -291,7 +291,7 @@ sub event_loop (;$$) {
 		$Poller->ep_wait($timeout, \@active);
 
 		# map all FDs to their associated Perl object
-		@active = @DescriptorMap{@active};
+		@active = @FD_MAP[@active];
 
 		while (my $obj = shift @active) {
 			$obj->event_step;
@@ -329,10 +329,10 @@ retry:
         }
         die "EPOLL_CTL_ADD $self/$sock/$fd: $!";
     }
-    croak("FD:$fd in use by $DescriptorMap{$fd} (for $self/$sock)")
-        if defined($DescriptorMap{$fd});
+    defined($FD_MAP[$fd]) and
+		croak("BUG: FD:$fd in use by $FD_MAP[$fd] (for $self/$sock)");
 
-    $DescriptorMap{$fd} = $self;
+    $FD_MAP[$fd] = $self;
 }
 
 # for IMAP, NNTP, and POP3 which greet clients upon connect
@@ -366,7 +366,7 @@ sub close {
 	# be self-referential closures (sub { $client->close })
 	# preventing the object from being destroyed
 	delete $self->{wbuf};
-	delete $DescriptorMap{fileno($sock)};
+	$FD_MAP[fileno($sock)] = undef;
 
 	!$Poller->ep_del($sock); # stop getting notifications
 }
