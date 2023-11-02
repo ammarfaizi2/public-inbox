@@ -268,7 +268,6 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 	my $cmd = $git->cmd(@LOG_STDIN);
 	my $rd = popen_rd($cmd, undef, { 0 => $in },
 				\&cidx_reap_log, $cmd, $self, $op_p);
-	close $in;
 	PublicInbox::CidxLogP->new($rd, $self, $git, $roots);
 	# CidxLogP->event_step will call cidx_read_log_p once there's input
 }
@@ -457,7 +456,6 @@ sub partition_refs ($$$) {
 	my ($self, $git, $refs) = @_; # show-ref --heads --tags --hash output
 	sysseek($refs, 0, SEEK_SET);
 	my $rfh = $git->popen(qw(rev-list --stdin), undef, { 0 => $refs });
-	close $refs;
 	my $seen = 0;
 	my @shard_in = map {
 		$_->reopen;
@@ -971,7 +969,7 @@ sub dump_git_commits { # run_await cb
 	(defined($pid) && $?) and die "E: @PRUNE_BATCH: \$?=$?";
 	return if $DO_QUIT;
 	my ($hexlen) = keys(%ALT_FH) or return; # done
-	close(delete $ALT_FH{$hexlen});
+	delete $ALT_FH{$hexlen};
 
 	$PRUNE_BATCH[1] = "--git-dir=$TMPDIR/hexlen$hexlen.git";
 	run_await(\@PRUNE_BATCH, undef, $batch_opt, \&dump_git_commits);
