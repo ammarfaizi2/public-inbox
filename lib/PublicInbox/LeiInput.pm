@@ -80,7 +80,8 @@ sub input_net_cb { # imap_each, nntp_each cb
 sub input_fh {
 	my ($self, $ifmt, $fh, $name, @args) = @_;
 	if ($ifmt eq 'eml') {
-		my $buf = do { local $/; <$fh> } //
+		my $buf = do { local $/; <$fh> };
+		(defined($buf) && eof($fh) && close($fh)) or
 			return $self->{lei}->child_error(0, <<"");
 error reading $name: $!
 

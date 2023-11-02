@@ -22,7 +22,7 @@ use Carp qw(croak);
 use PublicInbox::IO;
 our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait run_qx);
 our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
-use autodie qw(open pipe seek sysseek truncate);
+use autodie qw(close open pipe seek sysseek truncate);
 
 BEGIN {
 	my $all_libc = <<'ALL_LIBC'; # all *nix systems we support
@@ -405,7 +405,7 @@ sub read_out_err ($) {
 		my $dst = $opt->{$fd};
 		$dst = $opt->{$fd} = $dst->[1] if ref($dst) eq 'ARRAY';
 		$$dst .= <$fh>;
-		$fh->error and croak "E: read(FD=$fd): $!";
+		$fh = eof($fh) | close $fh; # detects readline errors
 	}
 }
 

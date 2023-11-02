@@ -57,7 +57,7 @@ use PublicInbox::Git qw(%OFMT2HEXLEN);
 use PublicInbox::Compat qw(uniqstr);
 use PublicInbox::Aspawn qw(run_await);
 use Carp ();
-use autodie qw(pipe open sysread seek sysseek send);
+use autodie qw(close pipe open sysread seek sysseek send);
 our $DO_QUIT = 15; # signal number
 our (
 	$LIVE_JOBS, # integer
@@ -628,7 +628,7 @@ sub index_repo { # run_git cb
 	my $roots_fh = delete $repo->{roots_fh} // die 'BUG: no {roots_fh}';
 	seek($roots_fh, 0, SEEK_SET);
 	chomp(my @roots = <$roots_fh>);
-	close($roots_fh);
+	$roots_fh = eof($roots_fh) | close $roots_fh; # detect readline errors
 	if (!@roots) {
 		warn("E: $git->{git_dir} has no root commits\n");
 		return index_next($self);

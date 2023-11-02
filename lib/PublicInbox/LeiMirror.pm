@@ -309,9 +309,9 @@ sub fgrp_update {
 	seek($srcfh, 0, SEEK_SET);
 	seek($dstfh, 0, SEEK_SET);
 	my %src = map { chomp; split(/\0/) } (<$srcfh>);
-	close $srcfh;
 	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
-	close $dstfh;
+	$srcfh = eof($srcfh) | close $srcfh; # detects readline errors
+	$dstfh = eof($dstfh) | close $dstfh; # ditto
 	my $w = start_update_ref($fgrp) or return;
 	my $lei = $fgrp->{lei};
 	my $ndel;

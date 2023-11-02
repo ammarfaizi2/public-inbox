@@ -11,6 +11,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
 use PublicInbox::Git;
 use PublicInbox::Lock;
+use autodie qw(close);
 
 BEGIN {
 	use autodie;
@@ -81,6 +82,7 @@ sub add_alt ($$) {
 	# See https://bugs.debian.org/975607
 	if (open(my $fh, '<', "$objdir/info/alternates")) {
 		chomp(my @abs_alt = grep(m!^/!, <$fh>));
+		$fh = eof($fh) | close $fh; # detect readline errors
 		$gcf2->add_alternate($_) for @abs_alt;
 	}
 	$gcf2->add_alternate($objdir);
