@@ -8,7 +8,7 @@ use List::Util qw(sum);
 use autodie qw(close open rename);
 require_mods(qw(json Xapian));
 use_ok 'PublicInbox::CodeSearchIdx';
-require PublicInbox::Import;
+use PublicInbox::Import;
 my ($tmp, $for_destroy) = tmpdir();
 my $pwd = getcwd();
 my @unused_keys = qw(last_commit has_threadid skip_docdata);
@@ -45,7 +45,6 @@ ok(run_script([qw(-cindex --dangerous -q), "$tmp/wt0"]), 'cindex internal');
 # it's possible for git to emit NUL characters in diffs
 # (see c4201214cbf10636e2c1ab9131573f735b42c8d4 in linux.git)
 my $zp = create_coderepo 'NUL in patch', sub {
-	require PublicInbox::Git;
 	my $src = PublicInbox::IO::try_cat("$pwd/COPYING");
 	xsys_e([qw(git init -q)]);
 
@@ -53,17 +52,13 @@ my $zp = create_coderepo 'NUL in patch', sub {
 	$src =~ s/\b(Limitation of Liability\.)\n\n/$1\n\0\n/s or
 		xbail "BUG: no `\\n\\n' in $pwd/COPYING";
 
-	open my $fh, '>', 'f';
-	print $fh $src or xbail "print: $!";
-	close $fh;
+	PublicInbox::IO::write_file '>', 'f', $src;
 	xsys_e([qw(/bin/sh -c), <<'EOM']);
 git add f &&
 git commit -q -m 'initial with NUL character'
 EOM
 	$src =~ s/\n\0\n/\n\n/ or xbail "BUG: no `\\n\\0\\n'";
-	open $fh, '>', 'f';
-	print $fh $src or xbail "print: $!";
-	close $fh;
+	PublicInbox::IO::write_file '>', 'f', $src;
 	xsys_e([qw(/bin/sh -c), <<'EOM']);
 git add f &&
 git commit -q -m 'remove NUL character' &&
@@ -207,13 +202,11 @@ my $basic = create_inbox 'basic', indexlevel => 'basic', sub {
 };
 {
 	my $env = { PI_CONFIG => "$tmp/pi_config" };
-	open my $fh, '>', $env->{PI_CONFIG};
-	print $fh <<EOM;
+	PublicInbox::IO::write_file '>', $env->{PI_CONFIG}, <<EOM;
 [publicinbox "basictest"]
 	inboxdir = $basic->{inboxdir}
 	address = basic\@example.com
 EOM
-	close $fh;
 	my $cmd = [ qw(-cindex -u --all --associate -d), "$tmp/ext",
 		'-I', $basic->{inboxdir} ];
 	$cidx_out = $cidx_err = '';

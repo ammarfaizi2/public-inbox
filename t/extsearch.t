@@ -5,9 +5,9 @@ use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Config;
 use PublicInbox::InboxWritable;
-use Fcntl qw(:seek);
 require_git(2.6);
 require_mods(qw(json DBD::SQLite Xapian));
+use autodie qw(open rename truncate);
 require PublicInbox::Search;
 use_ok 'PublicInbox::ExtSearch';
 use_ok 'PublicInbox::ExtSearchIdx';
@@ -16,12 +16,10 @@ my ($home, $for_destroy) = tmpdir();
 local $ENV{HOME} = $home;
 mkdir "$home/.public-inbox" or BAIL_OUT $!;
 my $cfg_path = "$home/.public-inbox/config";
-open my $fh, '>', $cfg_path or BAIL_OUT $!;
-print $fh <<EOF or BAIL_OUT $!;
+PublicInbox::IO::write_file '>', $cfg_path, <<EOF;
 [publicinboxMda]
 	spamcheck = none
 EOF
-close $fh or BAIL_OUT $!;
 my $v2addr = 'v2test@example.com';
 my $v1addr = 'v1test@example.com';
 ok(run_script([qw(-init -Lbasic -V2 v2test --newsgroup v2.example),
@@ -30,24 +28,18 @@ my $env = { ORIGINAL_RECIPIENT => $v2addr };
 my $eml = eml_load('t/utf8.eml');
 
 $eml->header_set('List-Id', '<v2.example.com>');
-open($fh, '+>', undef) or BAIL_OUT $!;
-$fh->autoflush(1);
-print $fh $eml->as_string or BAIL_OUT $!;
-seek($fh, 0, SEEK_SET) or BAIL_OUT $!;
 
-run_script(['-mda', '--no-precheck'], $env, { 0 => $fh }) or BAIL_OUT '-mda';
+my $in = \($eml->as_string);
+run_script(['-mda', '--no-precheck'], $env, { 0 => $in }) or BAIL_OUT '-mda';
 
 ok(run_script([qw(-init -V1 v1test --newsgroup v1.example), "$home/v1test",
 	'http://example.com/v1test', $v1addr ]), 'v1test init');
 
 $eml->header_set('List-Id', '<v1.example.com>');
-seek($fh, 0, SEEK_SET) or BAIL_OUT $!;
-truncate($fh, 0) or BAIL_OUT $!;
-print $fh $eml->as_string or BAIL_OUT $!;
-seek($fh, 0, SEEK_SET) or BAIL_OUT $!;
+$in = \$eml->as_string;
 
 $env = { ORIGINAL_RECIPIENT => $v1addr };
-run_script(['-mda', '--no-precheck'], $env, { 0 => $fh }) or BAIL_OUT '-mda';
+run_script(['-mda', '--no-precheck'], $env, { 0 => $in }) or BAIL_OUT '-mda';
 
 run_script([qw(-index -Lbasic), "$home/v1test"]) or BAIL_OUT "index $?";
 
@@ -103,14 +95,11 @@ if ('with boost') {
 }
 
 { # TODO: -extindex should write this to config
-	open $fh, '>>', $cfg_path or BAIL_OUT $!;
-	print $fh <<EOF or BAIL_OUT $!;
+	PublicInbox::IO::write_file '>>', $cfg_path, <<EOF;
 ; for ->ALL
 [extindex "all"]
 	topdir = $home/extindex
 EOF
-	close $fh or BAIL_OUT $!;
-
 	my $pi_cfg = PublicInbox::Config->new;
 	$pi_cfg->fill_all;
 	ok($pi_cfg->ALL, '->ALL');
@@ -202,11 +191,7 @@ if ('inbox edited') {
 	is_deeply($res, $exp, 'isearch limited results');
 	$pi_cfg = $res = $exp = undef;
 
-	open my $rmfh, '+>', undef or BAIL_OUT $!;
-	$rmfh->autoflush(1);
-	print $rmfh $eml2->as_string or BAIL_OUT $!;
-	seek($rmfh, 0, SEEK_SET) or BAIL_OUT $!;
-	$opt->{0} = $rmfh;
+	$opt->{0} = \($eml2->as_string);
 	ok(run_script([qw(-learn rm --all)], undef, $opt), '-learn rm');
 
 	ok(run_script([qw(-extindex --all), "$home/extindex"], undef, undef),
@@ -245,13 +230,11 @@ if ('inject w/o indexing') {
 	isnt($tip, $cmt, '0.git v2 updated');
 
 	# inject a message w/o updating index
-	rename("$home/v1test/public-inbox", "$home/v1test/skip-index") or
-		BAIL_OUT $!;
-	open(my $eh, '<', 't/iso-2202-jp.eml') or BAIL_OUT $!;
+	rename("$home/v1test/public-inbox", "$home/v1test/skip-index");
+	open(my $eh, '<', 't/iso-2202-jp.eml');
 	run_script(['-mda', '--no-precheck'], $env, { 0 => $eh}) or
 		BAIL_OUT '-mda';
-	rename("$home/v1test/skip-index", "$home/v1test/public-inbox") or
-		BAIL_OUT $!;
+	rename("$home/v1test/skip-index", "$home/v1test/public-inbox");
 
 	my ($in, $out, $err);
 	$in = $out = $err = '';
@@ -500,10 +483,8 @@ SKIP: {
 		"$home/v2tmp", 'http://example.com/v2tmp', $tmp_addr ])
 		or xbail '-init';
 	$env = { ORIGINAL_RECIPIENT => $tmp_addr };
-	open $fh, '+>', undef or xbail "open $!";
-	$fh->autoflush(1);
 	my $mid = 'tmpmsg@example.com';
-	print $fh <<EOM or xbail "print $!";
+	my $in = \<<EOM;
 From: b\@z
 To: b\@r
 Message-Id: <$mid>
@@ -511,8 +492,7 @@ Subject: tmpmsg
 Date: Tue, 19 Jan 2038 03:14:07 +0000
 
 EOM
-	seek $fh, 0, SEEK_SET or xbail "seek $!";
-	run_script([qw(-mda --no-precheck)], $env, {0 => $fh}) or xbail '-mda';
+	run_script([qw(-mda --no-precheck)], $env, {0 => $in}) or xbail '-mda';
 	ok(run_script([qw(-extindex --all), "$home/extindex"]), 'update');
 	my $nr;
 	{
@@ -525,7 +505,7 @@ EOM
 		$mset = $es->search->mset('z:0..');
 		$nr = $mset->size;
 	}
-	truncate($cfg_path, $old_size) or xbail "truncate $!";
+	truncate($cfg_path, $old_size);
 	my $rdr = { 2 => \(my $err) };
 	ok(run_script([qw(-extindex --gc), "$home/extindex"], undef, $rdr),
 		'gc to get rid of removed inbox');
