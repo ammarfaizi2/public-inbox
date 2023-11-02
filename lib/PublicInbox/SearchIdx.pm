@@ -353,7 +353,7 @@ sub index_diff ($$$) {
 sub patch_id {
 	my ($self, $sref) = @_;
 	my $git = ($self->{ibx} // $self->{eidx} // $self)->git;
-	my $opt = { 0 => $sref, 2 => \(my $err) };
+	my $opt = { 0 => [ ':utf8', $sref ], 2 => \(my $err) };
 	my $id = run_qx($git->cmd(qw(patch-id --stable)), undef, $opt);
 	warn $err if $err;
 	$id =~ /\A([a-f0-9]{40,})/ ? $1 : undef;

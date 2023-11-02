@@ -63,7 +63,6 @@ sub next_smsg ($) {
 sub emit_msg_diff {
 	my ($bref, $self) = @_; # bref is `git diff' output
 	# will be escaped to `&#8226;' in HTML
-	utf8::decode($$bref);
 	$self->{ctx}->{ibx}->{obfuscate} and
 		obfuscate_addrs($self->{ctx}->{ibx}, $$bref, "\x{2022}");
 	print { $self->{ctx}->{zfh} } '</pre><hr><pre>' if $self->{nr} > 1;
@@ -77,7 +76,7 @@ sub do_diff {
 	my $dir = "$self->{tmp}/$n";
 	$self->dump_eml($dir, $eml);
 	my $cmd = [ qw(git diff --no-index --no-color -- a), $n ];
-	my $opt = { -C => "$self->{tmp}", quiet => 1 };
+	my $opt = { -C => "$self->{tmp}", quiet => 1, 1 => [':utf8', \my $o] };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $opt);
 	$qsp->psgi_qx($self->{ctx}->{env}, undef, \&emit_msg_diff, $self);
 }
