@@ -75,7 +75,7 @@ sub new {
 	my @cmd = qw(git config -z --includes -l); # reuse normal git config
 	my $r = popen_rd(\@cmd, undef, { 2 => $lei->{2} });
 	my $cfg = PublicInbox::Config::config_fh_parse($r, "\0", "\n");
-	if (!close($r)) {
+	if ($r->close) {
 		warn "# @cmd failed, no color (non-fatal \$?=$?)\n";
 		return $self;
 	}

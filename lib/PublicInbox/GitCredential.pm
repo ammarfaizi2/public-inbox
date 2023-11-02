@@ -30,7 +30,7 @@ sub run ($$;$) {
 	close $in_w or die "close (git credential $op): $!";
 	return $out_r if $op eq 'fill';
 	<$out_r> and die "unexpected output from `git credential $op'\n";
-	close $out_r or die "`git credential $op' failed: \$!=$! \$?=$?\n";
+	$out_r->close or die "`git credential $op' failed: \$!=$! \$?=$?\n";
 }
 
 sub check_netrc {
@@ -61,7 +61,7 @@ sub fill {
 		/\A([^=]+)=(.*)\z/ or die "bad line: $_\n";
 		$self->{$1} = $2;
 	}
-	close $out_r or die "git credential fill failed: \$!=$! \$?=$?\n";
+	$out_r->close or die "git credential fill failed: \$!=$! \$?=$?\n";
 	$self->{filled} = 1;
 }
 

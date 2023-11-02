@@ -501,7 +501,7 @@ sub err ($;@) {
 	my @eor = (substr($_[-1]//'', -1, 1) eq "\n" ? () : ("\n"));
 	print $err @_, @eor and return;
 	my $old_err = delete $self->{2};
-	close($old_err) if $! == EPIPE && $old_err;
+	$old_err->close if $! == EPIPE && $old_err;
 	$err = $self->{2} = ($self->{pgr} // [])->[2] // *STDERR{GLOB};
 	print $err @_, @eor or print STDERR @_, @eor;
 }
@@ -516,7 +516,7 @@ sub qfin { # show message on finalization (LeiFinmsg)
 
 sub fail_handler ($;$$) {
 	my ($lei, $code, $io) = @_;
-	close($io) if $io; # needed to avoid warnings on SIGPIPE
+	$io->close if $io; # needed to avoid warnings on SIGPIPE
 	_drop_wq($lei);
 	x_it($lei, $code // (1 << 8));
 }
@@ -565,7 +565,7 @@ sub child_error { # passes non-fatal curl exit codes to user
 
 sub note_sigpipe { # triggers sigpipe_handler
 	my ($self, $fd) = @_;
-	close(delete($self->{$fd})); # explicit close silences Perl warning
+	delete($self->{$fd})->close; # explicit close silences Perl warning
 	$self->{pkt_op_p}->pkt_do('sigpipe_handler') if $self->{pkt_op_p};
 	x_it($self, 13);
 }
@@ -1129,7 +1129,7 @@ sub stop_pager {
 	my ($self) = @_;
 	my $pgr = delete($self->{pgr}) or return;
 	$self->{2} = $pgr->[2];
-	close(delete($self->{1})) if $self->{1};
+	delete($self->{1})->close if $self->{1};
 	$self->{1} = $pgr->[1];
 }
 

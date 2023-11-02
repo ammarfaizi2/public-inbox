@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use POSIX qw(mkfifo);
@@ -51,7 +51,7 @@ SKIP: {
 		'--import-before fails on non-seekable output');
 	like($lei_err, qr/not seekable/, 'unseekable noted in error');
 	is(do { local $/; <$cat> }, '', 'no output on FIFO');
-	close $cat;
+	$cat->close;
 	$cat = popen_rd(['cat', $o]);
 	lei_ok(qw(q m:qp@example.com -o), "mboxrd:$o");
 	my $buf = do { local $/; <$cat> };

@@ -246,7 +246,7 @@ sub input_path_url {
 			my $fh = popen_rd($fp, undef, $rdr);
 			eval { $self->input_fh('eml', $fh, $input, @args) };
 			my @err = ($@ ? $@ : ());
-			close($fh) or push @err, "\$?=$?";
+			$fh->close or push @err, "\$?=$?";
 			$lei->child_error($?, "@$fp failed: @err") if @err;
 		} else {
 			$self->folder_missing("$ifmt:$input");

@@ -67,7 +67,7 @@ my $do_get_all = sub {
 	}
 	my $res = $dig->hexdigest;
 	my $elapsed = sprintf('%0.3f', now() - $t0);
-	close $rd or die "close curl failed: $! \$?=$?\n";
+	$rd->close or xbail "close curl failed: $! \$?=$?\n";
 	print STDERR "# $job $$ ($?) $res (${elapsed}s) $bytes bytes\n";
 	$res;
 };

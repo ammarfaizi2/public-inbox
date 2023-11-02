@@ -368,7 +368,7 @@ SKIP: {
 		$n += $r;
 		$buf =~ /\A\0+\z/ or $non_zero++;
 	}
-	close $fh or die "close curl pipe: $!";
+	$fh->close or die "close curl pipe: $!";
 	is($?, 0, 'curl succesful');
 	is($n, 30 * 1024 * 1024, 'got expected output from curl');
 	is($non_zero, 0, 'read all zeros');

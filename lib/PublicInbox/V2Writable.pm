@@ -1070,7 +1070,7 @@ sub unindex_todo ($$$) {
 		/\A:\d{6} 100644 $OID ($OID) [AM]\tm$/o or next;
 		$self->git->cat_async($1, $unindex_oid, { %$sync, oid => $1 });
 	}
-	close $fh or die "git log failed: \$?=$?";
+	$fh->close or die "git log failed: \$?=$?";
 	$self->git->async_wait_all;
 
 	return unless $sync->{-opt}->{prune};

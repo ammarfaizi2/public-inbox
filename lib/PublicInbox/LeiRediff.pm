@@ -126,7 +126,7 @@ EOM
 			qw(fast-import --quiet --done --date-format=raw)],
 			$lei->{env}, { 2 => $lei->{2} });
 	print $w $ta, "\n", $tb, "\ndone\n" or die "print fast-import: $!";
-	close $w or die "close w fast-import: \$?=$? \$!=$!";
+	$w->close or die "close w fast-import: \$?=$? \$!=$!";
 
 	my $cmd = [ 'diff' ];
 	_lei_diff_prepare($lei, $cmd);

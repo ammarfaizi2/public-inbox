@@ -353,14 +353,14 @@ print STDERR $_;
 						$lei, $each_smsg);
 		$lei->sto_done_request if delete($self->{-sto_imported});
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
-		close $cfh;
+		$cfh->close;
 		my $code = $?;
 		if (!$code) { # don't update if no results, maybe MTA is down
 			$lei->{lss}->cfg_set($key, $start) if $key && $nr;
 			mset_progress($lei, $lei->{-current_url}, $nr, $nr);
 			next;
 		}
-		close(delete($rdr->{2})) if @lbf_tee;
+		delete($rdr->{2})->close if @lbf_tee;
 		seek($cerr, 0, SEEK_SET);
 		read($cerr, my $err, -s $cerr);
 		truncate($cerr, 0);
@@ -396,8 +396,8 @@ sub query_done { # EOF callback for main daemon
 	$lei->{ovv}->ovv_end($lei);
 	if ($l2m) { # close() calls LeiToMail reap_compress
 		if (my $out = delete $lei->{old_1}) {
-			if (my $mbout = $lei->{1}) {
-				close($mbout) or die <<"";
+			if (my $mbout = $lei->{1}) { # compressor pipe process
+				$mbout->close or die <<"";
 Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
 
 			}

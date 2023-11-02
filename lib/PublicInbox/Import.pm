@@ -476,7 +476,7 @@ sub done {
 	my $io = delete $self->{io} or return;
 	eval {
 		print $io "done\n" or wfail;
-		close $io; # reaps and dies on error
+		$io->close or croak "close fast-import \$?=$?"; # reaps
 	};
 	my $wait_err = $@;
 	my $nchg = delete $self->{nchg};
@@ -489,7 +489,7 @@ sub done {
 	die $wait_err if $wait_err;
 }
 
-sub atfork_child { close(delete($_[0]->{io}) // return) }
+sub atfork_child { (delete($_[0]->{io}) // return)->close }
 
 sub digest2mid ($$;$) {
 	my ($dig, $hdr, $fallback_time) = @_;
@@ -598,7 +598,7 @@ sub replace_oids {
 			push @buf, $_;
 		}
 	}
-	close $rd;
+	$rd->close or die "E: git @export (\$?=$?)";
 	if (@buf) {
 		print $io @buf or wfail;
 	}

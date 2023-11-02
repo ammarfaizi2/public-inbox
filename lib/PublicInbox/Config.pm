@@ -192,7 +192,7 @@ sub git_config_dump {
 	push(@cmd, '-f', $file) if !@opt_c && defined($file);
 	my $fh = popen_rd(\@cmd, \%env, $opt);
 	my $rv = config_fh_parse($fh, "\0", "\n");
-	close $fh or die "@cmd failed: \$?=$?\n";
+	$fh->close or die "@cmd failed: \$?=$?\n";
 	$rv->{-opt_c} = \@opt_c if @opt_c; # for ->urlmatch
 	$rv->{-f} = $file;
 	bless $rv, $class;

@@ -80,7 +80,7 @@ EOF
 	is($rdy, 'RDY', 'got ready signal, waitpid(-1) works in child');
 	ok(kill('CHLD', $pid), 'sent SIGCHLD to child');
 	is(readline($rd), "HI\n", '$SIG{CHLD} works in child');
-	ok(close $rd, 'popen_rd close works');
+	ok($rd->close, 'popen_rd close works');
 	PublicInbox::DS::sig_setmask($oldset);
 }
 
@@ -133,13 +133,13 @@ EOF
 	is($buf, "hello\n", 'tied gets works');
 	is(sysread($fh, $buf, 6), 0, 'sysread got EOF');
 	$? = 1;
-	ok(close($fh), 'close succeeds');
+	ok($fh->close, 'close succeeds');
 	is($?, 0, '$? set properly');
 }
 
 {
 	my $fh = popen_rd([qw(false)]);
-	ok(!close($fh), 'close fails on false');
+	ok(!$fh->close, 'close fails on false');
 	isnt($?, 0, '$? set properly: '.$?);
 }
 
@@ -152,7 +152,7 @@ EOF
 { # ->CLOSE vs ->DESTROY waitpid caller distinction
 	my @c;
 	my $fh = popen_rd(['true'], undef, undef, sub { @c = caller });
-	ok(close($fh), '->CLOSE fired and successful');
+	ok($fh->close, '->CLOSE fired and successful');
 	ok(scalar(@c), 'callback fired by ->CLOSE');
 	ok(grep(!m[/PublicInbox/DS\.pm\z], @c), 'callback not invoked by DS');
 
@@ -183,7 +183,7 @@ EOF
 	my @w;
 	local $SIG{__WARN__} = sub { push @w, @_ };
 	close $w;
-	close $fh;
+	$fh->close; # may set $?
 	is($?, 0, 'cat exited');
 	is(scalar(@arg), 2, 'callback got args');
 	is($arg[1], 'hi', 'passed arg');

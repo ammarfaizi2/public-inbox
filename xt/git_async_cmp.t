@@ -31,7 +31,7 @@ my $async = timeit($nr, sub {
 		my ($oid, undef, undef) = split(/ /);
 		$git->cat_async($oid, $cb);
 	}
-	close $cat or die "cat: $?";
+	$cat->close or xbail "cat: $?";
 	$git->async_wait_all;
 	push @dig, ['async', $dig->hexdigest ];
 });
@@ -44,7 +44,7 @@ my $sync = timeit($nr, sub {
 		my $bref = $git->cat_file($oid);
 		$dig->add($$bref);
 	}
-	close $cat or die "cat: $?";
+	$cat->close or xbail "cat: $?";
 	push @dig, ['sync', $dig->hexdigest ];
 });
 

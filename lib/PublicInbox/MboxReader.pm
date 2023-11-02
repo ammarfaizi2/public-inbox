@@ -29,7 +29,7 @@ sub _mbox_from {
 	my @raw;
 	while (defined(my $r = read($mbfh, $buf, 65536, length($buf)))) {
 		if ($r == 0) { # close here to check for "curl --fail"
-			close($mbfh) or die "error closing mbox: \$?=$? $!";
+			$mbfh->close or die "error closing mbox: \$?=$? $!";
 			@raw = ($buf);
 		} else {
 			@raw = split(/$from_strict/mos, $buf, -1);
@@ -88,7 +88,7 @@ sub _mbox_cl ($$$;@) {
 	my $buf = '';
 	while (defined(my $r = read($mbfh, $buf, 65536, length($buf)))) {
 		if ($r == 0) { # detect "curl --fail"
-			close($mbfh) or
+			$mbfh->close or
 				die "error closing mboxcl/mboxcl2: \$?=$? $!";
 			undef $mbfh;
 		}

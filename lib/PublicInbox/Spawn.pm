@@ -421,7 +421,7 @@ sub run_qx {
 		local $/;
 		$ret[0] = <$fh>;
 	}
-	close $fh; # caller should check $?
+	$fh->close; # caller should check $?
 	read_out_err($opt);
 	wantarray ? @ret : $ret[0];
 }

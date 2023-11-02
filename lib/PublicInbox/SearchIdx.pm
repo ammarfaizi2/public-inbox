@@ -980,7 +980,7 @@ sub log2stack ($$$) {
 			$stk->push_rec('m', $at, $ct, $oid, $cmt);
 		}
 	}
-	close $fh or die "git log failed: \$?=$?";
+	$fh->close or die "git log failed: \$?=$?";
 	$stk //= PublicInbox::IdxStack->new;
 	$stk->read_prepare;
 }
