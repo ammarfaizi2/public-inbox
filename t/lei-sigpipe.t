@@ -7,6 +7,19 @@ use PublicInbox::TestCommon;
 use POSIX qw(WTERMSIG WIFSIGNALED SIGPIPE);
 use PublicInbox::OnDestroy;
 use PublicInbox::Syscall qw($F_SETPIPE_SZ);
+use autodie qw(close open pipe seek sysread);
+use PublicInbox::IO qw(write_file);
+my $inboxdir = $ENV{GIANT_INBOX_DIR};
+SKIP: {
+	$inboxdir // skip 'GIANT_INBOX_DIR unset to test large results';
+	require PublicInbox::Inbox;
+	my $ibx = PublicInbox::Inbox->new({
+		name => 'unconfigured-test',
+		address => [ "test\@example.com" ],
+		inboxdir => $inboxdir,
+	});
+	$ibx->search or xbail "GIANT_INBOX_DIR=$inboxdir has no search";
+}
 
 # undo systemd (and similar) ignoring SIGPIPE, since lei expects to be run
 # from an interactive terminal:
@@ -21,30 +34,30 @@ test_lei(sub {
 	my $f = "$ENV{HOME}/big.eml";
 	my $imported;
 	for my $out ([], [qw(-f mboxcl2)], [qw(-f text)]) {
-		pipe(my ($r, $w)) or BAIL_OUT $!;
+		pipe(my $r, my $w);
 		my $size = $F_SETPIPE_SZ && fcntl($w, $F_SETPIPE_SZ, 4096) ?
 			4096 : 65536;
 		unless (-f $f) {
-			open my $fh, '>', $f or xbail "open $f: $!";
-			print $fh <<'EOM' or xbail;
+			my $fh = write_file '>', $f, <<'EOM';
 From: big@example.com
 Message-ID: <big@example.com>
 EOM
 			print $fh 'Subject:';
 			print $fh (' '.('x' x 72)."\n") x (($size / 73) + 1);
 			print $fh "\nbody\n";
-			close $fh or xbail "close: $!";
+			close $fh;
 		}
 
 		lei_ok(qw(import), $f) if $imported++ == 0;
-		open my $errfh, '+>>', "$ENV{HOME}/stderr.log" or xbail $!;
+		open my $errfh, '+>>', "$ENV{HOME}/stderr.log";
 		my $opt = { run_mode => 0, 2 => $errfh, 1 => $w };
 		my $cmd = [qw(lei q -q -t), @$out, 'z:1..'];
+		push @$cmd, '--only='.$inboxdir if defined $inboxdir;
 		my $tp = start_script($cmd, undef, $opt);
 		close $w;
 		vec(my $rvec = '', fileno($r), 1) = 1;
 		if (!select($rvec, undef, undef, 30)) {
-			seek($errfh, 0, 0) or xbail $!;
+			seek($errfh, 0, 0);
 			my $s = do { local $/; <$errfh> };
 			xbail "lei q had no output after 30s, stderr=$s";
 		}
@@ -53,7 +66,7 @@ EOM
 		$tp->join;
 		ok(WIFSIGNALED($?), "signaled @$out");
 		is(WTERMSIG($?), SIGPIPE, "got SIGPIPE @$out");
-		seek($errfh, 0, 0) or xbail $!;
+		seek($errfh, 0, 0);
 		my $s = do { local $/; <$errfh> };
 		is($s, '', "quiet after sigpipe @$out");
 	}

@@ -212,7 +212,8 @@ sub ovv_each_smsg_cb { # runs in wq worker usually
 		sub {
 			my ($smsg, $mitem, $eml) = @_;
 			$smsg->{pct} = get_pct($mitem) if $mitem;
-			$l2m->wq_io_do('write_mail', [], $smsg, $eml);
+			eval { $l2m->wq_io_do('write_mail', [], $smsg, $eml) };
+			$lei->fail($@) if $@ && !$!{ECONNRESET} && !$!{EPIPE};
 		}
 	} elsif ($self->{fmt} =~ /\A(concat)?json\z/ && $lei->{opt}->{pretty}) {
 		my $EOR = ($1//'') eq 'concat' ? "\n}" : "\n},";

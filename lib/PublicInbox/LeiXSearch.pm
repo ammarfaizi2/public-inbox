@@ -20,7 +20,7 @@ use PublicInbox::LEI;
 use Fcntl qw(SEEK_SET F_SETFL O_APPEND O_RDWR);
 use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
-use autodie qw(open read seek truncate);
+use autodie qw(close open read seek truncate);
 use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 
 sub new {
@@ -543,6 +543,7 @@ sub do_query {
 		pipe($lei->{startq}, $lei->{au_done}) or die "pipe: $!";
 		fcntl($lei->{startq}, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 		delete $l2m->{au_peers};
+		close(delete $l2m->{-wq_s2}); # share wq_s1 with lei_xsearch
 	}
 	$self->wq_workers_start('lei_xsearch', undef,
 				$lei->oldset, { lei => $lei },

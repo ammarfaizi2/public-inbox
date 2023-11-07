@@ -8,11 +8,13 @@ use v5.10.1;
 use parent qw(PublicInbox::IPC);
 use PublicInbox::Eml;
 use PublicInbox::IO;
+use PublicInbox::Git;
 use PublicInbox::Spawn qw(spawn);
 use IO::Handle; # ->autoflush
 use Fcntl qw(SEEK_SET SEEK_END O_CREAT O_EXCL O_WRONLY);
 use PublicInbox::Syscall qw(rename_noreplace);
 use autodie qw(open seek close);
+use Carp qw(croak);
 
 my %kw2char = ( # Maildir characters
 	draft => 'D',
@@ -132,8 +134,12 @@ sub eml2mboxcl2 {
 
 sub git_to_mail { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $smsg) = @_;
-	my $self = delete $smsg->{l2m} // die "BUG: no l2m";
 	$type // return; # called by PublicInbox::Git::close
+	my $self = delete $smsg->{l2m};
+	if (!defined($self)) {
+		return if $PublicInbox::Git::in_cleanup;
+		croak "BUG: no l2m (type=$type)";
+	}
 	eval {
 		if ($type eq 'missing' &&
 			  ($bref = $self->{-lms_rw}->local_blob($oid, 1))) {
