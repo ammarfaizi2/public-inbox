@@ -950,10 +950,11 @@ sub load_current_manifest ($) {
 	if (CORE::open(my $fh, '<', $fn)) {
 		decode_manifest($fh, $fn, $fn);
 	} elsif ($!{ENOENT}) { # non-fatal, we can just do it slowly
-		warn "open($fn): $!\n" if !$self->{-initial_clone};
+		$self->{-initial_clone} or
+			warn "W: open($fn): $! (non-fatal)\n";
 		undef;
 	} else {
-		die "open($fn): $!\n";
+		die "E: open($fn): $!\n";
 	}
 }
 
