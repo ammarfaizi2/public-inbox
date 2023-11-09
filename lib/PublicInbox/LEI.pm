@@ -574,19 +574,20 @@ sub _lei_atfork_child {
 	my ($self, $persist) = @_;
 	# we need to explicitly close things which are on stack
 	my $cfg = $self->{cfg};
+	delete @$cfg{qw(-watches -lei_note_event)};
 	if ($persist) {
 		open $self->{3}, '<', '/';
 		fchdir($self);
 		close($_) for (grep(defined, delete @$self{qw(0 1 2 sock)}));
-		delete @$cfg{qw(-lei_store -watches -lei_note_event)};
+		delete $cfg->{-lei_store};
 	} else { # worker, Net::NNTP (Net::Cmd) uses STDERR directly
-		open STDERR, '+>&='.fileno($self->{2});
+		open STDERR, '+>&', $self->{2};
 		STDERR->autoflush(1);
+		$self->{2} = \*STDERR;
 		POSIX::setpgid(0, $$) // die "setpgid(0, $$): $!";
-		delete @$cfg{qw(-watches -lei_note_event)};
 	}
 	close($_) for (grep(defined, delete @$self{qw(old_1 au_done)}));
-	delete $self->{-socks};
+	close($_) for (@{delete($self->{-socks}) // []});
 	if (my $op_c = delete $self->{pkt_op_c}) {
 		close(delete $op_c->{sock});
 	}
