@@ -12,7 +12,6 @@ use IO::Uncompress::Gunzip;
 use PublicInbox::MboxReader;
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::LeiCurl;
-use PublicInbox::AutoReap;
 use PublicInbox::ContentHash qw(git_sha);
 
 sub new {
@@ -22,7 +21,7 @@ sub new {
 
 sub isrch { $_[0] } # SolverGit expcets this
 
-sub _each_mboxrd_eml { # callback for MboxReader->mboxrd
+sub each_mboxrd_eml { # callback for MboxReader->mboxrd
 	my ($eml, $self) = @_;
 	my $lei = $self->{lei};
 	my $xoids = $lei->{ale}->xoids_for($eml, 1);
@@ -47,14 +46,13 @@ sub mset {
 	$uri->query_form(q => $qstr, x => 'm', r => 1); # r=1: relevance
 	my $cmd = $curl->for_uri($self->{lei}, $uri);
 	$self->{lei}->qerr("# $cmd");
-	my ($fh, $pid) = popen_rd($cmd, undef, { 2 => $lei->{2} });
-	my $ar = PublicInbox::AutoReap->new($pid);
 	$self->{smsg} = [];
-	$fh = IO::Uncompress::Gunzip->new($fh, MultiStream => 1);
-	PublicInbox::MboxReader->mboxrd($fh, \&_each_mboxrd_eml, $self);
+	my $fh = popen_rd($cmd, undef, { 2 => $lei->{2} });
+	$fh = IO::Uncompress::Gunzip->new($fh, MultiStream=>1, AutoClose=>1);
+	eval { PublicInbox::MboxReader->mboxrd($fh, \&each_mboxrd_eml, $self) };
+	my $err = $@ ? ": $@" : '';
 	my $wait = $self->{lei}->{sto}->wq_do('done');
-	$ar->join;
-	$lei->child_error($?) if $?;
+	$lei->child_error($?, "@$cmd failed$err") if $err || $?;
 	$self; # we are the mset (and $ibx, and $self)
 }
 

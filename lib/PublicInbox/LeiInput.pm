@@ -7,7 +7,6 @@ use v5.12;
 use PublicInbox::DS;
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::InboxWritable qw(eml_from_path);
-use PublicInbox::AutoReap;
 
 # JMAP RFC 8621 4.1.1
 # https://www.iana.org/assignments/imap-jmap-keywords/imap-jmap-keywords.xhtml
@@ -114,15 +113,13 @@ sub handle_http_input ($$@) {
 	push @$curl, '-s', @$curl_opt;
 	my $cmd = $curl->for_uri($lei, $uri);
 	$lei->qerr("# $cmd");
-	my ($fh, $pid) = popen_rd($cmd, undef, { 2 => $lei->{2} });
-	my $ar = PublicInbox::AutoReap->new($pid);
+	my $fh = popen_rd($cmd, undef, { 2 => $lei->{2} });
 	grep(/\A--compressed\z/, @$curl) or
-		$fh = IO::Uncompress::Gunzip->new($fh, MultiStream => 1);
+		$fh = IO::Uncompress::Gunzip->new($fh,
+					MultiStream => 1, AutoClose => 1);
 	eval { $self->input_fh('mboxrd', $fh, $url, @args) };
-	my @err = ($@ ? $@ : ());
-	$ar->join;
-	push(@err, "\$?=$?") if $?;
-	$lei->child_error($?, "@$cmd failed: @err") if @err;
+	my $err = $@ ? ": $@" : '';
+	$lei->child_error($?, "@$cmd failed$err") if $err || $?;
 }
 
 sub oid2eml { # git->cat_async cb

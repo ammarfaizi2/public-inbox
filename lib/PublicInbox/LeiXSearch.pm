@@ -346,14 +346,17 @@ print STDERR $_;
 		my $cmd = $curl->for_uri($lei, $uri);
 		$lei->qerr("# $cmd");
 		$rdr->{2} //= popen_wr(@lbf_tee) if @lbf_tee;
-		my $cfh = popen_rd($cmd, undef, $rdr);
-		my $fh = IO::Uncompress::Gunzip->new($cfh, MultiStream => 1);
-		PublicInbox::MboxReader->mboxrd($fh, \&each_remote_eml, $self,
-						$lei, $each_smsg);
+		my $fh = popen_rd($cmd, undef, $rdr);
+		$fh = IO::Uncompress::Gunzip->new($fh,
+					MultiStream => 1, AutoClose => 1);
+		eval {
+			PublicInbox::MboxReader->mboxrd($fh, \&each_remote_eml,
+						$self, $lei, $each_smsg);
+		};
+		my ($exc, $code) = ($@, $?);
 		$lei->sto_done_request if delete($self->{-sto_imported});
+		die "E: $exc" if $exc && !$code;
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
-		$cfh->close;
-		my $code = $?;
 		if (!$code) { # don't update if no results, maybe MTA is down
 			$lei->{lss}->cfg_set($key, $start) if $key && $nr;
 			mset_progress($lei, $lei->{-current_url}, $nr, $nr);
