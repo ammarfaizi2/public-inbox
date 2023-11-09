@@ -329,8 +329,8 @@ sub progress_pfx ($) {
 }
 
 sub kill_compact { # setup_signals callback
-	my ($sig, $pidref) = @_;
-	kill($sig, $$pidref) if defined($$pidref);
+	my ($sig, $ioref) = @_;
+	kill($sig, $$ioref->attached_pid // return) if defined($$ioref);
 }
 
 # xapian-compact wrapper
@@ -358,18 +358,16 @@ sub compact ($$) { # cb_spawn callback
 	}
 	$pr->("$pfx `".join(' ', @$cmd)."'\n") if $pr;
 	push @$cmd, $src, $dst;
-	my ($rd, $pid);
 	local @SIG{keys %SIG} = values %SIG;
-	setup_signals(\&kill_compact, \$pid);
-	($rd, $pid) = popen_rd($cmd, undef, $rdr);
+	setup_signals(\&kill_compact, \my $rd);
+	$rd = popen_rd($cmd, undef, $rdr);
 	while (<$rd>) {
 		if ($pr) {
 			s/\r/\r$pfx /g;
 			$pr->("$pfx $_");
 		}
 	}
-	waitpid($pid, 0);
-	die "@$cmd failed: \$?=$?\n" if $?;
+	$rd->close or die "@$cmd failed: \$?=$?\n";
 }
 
 sub cpdb_loop ($$$;$$) {
