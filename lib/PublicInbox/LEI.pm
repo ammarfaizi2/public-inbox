@@ -927,7 +927,7 @@ sub _config {
 	run_wait($cmd, \%env, \%opt) ? ($err_ok ? undef : fail($self, $?)) : 1;
 }
 
-sub lei_daemon_pid { puts shift, $$ }
+sub lei_daemon_pid { puts shift, $daemon_pid }
 
 sub lei_daemon_kill {
 	my ($self) = @_;

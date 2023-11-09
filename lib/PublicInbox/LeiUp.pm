@@ -11,6 +11,7 @@ use PublicInbox::LeiSavedSearch; # OverIdx
 use PublicInbox::DS;
 use PublicInbox::PktOp;
 use PublicInbox::LeiFinmsg;
+use PublicInbox::LEI;
 my $REMOTE_RE = qr!\A(?:imap|http)s?://!i; # http(s) will be for JMAP
 
 sub up1 ($$) {
@@ -92,7 +93,6 @@ sub redispatch_all ($$) {
 	$op_c->{ops} = { '' => [ $lei->can('dclose'), $lei ] };
 	my @first_batch = splice(@$upq, 0, $j); # initial parallelism
 	$lei->{-upq} = $upq;
-	$lei->{daemon_pid} = $$;
 	$lei->event_step_init; # wait for client disconnects
 	for my $out (@first_batch) {
 		PublicInbox::DS::requeue(
@@ -212,8 +212,8 @@ sub event_step { # runs via PublicInbox::DS::requeue
 
 sub DESTROY {
 	my ($self) = @_;
+	return if ($PublicInbox::LEI::daemon_pid // -1) != $$;
 	my $lei = $self->{lei}; # the original, from lei_up
-	return if $lei->{daemon_pid} != $$;
 	my $sock = delete $self->{unref_on_destroy};
 	my $s = $lei->{-socks} // [];
 	@$s = grep { $_ != $sock } @$s;
