@@ -3,8 +3,7 @@
 
 # "lei up" - updates the result of "lei q --save"
 package PublicInbox::LeiUp;
-use strict;
-use v5.10.1;
+use v5.12;
 # n.b. we use LeiInput to setup IMAP auth
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
 use PublicInbox::LeiSavedSearch; # OverIdx
@@ -174,8 +173,7 @@ no warnings 'once';
 *ipc_atfork_child = \&PublicInbox::LeiInput::input_only_atfork_child;
 
 package PublicInbox::LeiUp1; # for redispatch_all
-use strict;
-use v5.10.1;
+use v5.12;
 
 sub nxt ($$$) {
 	my ($lei, $out, $op_p) = @_;
