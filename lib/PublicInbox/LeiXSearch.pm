@@ -148,13 +148,13 @@ sub mset_progress {
 
 sub query_one_mset { # for --threads and l2m w/o sort
 	my ($self, $ibxish) = @_;
-	local $0 = "$0 query_one_mset";
 	my $lei = $self->{lei};
 	my ($srch, $over) = ($ibxish->search, $ibxish->over);
 	my $dir = $ibxish->{inboxdir} // $ibxish->{topdir};
 	return warn("$dir not indexed by Xapian\n") unless ($srch && $over);
 	bless $srch, 'PublicInbox::LeiSearch'; # for ->qparse_new
 	my $mo = { %{$lei->{mset_opt}} }; # copy
+	local $0 = "$0 1 $mo->{qstr}";
 	my $mset;
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
 	my $can_kw = !!$ibxish->can('msg_keywords');
@@ -219,9 +219,9 @@ sub query_one_mset { # for --threads and l2m w/o sort
 
 sub query_combined_mset { # non-parallel for non-"--threads" users
 	my ($self) = @_;
-	local $0 = "$0 query_combined_mset";
 	my $lei = $self->{lei};
 	my $mo = { %{$lei->{mset_opt}} };
+	local $0 = "$0 C $mo->{qstr}";
 	my $mset;
 	for my $loc (locals($self)) {
 		attach_external($self, $loc);
@@ -312,12 +312,11 @@ sub fudge_qstr_time ($$$) {
 
 sub query_remote_mboxrd {
 	my ($self, $uris) = @_;
-	local $0 = "$0 query_remote_mboxrd";
 	local $SIG{TERM} = sub { exit(0) }; # for DESTROY (File::Temp, $reap)
 	my $lei = $self->{lei};
 	my $opt = $lei->{opt};
-	chomp(my $qstr = $lei->{mset_opt}->{qstr});
-	$qstr =~ s/[ \n\t]+/ /sg; # make URLs less ugly
+	my $qstr = $lei->{mset_opt}->{qstr};
+	local $0 = "$0 R $qstr";
 	my @qform = (x => 'm');
 	push(@qform, t => 1) if $opt->{threads};
 	open my $cerr, '+>', undef;
@@ -504,6 +503,9 @@ sub ipc_atfork_child {
 sub do_query {
 	my ($self, $lei) = @_;
 	my $l2m = $lei->{l2m};
+	my $qstr = \($lei->{mset_opt}->{qstr});
+	chomp $$qstr;
+	$$qstr =~ s/[ \n\t]+/ /sg; # make URLs and $0 less ugly
 	my $ops = {
 		sigpipe_handler => [ $lei ],
 		fail_handler => [ $lei ],
