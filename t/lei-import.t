@@ -154,6 +154,33 @@ do {
 } until (!lei('ls-label') || $lei_out =~ /\bbin\b/ || now > $end);
 like($lei_out, qr/\bbin\b/, 'commit-delay eventually commits');
 
+SKIP: {
+	my $strace = strace_inject; # skips if strace is old or non-Linux
+	my $tmpdir = tmpdir;
+	my $tr = "$tmpdir/tr";
+	my $cmd = [ $strace, "-o$tr", '-f',
+		"-P", File::Spec->rel2abs('t/plack-qp.eml'),
+		'-e', 'inject=readv,read:error=EIO'];
+	lei_ok qw(daemon-pid);
+	chomp(my $daemon_pid = $lei_out);
+	push @$cmd, '-p', $daemon_pid;
+	my $strace_opt = { 1 => \my $out, 2 => \my $err };
+	require PublicInbox::Spawn;
+	require PublicInbox::AutoReap;
+	my $pid = PublicInbox::Spawn::spawn($cmd, \%ENV, $strace_opt);
+	my $ar = PublicInbox::AutoReap->new($pid);
+	tick; # wait for strace to attach
+	ok(!lei(qw(import -F eml t/plack-qp.eml)),
+		'-F eml import fails on pathname error injection');
+	like($lei_err, qr!error reading t/plack-qp\.eml: Input/output error!,
+		'EIO noted in stderr');
+	open $fh, '<', 't/plack-qp.eml';
+	ok(!lei(qw(import -F eml -), undef, { %$lei_opt, 0 => $fh }),
+		'-F eml import fails on stdin error injection');
+	like($lei_err, qr!error reading .*?: Input/output error!,
+		'EIO noted in stderr');
+}
+
 # see t/lei_to_mail.t for "import -F mbox*"
 });
 done_testing;

@@ -81,9 +81,11 @@ sub input_fh {
 	my ($self, $ifmt, $fh, $name, @args) = @_;
 	if ($ifmt eq 'eml') {
 		my $buf = do { local $/; <$fh> };
-		(defined($buf) && eof($fh) && close($fh)) or
-			return $self->{lei}->child_error(0, <<"");
-error reading $name: $!
+		my $ok = defined($buf) ? 1 : 0;
+		++$ok if eof($fh);
+		++$ok if $fh->close;
+		$ok == 3 or return $self->{lei}->child_error($?, <<"");
+error reading $name: $! (\$?=$?)
 
 		PublicInbox::Eml::strip_from($buf);
 
@@ -246,9 +248,8 @@ sub input_path_url {
 			my $rdr = { 2 => $lei->{2} };
 			my $fh = popen_rd($fp, undef, $rdr);
 			eval { $self->input_fh('eml', $fh, $input, @args) };
-			my @err = ($@ ? $@ : ());
-			$fh->close or push @err, "\$?=$?";
-			$lei->child_error($?, "@$fp failed: @err") if @err;
+			my $err = $@ ? ": $@" : '';
+			$lei->child_error($?, "@$fp failed$err") if $err || $?;
 		} else {
 			$self->folder_missing("$ifmt:$input");
 		}

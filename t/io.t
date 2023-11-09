@@ -9,13 +9,7 @@ use PublicInbox::Spawn qw(which run_qx);
 
 # only test failures
 SKIP: {
-skip 'linux only test' if $^O ne 'linux';
-my $strace = which('strace') or skip 'strace missing for test';
-my $v = run_qx([$strace, '--version']);
-$v =~ m!version\s+([1-9]+\.[0-9]+)! or xbail "no strace --version: $v";
-$v = eval("v$1");
-$v ge v4.16 or skip "$strace too old for syscall injection (".
-		sprintf('v%vd', $v). ' < v4.16)';
+my $strace = strace_inject;
 my $env = { PERL5LIB => join(':', @INC) };
 my $opt = { 1 => \my $out, 2 => \my $err };
 my $dst = "$tmpdir/dst";

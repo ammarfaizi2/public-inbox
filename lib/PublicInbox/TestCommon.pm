@@ -28,7 +28,8 @@ BEGIN {
 		quit_waiter_pipe wait_for_eof
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
-		ignore_inline_c_missing no_pollerfd no_coredump cfg_new);
+		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
+		strace strace_inject);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -931,6 +932,26 @@ sub cfg_new ($;@) {
 	print $fh @body;
 	close $fh;
 	PublicInbox::Config->new($f);
+}
+
+our $strace_cmd;
+sub strace () {
+	skip 'linux only test' if $^O ne 'linux';
+	require_cmd('strace', 1);
+}
+
+sub strace_inject () {
+	my $cmd = strace;
+	state $ver = do {
+		require PublicInbox::Spawn;
+		my $v = PublicInbox::Spawn::run_qx([$cmd, '--version']);
+		$v =~ m!version\s+([1-9]+\.[0-9]+)! or
+				xbail "no strace --version: $v";
+		eval("v$1");
+	};
+	$ver ge v4.16 or skip "$cmd too old for syscall injection (".
+				sprintf('v%vd', $ver). ' < v4.16)';
+	$cmd
 }
 
 package PublicInbox::TestCommon::InboxWakeup;
