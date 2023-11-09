@@ -60,6 +60,7 @@ sub mic_new ($$$$) {
 	my ($self, $mic_arg, $sec, $uri) = @_;
 	my %mic_arg = (%$mic_arg, Keepalive => 1);
 	my $sa = $self->{cfg_opt}->{$sec}->{-proxy_cfg} || $self->{-proxy_cli};
+	my ($mic, $s, $t);
 	if ($sa) {
 		# this `require' needed for worker[1..Inf], since socks_args
 		# only got called in worker[0]
@@ -68,24 +69,37 @@ sub mic_new ($$$$) {
 		$opt{SocksDebug} = 1 if $mic_arg{Debug};
 		$opt{ConnectAddr} = delete $mic_arg{Server};
 		$opt{ConnectPort} = delete $mic_arg{Port};
-		my $s = IO::Socket::Socks->new(%opt) or die
-			"E: <$uri> ".eval('$IO::Socket::Socks::SOCKS_ERROR');
+		do {
+			$! = 0;
+			$s = IO::Socket::Socks->new(%opt);
+		} until ($s || !$!{EINTR} || $self->{quit});
+		return if $self->{quit};
+		$s or die "E: <$uri> ".eval('$IO::Socket::Socks::SOCKS_ERROR');
+		$mic_arg{Socket} = $s;
 		if (my $o = delete $mic_arg{Ssl}) { # for imaps://
 			$o = mic_tls_opt($o, $opt{ConnectAddr});
-			$s = IO::Socket::SSL->start_SSL($s, @$o) or die
-				"E: <$uri> ".(IO::Socket::SSL->errstr // '');
+			do {
+				$! = 0;
+				$t = IO::Socket::SSL->start_SSL($s, @$o);
+			} until ($t || !$!{EINTR} || $self->{quit});
+			return if $self->{quit};
+			$t or die "E: <$uri> ".(IO::Socket::SSL->errstr // '');
+			$mic_arg{Socket} = $t;
 		} elsif ($o = $mic_arg{Starttls}) {
 			# Mail::IMAPClient will use this:
 			$mic_arg{Starttls} = mic_tls_opt($o, $opt{ConnectAddr});
 		}
-		$mic_arg{Socket} = $s;
 	} elsif ($mic_arg{Ssl} || $mic_arg{Starttls}) {
 		for my $f (qw(Ssl Starttls)) {
 			my $o = $mic_arg{$f} or next;
 			$mic_arg{$f} = mic_tls_opt($o, $mic_arg{Server});
 		}
 	}
-	PublicInbox::IMAPClient->new(%mic_arg);
+	do {
+		$! = 0;
+		$mic = PublicInbox::IMAPClient->new(%mic_arg);
+	} until ($mic || !$!{EINTR} || $self->{quit});
+	$mic;
 }
 
 sub auth_anon_cb { '' }; # for Mail::IMAPClient::Authcallback
@@ -152,6 +166,7 @@ sub mic_for ($$$$) { # mic = Mail::IMAPClient
 	};
 	require PublicInbox::IMAPClient;
 	my $mic = mic_new($self, $mic_arg, $sec, $uri);
+	return if $self->{quit};
 	($mic && $mic->IsConnected) or
 		die "E: <$uri> new: $@".onion_hint($lei, $uri);
 
@@ -202,16 +217,20 @@ sub mic_for ($$$$) { # mic = Mail::IMAPClient
 	$mic;
 }
 
-sub nn_new ($$$) {
-	my ($nn_arg, $nntp_cfg, $uri) = @_;
+sub nn_new ($$$$) {
+	my ($self, $nn_arg, $nntp_cfg, $uri) = @_;
 	my $nn;
+	my ($Net_NNTP, $new) = qw(Net::NNTP new);
 	if (defined $nn_arg->{ProxyAddr}) {
 		require PublicInbox::NetNNTPSocks;
+		($Net_NNTP, $new) = qw(PublicInbox::NetNNTPSocks new_socks);
 		$nn_arg->{SocksDebug} = 1 if $nn_arg->{Debug};
-		$nn = PublicInbox::NetNNTPSocks->new_socks(%$nn_arg) or return;
-	} else {
-		$nn = Net::NNTP->new(%$nn_arg) or return;
 	}
+	do {
+		$! = 0;
+		$nn = $Net_NNTP->$new(%$nn_arg);
+	} until ($nn || !$!{EINTR} || $self->{quit});
+	$nn // return;
 	setsockopt($nn, Socket::SOL_SOCKET(), Socket::SO_KEEPALIVE(), 1);
 
 	# default to using STARTTLS if it's available, but allow
@@ -268,8 +287,9 @@ sub nn_for ($$$$) { # nn = Net::NNTP
 	$nn_arg->{SSL} = 1 if $uri->secure; # snews == nntps
 	my $sa = $self->{-proxy_cli};
 	%$nn_arg = (%$nn_arg, %$sa) if $sa;
-	my $nn = nn_new($nn_arg, $nntp_cfg, $uri) or
-		die "E: <$uri> new: $@".onion_hint($lei, $uri);
+	my $nn = nn_new($self, $nn_arg, $nntp_cfg, $uri);
+	return if $self->{quit};
+	$nn // die "E: <$uri> new: $@".onion_hint($lei, $uri);
 	if ($cred) {
 		$cred->fill($lei) unless defined($p); # may prompt user here
 		if ($nn->authinfo($u, $p)) {
@@ -382,8 +402,9 @@ sub imap_common_init ($;$) {
 		my $sec = uri_section($orig_uri);
 		my $uri = PublicInbox::URIimap->new("$sec/");
 		my $mic = $mics->{$sec} //=
-				mic_for($self, $uri, $mic_common, $lei) //
-				die "Unable to continue\n";
+				mic_for($self, $uri, $mic_common, $lei);
+		return if $self->{quit};
+		$mic // die "Unable to continue\n";
 		next unless $self->isa('PublicInbox::NetWriter');
 		next if $self->{-skip_creat};
 		my $dst = $orig_uri->mailbox // next;
@@ -751,7 +772,7 @@ sub nn_get {
 	my $nn_arg = $self->{net_arg}->{$sec} or
 			die "BUG: no Net::NNTP->new arg for $sec";
 	my $nntp_cfg = $self->{cfg_opt}->{$sec};
-	$nn = nn_new($nn_arg, $nntp_cfg, $uri) or return;
+	$nn = nn_new($self, $nn_arg, $nntp_cfg, $uri) or return;
 	if (my $postconn = $nntp_cfg->{-postconn}) {
 		for my $m_arg (@$postconn) {
 			my ($method, @args) = @$m_arg;

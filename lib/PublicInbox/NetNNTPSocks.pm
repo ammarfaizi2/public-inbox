@@ -19,6 +19,7 @@ sub new_socks {
 	} qw(ProxyAddr ProxyPort SocksVersion SocksDebug SocksResolve);
 	no warnings 'uninitialized'; # needed for $SOCKS_ERROR
 	my $ret = Net::NNTP->new(%opt); # calls PublicInbox::NetNNTPSocks::new
+	return $ret if $ret || $!{EINTR};
 	$ret // die "errors: \$!=$! SOCKS=",
 				eval('$IO::Socket::Socks::SOCKS_ERROR // ""'),
 				', SSL=',

@@ -494,7 +494,7 @@ sub poll_fetch_reap { # awaitpid callback
 
 sub watch_imap_init ($$) {
 	my ($self, $poll) = @_;
-	my $mics = PublicInbox::NetReader::imap_common_init($self);
+	my $mics = PublicInbox::NetReader::imap_common_init($self) or return;
 	my $idle = []; # [ uri1, intvl1, uri2, intvl2 ]
 	for my $uri (@{$self->{imap_order}}) {
 		my $sec = uri_section($uri);
