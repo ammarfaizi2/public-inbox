@@ -19,7 +19,8 @@ sub input_path_url { # overrides LeiInput version
 	if ($url =~ m!\Aimaps?://!i) {
 		my $uri = PublicInbox::URIimap->new($url);
 		my $sec = $lei->{net}->can('uri_section')->($uri);
-		my $mic = $lei->{net}->mic_get($uri);
+		my $mic = $lei->{net}->mic_get($uri) or
+			return $lei->err("E: $uri");
 		my $l = $mic->folders_hash($uri->path); # server-side filter
 		@$l = map { $_->[2] } # undo Schwartzian transform below:
 			sort { $a->[0] cmp $b->[0] || $a->[1] <=> $b->[1] }
@@ -39,7 +40,8 @@ sub input_path_url { # overrides LeiInput version
 		}
 	} elsif ($url =~ m!\A(?:nntps?|s?news)://!i) {
 		my $uri = PublicInbox::URInntps->new($url);
-		my $nn = $lei->{net}->nn_get($uri);
+		my $nn = $lei->{net}->nn_get($uri) or
+			return $lei->err("E: $uri");
 		my $l = $nn->newsgroups($uri->group); # name => description
 		my $sec = $lei->{net}->can('uri_section')->($uri);
 		if ($json) {
