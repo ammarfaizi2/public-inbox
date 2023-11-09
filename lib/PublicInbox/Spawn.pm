@@ -384,16 +384,14 @@ sub spawn ($;$$) {
 sub popen_rd {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(my $r, local $opt->{1});
-	my $pid = spawn($cmd, $env, $opt);
-	wantarray ? ($r, $pid) : PublicInbox::IO::attach_pid($r, $pid, @cb_arg)
+	PublicInbox::IO::attach_pid($r, spawn($cmd, $env, $opt), @cb_arg);
 }
 
 sub popen_wr {
 	my ($cmd, $env, $opt, @cb_arg) = @_;
 	pipe(local $opt->{0}, my $w);
 	$w->autoflush(1);
-	my $pid = spawn($cmd, $env, $opt);
-	wantarray ? ($w, $pid) : PublicInbox::IO::attach_pid($w, $pid, @cb_arg)
+	PublicInbox::IO::attach_pid($w, spawn($cmd, $env, $opt), @cb_arg);
 }
 
 sub read_out_err ($) {
