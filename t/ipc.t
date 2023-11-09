@@ -132,6 +132,13 @@ for my $t ('worker', 'worker again') {
 		$exp = sha1_hex($bigger)."\n";
 		is(readline($rb), $exp, "SHA WQWorker limit ($t)");
 	}
+	SKIP: {
+		$ENV{TEST_EXPENSIVE} or skip 'TEST_EXPENSIVE not set', 1;
+		my $bigger = $big x 75000; # over 2G to trigger partial sendmsg
+		$ipc->wq_io_do('test_sha', [ $wa, $wb ], $bigger);
+		my $exp = sha1_hex($bigger)."\n";
+		is(readline($rb), $exp, "SHA WQWorker sendmsg limit ($t)");
+	}
 }
 
 # wq_io_do works across fork (siblings can feed)

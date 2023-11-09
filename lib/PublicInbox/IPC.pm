@@ -10,7 +10,7 @@
 package PublicInbox::IPC;
 use v5.12;
 use parent qw(Exporter);
-use autodie qw(fork pipe read socketpair sysread);
+use autodie qw(close fork pipe read socketpair sysread);
 use Carp qw(croak);
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
@@ -266,15 +266,8 @@ sub stream_in_full ($$$) {
 			0) // croak "sendmsg: $!";
 	undef $r;
 	$n = $send_cmd->($w, $fds, $buf, 0) // croak "sendmsg: $!";
-	while ($n < length($buf)) {
-		my $x = syswrite($w, $buf, length($buf) - $n, $n);
-		if (!defined($n)) {
-			next if $!{EINTR};
-			croak "syswrite: $!";
-		}
-		$x or croak "syswrite wrote 0 bytes";
-		$n += $x;
-	}
+	print $w substr($buf, $n) if $n < length($buf); # need > 2G on Linux
+	close $w; # autodies
 }
 
 sub wq_io_do { # always async
