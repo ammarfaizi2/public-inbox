@@ -371,6 +371,7 @@ lib/PublicInbox/WwwListing.pm
 lib/PublicInbox/WwwStatic.pm
 lib/PublicInbox/WwwStream.pm
 lib/PublicInbox/WwwText.pm
+lib/PublicInbox/WwwTopics.pm
 lib/PublicInbox/XapClient.pm
 lib/PublicInbox/XapHelper.pm
 lib/PublicInbox/XapHelperCxx.pm

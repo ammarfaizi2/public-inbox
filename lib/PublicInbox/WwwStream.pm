@@ -113,6 +113,7 @@ sub html_top ($) {
 			qq(<a\nid=mirror) .
 			qq(\nhref="${upfx}_/text/mirror/">mirror</a>$code / ).
 			qq(<a\nhref="$atom">Atom feed</a>);
+	$links .= delete($ctx->{-html_more_links}) if $ctx->{-html_more_links};
 	if ($ibx->isrch) {
 		my $q_val = delete($ctx->{-q_value_html}) // '';
 		$q_val = qq(\nvalue="$q_val") if $q_val ne '';

@@ -118,6 +118,14 @@ my $client = sub {
 	is($res->code, 404, '404 on out-of-range mid2tid query');
 	$res = $cb->(POST("/m2t/t\@1/?q=s:unrelated&x=m"));
 	is($res->code, 404, '404 on cross-thread search');
+
+
+	for my $c (qw(new active)) {
+		$res = $cb->(GET("/m2t/topics_$c.html"));
+		is($res->code, 200, "topics_$c.html on basic v2");
+		$res = $cb->(GET("/all/topics_$c.html"));
+		is($res->code, 200, "topics_$c.html on extindex");
+	}
 };
 test_psgi(sub { $www->call(@_) }, $client);
 %$env = (%$env, TMPDIR => $tmpdir, PI_CONFIG => $pi_config);

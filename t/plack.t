@@ -204,9 +204,13 @@ my $c1 = sub {
 	my $raw = PublicInbox::Eml->new(\$body);
 	is($raw->body_raw, $eml->body_raw, 'ISO-2022-JP body unmodified');
 
-	$res = $cb->(GET($pfx . '/blah@example.com/t.mbox.gz'));
-	is(501, $res->code, '501 when overview missing');
-	like($res->content, qr!\bOverview\b!, 'overview omission noted');
+	for my $u (qw(blah@example.com/t.mbox.gz topics_new.html
+			topics_active.html)) {
+		$res = $cb->(GET("$pfx/$u"));
+		is(501, $res->code, "501 on /$u when overview missing");
+		like($res->content, qr!\bOverview\b!,
+			"overview omission noted for /$u");
+	}
 
 	# legacy redirects
 	for my $t (qw(m f)) {

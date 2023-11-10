@@ -99,15 +99,16 @@ sub atom_header {
 		$base_url .= '?' . $search_q->qs_html(x => undef);
 		$self_url .= '?' . $search_q->qs_html;
 		$page_id = to_uuid("q\n".$query);
+	} elsif (defined(my $cat = $ctx->{topic_category})) {
+		$title = title_tag("$cat topics - ".$ibx->description);
+		$self_url .= "topics_$cat.atom";
 	} else {
 		$title = title_tag($ibx->description);
 		$self_url .= 'new.atom';
-		if (defined(my $addr = $ibx->{-primary_address})) {
-			$page_id = "mailto:$addr";
-		} else {
-			$page_id = to_uuid($self_url);
-		}
+		my $addr = $ibx->{-primary_address};
+		$page_id = "mailto:$addr" if defined $addr;
 	}
+	$page_id //= to_uuid($self_url);
 	qq(<?xml version="1.0" encoding="us-ascii"?>\n) .
 	qq(<feed\nxmlns="http://www.w3.org/2005/Atom"\n) .
 	qq(xmlns:thr="http://purl.org/syndication/thread/1.0">) .

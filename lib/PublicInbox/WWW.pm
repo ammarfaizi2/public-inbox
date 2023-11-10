@@ -101,6 +101,9 @@ sub call {
 		invalid_inbox($ctx, $1) || get_atom($ctx);
 	} elsif ($path_info =~ m!$INBOX_RE/new\.html\z!o) {
 		invalid_inbox($ctx, $1) || get_new($ctx);
+	} elsif ($path_info =~
+			m!$INBOX_RE/topics_(new|active)\.(atom|html)\z!o) {
+		get_topics($ctx, $1, $2, $3);
 	} elsif ($path_info =~ m!$INBOX_RE/description\z!o) {
 		get_description($ctx, $1);
 	} elsif ($path_info =~ m!$INBOX_RE/(?:(?:git/)?([0-9]+)(?:\.git)?/)?
@@ -270,6 +273,13 @@ sub get_new {
 	PublicInbox::Feed::new_html($ctx);
 }
 
+# /$INBOX/topics_(new|active).(html|atom)
+sub get_topics {
+	my ($ctx, $ibx_name, $category, $type) = @_;
+	require PublicInbox::WwwTopics;
+	PublicInbox::WwwTopics::response($ctx, $ibx_name, $category, $type);
+}
+
 # /$INBOX/?r=$GIT_COMMIT                 -> HTML only
 sub get_index {
 	my ($ctx) = @_;
@@ -338,11 +348,12 @@ sub get_altid_dump {
 }
 
 sub need {
-	my ($ctx, $extra) = @_;
+	my ($ctx, $extra, $upref) = @_;
 	require PublicInbox::WwwStream;
+	$upref //= '../';
 	PublicInbox::WwwStream::html_oneshot($ctx, 501, <<EOF);
 <pre>$extra is not available for this public-inbox
-<a\nhref="../">Return to index</a></pre>
+<a\nhref="$upref">Return to index</a></pre>
 EOF
 }
 
