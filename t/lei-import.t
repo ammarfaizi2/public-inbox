@@ -155,19 +155,18 @@ do {
 like($lei_out, qr/\bbin\b/, 'commit-delay eventually commits');
 
 SKIP: {
-	my $strace = strace_inject; # skips if strace is old or non-Linux
+	my $strace = strace_inject(1); # skips if strace is old or non-Linux
 	my $tmpdir = tmpdir;
 	my $tr = "$tmpdir/tr";
-	my $cmd = [ $strace, "-o$tr", '-f',
+	my $cmd = [ $strace, '-q', "-o$tr", '-f',
 		"-P", File::Spec->rel2abs('t/plack-qp.eml'),
 		'-e', 'inject=readv,read:error=EIO'];
 	lei_ok qw(daemon-pid);
 	chomp(my $daemon_pid = $lei_out);
 	push @$cmd, '-p', $daemon_pid;
-	my $strace_opt = { 1 => \my $out, 2 => \my $err };
 	require PublicInbox::Spawn;
 	require PublicInbox::AutoReap;
-	my $pid = PublicInbox::Spawn::spawn($cmd, \%ENV, $strace_opt);
+	my $pid = PublicInbox::Spawn::spawn($cmd, \%ENV);
 	my $ar = PublicInbox::AutoReap->new($pid);
 	tick; # wait for strace to attach
 	ok(!lei(qw(import -F eml t/plack-qp.eml)),

@@ -935,13 +935,25 @@ sub cfg_new ($;@) {
 }
 
 our $strace_cmd;
-sub strace () {
+sub strace (@) {
+	my ($for_daemon) = @_;
 	skip 'linux only test' if $^O ne 'linux';
+	if ($for_daemon) {
+		my $f = '/proc/sys/kernel/yama/ptrace_scope';
+		# TODO: we could fiddle with prctl in the daemon to make
+		# things work, but I'm not sure it's worth it...
+		state $ps = do {
+			my $fh;
+			CORE::open($fh, '<', $f) ? readline($fh) : 0;
+		};
+		chomp $ps;
+		skip "strace unusable on daemons\n$f is `$ps' (!= 0)" if $ps;
+	}
 	require_cmd('strace', 1);
 }
 
-sub strace_inject () {
-	my $cmd = strace;
+sub strace_inject (;$) {
+	my $cmd = strace(@_);
 	state $ver = do {
 		require PublicInbox::Spawn;
 		my $v = PublicInbox::Spawn::run_qx([$cmd, '--version']);
