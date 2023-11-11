@@ -10,6 +10,7 @@ use PublicInbox::Eml;
 use PublicInbox::IO;
 use PublicInbox::Git;
 use PublicInbox::Spawn qw(spawn);
+use PublicInbox::Import;
 use IO::Handle; # ->autoflush
 use Fcntl qw(SEEK_SET SEEK_END O_CREAT O_EXCL O_WRONLY);
 use PublicInbox::Syscall qw(rename_noreplace);
@@ -672,6 +673,11 @@ sub _pre_augment_v2 {
 		});
 	}
 	PublicInbox::InboxWritable->new($ibx, @creat);
+	local $PublicInbox::Import::DROP_UNIQUE_UNSUB; # only for workers
+	PublicInbox::Import::load_config(PublicInbox::Config->new, sub {
+		$lei->x_it(shift);
+		die "E: can't write v2 inbox with broken config\n";
+	});
 	$ibx->init_inbox if @creat;
 	my $v2w = $ibx->importer;
 	$v2w->wq_workers_start("lei/v2w $dir", 1, $lei->oldset, {lei => $lei},

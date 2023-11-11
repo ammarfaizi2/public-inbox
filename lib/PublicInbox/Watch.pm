@@ -45,6 +45,7 @@ sub new {
 	my (%mdmap);
 	my (%imap, %nntp); # url => [inbox objects] or 'watchspam'
 	my (@imap, @nntp);
+	PublicInbox::Import::load_config($cfg);
 
 	# "publicinboxwatch" is the documented namespace
 	# "publicinboxlearn" is legacy but may be supported

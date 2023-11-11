@@ -6,6 +6,7 @@ use PublicInbox::Eml;
 use Cwd;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
+use PublicInbox::IO qw(write_file);
 my ($tmpdir, $for_destroy) = tmpdir();
 my $git_dir = "$tmpdir/test.git";
 my $maildir = "$tmpdir/md";
@@ -143,6 +144,10 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	my $env = { PI_CONFIG => $cfg_path };
 	$git->cleanup;
 
+	write_file '>>', $cfg_path, <<EOM;
+[publicinboxImport]
+	dropUniqueUnsubscribe
+EOM
 	# n.b. --no-scan is only intended for testing atm
 	my $wm = start_script([qw(-watch --no-scan)], $env);
 	no_pollerfd($wm->{pid});
@@ -194,13 +199,32 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 	$em->commit; # wake -watch up
 	diag 'waiting for -watch to import new message';
 	PublicInbox::DS::event_loop();
+
+	my $head = $git->qx(qw(cat-file commit HEAD));
+	my $subj = $eml->header('Subject');
+	like($head, qr/^\Q$subj\E/sm, 'new commit made');
+
+	# try dropUniqueUnsubscribe
+	$delivered = 0;
+	$eml->header_set('Message-ID', '<unsubscribe@example>');
+	$eml->header_set('List-Unsubscribe',
+			'<https://example.com/some-UUID-here/test');
+	$eml->header_set('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
+	$em = PublicInbox::Emergency->new($maildir);
+	$em->prepare(\($eml->as_string));
+	$em->commit; # wake -watch up
+	diag 'waiting for -watch to import dropUniqueUnsubscribe message';
+	PublicInbox::DS::event_loop();
+	my $cur = $git->qx(qw(diff HEAD~1..HEAD));
+	like $cur, qr/Message-ID: <unsubscribe\@example>/,
+		'unsubscribe@example imported';
+	unlike $cur, qr/List-Unsubscribe\b/,
+		'List-Unsubscribe-* headers gone w/ dropUniqueUnsubscribe';
+
 	$wm->kill;
 	$wm->join;
 	$ii->close;
 	PublicInbox::DS->Reset;
-	my $head = $git->qx(qw(cat-file commit HEAD));
-	my $subj = $eml->header('Subject');
-	like($head, qr/^\Q$subj\E/sm, 'new commit made');
 }
 
 sub is_maildir {

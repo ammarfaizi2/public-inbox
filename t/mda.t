@@ -8,6 +8,7 @@ use PublicInbox::Git;
 use PublicInbox::InboxWritable;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
+use PublicInbox::IO qw(write_file);
 use File::Path qw(remove_tree);
 my ($tmpdir, $for_destroy) = tmpdir();
 my $home = "$tmpdir/pi-home";
@@ -49,13 +50,11 @@ my $fail_bad_header = sub ($$$) {
 	is(1, mkdir($pi_home, 0755), "setup ~/.public-inbox");
 	PublicInbox::Import::init_bare($maindir);
 
-	open my $fh, '>>', $pi_config or die;
-	print $fh <<EOF or die;
+	write_file '>>', $pi_config, <<EOF;
 [publicinbox "test"]
 	address = $addr
 	inboxdir = $maindir
 EOF
-	close $fh or die;
 }
 
 local $ENV{GIT_COMMITTER_NAME} = eval {
@@ -306,10 +305,44 @@ EOF
 	# ensure -learn rm works after inbox address is updated
 	($out, $err) = ('', '');
 	xsys(qw(git config --file), $pi_config, "$cfgpfx.address",
-		'updated-address@example.com');
+		$addr = 'updated-address@example.com');
 	ok(run_script(['-learn', 'rm'], undef, $rdr), 'rm-ed via -learn');
 	$cur = $git->qx(qw(diff HEAD~1..HEAD));
 	like($cur, qr/^-Message-ID: <2lids\@example>/sm, 'changed in git');
+
+	# ensure we can strip List-Unsubscribe
+	$in = <<EOF;
+To: You <you\@example.com>
+List-Id: <$list_id>
+Message-ID: <unsubscribe-1\@example>
+Subject: unsubscribe-1
+From: user <user\@example.com>
+To: $addr
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+List-Unsubscribe: <https://example.com/some-UUID-here/listname>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+List-Unsubscribe should be stripped
+EOF
+	write_file '>>', $pi_config, <<EOM;
+[publicinboxImport]
+	dropUniqueUnsubscribe
+EOM
+	$out = $err = '';
+	ok(run_script([qw(-mda)], undef, $rdr), 'mda w/ dropUniqueUnsubscribe');
+	$cur = join('', grep(/^\+/, $git->qx(qw(diff HEAD~1..HEAD))));
+	like $cur, qr/Message-ID: <unsubscribe-1/, 'imported new message';
+	unlike $cur, qr/some-UUID-here/, 'List-Unsubscribe gone';
+	unlike $cur, qr/List-Unsubscribe-Post/i, 'List-Unsubscribe-Post gone';
+
+	$in =~ s/unsubscribe-1/unsubscribe-2/g or xbail 'BUG: s// fail';
+	ok(run_script([qw(-learn ham)], undef, $rdr),
+			'learn ham w/ dropUniqueUnsubscribe');
+	$cur = join('', grep(/^\+/, $git->qx(qw(diff HEAD~1..HEAD))));
+	like $cur, qr/Message-ID: <unsubscribe-2/, 'learn ham';
+	unlike $cur, qr/some-UUID-here/, 'List-Unsubscribe gone on learn ham';
+	unlike $cur, qr/List-Unsubscribe-Post/i,
+		'List-Unsubscribe-Post gone on learn ham';
 }
 
 SKIP: {

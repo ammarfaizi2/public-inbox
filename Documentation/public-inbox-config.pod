@@ -196,6 +196,23 @@ and the path may be "/dev/null" or any empty file.
 Multiple files may be specified and will be included in the
 order specified.
 
+=item publicinboxImport.dropUniqueUnsubscribe
+
+Drop C<List-Unsubscribe> headers if the message also includes
+the C<List-Unsubscribe-Post: List-Unsubscribe=One-Click> header
+to signal MUAs to support an instantaneous unsubscribe.  This
+is strongly recommended for users creating their own public
+archives of mailing lists they subscribe to, otherwise any
+archive reader can unsubscribe the archivist.
+
+This may break DKIM signatures if the C<List-Unsubscribe*>
+headers are signed, but breaking DKIM signatures is the
+lesser evil compared to allowing any reader to unsubscribe
+the archivist.
+
+This affects L<public-inbox-mda(1)>, L<public-inbox-watch(1)>,
+and L<public-inbox-learn(1)>
+
 =item publicinboxmda.spamcheck
 
 This may be set to C<none> to disable the use of SpamAssassin

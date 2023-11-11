@@ -11,6 +11,8 @@ use strict;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use PublicInbox::Watch;
+use PublicInbox::Import;
+local $PublicInbox::Import::DROP_UNIQUE_UNSUB;
 use PublicInbox::Config;
 use PublicInbox::DS;
 my $do_scan = 1;

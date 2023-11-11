@@ -73,6 +73,25 @@ Default: ~/.public-inbox/config
 
 =back
 
+=head1 CONFIGURATION
+
+These configuration knobs should be used in the
+L<public-inbox-config(5)> file.
+
+=over 8
+
+=item publicinboxImport.dropUniqueUnsubscribe
+
+=item publicinbox.<name>.address
+
+=item publicinbox.<name>.listid
+
+=item publicinboxmda.spamcheck
+
+See L<public-inbox-config(5)> for descriptions of these options
+
+=back
+
 =head1 CONTACT
 
 Feedback welcome via plain-text mail to L<mailto:meta@public-inbox.org>

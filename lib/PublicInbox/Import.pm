@@ -321,10 +321,37 @@ sub extract_cmt_info ($;$) {
 # kill potentially confusing/misleading headers
 our @UNWANTED_HEADERS = (qw(Bytes Lines Content-Length),
 			qw(Status X-Status));
+our $DROP_UNIQUE_UNSUB;
 sub drop_unwanted_headers ($) {
 	my ($eml) = @_;
 	for (@UNWANTED_HEADERS, @PublicInbox::MDA::BAD_HEADERS) {
 		$eml->header_set($_);
+	}
+
+	# We don't want public-inbox readers to be able to unsubcribe the
+	# address which does archiving.  WARNING: this breaks DKIM if the
+	# mailing list sender follows RFC 8058, section 4; but breaking DKIM
+	# (or have senders ignore RFC 8058 sec. 4) is preferable to having
+	# saboteurs unsubscribing independent archivists:
+	if ($DROP_UNIQUE_UNSUB && grep(/\AList-Unsubscribe=One-Click\z/,
+				$eml->header_raw('List-Unsubscribe-Post'))) {
+		for (qw(List-Unsubscribe-Post List-Unsubscribe)) {
+			$eml->header_set($_)
+		}
+	}
+}
+
+sub load_config ($;$) {
+	my ($cfg, $do_exit) = @_;
+	my $v = $cfg->{lc 'publicinboxImport.dropUniqueUnsubscribe'};
+	if (defined $v) {
+		$DROP_UNIQUE_UNSUB = $cfg->git_bool($v) // do {
+			warn <<EOM;
+E: publicinboxImport.dropUniqueUnsubscribe=$v in $cfg->{-f} is not boolean
+EOM
+			$do_exit //= \&CORE::exit;
+			$do_exit->(78); # EX_CONFIG
+		};
 	}
 }
 

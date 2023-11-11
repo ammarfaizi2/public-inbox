@@ -28,6 +28,7 @@ use PublicInbox::Spamcheck::Spamc;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 my %opt = (all => 0);
 GetOptions(\%opt, qw(all help|h)) or die $help;
+use PublicInbox::Import;
 
 my $train = shift or die $help;
 if ($train !~ /\A(?:ham|spam|rm)\z/) {
@@ -37,6 +38,8 @@ die "--all only works with `rm'\n" if $opt{all} && $train ne 'rm';
 
 my $spamc = PublicInbox::Spamcheck::Spamc->new;
 my $pi_cfg = PublicInbox::Config->new;
+local $PublicInbox::Import::DROP_UNIQUE_UNSUB;
+PublicInbox::Import::load_config($pi_cfg);
 my $err;
 my $mime = PublicInbox::Eml->new(do{
 	defined(my $data = do { local $/; <STDIN> }) or die "read STDIN: $!\n";

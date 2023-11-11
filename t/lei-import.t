@@ -3,7 +3,8 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::DS qw(now);
-use autodie qw(open close);
+use PublicInbox::IO qw(write_file);
+use autodie qw(open close truncate);
 test_lei(sub {
 ok(!lei(qw(import -F bogus), 't/plack-qp.eml'), 'fails with bogus format');
 like($lei_err, qr/\bis `eml', not --in-format/, 'gave error message');
@@ -178,6 +179,51 @@ SKIP: {
 		'-F eml import fails on stdin error injection');
 	like($lei_err, qr!error reading .*?: Input/output error!,
 		'EIO noted in stderr');
+}
+
+{
+	local $ENV{PI_CONFIG} = "$ENV{HOME}/pi_config";
+	write_file '>', $ENV{PI_CONFIG}, <<EOM;
+[publicinboxImport]
+	dropUniqueUnsubscribe
+EOM
+	my $in = <<EOM;
+List-Unsubscribe: <https://example.com/some-UUID-here/test>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Message-ID: <unsubscribe-1\@example>
+Subject: unsubscribe-1 example
+From: u\@example.com
+To: 2\@example.com
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+
+EOM
+	lei_ok [qw(import -F eml +L:unsub)], undef, { %$lei_opt, 0 => \$in },
+		'import succeeds w/ List-Unsubscribe';
+	lei_ok qw(q L:unsub -f mboxrd);
+	like $lei_out, qr/some-UUID-here/,
+		'Unsubscribe header preserved despite PI_CONFIG dropping';
+	lei_ok qw(q L:unsub -o), "v2:$ENV{HOME}/v2-1";
+	lei_ok qw(q s:unsubscribe -f mboxrd --only), "$ENV{HOME}/v2-1";
+	unlike $lei_out, qr/some-UUID-here/,
+		'Unsubscribe header dropped w/ dropUniqueUnsubscribe';
+	like $lei_out, qr/Message-ID: <unsubscribe-1\@example>/,
+		'wrote expected message to v2 output';
+
+	# the default for compatibility:
+	truncate $ENV{PI_CONFIG}, 0;
+	lei_ok qw(q L:unsub -o), "v2:$ENV{HOME}/v2-2";
+	lei_ok qw(q s:unsubscribe -f mboxrd --only), "$ENV{HOME}/v2-2";
+	like $lei_out, qr/some-UUID-here/,
+		'Unsubscribe header preserved by default :<';
+
+	# ensure we can fail
+	write_file '>', $ENV{PI_CONFIG}, <<EOM;
+[publicinboxImport]
+	dropUniqueUnsubscribe = bogus
+EOM
+	ok(!lei(qw(q L:unsub -o), "v2:$ENV{HOME}/v2-3"), 'bad config fails');
+	like $lei_err, qr/is not boolean/, 'non-booleaness noted in stderr';
+	ok !-d "$ENV{HOME}/v2-3", 'v2 directory not created';
 }
 
 # see t/lei_to_mail.t for "import -F mbox*"
