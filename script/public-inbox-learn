@@ -110,12 +110,12 @@ if ($train eq 'spam' || ($train eq 'rm' && $opt{all})) {
 	my %seen;
 	while (my ($addr, $ibx) = each %dests) {
 		next unless ref($ibx); # $ibx may be 0
-		next if $seen{"$ibx"}++;
+		next if $seen{0 + $ibx}++;
 		remove_or_add($ibx, $train, $mime, $addr);
 	}
 	my $dests = PublicInbox::MDA->inboxes_for_list_id($pi_cfg, $mime);
 	for my $ibx (@$dests) {
-		next if $seen{"$ibx"}++;
+		next if $seen{0 + $ibx}++;
 		remove_or_add($ibx, $train, $mime, $ibx->{-primary_address});
 	}
 }
