@@ -82,6 +82,13 @@ die $@ if $@;
 	local $ENV{PI_EMERGENCY} = $faildir;
 	local $ENV{HOME} = $home;
 	local $ENV{ORIGINAL_RECIPIENT} = $addr;
+	ok(run_script([qw(-mda --help)], undef,
+		{ 1 => \my $out, 2 => \my $err }), '-mda --help');
+	like $out, qr/usage:/, 'usage shown w/ --help';
+	ok(!run_script([qw(-mda --bogus)], undef,
+		{ 1 => \$out, 2 => \$err }), '-mda --bogus fails');
+	like $err, qr/usage:/, 'usage shown on bogus switch';
+
 	my $in = <<EOF;
 From: Me <me\@example.com>
 To: You <you\@example.com>
@@ -91,6 +98,17 @@ Subject: hihi
 Date: Thu, 01 Jan 1970 00:00:00 +0000
 
 EOF
+	{
+		local $ENV{PATH} = $main_path;
+		ok(!run_script(['-mda'], { ORIGINAL_RECIPIENT => undef },
+			{ 0 => \$in, 2 => \$err }),
+			'missing ORIGINAL_RECIPIENT fails');
+		is($? >> 8, 67, 'got EX_NOUSER');
+		like $err, qr/\bORIGINAL_RECIPIENT\b/,
+			'ORIGINAL_RECIPIENT noted in stderr';
+		is unlink(glob("$faildir/*/*")), 1, 'unlinked failed message';
+	}
+
 	# ensure successful message delivery
 	{
 		local $ENV{PATH} = $main_path;

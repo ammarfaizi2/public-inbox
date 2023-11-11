@@ -20,6 +20,10 @@ use PublicInbox::Import;
 local $PublicInbox::Import::DROP_UNIQUE_UNSUB; # does this need a CLI switch?
 GetOptions('precheck!' => \$precheck, 'help|h' => \$show_help) or
 	do { print STDERR $help; exit 1 };
+if ($show_help) {
+	print $help;
+	exit;
+}
 
 my $do_exit = sub {
 	my ($code) = shift;
@@ -59,7 +63,8 @@ if (defined $recipient) {
 if (!scalar(@$dests)) {
 	$dests = PublicInbox::MDA->inboxes_for_list_id($cfg, $eml);
 	if (!scalar(@$dests) && !defined($recipient)) {
-		die "ORIGINAL_RECIPIENT not defined in ENV\n";
+		warn "ORIGINAL_RECIPIENT not defined in ENV\n";
+		$do_exit->(67); # EX_NOUSER
 	}
 	scalar(@$dests) or $do_exit->(67); # EX_NOUSER 5.1.1 user unknown
 }
