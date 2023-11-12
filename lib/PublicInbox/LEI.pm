@@ -1577,7 +1577,15 @@ sub _stdin_cb { # PublicInbox::InputPipe::consume callback for --stdin
 sub slurp_stdin {
 	my ($lei, $cb) = @_;
 	require PublicInbox::InputPipe;
-	PublicInbox::InputPipe::consume($lei->{0}, \&_stdin_cb, $lei, $cb);
+	my $in = $lei->{0};
+	if (-t $in) { # run cat via script/lei and read from it
+		$in = undef;
+		use autodie qw(pipe);
+		pipe($in, my $wr);
+		say { $lei->{2} } '# enter query, Ctrl-D when done';
+		send_exec_cmd($lei, [ $lei->{0}, $wr ], ['cat'], {});
+	}
+	PublicInbox::InputPipe::consume($in, \&_stdin_cb, $lei, $cb);
 }
 
 1;
