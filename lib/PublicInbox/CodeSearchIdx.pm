@@ -1033,7 +1033,8 @@ sub init_associate_prefork ($) {
 	$self->{-pi_cfg} = PublicInbox::Config->new;
 	my @unknown;
 	my @pfx = @{$self->{-opt}->{'associate-prefixes'} // [ 'patchid' ]};
-	for (map { split(/\s*,\s*/) } @pfx) {
+	@pfx = map { split(/\s*,\s*/) } @pfx;
+	for (@pfx) {
 		my $v = $PublicInbox::Search::PATCH_BOOL_COMMON{$_} //
 			push(@unknown, $_);
 		push(@ASSOC_PFX, split(/ /, $v));
@@ -1045,13 +1046,28 @@ EOM
 	my %incl = map {
 		rel2abs_collapsed($_) => undef;
 	} (@{$self->{-opt}->{include} // []});
-	$self->{-pi_cfg}->each_inbox(\&_prep_ibx, $self, \%incl);
+	my $all = $self->{-opt}->{all};
+	if (my $only = $self->{-opt}->{only}) {
+		die <<'' if $all;
+E: --all is incompatible with --only
+
+		$incl{rel2abs_collapsed($_)} = undef for @$only;
+	}
+	unless (keys(%incl)) {
+		$all = 1;
+		warn <<EOM unless $self->{opt}->{quiet};
+# --all implied since no inboxes were specified with --only or --include
+EOM
+	}
+	$self->{-pi_cfg}->each_inbox(\&_prep_ibx, $self, \%incl, $all);
+	my $nr = scalar(@IBX) or die "E: no inboxes to associate\n";
+	progress($self, "will associate $nr inboxes in ",
+			$self->{-pi_cfg}->{-f}, " using: @pfx");
 }
 
 sub _prep_ibx { # each_inbox callback
-	my ($ibx, $self, $incl) = @_;
-	($self->{-opt}->{all} || exists($incl->{$ibx->{inboxdir}})) and
-		push @IBX, $ibx;
+	my ($ibx, $self, $incl, $all) = @_;
+	($all || exists($incl->{$ibx->{inboxdir}})) and push @IBX, $ibx;
 }
 
 sub show_roots { # for diagnostics
