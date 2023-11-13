@@ -78,7 +78,7 @@ sub cmd_dump_ibx {
 	my ($req, $ibx_id, $qry_str) = @_;
 	$qry_str // return warn('usage: dump_ibx [OPTIONS] IBX_ID QRY_STR');
 	$req->{A} or return warn('dump_ibx requires -A PREFIX');
-	my $max = $req->{srch}->{xdb}->get_doccount;
+	my $max = $req->{'m'} // $req->{srch}->{xdb}->get_doccount;
 	my $opt = { relevance => -1, limit => $max, offset => $req->{o} // 0 };
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
