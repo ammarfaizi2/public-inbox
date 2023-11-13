@@ -468,12 +468,12 @@ sub partition_refs ($$$) {
 		chomp $cmt;
 		my $n = hex(substr($cmt, 0, 8)) % scalar(@RDONLY_XDB);
 		if ($REINDEX && $REINDEX->set_maybe(pack('H*', $cmt), '')) {
-			say { $shard_in[$n] } $cmt or die "say: $!";
+			say { $shard_in[$n] } $cmt;
 			++$NCHANGE;
 		} elsif (seen($RDONLY_XDB[$n], 'Q'.$cmt)) {
 			last if ++$seen > $SEEN_MAX;
 		} else {
-			say { $shard_in[$n] } $cmt or die "say: $!";
+			say { $shard_in[$n] } $cmt;
 			++$NCHANGE;
 			$seen = 0;
 		}
@@ -845,7 +845,7 @@ EOM
 		PublicInbox::Import::init_bare($git_dir, 'cidx-all', $fmt);
 		open $ALT_FH{$hexlen}, '>', "$git_dir/objects/info/alternates";
 	}
-	say { $ALT_FH{$hexlen} } $objdir or die "say: $!";
+	say { $ALT_FH{$hexlen} } $objdir;
 }
 
 sub prep_alternate_start {
@@ -969,7 +969,7 @@ sub dump_git_commits { # run_await cb
 	(defined($pid) && $?) and die "E: @PRUNE_BATCH: \$?=$?";
 	return if $DO_QUIT;
 	my ($hexlen) = keys(%ALT_FH) or return; # done
-	delete $ALT_FH{$hexlen};
+	close(delete $ALT_FH{$hexlen}); # flushes `say' buffer
 
 	$PRUNE_BATCH[1] = "--git-dir=$TMPDIR/hexlen$hexlen.git";
 	run_await(\@PRUNE_BATCH, undef, $batch_opt, \&dump_git_commits);
