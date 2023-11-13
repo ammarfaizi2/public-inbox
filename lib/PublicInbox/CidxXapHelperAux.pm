@@ -26,7 +26,11 @@ sub event_step {
 	}
 	my $pfx = $self->{pfx};
 	if ($n == 0) {
-		$self->{cidx}->progress("$pfx $buf") if $buf ne '';
+		warn "BUG? $pfx buf=$buf" if $buf ne '';
+		if (delete $self->{cidx}->{PENDING}->{$pfx}) {
+			warn "BUG? $pfx did not get mset.size";
+			$self->{cidx}->index_next;
+		}
 		return $self->close;
 	}
 	my @lines = split(/^/m, $buf);
