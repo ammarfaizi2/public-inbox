@@ -79,12 +79,10 @@ sub input_net_cb { # imap_each, nntp_each cb
 sub input_fh {
 	my ($self, $ifmt, $fh, $name, @args) = @_;
 	if ($ifmt eq 'eml') {
-		my $buf = do { local $/; <$fh> };
-		my $ok = defined($buf) ? 1 : 0;
-		++$ok if eof($fh);
-		++$ok if $fh->close;
-		$ok == 3 or return $self->{lei}->child_error($?, <<"");
-error reading $name: $! (\$?=$?)
+		my $buf = eval { PublicInbox::IO::read_all $fh, 0 };
+		my $e = $@;
+		return $self->{lei}->child_error($?, <<"") if !$fh->close || $e;
+error reading $name: $! (\$?=$?) (\$@=$e)
 
 		PublicInbox::Eml::strip_from($buf);
 

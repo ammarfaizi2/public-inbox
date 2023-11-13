@@ -44,7 +44,7 @@ use PublicInbox::Spamcheck;
 # in case there's bugs in our code or user error.
 my $emergency = $ENV{PI_EMERGENCY} || "$ENV{HOME}/.public-inbox/emergency/";
 $ems = PublicInbox::Emergency->new($emergency);
-my $str = do { local $/; <STDIN> };
+my $str = PublicInbox::IO::read_all \*STDIN;
 PublicInbox::Eml::strip_from($str);
 $ems->prepare(\$str);
 my $eml = PublicInbox::Eml->new(\$str);

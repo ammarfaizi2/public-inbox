@@ -33,7 +33,7 @@ PublicInbox::Admin::do_chdir(delete $opt->{C});
 my @ibxs = PublicInbox::Admin::resolve_inboxes(\@ARGV, $opt);
 PublicInbox::AdminEdit::check_editable(\@ibxs);
 
-defined(my $data = do { local $/; <STDIN> }) or die "read STDIN: $!\n";
+my $data = PublicInbox::IO::read_all \*STDIN;
 PublicInbox::Eml::strip_from($data);
 my $n_purged = 0;
 

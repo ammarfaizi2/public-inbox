@@ -307,10 +307,9 @@ sub fgrp_update {
 	my $dstfh = delete $fgrp->{dstfh} or return;
 	seek($srcfh, 0, SEEK_SET);
 	seek($dstfh, 0, SEEK_SET);
-	my %src = map { chomp; split(/\0/) } (<$srcfh>);
-	my %dst = map { chomp; split(/\0/) } (<$dstfh>);
-	$srcfh = eof($srcfh) | close $srcfh; # detects readline errors
-	$dstfh = eof($dstfh) | close $dstfh; # ditto
+	my %src = map { chomp; split /\0/ } PublicInbox::IO::read_all $srcfh;
+	my %dst = map { chomp; split /\0/ } PublicInbox::IO::read_all $dstfh;
+	$srcfh = $dstfh = undef;
 	my $w = start_update_ref($fgrp) or return;
 	my $lei = $fgrp->{lei};
 	my $ndel;
@@ -508,8 +507,7 @@ EOM
 		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
 		open my $fh, '+>>', my $f = "$o/info/alternates";
 		seek($fh, 0, SEEK_SET); # Perl did SEEK_END when it saw '>>'
-		my $seen = grep(/\A\Q$l\E\n/, <$fh>); # error check with eof
-		eof($fh) or die "not at `$f' EOF ($!)"; # $! was set by readline
+		my $seen = grep /\A\Q$l\E\n/, PublicInbox::IO::read_all $fh;
 		print $fh "$l\n" if !$seen;
 		close $fh;
 	}

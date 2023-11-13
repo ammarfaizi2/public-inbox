@@ -42,7 +42,7 @@ local $PublicInbox::Import::DROP_UNIQUE_UNSUB;
 PublicInbox::Import::load_config($pi_cfg);
 my $err;
 my $mime = PublicInbox::Eml->new(do{
-	defined(my $data = do { local $/; <STDIN> }) or die "read STDIN: $!\n";
+	my $data = PublicInbox::IO::read_all \*STDIN;
 	PublicInbox::Eml::strip_from($data);
 
 	if ($train ne 'rm') {

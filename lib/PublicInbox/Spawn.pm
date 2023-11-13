@@ -396,14 +396,12 @@ sub popen_wr {
 
 sub read_out_err ($) {
 	my ($opt) = @_;
-	local $/;
 	for my $fd (1, 2) { # read stdout/stderr
 		my $fh = delete($opt->{"fh.$fd"}) // next;
 		seek($fh, 0, SEEK_SET);
 		my $dst = $opt->{$fd};
 		$dst = $opt->{$fd} = $dst->[1] if ref($dst) eq 'ARRAY';
-		$$dst .= <$fh>;
-		$fh = eof($fh) | close $fh; # detects readline errors
+		PublicInbox::IO::read_all $fh, 0, $dst, length($$dst);
 	}
 }
 

@@ -81,8 +81,7 @@ sub add_alt ($$) {
 	#
 	# See https://bugs.debian.org/975607
 	if (open(my $fh, '<', "$objdir/info/alternates")) {
-		chomp(my @abs_alt = grep(m!^/!, <$fh>));
-		$fh = eof($fh) | close $fh; # detect readline errors
+		chomp(my @abs_alt = grep m!^/!, PublicInbox::IO::read_all $fh);
 		$gcf2->add_alternate($_) for @abs_alt;
 	}
 	$gcf2->add_alternate($objdir);

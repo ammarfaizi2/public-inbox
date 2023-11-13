@@ -48,16 +48,16 @@ sub require_bsd (;$) {
 
 sub xbail (@) { BAIL_OUT join(' ', map { ref() ? (explain($_)) : ($_) } @_) }
 
-sub read_all ($;$$) {
+sub read_all ($;$$$) {
 	require PublicInbox::IO;
-	PublicInbox::IO::read_all($_[0], $_[1], $_[2])
+	PublicInbox::IO::read_all($_[0], $_[1], $_[2], $_[3])
 }
 
 sub eml_load ($) {
 	my ($path, $cb) = @_;
 	open(my $fh, '<', $path);
 	require PublicInbox::Eml;
-	PublicInbox::Eml->new(\(read_all($fh)));
+	PublicInbox::Eml->new(\(scalar read_all $fh));
 }
 
 sub tmpdir (;$) {

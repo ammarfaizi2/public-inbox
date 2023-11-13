@@ -62,13 +62,21 @@ sub poll_in ($;$) {
 	IO::Poll::_poll($_[1] // -1, fileno($_[0]), my $ev = POLLIN);
 }
 
-sub read_all ($;$$) {
+sub read_all ($;$$$) { # pass $len=0 to read until EOF for :utf8 handles
 	use autodie qw(read);
-	my ($io, $len, $bref) = @_;
+	my ($io, $len, $bref, $off) = @_;
 	$bref //= \(my $buf);
-	my $r = read($io, $$bref, $len //= -s $io);
-	croak("read($io) ($r != $len)") if $len != $r;
-	$$bref;
+	$off //= 0;
+	my $r = 0;
+	if (my $left = $len //= -s $io) { # known size (binmode :raw/:unix)
+		do { # retry for binmode :unix
+			$r = read($io, $$bref, $left, $off += $r) or croak(
+				"read($io) premature EOF ($left/$len remain)");
+		} while ($left -= $r);
+	} else { # read until EOF
+		while (($r = read($io, $$bref, 65536, $off += $r))) {}
+	}
+	wantarray ? split(/^/sm, $$bref) : $$bref
 }
 
 sub try_cat ($) {

@@ -627,8 +627,7 @@ sub index_repo { # run_git cb
 	my $repo = delete $git->{-repo} or return index_next($self);
 	my $roots_fh = delete $repo->{roots_fh} // die 'BUG: no {roots_fh}';
 	seek($roots_fh, 0, SEEK_SET);
-	chomp(my @roots = <$roots_fh>);
-	$roots_fh = eof($roots_fh) | close $roots_fh; # detect readline errors
+	chomp(my @roots = PublicInbox::IO::read_all $roots_fh);
 	if (!@roots) {
 		warn("E: $git->{git_dir} has no root commits\n");
 		return index_next($self);

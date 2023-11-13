@@ -687,8 +687,7 @@ sub _pre_augment_v2 {
 	my $d = "$lei->{ale}->{git}->{git_dir}/objects";
 	open my $fh, '+>>', my $f = "$dir/git/0.git/objects/info/alternates";
 	seek($fh, 0, SEEK_SET); # Perl did SEEK_END when it saw '>>'
-	my $seen = grep(/\A\Q$d\E\n/, <$fh>);
-	eof($fh) or die "not at `$f' EOF ($!)"; # $! was set by readline
+	my $seen = grep /\A\Q$d\E\n/, PublicInbox::IO::read_all $fh;
 	print $fh "$d\n" if !$seen;
 	close $fh;
 }
