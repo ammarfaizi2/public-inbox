@@ -97,7 +97,7 @@ our (
 our $SEEN_MAX = 100000;
 
 # window for commits/emails to determine a inbox <-> coderepo association
-my $ASSOC_MAX = 50000;
+my $ASSOC_WINDOW = 50000;
 
 our @PRUNE_BATCH = qw(git _ cat-file --batch-all-objects --batch-check);
 
@@ -501,10 +501,10 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $self->{shard}", 0);
 }
 
-sub assoc_max_args ($) {
+sub assoc_window_args ($) {
 	my ($self) = @_;
-	my $max = $self->{-opt}->{'associate-max'} // $ASSOC_MAX;
-	$max <= 0 ? () : ('-m', $max);
+	my $n = $self->{-opt}->{'associate-window'} // $ASSOC_WINDOW;
+	$n <= 0 ? () : ('-m', $n);
 }
 
 sub start_xhc () {
@@ -537,7 +537,7 @@ sub dump_roots_start {
 	run_await(\@sort, $CMD_ENV, $sort_opt, \&cmd_done, $associate);
 	run_await(\@UNIQ_FOLD, $fold_env, $fold_opt, \&cmd_done, $associate);
 	my @arg = ((map { ('-A', $_) } @ASSOC_PFX), '-c',
-		assoc_max_args($self), $root2id, $QRY_STR);
+		assoc_window_args($self), $root2id, $QRY_STR);
 	for my $d ($self->shard_dirs) {
 		pipe(my $err_r, my $err_w);
 		$XHC->mkreq([$sort_w, $err_w], qw(dump_roots -d), $d, @arg);
