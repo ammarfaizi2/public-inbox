@@ -501,11 +501,10 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $self->{shard}", 0);
 }
 
-sub assoc_max_init ($) {
+sub assoc_max_args ($) {
 	my ($self) = @_;
 	my $max = $self->{-opt}->{'associate-max'} // $ASSOC_MAX;
-	$max = $ASSOC_MAX if !$max;
-	$max < 0 ? ((2 ** 31) - 1) : $max;
+	$max <= 0 ? () : ('-m', $max);
 }
 
 sub start_xhc () {
@@ -538,7 +537,7 @@ sub dump_roots_start {
 	run_await(\@sort, $CMD_ENV, $sort_opt, \&cmd_done, $associate);
 	run_await(\@UNIQ_FOLD, $fold_env, $fold_opt, \&cmd_done, $associate);
 	my @arg = ((map { ('-A', $_) } @ASSOC_PFX), '-c',
-		'-m', assoc_max_init($self), $root2id, $QRY_STR);
+		assoc_max_args($self), $root2id, $QRY_STR);
 	for my $d ($self->shard_dirs) {
 		pipe(my $err_r, my $err_w);
 		$XHC->mkreq([$sort_w, $err_w], qw(dump_roots -d), $d, @arg);
@@ -556,6 +555,8 @@ sub dump_ibx { # sends to xap_helper.h
 	my $srch = $ibx->isrch or return warn <<EOM;
 W: $ekey not indexed for search
 EOM
+	# note: we don't send associate_max_args to dump_ibx since we
+	# have to post-filter non-patch messages
 	my @cmd = ('dump_ibx', $srch->xh_args,
 			(map { ('-A', $_) } @ASSOC_PFX), $ibx_id, $QRY_STR);
 	pipe(my $r, my $w);
