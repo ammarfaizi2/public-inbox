@@ -522,8 +522,8 @@ sub dump_roots_start {
 	close $fh;
 	# dump_roots | sort -k1,1 | OFS=' ' uniq_fold >to_root_id
 	my ($sort_opt, $fold_opt);
-	pipe($sort_opt->{0}, my $sort_w);
-	pipe($fold_opt->{0}, $sort_opt->{1});
+	pipe(local $sort_opt->{0}, my $sort_w);
+	pipe(local $fold_opt->{0}, local $sort_opt->{1});
 	my @sort = (@SORT, '-k1,1');
 	my $dst = "$TMPDIR/to_root_id";
 	open $fold_opt->{1}, '>', $dst;
@@ -560,8 +560,8 @@ EOM
 sub dump_ibx_start {
 	my ($self, $associate) = @_;
 	my ($sort_opt, $fold_opt);
-	pipe($sort_opt->{0}, $DUMP_IBX_WPIPE);
-	pipe($fold_opt->{0}, $sort_opt->{1});
+	pipe(local $sort_opt->{0}, $DUMP_IBX_WPIPE);
+	pipe(local $fold_opt->{0}, local $sort_opt->{1});
 	my @sort = (@SORT, '-k1,1'); # sort only on ASSOC_PFX
 	# pipeline: dump_ibx | sort -k1,1 | uniq_fold >to_ibx_id
 	open $fold_opt->{1}, '>', "$TMPDIR/to_ibx_id";
@@ -952,8 +952,8 @@ sub init_prune ($) {
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
 	my $run_prune = PublicInbox::OnDestroy->new($$, \&run_prune, $self);
 	my ($sort_opt, $sed_opt, $delve_opt);
-	pipe($sed_opt->{0}, $delve_opt->{1});
-	pipe($sort_opt->{0}, $sed_opt->{1});
+	pipe(local $sed_opt->{0}, local $delve_opt->{1});
+	pipe(local $sort_opt->{0}, local $sed_opt->{1});
 	open($sort_opt->{1}, '+>', "$TMPDIR/indexed_commits");
 	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done, $run_prune);
 	run_await(\@sed, $CMD_ENV, $sed_opt, \&cmd_done, $run_prune);
@@ -986,13 +986,12 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	# ) | awk | sort | comm | cidx_read_comm()
 	my ($awk_opt, $sort_opt, $batch_opt);
 	my $comm_opt = { -C => "$TMPDIR" };
-	pipe($awk_opt->{0}, $batch_opt->{1});
-	pipe($sort_opt->{0}, $awk_opt->{1});
-	pipe($comm_opt->{0}, $sort_opt->{1});
+	pipe(local $awk_opt->{0}, local $batch_opt->{1});
+	pipe(local $sort_opt->{0}, local $awk_opt->{1});
+	pipe(local $comm_opt->{0}, local $sort_opt->{1});
 	run_await(\@AWK, $CMD_ENV, $awk_opt, \&cmd_done);
 	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done);
 	my $comm_rd = popen_rd(\@COMM, $CMD_ENV, $comm_opt, \&cmd_done, \@COMM);
-	%$_ = () for ($awk_opt, $sort_opt, $comm_opt); # comm_rd is blocking :<
 	PublicInbox::CidxComm->new($comm_rd, $self); # calls cidx_read_comm
 	my $git_ver = PublicInbox::Git::git_version();
 	push @PRUNE_BATCH, '--buffer' if $git_ver ge v2.6;
