@@ -23,7 +23,7 @@ my @srcs = map { $srcpfx.$_ } qw(xap_helper.h);
 my @pm_dep = map { $srcpfx.$_ } qw(Search.pm CodeSearch.pm);
 my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
-my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -O0') . ' ' .
+my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -pipe') . ' ' .
 	' -DTHREADID=' . PublicInbox::Search::THREADID .
 	' ' . ($ENV{LDFLAGS} // $ldflags);
 my $xap_modversion;
