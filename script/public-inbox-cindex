@@ -27,6 +27,7 @@ EOF
 my $opt = { fsync => 1, scan => 1 }; # --no-scan is hidden
 GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
 		indexlevel|index-level|L=s associate associate-window=i
+		associate-aggressive
 		associate-date-range=s associate-prefixes=s@
 		batch_size|batch-size=s max_size|max-size=s
 		include|I=s@ only=s@ all show-roots

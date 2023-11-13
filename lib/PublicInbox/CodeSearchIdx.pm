@@ -1146,6 +1146,11 @@ sub cidx_run { # main entry point
 	local $self->{ASSOC_PFX} = \@ASSOC_PFX;
 	local $self->{PENDING} = {};
 	local $self->{-pi_cfg};
+	if ($self->{-opt}->{'associate-aggressive'}) { # shortcut
+		$self->{-opt}->{'associate-date-range'} //= '19700101000000..';
+		$self->{-opt}->{'associate-window'} //= -1;
+		$self->{-opt}->{associate} //= 1;
+	}
 	if (grep { $_ } @{$self->{-opt}}{qw(prune associate)}) {
 		require File::Temp;
 		$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);
