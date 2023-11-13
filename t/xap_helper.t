@@ -61,11 +61,11 @@ my $doreq = sub {
 
 my $env = { PERL5LIB => join(':', @INC) };
 my $test = sub {
-	my (@arg) = @_;
+	my (@cmd) = @_;
 	socketpair(my $s, my $y, AF_UNIX, SOCK_SEQPACKET, 0);
-	my $pid = spawn([$^X, '-w', @arg], $env, { 0 => $y });
+	my $pid = spawn(\@cmd, $env, { 0 => $y });
 	my $ar = PublicInbox::AutoReap->new($pid);
-	diag "$arg[-1] running pid=$pid";
+	diag "$cmd[-1] running pid=$pid";
 	close $y;
 	my $r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0]);
 	my %info = map { split(/=/, $_, 2) } split(/ /, do { local $/; <$r> });
@@ -141,24 +141,20 @@ my $test = sub {
 
 my @NO_CXX = (1);
 unless ($ENV{TEST_XH_CXX_ONLY}) {
-	my $ar = $test->(qw[-MPublicInbox::XapHelper -e
+	my $ar = $test->($^X, qw[-w -MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j0')]);
-	($ar, my $s) = $test->(qw[-MPublicInbox::XapHelper -e
+	($ar, my $s) = $test->($^X, qw[-w -MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j1')]);
 	no_pollerfd($ar->{pid});
 }
 SKIP: {
-	eval {
-		require PublicInbox::XapHelperCxx;
-		PublicInbox::XapHelperCxx::check_build();
-	};
+	require PublicInbox::XapHelperCxx;
+	my $cmd = eval { PublicInbox::XapHelperCxx::cmd() };
 	skip "XapHelperCxx build: $@", 1 if $@ || $ENV{PI_NO_CXX};
 
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
-	my $ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
-			PublicInbox::XapHelperCxx::start('-j0')]);
-	$ar = $test->(qw[-MPublicInbox::XapHelperCxx -e
-			PublicInbox::XapHelperCxx::start('-j1')]);
+	my $ar = $test->(@$cmd, '-j0');
+	$ar = $test->(@$cmd, '-j1');
 };
 
 require PublicInbox::CodeSearch;

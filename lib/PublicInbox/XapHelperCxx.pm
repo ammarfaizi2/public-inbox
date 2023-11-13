@@ -114,17 +114,16 @@ sub check_build () {
 	needs_rebuild() ? build() : 0;
 }
 
-sub start (@) {
+# returns spawn arg
+sub cmd {
 	check_build();
 	my @cmd;
 	if (my $v = $ENV{VALGRIND}) {
 		$v = 'valgrind -v' if $v eq '1';
 		@cmd = split(/\s+/, $v);
 	}
-	push @cmd, $bin, @_;
-	my $prog = $cmd[0];
-	$cmd[0] =~ s!\A.*?/([^/]+)\z!$1!;
-	exec { $prog } @cmd;
+	push @cmd, $bin;
+	\@cmd;
 }
 
 1;

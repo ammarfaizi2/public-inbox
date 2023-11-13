@@ -11,7 +11,7 @@ use v5.12;
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
-use autodie qw(pipe socketpair);
+use autodie qw(fork pipe socketpair);
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;
@@ -28,19 +28,19 @@ sub mkreq {
 sub start_helper {
 	my @argv = @_;
 	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0);
-	my $cls = ($ENV{PI_NO_CXX} ? undef : eval {
-			require PublicInbox::XapHelperCxx;
-			PublicInbox::XapHelperCxx::check_build();
-			'PublicInbox::XapHelperCxx';
-		}) // do {
-			require PublicInbox::XapHelper;
-			'PublicInbox::XapHelper';
-		};
-	# ensure the child process has the same @INC we do:
-	my $env = { PERL5LIB => join(':', @INC) };
-	my $pid = spawn([$^X, ($^W ? ('-w') : ()), "-M$cls", '-e',
-				$cls.'::start(@ARGV)', '--', @argv],
-			$env, { 0 => $in });
+	require PublicInbox::XapHelperCxx;
+	my $cls = 'PublicInbox::XapHelperCxx';
+	my $env;
+	my $cmd = eval { PublicInbox::XapHelperCxx::cmd() };
+	if ($@) { # fall back to Perl + XS|SWIG
+		require PublicInbox::XapHelper;
+		$cls = 'PublicInbox::XapHelper';
+		# ensure the child process has the same @INC we do:
+		$env = { PERL5LIB => join(':', @INC) };
+		$cmd = [$^X, ($^W ? ('-w') : ()), "-M$cls", '-e',
+			$cls.'::start(@ARGV)', '--' ];
+	}
+	my $pid = spawn($cmd, $env, { 0 => $in });
 	((bless { io => $sock, impl => $cls }, __PACKAGE__), $pid);
 }
 
