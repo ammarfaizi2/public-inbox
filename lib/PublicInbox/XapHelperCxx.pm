@@ -8,6 +8,7 @@
 package PublicInbox::XapHelperCxx;
 use v5.12;
 use PublicInbox::Spawn qw(run_qx which);
+use PublicInbox::IO qw(read_all write_file);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
@@ -39,11 +40,11 @@ EOM
 
 sub needs_rebuild () {
 	open my $fh, '<', "$dir/XFLAGS" or return 1;
-	chomp(my $prev = <$fh>);
+	chomp(my $prev = read_all($fh));
 	return 1 if $prev ne $xflags;
 
 	open $fh, '<', "$dir/xap_modversion" or return 1;
-	chomp($prev = <$fh>);
+	chomp($prev = read_all($fh));
 	$prev or return 1;
 
 	$xap_modversion = xap_cfg('--modversion');
@@ -66,7 +67,7 @@ sub build () {
 	for (@srcs) {
 		say $fh qq(# line 1 "$_");
 		open my $rfh, '<', $_;
-		print $fh PublicInbox::IO::read_all $rfh;
+		print $fh read_all($rfh);
 	}
 	print $fh PublicInbox::Search::generate_cxx();
 	print $fh PublicInbox::CodeSearch::generate_cxx();
@@ -86,13 +87,8 @@ sub build () {
 
 	my $cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
 	system($cmd) and die "$cmd failed: \$?=$?";
-	open $fh, '>', "$tmp/XFLAGS";
-	say $fh $xflags;
-	close $fh;
-
-	open $fh, '>', "$tmp/xap_modversion";
-	say $fh $xap_modversion;
-	close $fh;
+	write_file '>', "$tmp/XFLAGS", $xflags, "\n";
+	write_file '>', "$tmp/xap_modversion", $xap_modversion, "\n";
 	undef $xap_modversion; # do we ever build() twice?
 	# not quite atomic, but close enough :P
 	rename("$tmp/$_", "$dir/$_") for ($prog, qw(XFLAGS xap_modversion));
