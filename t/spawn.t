@@ -26,7 +26,7 @@ require PublicInbox::DS;
 	is($out, 'in', 'stdin read and stdout captured');
 	$opt->{0} = \"IN\n3\nLINES";
 	my @out = run_qx(['sh', '-c', 'echo E >&2; cat'], undef, $opt);
-	is($e, "e\nE\n", 'captured stderr appended to string');
+	is($e, "E\n", 'captured stderr clobbers string');
 	is_deeply(\@out, [ "IN\n", "3\n", 'LINES' ], 'stdout array');
 }
 

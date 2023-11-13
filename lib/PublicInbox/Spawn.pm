@@ -401,7 +401,7 @@ sub read_out_err ($) {
 		seek($fh, 0, SEEK_SET);
 		my $dst = $opt->{$fd};
 		$dst = $opt->{$fd} = $dst->[1] if ref($dst) eq 'ARRAY';
-		PublicInbox::IO::read_all $fh, 0, $dst, length($$dst);
+		PublicInbox::IO::read_all $fh, 0, $dst
 	}
 }
 
