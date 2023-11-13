@@ -13,8 +13,8 @@ use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT);
 
 sub new {
-	my ($cls, $rd, $cidx) = @_;
-	my $self = bless { cidx => $cidx }, $cls;
+	my ($cls, $rd, $cidx, $drs) = @_;
+	my $self = bless { cidx => $cidx, drs => $drs }, $cls;
 	$self->SUPER::new($rd, EPOLLIN|EPOLLONESHOT);
 }
 
@@ -22,7 +22,7 @@ sub event_step {
 	my ($self) = @_;
 	my $rd = $self->{sock} // return warn('BUG?: no {sock}');
 	$self->close; # EPOLL_CTL_DEL
-	delete($self->{cidx})->cidx_read_comm($rd);
+	delete($self->{cidx})->cidx_read_comm($rd, delete $self->{drs});
 }
 
 1;
