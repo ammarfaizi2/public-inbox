@@ -7,7 +7,7 @@
 # The resulting executable is not linked to Perl in any way.
 package PublicInbox::XapHelperCxx;
 use v5.12;
-use PublicInbox::Spawn qw(run_qx which);
+use PublicInbox::Spawn qw(run_die run_qx which);
 use PublicInbox::IO qw(read_all write_file);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
@@ -24,8 +24,8 @@ my @pm_dep = map { $srcpfx.$_ } qw(Search.pm CodeSearch.pm);
 my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
 my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -O0') . ' ' .
-	($ENV{LDFLAGS} // $ldflags) .
-	qq{ -DTHREADID=}.PublicInbox::Search::THREADID;
+	' -DTHREADID=' . PublicInbox::Search::THREADID .
+	' ' . ($ENV{LDFLAGS} // $ldflags);
 my $xap_modversion;
 
 sub xap_cfg (@) {
@@ -58,12 +58,12 @@ sub build () {
 		die "mkdir($dir): $err" if !-d $dir;
 	}
 	use autodie;
-	require File::Temp;
 	require PublicInbox::CodeSearch;
+	require PublicInbox::Lock;
+	require PublicInbox::OnDestroy;
 	my ($prog) = ($bin =~ m!/([^/]+)\z!);
-	my $tmp = File::Temp->newdir(DIR => $dir) // die "newdir: $!";
-	my $src = "$tmp/$prog.cpp";
-	open my $fh, '>', $src;
+	my $lk = PublicInbox::Lock->new("$dir/$prog.lock")->lock_for_scope;
+	open my $fh, '>', "$dir/$prog.cpp";
 	for (@srcs) {
 		say $fh qq(# line 1 "$_");
 		open my $rfh, '<', $_;
@@ -72,6 +72,10 @@ sub build () {
 	print $fh PublicInbox::Search::generate_cxx();
 	print $fh PublicInbox::CodeSearch::generate_cxx();
 	close $fh;
+
+	opendir my $dh, '.';
+	my $restore = PublicInbox::OnDestroy->new(\&chdir, $dh);
+	chdir $dir;
 
 	# xap_modversion may be set by needs_rebuild
 	$xap_modversion //= xap_cfg('--modversion');
@@ -84,14 +88,16 @@ sub build () {
 	# distributed packages.
 	$^O eq 'netbsd' and $fl =~ s/(\A|[ \t])\-L([^ \t]+)([ \t]|\z)/
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
-
-	my $cmd = "$cxx $src $fl $xflags -o $tmp/$prog";
-	system($cmd) and die "$cmd failed: \$?=$?";
-	write_file '>', "$tmp/XFLAGS", $xflags, "\n";
-	write_file '>', "$tmp/xap_modversion", $xap_modversion, "\n";
+	my @xflags = split(/\s+/, "$fl $xflags");
+	my @cflags = grep(!/\A-(?:Wl|l|L)/, @xflags);
+	run_die([$cxx, '-c', "$prog.cpp", @cflags]);
+	run_die([$cxx, '-o', "$prog.tmp", "$prog.o", @xflags]);
+	unlink "$prog.cpp", "$prog.o";
+	write_file '>', 'XFLAGS.tmp', $xflags, "\n";
+	write_file '>', 'xap_modversion.tmp', $xap_modversion, "\n";
 	undef $xap_modversion; # do we ever build() twice?
 	# not quite atomic, but close enough :P
-	rename("$tmp/$_", "$dir/$_") for ($prog, qw(XFLAGS xap_modversion));
+	rename("$_.tmp", $_) for ($prog, qw(XFLAGS xap_modversion));
 }
 
 sub check_build () {
