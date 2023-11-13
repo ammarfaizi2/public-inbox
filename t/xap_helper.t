@@ -47,11 +47,10 @@ is(scalar(@int), 1, 'have 1 internal shard') or diag explain(\@int);
 
 my $doreq = sub {
 	my ($s, @arg) = @_;
-	my $err = pop @arg if ref($arg[-1]);
+	my $err = ref($arg[-1]) ? pop(@arg) : \*STDERR;
 	pipe(my $x, my $y);
 	my $buf = join("\0", @arg, '');
-	my @fds = fileno($y);
-	push @fds, fileno($err) if $err;
+	my @fds = (fileno($y), fileno($err));
 	my $n = $PublicInbox::IPC::send_cmd->($s, \@fds, $buf, 0) //
 		xbail "send: $!";
 	my $exp = length($buf);

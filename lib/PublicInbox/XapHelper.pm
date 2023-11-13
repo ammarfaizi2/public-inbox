@@ -16,6 +16,7 @@ use PublicInbox::DS qw(awaitpid);
 use autodie qw(open getsockopt);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
+use Carp qw(croak);
 my $X = \%PublicInbox::Search::X;
 our (%SRCH, %WORKERS, $nworker, $workerset, $in);
 our $stderr = \*STDERR;
@@ -70,14 +71,14 @@ sub dump_ibx_iter ($$$) {
 
 sub emit_mset_stats ($$) {
 	my ($req, $mset) = @_;
-	my $err = $req->{1} or return;
+	my $err = $req->{1} or croak "BUG: caller only passed 1 FD";
 	say $err 'mset.size='.$mset->size.' nr_out='.$req->{nr_out}
 }
 
 sub cmd_dump_ibx {
 	my ($req, $ibx_id, $qry_str) = @_;
-	$qry_str // return warn('usage: dump_ibx [OPTIONS] IBX_ID QRY_STR');
-	$req->{A} or return warn('dump_ibx requires -A PREFIX');
+	$qry_str // die 'usage: dump_ibx [OPTIONS] IBX_ID QRY_STR';
+	$req->{A} or die 'dump_ibx requires -A PREFIX';
 	my $max = $req->{'m'} // $req->{srch}->{xdb}->get_doccount;
 	my $opt = { relevance => -1, limit => $max, offset => $req->{o} // 0 };
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
@@ -88,9 +89,7 @@ sub cmd_dump_ibx {
 			$t = dump_ibx_iter($req, $ibx_id, $it) // $t;
 		}
 	}
-	if (my $err = $req->{1}) {
-		say $err 'mset.size='.$mset->size.' nr_out='.$req->{nr_out}
-	}
+	emit_mset_stats($req, $mset);
 }
 
 sub dump_roots_iter ($$$) {
@@ -120,9 +119,8 @@ sub dump_roots_flush ($$) {
 
 sub cmd_dump_roots {
 	my ($req, $root2id_file, $qry_str) = @_;
-	$qry_str // return
-		warn('usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR');
-	$req->{A} or return warn('dump_roots requires -A PREFIX');
+	$qry_str // die 'usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR';
+	$req->{A} or die 'dump_roots requires -A PREFIX';
 	open my $fh, '<', $root2id_file;
 	my $root2id; # record format: $OIDHEX "\0" uint32_t
 	my @x = split(/\0/, read_all $fh);
@@ -150,7 +148,7 @@ sub dispatch {
 	my ($req, $cmd, @argv) = @_;
 	my $fn = $req->can("cmd_$cmd") or return;
 	$GLP->getoptionsfromarray(\@argv, $req, @SPEC) or return;
-	my $dirs = delete $req->{d} or return warn 'no -d args';
+	my $dirs = delete $req->{d} or die 'no -d args';
 	my $key = join("\0", @$dirs);
 	$req->{srch} = $SRCH{$key} //= do {
 		my $new = { qp_flags => $PublicInbox::Search::QP_FLAGS };
@@ -168,8 +166,7 @@ sub dispatch {
 		$new->{qp} = $new->qparse_new;
 		$new;
 	};
-	eval { $fn->($req, @argv) };
-	warn "E: $@" if $@;
+	$fn->($req, @argv);
 }
 
 sub recv_loop {
@@ -192,13 +189,10 @@ sub recv_loop {
 		my $i = 0;
 		open($req->{$i++}, '+<&=', $_) for @fds;
 		local $stderr = $req->{1} // \*STDERR;
-		if (chop($rbuf) ne "\0") {
-			warn "not NUL-terminated";
-			next;
-		}
+		die "not NUL-terminated" if chop($rbuf) ne "\0";
 		my @argv = split(/\0/, $rbuf);
 		$req->{nr_out} = 0;
-		eval { $req->dispatch(@argv) } if @argv;
+		$req->dispatch(@argv) if @argv;
 	}
 }
 

@@ -78,6 +78,10 @@
 	assert(ckvar______ == (expect) && "BUG" && __FILE__ && __LINE__); \
 } while (0)
 
+// coredump on most usage errors since our only users are internal
+#define ABORT(...) do { warnx(__VA_ARGS__); abort(); } while (0)
+#define EABORT(...) do { warn(__VA_ARGS__); abort(); } while (0)
+
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
 static sigset_t fullset, workerset;
@@ -145,10 +149,8 @@ struct worker {
 #define SPLIT2ARGV(dst,buf,len) split2argv(dst,buf,len,MY_ARRAY_SIZE(dst))
 static size_t split2argv(char **dst, char *buf, size_t len, size_t limit)
 {
-	if (buf[0] == 0 || len == 0 || buf[len - 1] != 0) {
-		warnx("bogus argument given");
-		return 0;
-	}
+	if (buf[0] == 0 || len == 0 || buf[len - 1] != 0)
+		ABORT("bogus argument given");
 	size_t nr = 0;
 	char *c = buf;
 	for (size_t i = 1; i < len; i++) {
@@ -156,11 +158,11 @@ static size_t split2argv(char **dst, char *buf, size_t len, size_t limit)
 			dst[nr++] = c;
 			c = buf + i + 1;
 		}
-		if (nr == limit) {
-			warnx("too many args: %zu", nr);
-			return 0;
-		}
+		if (nr == limit)
+			ABORT("too many args: %zu == %zu", nr, limit);
 	}
+	if (nr == 0) ABORT("no argument given");
+	if ((long)nr < 0) ABORT("too many args: %zu", nr);
 	return (long)nr;
 }
 
@@ -242,6 +244,8 @@ static void emit_mset_stats(struct req *req, const Xapian::MSet *mset)
 	if (req->fp[1])
 		fprintf(req->fp[1], "mset.size=%llu nr_out=%zu\n",
 			(unsigned long long)mset->size(), req->nr_out);
+	else
+		ABORT("BUG: %s caller only passed 1 FD", req->argv[0]);
 }
 
 static bool starts_with(const std::string *s, const char *pfx, size_t pfx_len)
@@ -290,20 +294,14 @@ static enum exc_iter dump_ibx_iter(struct req *req, const char *ibx_id,
 
 static bool cmd_dump_ibx(struct req *req)
 {
-	if ((optind + 1) >= req->argc) {
-		warnx("usage: dump_ibx [OPTIONS] IBX_ID QRY_STR");
-		return false; // need ibx_id + qry_str
-	}
-	if (!req->pfxc) {
-		warnx("dump_ibx requires -A PREFIX");
-		return false;
-	}
+	if ((optind + 1) >= req->argc)
+		ABORT("usage: dump_ibx [OPTIONS] IBX_ID QRY_STR");
+	if (!req->pfxc)
+		ABORT("dump_ibx requires -A PREFIX");
 
 	const char *ibx_id = req->argv[optind];
-	if (my_setlinebuf(req->fp[0])) { // for sort(1) pipe
-		perror("setlinebuf(fp[0])");
-		return false;
-	}
+	if (my_setlinebuf(req->fp[0])) // for sort(1) pipe
+		EABORT("setlinebuf(fp[0])"); // WTF?
 	req->asc = true;
 	req->sort_col = -1;
 	Xapian::MSet mset = mail_mset(req, req->argv[optind + 1]);
@@ -344,24 +342,22 @@ static void fbuf_ensure(void *ptr)
 {
 	struct fbuf *fbuf = (struct fbuf *)ptr;
 	if (fbuf->fp && fclose(fbuf->fp))
-		perror("fclose(fbuf->fp)");
+		err(EXIT_FAILURE, "fclose(fbuf->fp)"); // ENOMEM?
 	fbuf->fp = NULL;
 	free(fbuf->ptr);
 }
 
-static bool fbuf_init(struct fbuf *fbuf)
+static void fbuf_init(struct fbuf *fbuf)
 {
 	assert(!fbuf->ptr);
 	fbuf->fp = open_memstream(&fbuf->ptr, &fbuf->len);
-	if (fbuf->fp) return true;
-	perror("open_memstream(fbuf)");
-	return false;
+	if (!fbuf->fp) err(EXIT_FAILURE, "open_memstream(fbuf)");
 }
 
 static void xclose(int fd)
 {
 	if (close(fd) < 0 && errno != EINTR)
-		err(EXIT_FAILURE, "BUG: close");
+		EABORT("BUG: close");
 }
 
 #define CLEANUP_DUMP_ROOTS __attribute__((__cleanup__(dump_roots_ensure)))
@@ -372,19 +368,17 @@ static void dump_roots_ensure(void *ptr)
 		xclose(drt->root2id_fd);
 	hdestroy(); // idempotent
 	if (drt->mm_ptr && munmap(drt->mm_ptr, drt->sb.st_size))
-		err(EXIT_FAILURE, "BUG: munmap");
+		EABORT("BUG: munmap(%p, %zu)", drt->mm_ptr, drt->sb.st_size);
 	free(drt->entries);
 	fbuf_ensure(&drt->wbuf);
 }
 
 static bool root2ids_str(struct fbuf *root_ids, Xapian::Document *doc)
 {
-	if (!fbuf_init(root_ids)) return false;
-
-	bool ok = true;
 	Xapian::TermIterator cur = doc->termlist_begin();
 	Xapian::TermIterator end = doc->termlist_end();
 	ENTRY e, *ep;
+	fbuf_init(root_ids);
 	for (cur.skip_to("G"); cur != end; cur++) {
 		std::string tn = *cur;
 		if (!starts_with(&tn, "G", 1))
@@ -393,21 +387,16 @@ static bool root2ids_str(struct fbuf *root_ids, Xapian::Document *doc)
 		u.in = tn.c_str() + 1;
 		e.key = u.out;
 		ep = hsearch(e, FIND);
-		if (!ep) {
-			warnx("hsearch miss `%s'", e.key);
-			return false;
-		}
+		if (!ep) ABORT("hsearch miss `%s'", e.key);
 		// ep->data is a NUL-terminated string matching /[0-9]+/
 		fputc(' ', root_ids->fp);
 		fputs((const char *)ep->data, root_ids->fp);
 	}
 	fputc('\n', root_ids->fp);
-	if (ferror(root_ids->fp) | fclose(root_ids->fp)) {
-		perror("ferror|fclose(root_ids)");
-		ok = false;
-	}
+	if (ferror(root_ids->fp) | fclose(root_ids->fp))
+		err(EXIT_FAILURE, "ferror|fclose(root_ids)"); // ENOMEM
 	root_ids->fp = NULL;
-	return ok;
+	return true;
 }
 
 // writes term values matching @pfx for a given @doc, ending the line
@@ -440,20 +429,17 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 	bool ok = true;
 
 	if (!drt->wbuf.fp) return true;
-	if (fd < 0) err(EXIT_FAILURE, "BUG: fileno");
-	if (fclose(drt->wbuf.fp)) {
-		warn("fclose(drt->wbuf.fp)"); // malloc failure?
-		return false;
-	}
+	if (fd < 0) EABORT("BUG: fileno");
+	if (ferror(drt->wbuf.fp) | fclose(drt->wbuf.fp)) // ENOMEM?
+		err(EXIT_FAILURE, "ferror|fclose(drt->wbuf.fp)");
 	drt->wbuf.fp = NULL;
 	if (!drt->wbuf.len) goto done_free;
 	while (flock(drt->root2id_fd, LOCK_EX)) {
 		if (errno == EINTR) continue;
-		perror("LOCK_EX");
-		return false;
+		err(EXIT_FAILURE, "LOCK_EX"); // ENOLCK?
 	}
 	p = drt->wbuf.ptr;
-	do {
+	do { // write to client FD
 		ssize_t n = write(fd, p, drt->wbuf.len);
 		if (n > 0) {
 			drt->wbuf.len -= n;
@@ -465,10 +451,9 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 	} while (drt->wbuf.len);
 	while (flock(drt->root2id_fd, LOCK_UN)) {
 		if (errno == EINTR) continue;
-		perror("LOCK_UN");
-		return false;
+		err(EXIT_FAILURE, "LOCK_UN"); // ENOLCK?
 	}
-done_free:
+done_free: // OK to skip on errors, dump_roots_ensure calls fbuf_ensure
 	free(drt->wbuf.ptr);
 	drt->wbuf.ptr = NULL;
 	return ok;
@@ -501,7 +486,7 @@ static char *hsearch_enter_key(char *s)
 	// hdestroy frees each key on some platforms,
 	// so give it something to free:
 	char *ret = strdup(s);
-	if (!ret) perror("strdup");
+	if (!ret) err(EXIT_FAILURE, "strdup");
 	return ret;
 // AFAIK there's no way to detect musl, assume non-glibc Linux is musl:
 #elif defined(__GLIBC__) || defined(__linux__) || \
@@ -518,61 +503,42 @@ static bool cmd_dump_roots(struct req *req)
 {
 	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = {};
 	drt.root2id_fd = -1;
-	if ((optind + 1) >= req->argc) {
-		warnx("usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR");
-		return false; // need file + qry_str
-	}
-	if (!req->pfxc) {
-		warnx("dump_roots requires -A PREFIX");
-		return false;
-	}
+	if ((optind + 1) >= req->argc)
+		ABORT("usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR");
+	if (!req->pfxc)
+		ABORT("dump_roots requires -A PREFIX");
 	const char *root2id_file = req->argv[optind];
 	drt.root2id_fd = open(root2id_file, O_RDONLY);
-	if (drt.root2id_fd < 0) {
-		warn("open(%s)", root2id_file);
-		return false;
-	}
-	if (fstat(drt.root2id_fd, &drt.sb)) {
-		warn("fstat(%s)", root2id_file);
-		return false;
-	}
+	if (drt.root2id_fd < 0)
+		EABORT("open(%s)", root2id_file);
+	if (fstat(drt.root2id_fd, &drt.sb)) // ENOMEM?
+		err(EXIT_FAILURE, "fstat(%s)", root2id_file);
 	// each entry is at least 43 bytes ({OIDHEX}\0{INT}\0),
 	// so /32 overestimates the number of expected entries by
 	// ~%25 (as recommended by Linux hcreate(3) manpage)
 	size_t est = (drt.sb.st_size / 32) + 1; //+1 for "\0" termination
-	if ((uint64_t)drt.sb.st_size > (uint64_t)SIZE_MAX) {
-		warnx("%s size too big (%lld bytes > %zu)", root2id_file,
-			(long long)drt.sb.st_size, SIZE_MAX);
-		return false;
-	}
+	if ((uint64_t)drt.sb.st_size > (uint64_t)SIZE_MAX)
+		err(EXIT_FAILURE, "%s size too big (%lld bytes > %zu)",
+			root2id_file, (long long)drt.sb.st_size, SIZE_MAX);
 	drt.mm_ptr = mmap(NULL, drt.sb.st_size, PROT_READ,
 				MAP_PRIVATE, drt.root2id_fd, 0);
-	if (drt.mm_ptr == MAP_FAILED) {
-		warn("mmap(%s)", root2id_file);
-		return false;
-	}
+	if (drt.mm_ptr == MAP_FAILED)
+		err(EXIT_FAILURE, "mmap(%zu, %s)", drt.sb.st_size,root2id_file);
 	drt.entries = (char **)calloc(est * 2, sizeof(char *));
-	if (!drt.entries) {
-		warn("calloc(%zu * 2, %zu)", est, sizeof(char *));
-		return false;
-	}
+	if (!drt.entries)
+		err(EXIT_FAILURE, "calloc(%zu * 2, %zu)", est, sizeof(char *));
 	size_t tot = split2argv(drt.entries, (char *)drt.mm_ptr,
 				drt.sb.st_size, est * 2);
 	if (tot <= 0) return false; // split2argv already warned on error
-	if (!hcreate(est)) {
-		warn("hcreate(%zu)", est);
-		return false;
-	}
+	if (!hcreate(est))
+		err(EXIT_FAILURE, "hcreate(%zu)", est);
 	for (size_t i = 0; i < tot; ) {
 		ENTRY e;
-		e.key = hsearch_enter_key(drt.entries[i++]);
-		if (!e.key) return false;
+		e.key = hsearch_enter_key(drt.entries[i++]); // dies on ENOMEM
 		e.data = drt.entries[i++];
-		if (!hsearch(e, ENTER)) {
-			warn("hsearch(%s => %s, ENTER)", e.key,
-				(const char *)e.data);
-			return false;
-		}
+		if (!hsearch(e, ENTER))
+			err(EXIT_FAILURE, "hsearch(%s => %s, ENTER)", e.key,
+					(const char *)e.data);
 	}
 	req->asc = true;
 	req->sort_col = -1;
@@ -581,8 +547,8 @@ static bool cmd_dump_roots(struct req *req)
 	// @UNIQ_FOLD in CodeSearchIdx.pm can handle duplicate lines fine
 	// in case we need to retry on DB reopens
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
-		if (!drt.wbuf.fp && !fbuf_init(&drt.wbuf))
-			return false;
+		if (!drt.wbuf.fp)
+			fbuf_init(&drt.wbuf);
 		for (int t = 10; t > 0; --t)
 			switch (dump_roots_iter(req, &drt, &i)) {
 			case ITER_OK: t = 0; break; // leave inner loop
@@ -672,6 +638,8 @@ again:
 
 	// success! no signals for the rest of the request/response cycle
 	CHECK(int, 0, sigprocmask(SIG_SETMASK, &fullset, NULL));
+	if (r > 0 && msg.msg_flags)
+		ABORT("unexpected msg_flags");
 
 	*len = r;
 	if (cmsg.hdr.cmsg_level == SOL_SOCKET &&
@@ -806,7 +774,7 @@ static void dispatch(struct req *req)
 			break;
 		}
 	}
-	if (!req->fn) goto cmd_err;
+	if (!req->fn) ABORT("not handled: `%s'", req->argv[0]);
 
 	kfp = open_memstream(&fbuf.ptr, &size);
 	// write padding, first
@@ -825,53 +793,48 @@ static void dispatch(struct req *req)
 		case 'd': fwrite(optarg, strlen(optarg) + 1, 1, kfp); break;
 		case 'k':
 			req->sort_col = strtol(optarg, &end, 10);
-			if (*end) goto cmd_err;
+			if (*end) ABORT("-k %s", optarg);
 			switch (req->sort_col) {
-			case LONG_MAX: case LONG_MIN: goto cmd_err;
+			case LONG_MAX: case LONG_MIN: ABORT("-k %s", optarg);
 			}
 			break;
 		case 'm':
 			req->max = strtoull(optarg, &end, 10);
-			if (*end) goto cmd_err;
-			if (req->max == ULLONG_MAX) goto cmd_err;
+			if (*end || req->max == ULLONG_MAX)
+				ABORT("-m %s", optarg);
 			break;
 		case 'o':
 			req->off = strtoull(optarg, &end, 10);
-			if (*end) goto cmd_err;
-			if (req->off == ULLONG_MAX) goto cmd_err;
+			if (*end || req->off == ULLONG_MAX)
+				ABORT("-o %s", optarg);
 			break;
 		case 'r': req->relevance = true; break;
 		case 't': req->collapse_threads = true; break;
 		case 'A':
 			req->pfxv[req->pfxc++] = optarg;
-			if (MY_ARG_MAX == req->pfxc) goto cmd_err;
+			if (MY_ARG_MAX == req->pfxc)
+				ABORT("too many -A");
 			break;
 		case 'O': req->Oeidx_key = optarg - 1; break; // pad "O" prefix
 		case 'T':
 			req->timeout_sec = strtoul(optarg, &end, 10);
-			if (*end) goto cmd_err;
-			if (req->timeout_sec == ULONG_MAX) goto cmd_err;
+			if (*end || req->timeout_sec == ULONG_MAX)
+				ABORT("-T %s", optarg);
 			break;
-		default: goto cmd_err;
+		default: ABORT("bad switch `-%c'", c);
 		}
 	}
-	if (ferror(kfp) | fclose(kfp)) {
-		perror("ferror|fclose");
-		goto cmd_err;
-	}
+	if (ferror(kfp) | fclose(kfp))
+		err(EXIT_FAILURE, "ferror|fclose"); // likely ENOMEM
 	fbuf.srch->db = NULL;
 	fbuf.srch->qp = NULL;
 	fbuf.srch->paths_len = size - offsetof(struct srch, paths);
 	if (fbuf.srch->paths_len <= 0) {
 		free_srch(fbuf.srch);
-		warnx("no -d args");
-		goto cmd_err;
+		ABORT("no -d args");
 	}
 	s = (struct srch **)tsearch(fbuf.srch, &srch_tree, srch_cmp);
-	if (!s) {
-		perror("tsearch");
-		goto cmd_err;
-	}
+	if (!s) err(EXIT_FAILURE, "tsearch"); // likely ENOMEM
 	req->srch = *s;
 	if (req->srch != fbuf.srch) { // reuse existing
 		free_srch(fbuf.srch);
@@ -881,11 +844,11 @@ static void dispatch(struct req *req)
 		void *del = tdelete(fbuf.srch, &srch_tree, srch_cmp);
 		assert(del);
 		free_srch(fbuf.srch);
-		goto cmd_err;
+		goto cmd_err; // srch_init already warned
 	}
 	try {
 		if (!req->fn(req))
-			goto cmd_err;
+			warnx("`%s' failed", req->argv[0]);
 	} catch (const Xapian::Error & e) {
 		warnx("Xapian::Error: %s", e.get_description().c_str());
 	} catch (...) {
@@ -924,7 +887,7 @@ static void stderr_restore(FILE *tmp_err)
 	return;
 #endif
 	if (ferror(stderr) | fflush(stderr))
-		perror("ferror|fflush stderr");
+		err(EXIT_FAILURE, "ferror|fflush stderr");
 	while (dup2(orig_err_fd, STDERR_FILENO) < 0) {
 		if (errno != EINTR)
 			err(EXIT_FAILURE, "dup2(%d => 2)", orig_err_fd);
@@ -953,8 +916,7 @@ static void recv_loop(void) // worker process loop
 		if (req.fp[1])
 			stderr_set(req.fp[1]);
 		req.argc = (int)SPLIT2ARGV(req.argv, rbuf, len);
-		if (req.argc > 0)
-			dispatch(&req);
+		dispatch(&req);
 		if (ferror(req.fp[0]) | fclose(req.fp[0]))
 			perror("ferror|fclose fp[0]");
 		if (req.fp[1]) {
@@ -1066,7 +1028,7 @@ static void reaped_worker(pid_t pid, int st)
 	if (WIFEXITED(st) && WEXITSTATUS(st) == EX_NOINPUT)
 		alive = false;
 	else if (st)
-		warnx("worker[%lu] died $?=%d", nr, st);
+		warnx("worker[%lu] died $?=%d alive=%d", nr, st, (int)alive);
 	if (alive)
 		start_workers();
 }
