@@ -762,7 +762,7 @@ static void dispatch(struct req *req)
 	union {
 		struct srch *srch;
 		char *ptr;
-	} fbuf;
+	} kbuf;
 	char *end;
 	FILE *kfp;
 	struct srch **s;
@@ -776,8 +776,9 @@ static void dispatch(struct req *req)
 	}
 	if (!req->fn) ABORT("not handled: `%s'", req->argv[0]);
 
-	kfp = open_memstream(&fbuf.ptr, &size);
-	// write padding, first
+	kfp = open_memstream(&kbuf.ptr, &size);
+	if (!kfp) err(EXIT_FAILURE, "open_memstream(kbuf)");
+	// write padding, first (contents don't matter)
 	fwrite(&req->argv[0], offsetof(struct srch, paths), 1, kfp);
 
 	// global getopt variables:
@@ -824,26 +825,24 @@ static void dispatch(struct req *req)
 		default: ABORT("bad switch `-%c'", c);
 		}
 	}
-	if (ferror(kfp) | fclose(kfp))
+	if (ferror(kfp) | fclose(kfp)) /* sets kbuf.srch */
 		err(EXIT_FAILURE, "ferror|fclose"); // likely ENOMEM
-	fbuf.srch->db = NULL;
-	fbuf.srch->qp = NULL;
-	fbuf.srch->paths_len = size - offsetof(struct srch, paths);
-	if (fbuf.srch->paths_len <= 0) {
-		free_srch(fbuf.srch);
+	kbuf.srch->db = NULL;
+	kbuf.srch->qp = NULL;
+	kbuf.srch->paths_len = size - offsetof(struct srch, paths);
+	if (kbuf.srch->paths_len <= 0)
 		ABORT("no -d args");
-	}
-	s = (struct srch **)tsearch(fbuf.srch, &srch_tree, srch_cmp);
+	s = (struct srch **)tsearch(kbuf.srch, &srch_tree, srch_cmp);
 	if (!s) err(EXIT_FAILURE, "tsearch"); // likely ENOMEM
 	req->srch = *s;
-	if (req->srch != fbuf.srch) { // reuse existing
-		free_srch(fbuf.srch);
+	if (req->srch != kbuf.srch) { // reuse existing
+		free_srch(kbuf.srch);
 	} else if (!srch_init(req)) {
-		assert(fbuf.srch == *((struct srch **)tfind(
-					fbuf.srch, &srch_tree, srch_cmp)));
-		void *del = tdelete(fbuf.srch, &srch_tree, srch_cmp);
+		assert(kbuf.srch == *((struct srch **)tfind(
+					kbuf.srch, &srch_tree, srch_cmp)));
+		void *del = tdelete(kbuf.srch, &srch_tree, srch_cmp);
 		assert(del);
-		free_srch(fbuf.srch);
+		free_srch(kbuf.srch);
 		goto cmd_err; // srch_init already warned
 	}
 	try {
