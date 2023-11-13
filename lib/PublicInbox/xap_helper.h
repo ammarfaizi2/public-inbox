@@ -58,6 +58,12 @@
 #	define SET_MAX_EXPANSION set_max_wildcard_expansion
 #endif
 
+#if defined(__GLIBC__)
+#	define MY_DO_OPTRESET() do { optind = 0; } while (0)
+#else /* FreeBSD, musl, dfly, NetBSD, OpenBSD */
+#	define MY_DO_OPTRESET() do { optind = optreset = 1; } while (0)
+#endif
+
 #if defined(__FreeBSD__) || defined(__GLIBC__)
 #	define STDERR_ASSIGNABLE (1)
 #else
@@ -807,9 +813,9 @@ static void dispatch(struct req *req)
 	fwrite(&req->argv[0], offsetof(struct srch, paths), 1, kfp);
 
 	// global getopt variables:
-	optind = 1;
-	opterr = optopt = 0;
+	optopt = 0;
 	optarg = NULL;
+	MY_DO_OPTRESET();
 
 	// keep sync with @PublicInbox::XapHelper::SPEC
 	while ((c = getopt(req->argc, req->argv, "acd:k:m:o:rtA:O:T:")) != -1) {
