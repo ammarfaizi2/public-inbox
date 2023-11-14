@@ -509,9 +509,16 @@ sub _fill_ibx {
 			delete $ibx->{newsgroup};
 			warn "newsgroup name invalid: `$ngname'\n";
 		} else {
+			my $lc = $ibx->{newsgroup} = lc $ngname;
+			warn <<EOM if $lc ne $ngname;
+W: newsgroup=`$ngname' lowercased to `$lc'
+EOM
 			# PublicInbox::NNTPD does stricter ->nntp_usable
 			# checks, keep this lean for startup speed
-			$self->{-by_newsgroup}->{$ngname} = $ibx;
+			my $cur = $self->{-by_newsgroup}->{$lc} //= $ibx;
+			warn <<EOM if $cur != $ibx;
+W: newsgroup=`$lc' is used by both `$cur->{name}' and `$ibx->{name}'
+EOM
 		}
 	}
 	unless (defined $ibx->{newsgroup}) { # for ->eidx_key
@@ -531,7 +538,10 @@ sub _fill_ibx {
 		require PublicInbox::Isearch;
 		$ibx->{isrch} = PublicInbox::Isearch->new($ibx, $es);
 	}
-	$self->{-by_eidx_key}->{$ibx->eidx_key} = $ibx;
+	my $cur = $self->{-by_eidx_key}->{my $ekey = $ibx->eidx_key} //= $ibx;
+	$cur == $ibx or warn
+		"W: `$ekey' used by both `$cur->{name}' and `$ibx->{name}'\n";
+	$ibx;
 }
 
 sub _fill_ei ($$) {

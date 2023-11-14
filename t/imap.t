@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # unit tests (no network) for IMAP, see t/imapd.t for end-to-end tests
 use strict;
@@ -9,12 +9,12 @@ require_git 2.6;
 require_mods(qw(-imapd));
 require_ok 'PublicInbox::IMAP';
 require_ok 'PublicInbox::IMAPD';
+use PublicInbox::IO qw(write_file);
 
 my ($tmpdir, $for_destroy) = tmpdir();
 my $cfgfile = "$tmpdir/config";
 {
-	open my $fh, '>', $cfgfile or BAIL_OUT $!;
-	print $fh <<EOF or BAIL_OUT $!;
+	write_file '>', $cfgfile, <<EOF;
 [publicinbox "a"]
 	inboxdir = $tmpdir/a
 	newsgroup = x.y.z
@@ -23,9 +23,8 @@ my $cfgfile = "$tmpdir/config";
 	newsgroup = x.z.y
 [publicinbox "c"]
 	inboxdir = $tmpdir/c
-	newsgroup = IGNORE.THIS
+	newsgroup = ignore.this.9
 EOF
-	close $fh or BAIL_OUT $!;
 	local $ENV{PI_CONFIG} = $cfgfile;
 	for my $x (qw(a b c)) {
 		ok(run_script(['-init', '-Lbasic', '-V2', $x, "$tmpdir/$x",
@@ -37,8 +36,8 @@ EOF
 	local $SIG{__WARN__} = sub { push @w, @_ };
 	$imapd->refresh_groups;
 	my $self = { imapd => $imapd };
-	is(scalar(@w), 1, 'got a warning for upper-case');
-	like($w[0], qr/IGNORE\.THIS/, 'warned about upper-case');
+	is(scalar(@w), 1, 'got a warning for slice-like name');
+	like($w[0], qr/ignore\.this\.9/i, 'warned about slice-like name');
 	my $res = PublicInbox::IMAP::cmd_list($self, 'tag', 'x', '%');
 	is(scalar($$res =~ tr/\n/\n/), 2, 'only one result');
 	like($$res, qr/ x\r\ntag OK/, 'saw expected');

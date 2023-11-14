@@ -18,6 +18,14 @@ Upgrading:
   backwards-incompatible data format changes so rolling back to
   older versions is harmless.
 
+Compatibility:
+
+  Uppercase newsgroup names were always broken with IMAP, POP3, and
+  -extindex.  Uppercase names will now be lowercased by default and
+  warnings will be emitted.  Conflicting newsgroup names (and `inboxdir'
+  entries if `newsgroup' isn't specified) will also generate warnings
+  since it breaks -extindex and the new -cindex (coderepo index)
+
 treewide
 
   * support raw UTF-8 headers from SMTPUTF8 hosts

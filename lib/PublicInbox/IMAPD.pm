@@ -27,13 +27,8 @@ sub _refresh_ibx { # pi_cfg->each_inbox cb
 	my ($ibx, $imapd, $cache, $dummies) = @_;
 	my $ngname = $ibx->{newsgroup} // return;
 
-	# We require lower-case since IMAP mailbox names are
-	# case-insensitive (but -nntpd matches INN in being
-	# case-sensitive)
-	if ($ngname =~ m![^a-z0-9/_\.\-\~\@\+\=:]! ||
-			# don't confuse with 50K slices
-			$ngname =~ /\.[0-9]+\z/) {
-		warn "mailbox name invalid: newsgroup=`$ngname'\n";
+	if ($ngname =~ /\.[0-9]+\z/) { # don't confuse with 50K slices
+		warn "E: mailbox name invalid: newsgroup=`$ngname' (ignored)\n";
 		return;
 	}
 	my $ce = $cache->{$ngname};

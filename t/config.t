@@ -299,4 +299,37 @@ my $re = $glob2re->('a/**/b');
 is_deeply($re, 'a/.*?b', 'double asterisk middle');
 like($_, qr!$re!, "a/**/b matches $_") for ('a/b', 'a/c/b', 'a/c/a/b');
 
-done_testing();
+{
+	my $w = '';
+	local $SIG{__WARN__} = sub { $w .= "@_"; };
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "a"]
+	address = a\@example.com
+	inboxdir = $tmpdir/aa
+[publicinbox "b"]
+	address = b\@example.com
+	inboxdir = $tmpdir/aa
+EOF
+	$cfg->fill_all;
+	like $w, qr!`\Q$tmpdir/aa\E' used by both!, 'inboxdir conflict warned';
+}
+
+{
+	my $w = '';
+	local $SIG{__WARN__} = sub { $w .= "@_"; };
+	my $cfg = cfg_new $tmpdir, <<EOF;
+[publicinbox "a"]
+	address = a\@example.com
+	inboxdir = $tmpdir/a
+	newsgroup = inbox.test
+[publicinbox "b"]
+	address = b\@example.com
+	inboxdir = $tmpdir/b
+	newsgroup = inbox.tesT
+EOF
+	$cfg->fill_all;
+	like $w, qr!`inbox\.test' used by both!, 'newsgroup conflict warned';
+	like $w, qr!`inbox\.tesT' lowercased!, 'upcase warned';
+}
+
+done_testing;

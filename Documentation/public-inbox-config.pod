@@ -74,6 +74,11 @@ Omitting this for a given inbox will prevent the inbox from
 being served by L<public-inbox-nntpd(1)>,
 L<public-inbox-imapd(1)>, and/or L<public-inbox-pop3d(1)>
 
+Newsgroup names should be all lowercase.  Uppercase characters are
+converted to lowercase for compatibility with IMAP, POP3, and our
+L<public-inbox-extindex(1)> and L<public-inbox-cindex(1)> tools
+starting with public-inbox 2.0+ (they were unusable before).
+
 Default: none, optional
 
 =item publicinbox.<name>.watch
