@@ -956,9 +956,9 @@ sub strace_inject (;$) {
 	my $cmd = strace(@_);
 	state $ver = do {
 		require PublicInbox::Spawn;
-		my $v = PublicInbox::Spawn::run_qx([$cmd, '--version']);
+		my $v = PublicInbox::Spawn::run_qx([$cmd, '-V']);
 		$v =~ m!version\s+([1-9]+\.[0-9]+)! or
-				xbail "no strace --version: $v";
+				xbail "no strace -V: $v";
 		eval("v$1");
 	};
 	$ver ge v4.16 or skip "$cmd too old for syscall injection (".
