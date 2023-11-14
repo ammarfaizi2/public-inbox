@@ -865,7 +865,7 @@ sub prep_alternate_start {
 	my ($git_dir, $run_prune) = @_;
 	my $o = $git_dir.'/objects';
 	while (!-d $o) {
-		$git_dir = shift(@PRUNE_QUEUE) // return
+		$git_dir = shift(@PRUNE_QUEUE) // return;
 		$o = $git_dir.'/objects';
 	}
 	my $cmd = [ 'git', "--git-dir=$git_dir",
