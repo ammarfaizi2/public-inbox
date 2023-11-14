@@ -144,13 +144,14 @@ sub next_tick () {
 		# https://rt.perl.org/Public/Bug/Display.html?id=114340
 		blessed($obj) ? $obj->event_step : $obj->();
 	}
+	1;
 }
 
 # runs timers and returns milliseconds for next one, or next event loop
 sub RunTimers {
-	next_tick();
+	my $ran = next_tick();
 
-	return ($nextq ? 0 : $loop_timeout) unless @Timers;
+	return ($nextq || $ran ? 0 : $loop_timeout) unless @Timers;
 
 	my $now = now();
 
@@ -159,10 +160,11 @@ sub RunTimers {
 		my $to_run = shift(@Timers);
 		delete $UniqTimer{$to_run->[1] // ''};
 		$to_run->[2]->(@$to_run[3..$#$to_run]);
+		$ran = 1;
 	}
 
 	# timers may enqueue into nextq:
-	return 0 if $nextq;
+	return 0 if $nextq || $ran;
 
 	return $loop_timeout unless @Timers;
 
