@@ -172,12 +172,12 @@ SKIP: {
 	tick; # wait for strace to attach
 	ok(!lei(qw(import -F eml t/plack-qp.eml)),
 		'-F eml import fails on pathname error injection');
-	like($lei_err, qr!error reading t/plack-qp\.eml: Input/output error!,
+	like($lei_err, qr!error reading t/plack-qp\.eml: .*Input/output error!,
 		'EIO noted in stderr');
 	open $fh, '<', 't/plack-qp.eml';
 	ok(!lei(qw(import -F eml -), undef, { %$lei_opt, 0 => $fh }),
 		'-F eml import fails on stdin error injection');
-	like($lei_err, qr!error reading .*?: Input/output error!,
+	like($lei_err, qr!error reading .*?: .*Input/output error!,
 		'EIO noted in stderr');
 }
 
