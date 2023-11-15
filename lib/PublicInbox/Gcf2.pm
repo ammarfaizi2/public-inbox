@@ -11,10 +11,9 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
 use PublicInbox::Git;
 use PublicInbox::Lock;
-use autodie qw(close);
+use autodie qw(close open seek truncate);
 
 BEGIN {
-	use autodie;
 	my (%CFG, $c_src);
 	# PublicInbox::Spawn will set PERL_INLINE_DIRECTORY
 	# to ~/.cache/public-inbox/inline-c if it exists and Inline::C works
@@ -80,9 +79,8 @@ sub add_alt ($$) {
 	# to refer to $V2INBOX_DIR/git/$EPOCH.git/objects
 	#
 	# See https://bugs.debian.org/975607
-	if (open(my $fh, '<', "$objdir/info/alternates")) {
-		chomp(my @abs_alt = grep m!^/!, PublicInbox::IO::read_all $fh);
-		$gcf2->add_alternate($_) for @abs_alt;
+	if (my $s = PublicInbox::IO::try_cat("$objdir/info/alternates")) {
+		$gcf2->add_alternate($_) for ($s =~ m!^(/[^\n]+)\n!gms);
 	}
 	$gcf2->add_alternate($objdir);
 	1;
@@ -92,8 +90,9 @@ sub have_unlinked_files () {
 	# FIXME: port gcf2-like over to git.git so we won't need to
 	# deal with libgit2
 	return 1 if $^O ne 'linux';
-	open my $fh, '<', "/proc/$$/maps" or return;
-	while (<$fh>) { return 1 if /\.(?:idx|pack) \(deleted\)$/ }
+	if (my $s = PublicInbox::IO::try_cat("/proc/$$/maps")) {
+		return 1 if /\.(?:idx|pack) \(deleted\)/s;
+	}
 	undef;
 }
 
