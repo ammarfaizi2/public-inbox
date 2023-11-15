@@ -33,9 +33,9 @@ sub process_inputs { # via wq_do
 	local $PublicInbox::DS::in_loop = 0; # force synchronous awaitpid
 	$self->SUPER::process_inputs;
 	my $lei = $self->{lei};
-	delete $lei->{1};
 	my $l2m = delete $lei->{l2m};
-	delete $self->{wcb}; # commit
+	delete $self->{wcb}; # may close connections
+	$l2m->finish_output($lei) if $l2m;
 	if (my $v2w = delete $lei->{v2w}) { $v2w->done } # may die
 	my $nr_w = delete($l2m->{-nr_write}) // 0;
 	my $d = (delete($l2m->{-nr_seen}) // 0) - $nr_w;

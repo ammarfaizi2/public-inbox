@@ -393,14 +393,7 @@ sub query_done { # EOF callback for main daemon
 	$lei->sto_done_request;
 	$lei->{ovv}->ovv_end($lei);
 	if ($l2m) { # close() calls LeiToMail reap_compress
-		if (my $out = delete $lei->{old_1}) {
-			if (my $mbout = $lei->{1}) { # compressor pipe process
-				$mbout->close or die <<"";
-Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
-
-			}
-			$lei->{1} = $out;
-		}
+		$l2m->finish_output($lei);
 		if ($l2m->lock_free) {
 			$l2m->poke_dst;
 			$lei->poke_mua;
