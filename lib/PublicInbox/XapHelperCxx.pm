@@ -86,7 +86,7 @@ sub build () {
 	# distributed packages.
 	$^O eq 'netbsd' and $fl =~ s/(\A|[ \t])\-L([^ \t]+)([ \t]|\z)/
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
-	my @xflags = split(/\s+/, "$fl $xflags");
+	my @xflags = split(' ', "$fl $xflags"); # ' ' awk-mode eats leading WS
 	my @cflags = grep(!/\A-(?:Wl|l|L)/, @xflags);
 	run_die([$cxx, '-c', "$prog.cpp", @cflags]);
 	run_die([$cxx, '-o', "$prog.tmp", "$prog.o", @xflags]);
