@@ -52,6 +52,7 @@ no warnings 'once';
 
 *cat_async_step = \&PublicInbox::Git::cat_async_step; # for event_step
 *event_step = \&PublicInbox::Git::event_step;
+*fail = \&PublicInbox::Git::fail;
 *DESTROY = \&PublicInbox::Git::DESTROY;
 
 1;
