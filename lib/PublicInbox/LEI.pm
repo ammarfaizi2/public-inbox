@@ -9,7 +9,7 @@ package PublicInbox::LEI;
 use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
-use autodie qw(bind chdir fork open socket socketpair syswrite unlink);
+use autodie qw(bind chdir fork open pipe socket socketpair syswrite unlink);
 use Getopt::Long ();
 use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET);
@@ -1099,8 +1099,8 @@ sub start_pager {
 	$new_env->{LESS} //= 'FRX';
 	$new_env->{LV} //= '-c';
 	$new_env->{MORE} = $new_env->{LESS} if $^O eq 'freebsd';
-	pipe(my ($r, $wpager)) or return warn "pipe: $!";
-	my $rdr = { 0 => $r, 1 => $self->{1}, 2 => $self->{2} };
+	my $rdr = { 1 => $self->{1}, 2 => $self->{2} };
+	CORE::pipe($rdr->{0}, my $wpager) or return warn "pipe: $!";
 	my $pgr = [ undef, @$rdr{1, 2} ];
 	my $env = $self->{env};
 	if ($self->{sock}) { # lei(1) process runs it
@@ -1580,7 +1580,6 @@ sub slurp_stdin {
 	my $in = $lei->{0};
 	if (-t $in) { # run cat via script/lei and read from it
 		$in = undef;
-		use autodie qw(pipe);
 		pipe($in, my $wr);
 		say { $lei->{2} } '# enter query, Ctrl-D when done';
 		send_exec_cmd($lei, [ $lei->{0}, $wr ], ['cat'], {});

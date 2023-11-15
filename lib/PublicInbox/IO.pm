@@ -9,6 +9,8 @@ use PublicInbox::DS qw(awaitpid);
 our @EXPORT_OK = qw(poll_in read_all try_cat write_file);
 use Carp qw(croak);
 use IO::Poll qw(POLLIN);
+# don't autodie in top-level for Perl 5.16.3 (and maybe newer versions)
+# we have our own ->close, so we scope autodie into each sub
 
 sub waitcb { # awaitpid callback
 	my ($pid, $errref, $cb, @args) = @_;

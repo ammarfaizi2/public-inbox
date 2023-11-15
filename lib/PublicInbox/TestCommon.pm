@@ -16,7 +16,7 @@ our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 my $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err);
-use autodie qw(chdir close fcntl open opendir seek unlink);
+use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
 
@@ -670,7 +670,6 @@ sub test_lei {
 SKIP: {
 	my ($cb) = pop @_;
 	my $test_opt = shift // {};
-	use autodie qw(mkdir);
 	require_git(2.6, 1);
 	my $mods = $test_opt->{mods} // [ 'lei' ];
 	require_mods(@$mods, 2);
@@ -801,7 +800,7 @@ sub create_coderepo ($$;@) {
 	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
 	my $dir = "t/data-gen/$base.$ident-$db";
 	my $new = !-d $dir;
-	if ($new && !mkdir($dir)) {
+	if ($new && !CORE::mkdir($dir)) {
 		my $err = $!;
 		-d $dir or xbail "mkdir($dir): $err";
 	}

@@ -8,10 +8,11 @@
 package PublicInbox::XapHelperCxx;
 use v5.12;
 use PublicInbox::Spawn qw(run_die run_qx which);
-use PublicInbox::IO qw(read_all write_file);
+use PublicInbox::IO qw(read_all try_cat write_file);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
+use autodie;
 my $cxx = which($ENV{CXX} // 'c++');
 my $dir = substr("$cxx-$Config{archname}", 1); # drop leading '/'
 $dir =~ tr!/!-!;
@@ -39,25 +40,22 @@ EOM
 }
 
 sub needs_rebuild () {
-	open my $fh, '<', "$dir/XFLAGS" or return 1;
-	chomp(my $prev = read_all($fh));
+	my $prev = try_cat("$dir/XFLAGS") or return 1;
+	chomp $prev;
 	return 1 if $prev ne $xflags;
 
-	open $fh, '<', "$dir/xap_modversion" or return 1;
-	chomp($prev = read_all($fh));
-	$prev or return 1;
+	$prev = try_cat("$dir/xap_modversion") or return 1;
+	chomp $prev;
 
 	$xap_modversion = xap_cfg('--modversion');
 	$xap_modversion ne $prev;
 }
 
 sub build () {
-	if (!-d $dir) {
-		my $err;
-		mkdir($dir) or $err = $!;
+	if (!-d $dir && !CORE::mkdir($dir)) {
+		my $err = $!;
 		die "mkdir($dir): $err" if !-d $dir;
 	}
-	use autodie;
 	require PublicInbox::CodeSearch;
 	require PublicInbox::Lock;
 	require PublicInbox::OnDestroy;

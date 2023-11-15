@@ -7,7 +7,7 @@ use PublicInbox::Config;
 use PublicInbox::InboxWritable;
 require_git(2.6);
 require_mods(qw(json DBD::SQLite Xapian));
-use autodie qw(open rename truncate);
+use autodie qw(open rename truncate unlink);
 require PublicInbox::Search;
 use_ok 'PublicInbox::ExtSearch';
 use_ok 'PublicInbox::ExtSearchIdx';
@@ -577,7 +577,6 @@ test_lei(sub {
 	is_deeply($dst, \@md1,
 		"convert from extindex w/ or w/o `extindex' prefix");
 
-	use autodie qw(unlink);
 	my @o = glob "$home/extindex/ei*/over.sqlite*";
 	unlink(@o);
 	ok(!lei('convert', '-o', "$home/fail", "extindex:$d"));
