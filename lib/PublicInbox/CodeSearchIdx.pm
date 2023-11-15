@@ -890,7 +890,7 @@ sub associate {
 	my @pending = keys %{$self->{PENDING}};
 	die "E: pending=@pending jobs not done\n" if @pending;
 	progress($self, 'associating...');
-	my @join = ('time', @JOIN, 'to_ibx_id', 'to_root_id');
+	my @join = (@JOIN, 'to_ibx_id', 'to_root_id');
 	my $rd = popen_rd(\@join, $CMD_ENV, { -C => "$TMPDIR" });
 	my %score;
 	while (<$rd>) { # PFX ibx_ids root_id
