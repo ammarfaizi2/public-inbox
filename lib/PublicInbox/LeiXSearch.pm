@@ -437,7 +437,7 @@ sub do_post_augment {
 	my $err = $@;
 	if ($err) {
 		if (my $lxs = delete $lei->{lxs}) {
-			$lxs->wq_kill('-TERM');
+			$lxs->wq_kill(-POSIX::SIGTERM());
 			$lxs->wq_close;
 		}
 		$lei->fail("$err");

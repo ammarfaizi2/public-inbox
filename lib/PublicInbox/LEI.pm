@@ -474,7 +474,7 @@ my @WQ_KEYS = qw(lxs l2m ikw pmd wq1 lne v2w); # internal workers
 sub _drop_wq {
 	my ($self) = @_;
 	for my $wq (grep(defined, delete(@$self{@WQ_KEYS}))) {
-		$wq->wq_kill('-TERM');
+		$wq->wq_kill(-POSIX::SIGTERM());
 		$wq->DESTROY;
 	}
 }
