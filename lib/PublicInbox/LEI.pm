@@ -581,7 +581,7 @@ sub _lei_atfork_child {
 		close($_) for (grep(defined, delete @$self{qw(0 1 2 sock)}));
 		delete $cfg->{-lei_store};
 	} else { # worker, Net::NNTP (Net::Cmd) uses STDERR directly
-		open STDERR, '+>&', $self->{2};
+		open STDERR, '+>&='.fileno($self->{2}); # idempotent w/ fileno
 		STDERR->autoflush(1);
 		$self->{2} = \*STDERR;
 		POSIX::setpgid(0, $$) // die "setpgid(0, $$): $!";
