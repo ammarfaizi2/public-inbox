@@ -135,7 +135,6 @@ sub add {
 	if (do_idx($self, $mime, $smsg)) {
 		$self->checkpoint;
 	}
-	++$self->{-nr_add}; # for lei convert
 	$cmt;
 }
 
@@ -611,7 +610,6 @@ sub done {
 	$self->lock_release(!!$nbytes) if $shards;
 	$self->git->cleanup;
 	die $err if $err;
-	delete $self->{-nr_add}; # for lei-convert
 }
 
 sub importer {

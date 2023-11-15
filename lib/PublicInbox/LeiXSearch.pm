@@ -391,11 +391,6 @@ sub query_done { # EOF callback for main daemon
 	($lei->{opt}->{'mail-sync'} && !$lei->{sto}) and
 		warn "BUG: {sto} missing with --mail-sync";
 	$lei->sto_done_request;
-	my $nr_w = delete($lei->{-nr_write}) // 0;
-	if (my $v2w = delete $lei->{v2w}) {
-		$nr_w = $v2w->wq_do('done'); # may die
-		$v2w->wq_close;
-	}
 	$lei->{ovv}->ovv_end($lei);
 	if ($l2m) { # close() calls LeiToMail reap_compress
 		if (my $out = delete $lei->{old_1}) {
@@ -413,6 +408,7 @@ Error closing $lei->{ovv}->{dst}: \$!=$! \$?=$?
 			delete $l2m->{mbl}; # drop dotlock
 		}
 	}
+	my $nr_w = delete($lei->{-nr_write}) // 0;
 	my $nr_dup = (delete($lei->{-nr_seen}) // 0) - $nr_w;
 	if ($lei->{-progress}) {
 		my $tot = $lei->{-mset_total} // 0;
