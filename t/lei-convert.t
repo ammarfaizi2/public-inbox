@@ -8,7 +8,8 @@ use PublicInbox::NetReader;
 use PublicInbox::Eml;
 use IO::Uncompress::Gunzip;
 use File::Path qw(remove_tree);
-use PublicInbox::Spawn qw(which);
+use PublicInbox::Spawn qw(which run_qx);
+use File::Compare;
 use autodie qw(open);
 require_mods(qw(lei -imapd -nntpd Mail::IMAPClient Net::NNTP));
 my ($tmpdir, $for_destroy) = tmpdir;
@@ -28,7 +29,35 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	my $d = $ENV{HOME};
 	lei_ok('convert', '-o', "mboxrd:$d/foo.mboxrd",
 		"imap://$imap_host_port/t.v2.0");
+	my ($nc0) = ($lei_err =~ /converted (\d+) messages/);
 	ok(-f "$d/foo.mboxrd", 'mboxrd created from imap://');
+
+	lei_ok qw(convert -o), "v2:$d/v2-test", "mboxrd:$d/foo.mboxrd";
+	my ($nc) = ($lei_err =~ /converted (\d+) messages/);
+	is $nc, $nc0, 'converted all messages messages';
+	lei_ok qw(q z:0.. -f jsonl --only), "$d/v2-test";
+	is(scalar(split(/^/sm, $lei_out)), $nc, 'got all messages in v2-test');
+
+	lei_ok qw(convert -o), "mboxrd:$d/from-v2.mboxrd", "$d/v2-test";
+	like $lei_err, qr/converted $nc messages/;
+	is(compare("$d/foo.mboxrd", "$d/from-v2.mboxrd"), 0,
+		'convert mboxrd -> v2 ->mboxrd roundtrip') or
+			diag run_qx([qw(git diff --no-index),
+					"$d/foo.mboxrd", "$d/from-v2.mboxrd"]);
+
+	lei_ok [qw(convert -F eml -o), "$d/v2-test"], undef,
+		{ 0 => \<<'EOM', %$lei_opt };
+From: f@example.com
+To: t@example.com
+Subject: append-to-v2-on-convert
+Message-ID: <append-to-v2-on-convert@example>
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+EOM
+	like $lei_err, qr/converted 1 messages/, 'only one message added';
+	lei_ok qw(q z:0.. -f jsonl --only), "$d/v2-test";
+	is(scalar(split(/^/sm, $lei_out)), $nc + 1,
+		'got expected number of messages after append convert');
+	like $lei_out, qr/append-to-v2-on-convert/;
 
 	lei_ok('convert', '-o', "mboxrd:$d/nntp.mboxrd",
 		"nntp://$nntp_host_port/t.v2");

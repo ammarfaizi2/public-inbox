@@ -375,7 +375,6 @@ sub _v2_write_cb ($$) {
 		++$self->{-nr_seen};
 		return if $dedupe && $dedupe->is_dup($eml, $smsg);
 		$lei->{v2w}->wq_do('add', $eml); # V2Writable->add
-		++$self->{-nr_write};
 	}
 }
 
@@ -435,7 +434,7 @@ sub new {
 			($lei->{opt}->{dedupe}//'') eq 'oid';
 		$self->{base_type} = 'v2';
 		$self->{-wq_nr_workers} = 1; # v2 has shards
-		$lei->{opt}->{save} = \1;
+		$lei->{opt}->{save} //= \1 if $lei->{cmd} eq 'q';
 		$dst = $lei->{ovv}->{dst} = $lei->abs_path($dst);
 		@conflict = qw(mua sort);
 	} else {

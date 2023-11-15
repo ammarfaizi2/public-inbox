@@ -34,9 +34,13 @@ sub process_inputs { # via wq_do
 	$self->SUPER::process_inputs;
 	my $lei = $self->{lei};
 	delete $lei->{1};
-	my $l2m = delete $self->{l2m};
-	delete $self->{wcb}; # commit
+	my $l2m = delete $lei->{l2m};
 	my $nr_w = delete($l2m->{-nr_write}) // 0;
+	delete $self->{wcb}; # commit
+	if (my $v2w = delete $lei->{v2w}) {
+		$nr_w = $v2w->wq_do('done'); # may die
+		$v2w->wq_close;
+	}
 	my $d = (delete($l2m->{-nr_seen}) // 0) - $nr_w;
 	$d = $d ? " ($d duplicates)" : '';
 	$lei->qerr("# converted $nr_w messages$d");

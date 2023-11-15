@@ -41,8 +41,8 @@ sub detect_fmt ($) {
 	my ($dst) = @_;
 	if ($dst =~ m!\A([:/]+://)!) {
 		die "$1 support not implemented, yet\n";
-	} elsif (!-e $dst || -d _) {
-		'maildir'; # the default TODO: MH?
+	} elsif (!-e $dst || -d _) { # maildir is the default TODO: MH
+		-e "$dst/inbox.lock" ? 'v2' : 'maildir';
 	} elsif (-f _ || -p _) {
 		die "unable to determine mbox family of $dst\n";
 	} else {
