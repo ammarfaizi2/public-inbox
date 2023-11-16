@@ -50,8 +50,9 @@ significant space savings on Xapian indices.
 =item --gc
 
 Perform garbage collection instead of indexing.  Use this if
-inboxes are removed from the extindex, or if messages are
-purged or removed from some inboxes.
+inboxes are removed from the extindex, a newsgroup name is
+set or changed, or if messages are purged or removed from
+some inboxes.
 
 =item --reindex
 

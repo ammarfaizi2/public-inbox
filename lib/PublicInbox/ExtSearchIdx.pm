@@ -113,11 +113,30 @@ sub check_batch_limit ($) {
 	${$req->{need_checkpoint}} = 1 if $n >= $self->{batch_bytes};
 }
 
+sub bad_ibx_id ($$;$) {
+	my ($self, $ibx_id, $cb) = @_;
+	my $msg = "E: bad/stale ibx_id=#$ibx_id encountered";
+	my $ekey = $self->{oidx}->dbh->selectrow_array(<<EOM, undef, $ibx_id);
+SELECT eidx_key FROM inboxes WHERE ibx_id = ? LIMIT 1
+EOM
+	$msg .= " (formerly `$ekey')" if defined $ekey;
+	$cb //= \&carp;
+	$cb->($msg, "\nE: running $0 --gc may be required");
+}
+
+sub check_xr3 ($$$) {
+	my ($self, $id2pos, $xr3) = @_;
+	@$xr3 = grep {
+		defined($id2pos->{$_->[0]}) ? 1 : bad_ibx_id($self, $_->[0])
+	} @$xr3;
+}
+
 sub apply_boost ($$) {
 	my ($req, $smsg) = @_;
 	my $id2pos = $req->{id2pos}; # index in ibx_sorted
 	my $xr3 = $req->{self}->{oidx}->get_xref3($smsg->{num}, 1);
-	@$xr3 = sort {
+	check_xr3($req->{self}, $id2pos, $xr3);
+	@$xr3 = sort { # sort ascending
 		$id2pos->{$a->[0]} <=> $id2pos->{$b->[0]}
 				||
 		$a->[1] <=> $b->[1] # break ties with {xnum}
@@ -513,8 +532,9 @@ sub eidx_gc {
 
 sub _ibx_for ($$$) {
 	my ($self, $sync, $smsg) = @_;
-	my $ibx_id = delete($smsg->{ibx_id}) // die '{ibx_id} unset';
-	my $pos = $sync->{id2pos}->{$ibx_id} // die "$ibx_id no pos";
+	my $ibx_id = delete($smsg->{ibx_id}) // die 'BUG: {ibx_id} unset';
+	my $pos = $sync->{id2pos}->{$ibx_id} //
+		bad_ibx_id($self, $ibx_id, \&croak);
 	$self->{-ibx_ary_known}->[$pos] //
 		die "BUG: ibx for $smsg->{blob} not mapped"
 }
@@ -657,7 +677,8 @@ BUG? #$docid $smsg->{blob} is not referenced by inboxes during reindex
 	# hit the common case in _reindex_finalize without rereading
 	# from git (or holding multiple messages in memory).
 	my $id2pos = $sync->{id2pos}; # index in ibx_sorted
-	@$xr3 = sort {
+	check_xr3($self, $id2pos, $xr3);
+	@$xr3 = sort { # sort descending
 		$id2pos->{$b->[0]} <=> $id2pos->{$a->[0]}
 				||
 		$b->[1] <=> $a->[1] # break ties with {xnum}
