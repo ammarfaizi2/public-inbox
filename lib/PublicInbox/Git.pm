@@ -276,7 +276,7 @@ sub cat_async_step ($$) {
 
 sub cat_async_wait ($) {
 	my ($self) = @_;
-	$self->close if !$self->{sock};
+	return $self->close if !$self->{sock};
 	my $inflight = $self->{inflight} or return;
 	while (scalar(@$inflight)) {
 		cat_async_step($self, $inflight);
@@ -332,7 +332,7 @@ sub check_async_wait ($) {
 	my ($self) = @_;
 	return cat_async_wait($self) if $self->{-bc};
 	my $ck = $self->{ck} or return;
-	$ck->close if !$ck->{sock};
+	return $ck->close if !$ck->{sock};
 	my $inflight = $ck->{inflight} or return;
 	check_async_step($ck, $inflight) while (scalar(@$inflight));
 }
