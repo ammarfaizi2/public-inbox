@@ -675,7 +675,7 @@ sub get_roots ($$) {
 		{ 0 => $refs, 1 => $roots_fh }, \&index_repo, $self, $git)
 }
 
-# for PublicInbox::SearchIdx::patch_id and with_umask
+# for PublicInbox::SearchIdx `git patch-id' call and with_umask
 sub git { $_[0]->{git} }
 
 sub load_existing ($) { # for -u/--update
