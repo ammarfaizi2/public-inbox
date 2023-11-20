@@ -512,7 +512,7 @@ sub tail_f (@) {
 	while (my ($io, $fl) = splice(@cfmap, 0, 2)) {
 		fcntl($io, F_SETFD, $fl);
 	}
-	wait_for_tail($pid, scalar @_);
+	wait_for_tail($pid, scalar @f);
 	require PublicInbox::AutoReap;
 	PublicInbox::AutoReap->new($pid, \&wait_for_tail);
 }
