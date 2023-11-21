@@ -152,8 +152,8 @@ EOM
 # TODO: may be used for reshard/compact
 sub count_shards { scalar($_[0]->xdb_shards_flat) }
 
-sub update_commit ($$) {
-	my ($self, $cmt) = @_; # fields from @FMT
+sub update_commit ($$$) {
+	my ($self, $cmt, $roots) = @_; # fields from @FMT
 	my $x = 'Q'.$cmt->{H};
 	my ($docid, @extra) = sort { $a <=> $b } docids_by_postlist($self, $x);
 	@extra and warn "W: $cmt->{H} indexed multiple times, pruning ",
@@ -161,7 +161,7 @@ sub update_commit ($$) {
 	$self->{xdb}->delete_document($_) for @extra;
 	my $doc = $PublicInbox::Search::X{Document}->new;
 	$doc->add_boolean_term($x);
-	$doc->add_boolean_term('G'.$_) for @{$self->{roots}};
+	$doc->add_boolean_term('G'.$_) for @$roots;
 	$doc->add_boolean_term('XP'.$_) for split(/ /, $cmt->{P});
 	$doc->add_boolean_term('T'.'c');
 
@@ -277,9 +277,7 @@ sub cidx_read_log_p {
 	my ($self, $log_p, $rd) = @_;
 	my $git = delete $log_p->{git} // die 'BUG: no {git}';
 	local $self->{current_info} = "$git->{git_dir} [$self->{shard}]";
-	local $self->{roots} = delete $log_p->{roots} // die 'BUG: no {roots}';
-
-	local $MAX_SIZE = $self->{-opt}->{max_size};
+	my $roots = delete $log_p->{roots} // die 'BUG: no {roots}';
 	# local-ized in parent before fork
 	$TXN_BYTES = $BATCH_BYTES;
 	local $self->{git} = $git; # for patchid
@@ -308,7 +306,7 @@ sub cidx_read_log_p {
 			cidx_ckpoint($self, "[$self->{shard}] $nr");
 			$TXN_BYTES -= $len; # len may be huge, >TXN_BYTES;
 		}
-		update_commit($self, $cmt);
+		update_commit($self, $cmt, $roots);
 		++$nr;
 		cidx_ckpoint($self, "[$self->{shard}] $nr") if $TXN_BYTES <= 0;
 		$/ = $FS;
@@ -1143,6 +1141,7 @@ sub cidx_run { # main entry point
 		@ID2ROOT, $XHC, @SORT, $GITS_NR);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
+	local $MAX_SIZE = $self->{-opt}->{max_size};
 	local $self->{ASSOC_PFX} = \@ASSOC_PFX;
 	local $self->{PENDING} = {};
 	local $self->{-pi_cfg};
