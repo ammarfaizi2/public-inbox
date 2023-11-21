@@ -64,12 +64,7 @@ Use this after L<git-gc(1)> (or L<git-prune(1)>).
 
 =item --no-fsync
 
-Disables L<fsync(2)> and L<fdatasync(2)> operations on SQLite
-and Xapian.  This is only effective with Xapian 1.4+.  This is
-primarily intended for systems with low RAM and the small
-(default) C<--batch-size=1m>.  Users of large C<--batch-size>
-may even find disabling L<fdatasync(2)> causes too much dirty
-data to accumulate, resulting on latency spikes from writeback.
+=item --dangerous
 
 =item --max-size SIZE
 
