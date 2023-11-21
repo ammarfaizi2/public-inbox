@@ -7,7 +7,9 @@
 package PublicInbox::CodeSearch;
 use v5.12;
 use parent qw(PublicInbox::Search);
+use PublicInbox::Config;
 use PublicInbox::Search qw(retry_reopen int_val xap_terms);
+use Compress::Zlib qw(uncompress);
 use constant {
 	AT => 0, # author time YYYYMMDDHHMMSS, dt: for mail)
 	CT => 1, # commit time (Unix time stamp, like TS/rt: in mail)
@@ -47,8 +49,21 @@ my %prob_prefix = ( # copied from PublicInbox::Search
 );
 
 sub new {
-	my ($cls, $dir) = @_;
-	bless { xpfx => "$dir/cidx".CIDX_SCHEMA_VER }, $cls;
+	my ($cls, $dir, $cfg) = @_;
+	# can't have a PublicInbox::Config here due to circular refs
+	bless { xpfx => "$dir/cidx".CIDX_SCHEMA_VER,
+		-cfg_f => $cfg->{-f} }, $cls;
+}
+
+sub join_data_key ($) { "join:$_[0]->{-cfg_f}" }
+
+sub join_data {
+	my ($self) = @_;
+	my $key = join_data_key($self);
+	my $cur = $self->xdb->get_metadata($key) or return;
+	$cur = eval { PublicInbox::Config::json()->decode(uncompress($cur)) };
+	warn "E: $@ (corrupt metadata in `$key' key?)" if $@;
+	$cur;
 }
 
 sub qparse_new ($) {
@@ -149,6 +164,49 @@ sub mset {
 				PublicInbox::Search::OP_FILTER(),
 				$qry, 'T'.'c');
 	$self->do_enquire($qry, $opt, CT);
+}
+
+sub roots2paths { # for diagnostics
+	my ($self) = @_;
+	my $cur = $self->xdb->allterms_begin('G');
+	my $end = $self->{xdb}->allterms_end('G');
+	my $qrepo = $PublicInbox::Search::X{Query}->new('T'.'r');
+	my $enq = $PublicInbox::Search::X{Enquire}->new($self->{xdb});
+	$enq->set_weighting_scheme($PublicInbox::Search::X{BoolWeight}->new);
+	$enq->set_docid_order($PublicInbox::Search::ENQ_ASCENDING);
+	my %ret;
+	for (; $cur != $end; $cur++) {
+		my $G_oidhex = $cur->get_termname;
+		my $qry = $PublicInbox::Search::X{Query}->new(
+				PublicInbox::Search::OP_FILTER(),
+				$qrepo, $G_oidhex);
+		$enq->set_query($qry);
+		my ($size, $off, $lim) = (0, 0, 100000);
+		my $dirs = $ret{substr($G_oidhex, 1)} = [];
+		do {
+			my $mset = $enq->get_mset($off += $size, $lim);
+			for my $x ($mset->items) {
+				my $tmp = xap_terms('P', $x->get_document);
+				push @$dirs, keys %$tmp;
+			}
+			$size = $mset->size;
+		} while ($size);
+		substr($_, 0, 1, '/') for @$dirs; # s!^P!/!
+		@$dirs = sort @$dirs;
+	}
+	\%ret;
+}
+
+sub paths2roots { # for diagnostics
+	my ($self) = @_;
+	my %ret;
+	my $tmp = roots2paths($self);
+	for my $root_oidhex (keys %$tmp) {
+		my $paths = delete $tmp->{$root_oidhex};
+		push @{$ret{$_}}, $root_oidhex for @$paths;
+	}
+	@$_ = sort(@$_) for values %ret;
+	\%ret;
 }
 
 1;

@@ -93,10 +93,10 @@ sub cmd_dump_ibx {
 }
 
 sub dump_roots_iter ($$$) {
-	my ($req, $root2id, $it) = @_;
+	my ($req, $root2off, $it) = @_;
 	eval {
 		my $doc = $it->get_document;
-		my $G = join(' ', map { $root2id->{$_} } xap_terms('G', $doc));
+		my $G = join(' ', map { $root2off->{$_} } xap_terms('G', $doc));
 		for my $p (@{$req->{A}}) {
 			for (xap_terms($p, $doc)) {
 				$req->{wbuf} .= "$_ $G\n";
@@ -118,14 +118,14 @@ sub dump_roots_flush ($$) {
 }
 
 sub cmd_dump_roots {
-	my ($req, $root2id_file, $qry_str) = @_;
+	my ($req, $root2off_file, $qry_str) = @_;
 	$qry_str // die 'usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR';
 	$req->{A} or die 'dump_roots requires -A PREFIX';
-	open my $fh, '<', $root2id_file;
-	my $root2id; # record format: $OIDHEX "\0" uint32_t
+	open my $fh, '<', $root2off_file;
+	my $root2off; # record format: $OIDHEX "\0" uint32_t
 	my @x = split(/\0/, read_all $fh);
 	while (defined(my $oidhex = shift @x)) {
-		$root2id->{$oidhex} = shift @x;
+		$root2off->{$oidhex} = shift @x;
 	}
 	my $opt = { relevance => -1, limit => $req->{'m'},
 			offset => $req->{o} // 0 };
@@ -134,7 +134,7 @@ sub cmd_dump_roots {
 	$req->{wbuf} = '';
 	for my $it ($mset->items) {
 		for (my $t = 10; $t > 0; --$t) {
-			$t = dump_roots_iter($req, $root2id, $it) // $t;
+			$t = dump_roots_iter($req, $root2off, $it) // $t;
 		}
 		if (!($req->{nr_out} & 0x3fff)) {
 			dump_roots_flush($req, $fh);

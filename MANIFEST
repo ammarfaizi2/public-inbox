@@ -423,6 +423,7 @@ t/altid.t
 t/altid_v2.t
 t/cgi.t
 t/check-www-inbox.perl
+t/cindex-join.t
 t/cindex.t
 t/clone-coderepo-puh1.sh
 t/clone-coderepo-puh2.sh

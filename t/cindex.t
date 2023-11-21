@@ -13,6 +13,7 @@ my ($tmp, $for_destroy) = tmpdir();
 my $pwd = getcwd();
 my @unused_keys = qw(last_commit has_threadid skip_docdata);
 local $ENV{PI_CONFIG} = '/dev/null';
+# local $ENV{TAIL_ALL} = $ENV{TAIL_ALL} // 1; # while features are unstable
 my $opt = { 1 => \(my $cidx_out), 2 => \(my $cidx_err) };
 
 # I reworked CodeSearchIdx->shard_worker to handle empty trees
@@ -207,11 +208,12 @@ my $basic = create_inbox 'basic', indexlevel => 'basic', sub {
 	inboxdir = $basic->{inboxdir}
 	address = basic\@example.com
 EOM
-	my $cmd = [ qw(-cindex -u --all --associate -d), "$tmp/ext",
+	my $cmd = [ qw(-cindex -u --all -d), "$tmp/ext",
+		'--join=aggressive,dt:19700101000000..now',
 		'-I', $basic->{inboxdir} ];
 	$cidx_out = $cidx_err = '';
-	ok(run_script($cmd, $env, $opt), 'associate w/o search');
-	like($cidx_err, qr/W: \Q$basic->{inboxdir}\E not indexed for search/,
+	ok(run_script($cmd, $env, $opt), 'join w/o search');
+	like($cidx_err, qr/W: \Q$basic->{inboxdir}\E not indexed for search/s,
 		'non-Xapian-enabled inbox noted');
 }
 

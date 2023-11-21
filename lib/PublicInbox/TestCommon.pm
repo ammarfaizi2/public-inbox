@@ -14,7 +14,7 @@ use Scalar::Util qw(isvstring);
 use Carp ();
 our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
-my $tail_cmd = $ENV{TAIL};
+our $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err);
 use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
 
@@ -364,12 +364,15 @@ sub run_script ($;$$) {
 	my $fhref = [];
 	my $spawn_opt = {};
 	my @tail_paths;
+	local $tail_cmd = $tail_cmd;
 	for my $fd (0..2) {
 		my $redir = $opt->{$fd};
 		my $ref = ref($redir);
 		if ($ref eq 'SCALAR') {
 			my $fh;
-			if ($tail_cmd && $ENV{TAIL_ALL} && $fd > 0) {
+			if ($ENV{TAIL_ALL} && $fd > 0) {
+				# tail -F is better, but not portable :<
+				$tail_cmd //= 'tail -f';
 				require File::Temp;
 				$fh = File::Temp->new("fd.$fd-XXXX", TMPDIR=>1);
 				push @tail_paths, $fh->filename;
@@ -820,7 +823,7 @@ sub create_coderepo ($$;@) {
 	$tmpdir;
 }
 
-sub create_inbox ($$;@) {
+sub create_inbox ($;@) {
 	my $ident = shift;
 	my $cb = pop;
 	my %opt = @_;

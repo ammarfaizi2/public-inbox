@@ -331,7 +331,7 @@ struct dump_roots_tmp {
 	void *mm_ptr;
 	char **entries;
 	struct fbuf wbuf;
-	int root2id_fd;
+	int root2off_fd;
 };
 
 // n.b. __cleanup__ works fine with C++ exceptions, but not longjmp
@@ -364,8 +364,8 @@ static void xclose(int fd)
 static void dump_roots_ensure(void *ptr)
 {
 	struct dump_roots_tmp *drt = (struct dump_roots_tmp *)ptr;
-	if (drt->root2id_fd >= 0)
-		xclose(drt->root2id_fd);
+	if (drt->root2off_fd >= 0)
+		xclose(drt->root2off_fd);
 	hdestroy(); // idempotent
 	if (drt->mm_ptr && munmap(drt->mm_ptr, drt->sb.st_size))
 		EABORT("BUG: munmap(%p, %zu)", drt->mm_ptr, drt->sb.st_size);
@@ -373,12 +373,12 @@ static void dump_roots_ensure(void *ptr)
 	fbuf_ensure(&drt->wbuf);
 }
 
-static bool root2ids_str(struct fbuf *root_ids, Xapian::Document *doc)
+static bool root2offs_str(struct fbuf *root_offs, Xapian::Document *doc)
 {
 	Xapian::TermIterator cur = doc->termlist_begin();
 	Xapian::TermIterator end = doc->termlist_end();
 	ENTRY e, *ep;
-	fbuf_init(root_ids);
+	fbuf_init(root_offs);
 	for (cur.skip_to("G"); cur != end; cur++) {
 		std::string tn = *cur;
 		if (!starts_with(&tn, "G", 1))
@@ -389,21 +389,21 @@ static bool root2ids_str(struct fbuf *root_ids, Xapian::Document *doc)
 		ep = hsearch(e, FIND);
 		if (!ep) ABORT("hsearch miss `%s'", e.key);
 		// ep->data is a NUL-terminated string matching /[0-9]+/
-		fputc(' ', root_ids->fp);
-		fputs((const char *)ep->data, root_ids->fp);
+		fputc(' ', root_offs->fp);
+		fputs((const char *)ep->data, root_offs->fp);
 	}
-	fputc('\n', root_ids->fp);
-	if (ferror(root_ids->fp) | fclose(root_ids->fp))
-		err(EXIT_FAILURE, "ferror|fclose(root_ids)"); // ENOMEM
-	root_ids->fp = NULL;
+	fputc('\n', root_offs->fp);
+	if (ferror(root_offs->fp) | fclose(root_offs->fp))
+		err(EXIT_FAILURE, "ferror|fclose(root_offs)"); // ENOMEM
+	root_offs->fp = NULL;
 	return true;
 }
 
 // writes term values matching @pfx for a given @doc, ending the line
-// with the contents of @root_ids
+// with the contents of @root_offs
 static void dump_roots_term(struct req *req, const char *pfx,
 				struct dump_roots_tmp *drt,
-				struct fbuf *root_ids,
+				struct fbuf *root_offs,
 				Xapian::Document *doc)
 {
 	Xapian::TermIterator cur = doc->termlist_begin();
@@ -415,7 +415,7 @@ static void dump_roots_term(struct req *req, const char *pfx,
 		if (!starts_with(&tn, pfx, pfx_len))
 			continue;
 		fputs(tn.c_str() + pfx_len, drt->wbuf.fp);
-		fwrite(root_ids->ptr, root_ids->len, 1, drt->wbuf.fp);
+		fwrite(root_offs->ptr, root_offs->len, 1, drt->wbuf.fp);
 		++req->nr_out;
 	}
 }
@@ -434,7 +434,7 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 		err(EXIT_FAILURE, "ferror|fclose(drt->wbuf.fp)");
 	drt->wbuf.fp = NULL;
 	if (!drt->wbuf.len) goto done_free;
-	while (flock(drt->root2id_fd, LOCK_EX)) {
+	while (flock(drt->root2off_fd, LOCK_EX)) {
 		if (errno == EINTR) continue;
 		err(EXIT_FAILURE, "LOCK_EX"); // ENOLCK?
 	}
@@ -449,7 +449,7 @@ static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 			return false;
 		}
 	} while (drt->wbuf.len);
-	while (flock(drt->root2id_fd, LOCK_UN)) {
+	while (flock(drt->root2off_fd, LOCK_UN)) {
 		if (errno == EINTR) continue;
 		err(EXIT_FAILURE, "LOCK_UN"); // ENOLCK?
 	}
@@ -463,14 +463,14 @@ static enum exc_iter dump_roots_iter(struct req *req,
 				struct dump_roots_tmp *drt,
 				Xapian::MSetIterator *i)
 {
-	CLEANUP_FBUF struct fbuf root_ids = {}; // " $ID0 $ID1 $IDx..\n"
+	CLEANUP_FBUF struct fbuf root_offs = {}; // " $ID0 $ID1 $IDx..\n"
 	try {
 		Xapian::Document doc = i->get_document();
-		if (!root2ids_str(&root_ids, &doc))
+		if (!root2offs_str(&root_offs, &doc))
 			return ITER_ABORT; // bad request, abort
 		for (int p = 0; p < req->pfxc; p++)
 			dump_roots_term(req, req->pfxv[p], drt,
-					&root_ids, &doc);
+					&root_offs, &doc);
 	} catch (const Xapian::DatabaseModifiedError & e) {
 		req->srch->db->reopen();
 		return ITER_RETRY;
@@ -502,28 +502,29 @@ static char *hsearch_enter_key(char *s)
 static bool cmd_dump_roots(struct req *req)
 {
 	CLEANUP_DUMP_ROOTS struct dump_roots_tmp drt = {};
-	drt.root2id_fd = -1;
+	drt.root2off_fd = -1;
 	if ((optind + 1) >= req->argc)
 		ABORT("usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR");
 	if (!req->pfxc)
 		ABORT("dump_roots requires -A PREFIX");
-	const char *root2id_file = req->argv[optind];
-	drt.root2id_fd = open(root2id_file, O_RDONLY);
-	if (drt.root2id_fd < 0)
-		EABORT("open(%s)", root2id_file);
-	if (fstat(drt.root2id_fd, &drt.sb)) // ENOMEM?
-		err(EXIT_FAILURE, "fstat(%s)", root2id_file);
+	const char *root2off_file = req->argv[optind];
+	drt.root2off_fd = open(root2off_file, O_RDONLY);
+	if (drt.root2off_fd < 0)
+		EABORT("open(%s)", root2off_file);
+	if (fstat(drt.root2off_fd, &drt.sb)) // ENOMEM?
+		err(EXIT_FAILURE, "fstat(%s)", root2off_file);
 	// each entry is at least 43 bytes ({OIDHEX}\0{INT}\0),
 	// so /32 overestimates the number of expected entries by
 	// ~%25 (as recommended by Linux hcreate(3) manpage)
 	size_t est = (drt.sb.st_size / 32) + 1; //+1 for "\0" termination
 	if ((uint64_t)drt.sb.st_size > (uint64_t)SIZE_MAX)
 		err(EXIT_FAILURE, "%s size too big (%lld bytes > %zu)",
-			root2id_file, (long long)drt.sb.st_size, SIZE_MAX);
+			root2off_file, (long long)drt.sb.st_size, SIZE_MAX);
 	drt.mm_ptr = mmap(NULL, drt.sb.st_size, PROT_READ,
-				MAP_PRIVATE, drt.root2id_fd, 0);
+				MAP_PRIVATE, drt.root2off_fd, 0);
 	if (drt.mm_ptr == MAP_FAILED)
-		err(EXIT_FAILURE, "mmap(%zu, %s)", drt.sb.st_size,root2id_file);
+		err(EXIT_FAILURE, "mmap(%zu, %s)",
+			drt.sb.st_size, root2off_file);
 	drt.entries = (char **)calloc(est * 2, sizeof(char *));
 	if (!drt.entries)
 		err(EXIT_FAILURE, "calloc(%zu * 2, %zu)", est, sizeof(char *));
