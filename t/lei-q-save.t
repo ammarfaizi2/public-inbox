@@ -305,5 +305,7 @@ EOM
 	is(scalar(@new), 2, 'got new message');
 	is_xdeeply([grep { $_ eq $orig[0] } @new], \@orig,
 		'original message preserved on up w/ threads');
+	lei_ok 'up', "$home/md", $d, \'multiple maildir up';
+	unlike $lei_err, qr! line \d+!s, 'no warnings';
 });
 done_testing;

@@ -612,8 +612,8 @@ sub _pre_augment_mbox {
 sub finish_output {
 	my ($self, $lei) = @_;
 	my $out = delete $lei->{1} // die 'BUG: no lei->{1}';
-	my $old = delete $lei->{old_1};
-	$lei->{1} = $old if $old;
+	my $old = delete $lei->{old_1} or return; # path only
+	$lei->{1} = $old;
 	return if $out->close; # reaps gzip|pigz|xz|bzip2
 	my $msg = "E: Error closing $lei->{ovv}->{dst}";
 	$? ? $lei->child_error($?) : ($msg .= " ($!)");

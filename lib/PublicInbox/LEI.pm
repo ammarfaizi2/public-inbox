@@ -493,6 +493,7 @@ sub x_it ($$) {
 	} elsif ($quit == \&CORE::exit) { # an admin (one-shot) command
 		exit($code >> 8);
 	} # else ignore if client disconnected
+	$self->dclose if $$ == $daemon_pid;
 }
 
 sub err ($;@) {
