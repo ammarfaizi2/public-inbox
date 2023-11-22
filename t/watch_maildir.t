@@ -16,7 +16,6 @@ use_ok 'PublicInbox::Emergency';
 my $addr = 'test-public@example.com';
 my $default_branch = PublicInbox::Import::default_branch;
 PublicInbox::Import::init_bare($git_dir);
-
 my $msg = <<EOF;
 From: user\@example.com
 To: $addr
@@ -26,6 +25,9 @@ Date: Sat, 18 Jun 2016 00:00:00 +0000
 
 something
 EOF
+
+my $ibx_ro = create_inbox 'ro', sub { $_[0]->add(PublicInbox::Eml->new($msg)) };
+
 PublicInbox::Emergency->new($maildir)->prepare(\$msg);
 ok(POSIX::mkfifo("$maildir/cur/fifo", 0777),
 	'create FIFO to ensure we do not get stuck on it :P');
@@ -56,6 +58,10 @@ my $cfg = cfg_new $tmpdir, <<EOF;
 	filter = PublicInbox::Filter::Vger
 [publicinboxlearn]
 	watchspam = maildir:$spamdir
+[publicinbox "test-ro"]
+	watch = false
+	inboxdir = $ibx_ro->{inboxdir}
+	address = ro-test\@example.com
 EOF
 my $cfg_path = $cfg->{-f};
 PublicInbox::Watch->new($cfg)->scan('full');
@@ -81,6 +87,10 @@ is(scalar @list, 2, 'two revisions in rev-list');
 @list = $git->qx('ls-tree', '-r', '--name-only', $default_branch);
 is(scalar @list, 0, 'tree is empty');
 is(unlink(glob("$spamdir/cur/*")), 1, 'unlinked trained spam');
+
+@list = $ibx_ro->git->qx(qw(ls-tree -r --name-only), $default_branch);
+undef $ibx_ro;
+is scalar(@list), 1, 'read-only inbox is unchanged';
 
 # check with scrubbing
 {

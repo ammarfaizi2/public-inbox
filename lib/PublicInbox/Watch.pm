@@ -85,7 +85,10 @@ sub new {
 		$watches = PublicInbox::Config::_array($watches);
 		for my $watch (@$watches) {
 			my $uri;
-			if (is_maildir($watch)) {
+			my $bool = $cfg->git_bool($watch);
+			if (defined $bool && !$bool) {
+				$ibx->{-watch_disabled} = 1;
+			} elsif (is_maildir($watch)) {
 				compile_watchheaders($ibx);
 				my ($new, $cur) = ("$watch/new", "$watch/cur");
 				my $cur_dst = $mdmap{$cur} //= [];
@@ -143,6 +146,7 @@ sub _done_for_now {
 
 sub remove_eml_i { # each_inbox callback
 	my ($ibx, $self, $eml, $loc) = @_;
+	return if $ibx->{-watch_disabled};
 
 	eval {
 		# try to avoid taking a lock or unnecessary spawning
