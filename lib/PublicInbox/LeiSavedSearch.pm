@@ -245,10 +245,10 @@ sub git { $_[0]->{git} //= PublicInbox::Git->new($_[0]->{ale}->git->{git_dir}) }
 
 sub pause_dedupe {
 	my ($self) = @_;
-	git($self)->cleanup;
-	my $lockfh = delete $self->{lockfh}; # from lock_for_scope_fast;
-	my $oidx = delete($self->{oidx}) // return;
-	$oidx->commit_lazy;
+	my ($git, $oidx) = delete @$self{qw(git oidx)};
+	$git->cleanup if $git;
+	$oidx->commit_lazy if $oidx;
+	delete $self->{lockfh}; # from lock_for_scope_fast;
 }
 
 sub reset_dedupe {
