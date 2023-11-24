@@ -997,7 +997,7 @@ sub init_join_postfork ($) {
 	require_progs('join', join => \@JOIN);
 	my $d2 = '([0-9]{2})';
 	my $dt_re = qr!([0-9]{4})$d2$d2$d2$d2$d2!;
-	if (my $cur = $JOIN{reset} ? current_join_data($self) : undef) {
+	if (my $cur = $JOIN{reset} ? undef : current_join_data($self)) {
 		if (($cur->{dt}->[1] // '') =~ m!\A$dt_re\z!o) {
 			my ($Y, $m, $d, $H, $M, $S) = ($1, $2, $3, $4, $5, $6);
 			my $t = timegm($S, $M, $H, $d, $m - 1, $Y);
