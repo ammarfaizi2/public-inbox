@@ -27,6 +27,28 @@ my $crypt = Crypt::CBC->new(-key => $key,
 			-cipher => 'Blowfish');
 $fh = $iv = $key = undef;
 
+my $allow_domains = '/etc/unsubscribe-milter.allow_domains';
+my $ALLOW_DOMAINS;
+if (open my $fh, '<', $allow_domains) {
+	local $/ = "\n";
+	chomp(my @l = <$fh>);
+	die "close: $!" unless eof($fh) && close($fh);
+	my %l = map { lc($_) => 1 } @l;
+	$ALLOW_DOMAINS = \%l;
+} else {
+	warn <<EOM;
+W: open $allow_domains: $! (all domains allowed)
+W: all mlmmj-looking messages will have List-Unsubscribe added,
+W: this is probably not what you want.
+EOM
+}
+
+# only allow users hitting SMTP server locally:
+# Is a config file necessary?  Regexps are ugly for IP addresses
+# but Net::Patricia (or similar) seems like overkill.  Ugly it is:
+my @ALLOW_ADDR = (qr/\A::1\z/, qr/\A127\./);
+my $ALLOW_ADDR = join('|', @ALLOW_ADDR);
+
 my %cbs;
 $cbs{connect} = sub {
 	my ($ctx) = @_;
@@ -88,10 +110,24 @@ $cbs{eom} = sub {
 	eval {
 		my $priv = $ctx->getpriv;
 		$ctx->setpriv({ header => {}, envrcpt => {} });
-		my @rcpt = keys %{$priv->{envrcpt}};
+
+		# XXX my postfix (3.5.18-0+deb11u1) + Sendmail::PMilter
+		# instance doesn't seem to get {client_addr}, but
+		# {daemon_addr} seems to make sense since I only want it
+		# to apply to users connecting to postfix locally:
+		if ($ALLOW_ADDR) {
+			my $x = $ctx->getsymval('{daemon_addr}');
+			return SMFIS_CONTINUE if $x && $x !~ /$ALLOW_ADDR/;
+		}
 
 		# one recipient, one unique HTTP(S) URL
+		my @rcpt = keys %{$priv->{envrcpt}};
 		return SMFIS_CONTINUE if @rcpt != 1;
+		if ($ALLOW_DOMAINS) {
+			my $addr = $ctx->getsymval('{mail_addr}');
+			my (undef, $d) = split /\@/, $addr;
+			return SMFIS_CONTINUE if !$ALLOW_DOMAINS->{$d};
+		}
 		return SMFIS_CONTINUE if archive_addr(lc($rcpt[0]));
 
 		my $unsub = $priv->{header}->{'list-unsubscribe'} || [];
