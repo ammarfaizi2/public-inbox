@@ -47,6 +47,20 @@ C<indexlevel> set to C<basic> and their respective Xapian
 public-inboxes where cross-posting is common, this allows
 significant space savings on Xapian indices.
 
+=item --dedupe=MSGID
+
+=item --dedupe
+
+Rerun deduplication on messages with the given Message-ID or
+all messages if no Message-ID is specified.  Deduplication rules may
+change and evolve over time, especially if filters are involved.
+
+C<--dedupe=MSGID> may be specified multiple times to deduplicate
+multiple Message-IDs.
+
+Use this if you see C<W: BUG? $MSGID not deduplicated properly>
+warnings from WWW logs.
+
 =item --gc
 
 Perform garbage collection instead of indexing.  Use this if
@@ -60,10 +74,6 @@ Forces a re-index of all messages in the extindex.  This can be
 used for in-place upgrades and bugfixes while read-only server
 processes are utilizing the index.  Keep in mind this roughly
 doubles the size of the already-large Xapian database.
-
-The extindex locks will be released roughly every 10s to
-allow L<public-inbox-mda(1)> and L<public-inbox-watch(1)>
-processes to write to the extindex.
 
 =item --fast
 
@@ -130,6 +140,14 @@ Default: none, uses C<publicinbox.indexBatchSize>
 
 Occasionally, public-inbox will update its schema version and
 require a full index by running this command.
+
+=head1 LOCKING
+
+It is safe to use C<--dedupe>, C<--gc> and C<--reindex> while
+other processes are writing to covered inboxes or extindex.
+The extindex locks will be released roughly every 10s to
+allow L<public-inbox-mda(1)> and L<public-inbox-watch(1)>
+processes to write to the extindex.
 
 =head1 CONTACT
 
