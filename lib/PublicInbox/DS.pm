@@ -629,7 +629,6 @@ sub long_step {
 		delete $self->{long_cb};
 		$self->long_response_done;
 		my $elapsed = now() - $t0;
-		my $fd = fileno($self->{sock});
 		$self->out(" deferred[$fd] done - %0.6f", $elapsed);
 		my $wbuf = $self->{wbuf}; # do NOT autovivify
 		requeue($self) unless $wbuf && @$wbuf;
