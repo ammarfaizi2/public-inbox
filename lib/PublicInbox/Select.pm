@@ -8,6 +8,7 @@
 package PublicInbox::Select;
 use v5.12;
 use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
+use Errno;
 
 sub new { bless {}, __PACKAGE__ } # fd => events
 
@@ -19,8 +20,9 @@ sub ep_wait {
 		vec($wvec, $fd, 1) = 1 if $ev & EPOLLOUT;
 	}
 	@$events = ();
-	my $n = select($rvec, $wvec, undef, $msec < 0 ? undef : ($msec/1000));
-	return if $n == 0;
+	my $to = $msec < 0 ? undef : ($msec/1000);
+	my $n = select $rvec, $wvec, undef, $to or return; # timeout expired
+	return if $n < 0 && $! == Errno::EINTR; # caller recalculates timeout
 	die "select: $!" if $n < 0;
 	while (my ($fd, $ev) = each %$self) {
 		if (vec($rvec, $fd, 1) || vec($wvec, $fd, 1)) {

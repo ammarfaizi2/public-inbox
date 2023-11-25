@@ -26,11 +26,9 @@ sub ep_wait {
 		push(@pset, $fd, $pevents);
 	}
 	@$events = ();
-	do {
-		$n = IO::Poll::_poll($timeout_msec, @pset);
-	} while ($n < 0 && $! == Errno::EINTR);
+	$n = IO::Poll::_poll($timeout_msec, @pset) or return; # timeout expired
+	return if $n < 0 && $! == Errno::EINTR; # caller recalculates timeout
 	die "poll: $!" if $n < 0;
-	return if $n == 0;
 	while (defined($fd = shift @pset)) {
 		$revents = shift @pset or next; # no event
 		if ($revents & POLLNVAL) {
