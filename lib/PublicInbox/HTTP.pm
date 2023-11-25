@@ -76,7 +76,7 @@ sub new ($$$) {
 sub event_step { # called by PublicInbox::DS
 	my ($self) = @_;
 	local $SIG{__WARN__} = $self->{srv_env}->{'pi-httpd.warn_cb'};
-	return unless $self->flush_write && $self->{sock};
+	return unless $self->flush_write && $self->{sock} && !$self->{forward};
 
 	# only read more requests if we've drained the write buffer,
 	# otherwise we can be buffering infinitely w/o backpressure
@@ -230,6 +230,13 @@ sub identity_write ($$) {
 
 sub response_done {
 	my ($self, $alive) = @_;
+	if (my $forward = delete $self->{forward}) { # avoid recursion
+		eval { $forward->close };
+		if ($@) {
+			warn "response forward->close error: $@";
+			return $self->close; # idempotent
+		}
+	}
 	delete $self->{env}; # we're no longer busy
 	# HEAD requests set $alive = 3 so we don't send "0\r\n\r\n";
 	$self->write(\"0\r\n\r\n") if $alive == 2;
@@ -267,14 +274,6 @@ sub getline_pull {
 	} elsif ($@) {
 		warn "response ->getline error: $@";
 		$self->close;
-	}
-	# avoid recursion
-	if (delete $self->{forward}) {
-		eval { $forward->close };
-		if ($@) {
-			warn "response ->close error: $@";
-			$self->close; # idempotent
-		}
 	}
 	response_done($self, delete $self->{alive});
 }
