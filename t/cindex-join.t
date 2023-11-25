@@ -41,7 +41,7 @@ EOM
 
 while (my ($url, $v, $ng) = splice(@inboxes, 0, 3)) {
 	my ($key) = ($url =~ m!/([^/]+)\z!);
-	my @opt = (version => $v, tmpdir => "$tmpdir/$key" -no_gc => 1);
+	my @opt = (version => $v, tmpdir => "$tmpdir/$key", -no_gc => 1);
 	$inboxes{$key} = create_inbox $key, @opt, sub {
 		my ($im, $ibx) = @_;
 		$im->done;
