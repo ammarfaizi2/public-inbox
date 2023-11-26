@@ -28,12 +28,10 @@ sub mkreq {
 sub start_helper {
 	my @argv = @_;
 	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0);
-	require PublicInbox::XapHelperCxx;
 	my $cls = 'PublicInbox::XapHelperCxx';
 	my $env;
-	my $cmd = eval { PublicInbox::XapHelperCxx::cmd() };
+	my $cmd = eval "require $cls; ${cls}::cmd()";
 	if ($@) { # fall back to Perl + XS|SWIG
-		require PublicInbox::XapHelper;
 		$cls = 'PublicInbox::XapHelper';
 		# ensure the child process has the same @INC we do:
 		$env = { PERL5LIB => join(':', @INC) };

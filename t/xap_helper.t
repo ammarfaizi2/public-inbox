@@ -149,7 +149,7 @@ unless ($ENV{TEST_XH_CXX_ONLY}) {
 SKIP: {
 	require PublicInbox::XapHelperCxx;
 	my $cmd = eval { PublicInbox::XapHelperCxx::cmd() };
-	skip "XapHelperCxx build: $@", 1 if $@ || $ENV{PI_NO_CXX};
+	skip "XapHelperCxx build: $@", 1 if $@;
 
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
 	my $ar = $test->(@$cmd, '-j0');

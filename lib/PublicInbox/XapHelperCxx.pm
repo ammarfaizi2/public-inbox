@@ -110,6 +110,7 @@ sub check_build () {
 
 # returns spawn arg
 sub cmd {
+	die 'PI_NO_CXX set' if $ENV{PI_NO_CXX};
 	check_build();
 	my @cmd;
 	if (my $v = $ENV{VALGRIND}) {
