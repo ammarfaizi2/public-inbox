@@ -8,7 +8,7 @@
 package PublicInbox::XapHelperCxx;
 use v5.12;
 use PublicInbox::Spawn qw(run_die run_qx which);
-use PublicInbox::IO qw(read_all try_cat write_file);
+use PublicInbox::IO qw(try_cat write_file);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
@@ -62,11 +62,7 @@ sub build () {
 	my ($prog) = ($bin =~ m!/([^/]+)\z!);
 	my $lk = PublicInbox::Lock->new("$dir/$prog.lock")->lock_for_scope;
 	open my $fh, '>', "$dir/$prog.cpp";
-	for (@srcs) {
-		say $fh qq(# line 1 "$_");
-		open my $rfh, '<', $_;
-		print $fh read_all($rfh);
-	}
+	say $fh qq(# include "$_") for @srcs;
 	print $fh PublicInbox::Search::generate_cxx();
 	print $fh PublicInbox::CodeSearch::generate_cxx();
 	close $fh;
@@ -88,7 +84,7 @@ sub build () {
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
 	my @xflags = split(' ', "$fl $xflags"); # ' ' awk-mode eats leading WS
 	my @cflags = grep(!/\A-(?:Wl|l|L)/, @xflags);
-	run_die([$cxx, '-c', "$prog.cpp", @cflags]);
+	run_die([$cxx, '-c', "$prog.cpp", '-I', $srcpfx, @cflags]);
 	run_die([$cxx, '-o', "$prog.tmp", "$prog.o", @xflags]);
 	unlink "$prog.cpp", "$prog.o";
 	write_file '>', 'XFLAGS.tmp', $xflags, "\n";
