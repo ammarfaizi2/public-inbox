@@ -15,10 +15,8 @@ use Errno qw(EINTR EAGAIN);
 
 sub waitcb { # awaitpid callback
 	my ($pid, $errref, $cb, @args) = @_;
-	$errref //= \my $workaround_await_pids_clobbered;
-	$$errref = $?; # sets .cerr for _close
+	$$errref = $? if $errref; # sets .cerr for _close
 	$cb->($pid, @args) if $cb; # may clobber $?
-	$? = $$errref;
 }
 
 sub attach_pid {
@@ -52,7 +50,7 @@ sub close {
 	} else { # wait synchronously
 		my $w = awaitpid($reap->[1]);
 	}
-	$? ? '' : $ret; # use $?, AWAIT_PIDS may be cleared on ->Reset (FIXME?)
+	$? ? '' : $ret;
 }
 
 sub DESTROY {

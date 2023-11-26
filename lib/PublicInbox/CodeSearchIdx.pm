@@ -1292,7 +1292,6 @@ sub cidx_run { # main entry point
 
 	local @PublicInbox::DS::post_loop_do = (\&shards_active);
 	PublicInbox::DS::event_loop($MY_SIG, $SIGSET);
-	PublicInbox::DS->Reset;
 	$self->lock_release(!!$NCHANGE);
 	show_json($self);
 }

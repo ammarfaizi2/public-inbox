@@ -703,7 +703,6 @@ sub run {
 	local %POST_ACCEPT;
 
 	daemon_loop();
-	PublicInbox::DS->Reset;
 	# ->DESTROY runs when $for_destroy goes out-of-scope
 }
 
