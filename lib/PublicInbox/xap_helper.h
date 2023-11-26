@@ -980,7 +980,8 @@ static void sigp(int sig) // parent signal handler
 {
 	static const char eagain[] = "signals coming in too fast";
 	static const char bad_sig[] = "BUG: bad sig\n";
-	static const char write_err[] = "BUG: sigp write: ";
+	static const char write_errno[] = "BUG: sigp write (errno)";
+	static const char write_zero[] = "BUG: sigp write wrote zero bytes";
 	char c = 0;
 
 	switch (sig) {
@@ -992,23 +993,17 @@ static void sigp(int sig) // parent signal handler
 		_exit(EXIT_FAILURE);
 	}
 	ssize_t w = write(pipefds[1], &c, 1);
-	if (w == sizeof(c)) return;
-	int e = 0;
-	if (w < 0) {
-		e = errno;
-		if (e == EAGAIN) {
-			write(STDERR_FILENO, eagain, sizeof(eagain) - 1);
-			return;
-		}
+	if (w > 0) return;
+	if (w < 0 && errno == EAGAIN) {
+		write(STDERR_FILENO, eagain, sizeof(eagain) - 1);
+		return;
+	} else if (w == 0) {
+		write(STDERR_FILENO, write_zero, sizeof(write_zero) - 1);
+	} else {
+		// strerror isn't technically async-signal-safe, and
+		// strerrordesc_np+strerrorname_np isn't portable
+		write(STDERR_FILENO, write_errno, sizeof(write_errno) - 1);
 	}
-	struct iovec iov[3];
-	iov[0].iov_base = (void *)write_err;
-	iov[0].iov_len = sizeof(write_err) - 1;
-	iov[1].iov_base = (void *)(e ? strerror(e) : "zero write");
-	iov[1].iov_len = strlen((const char *)iov[1].iov_base);
-	iov[2].iov_base = (void *)"\n";
-	iov[2].iov_len = 1;
-	(void)writev(STDERR_FILENO, iov, MY_ARRAY_SIZE(iov));
 	_exit(EXIT_FAILURE);
 }
 
