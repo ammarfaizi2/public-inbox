@@ -9,6 +9,7 @@ use PublicInbox::DS qw(awaitpid);
 our @EXPORT_OK = qw(poll_in read_all try_cat write_file);
 use Carp qw(croak);
 use IO::Poll qw(POLLIN);
+use Errno qw(EINTR EAGAIN);
 # don't autodie in top-level for Perl 5.16.3 (and maybe newer versions)
 # we have our own ->close, so we scope autodie into each sub
 
@@ -18,7 +19,7 @@ sub waitcb { # awaitpid callback
 	$cb->($pid, @args) if $cb;
 }
 
-sub attach_pid ($$;@) {
+sub attach_pid {
 	my ($io, $pid, @cb_arg) = @_;
 	bless $io, __PACKAGE__;
 	# we share $err (and not $self) with awaitpid to avoid a ref cycle
@@ -85,6 +86,56 @@ sub try_cat ($) {
 	my ($path) = @_;
 	open(my $fh, '<', $path) or return '';
 	read_all $fh;
+}
+
+# TODO: move existing HTTP/IMAP/NNTP/POP3 uses of rbuf here
+sub my_bufread {
+	my ($io, $len) = @_;
+	my $rbuf = ${*$io}{pi_io_rbuf} //= \(my $new = '');
+	my $left = $len - length($$rbuf);
+	my $r;
+	while ($left > 0) {
+		$r = sysread($io, $$rbuf, $left, length($$rbuf));
+		if ($r) {
+			$left -= $r;
+		} elsif (defined($r)) { # EOF
+			return 0;
+		} else {
+			next if ($! == EAGAIN and poll_in($io));
+			next if $! == EINTR; # may be set by sysread or poll_in
+			return; # unrecoverable error
+		}
+	}
+	my $no_pad = substr($$rbuf, 0, $len, '');
+	delete(${*$io}{pi_io_rbuf}) if $$rbuf eq '';
+	\$no_pad;
+}
+
+# always uses "\n"
+sub my_readline {
+	my ($io) = @_;
+	my $rbuf = ${*$io}{pi_io_rbuf} //= \(my $new = '');
+	while (1) {
+		if ((my $n = index($$rbuf, "\n")) >= 0) {
+			my $ret = substr($$rbuf, 0, $n + 1, '');
+			delete(${*$io}{pi_io_rbuf}) if $$rbuf eq '';
+			return $ret;
+		}
+		my $r = sysread($io, $$rbuf, 65536, length($$rbuf));
+		if (!defined($r)) {
+			next if ($! == EAGAIN and poll_in($io));
+			next if $! == EINTR; # may be set by sysread or poll_in
+			return; # unrecoverable error
+		} elsif ($r == 0) { # return whatever's left on EOF
+			delete(${*$io}{pi_io_rbuf});
+			return $$rbuf;
+		} # else { continue
+	}
+}
+
+sub has_rbuf {
+	my ($io) = @_;
+	defined(${*$io}{pi_io_rbuf});
 }
 
 1;

@@ -21,7 +21,6 @@ use autodie qw(socketpair);
 #	pid.owner => process which spawned {pid}
 #	in => same as {sock}, for compatibility with PublicInbox::Git
 #	inflight => array (see PublicInbox::Git)
-#	rbuf => scalarref, may be non-existent or empty
 sub new  {
 	my ($opt) = @_;
 	my $self = bless {}, __PACKAGE__;

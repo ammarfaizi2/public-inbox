@@ -14,11 +14,11 @@ use autodie qw(socketpair read);
 use POSIX ();
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
-use Errno qw(EINTR EAGAIN);
+use Errno qw(EAGAIN);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use File::Spec ();
 use PublicInbox::Spawn qw(spawn popen_rd run_qx which);
-use PublicInbox::IO qw(poll_in read_all try_cat);
+use PublicInbox::IO qw(read_all try_cat);
 use PublicInbox::Tmpfile;
 use Carp qw(croak carp);
 use PublicInbox::SHA qw(sha_all);
@@ -166,43 +166,6 @@ sub _sock_cmd {
 	$self->{sock} = PublicInbox::IO::attach_pid($s1, $pid);
 }
 
-sub my_read ($$$) {
-	my ($fh, $rbuf, $len) = @_;
-	my $left = $len - length($$rbuf);
-	my $r;
-	while ($left > 0) {
-		$r = sysread($fh, $$rbuf, $left, length($$rbuf));
-		if ($r) {
-			$left -= $r;
-		} elsif (defined($r)) { # EOF
-			return 0;
-		} else {
-			next if ($! == EAGAIN and poll_in($fh));
-			next if $! == EINTR; # may be set by sysread or poll_in
-			return; # unrecoverable error
-		}
-	}
-	my $no_pad = substr($$rbuf, 0, $len, '');
-	\$no_pad;
-}
-
-sub my_readline ($$) {
-	my ($fh, $rbuf) = @_;
-	while (1) {
-		if ((my $n = index($$rbuf, "\n")) >= 0) {
-			return substr($$rbuf, 0, $n + 1, '');
-		}
-		my $r = sysread($fh, $$rbuf, 65536, length($$rbuf)) and next;
-
-		# return whatever's left on EOF
-		return substr($$rbuf, 0, length($$rbuf)+1, '') if defined($r);
-
-		next if ($! == EAGAIN and poll_in($fh));
-		next if $! == EINTR; # may be set by sysread or poll_in
-		return; # unrecoverable error
-	}
-}
-
 sub cat_async_retry ($$) {
 	my ($self, $old_inflight) = @_;
 
@@ -234,16 +197,15 @@ sub cat_async_step ($$) {
 	my ($self, $inflight) = @_;
 	die 'BUG: inflight empty or odd' if scalar(@$inflight) < 3;
 	my ($req, $cb, $arg) = @$inflight[0, 1, 2];
-	my $rbuf = delete($self->{rbuf}) // \(my $new = '');
 	my ($bref, $oid, $type, $size);
-	my $head = my_readline($self->{sock}, $rbuf);
+	my $head = $self->{sock}->my_readline;
 	my $cmd = ref($req) ? $$req : $req;
 	# ->fail may be called via Gcf2Client.pm
 	my $info = $self->{-bc} && substr($cmd, 0, 5) eq 'info ';
 	if ($head =~ /^([0-9a-f]{40,}) (\S+) ([0-9]+)$/) {
 		($oid, $type, $size) = ($1, $2, $3 + 0);
 		unless ($info) { # --batch-command
-			$bref = my_read($self->{sock}, $rbuf, $size + 1) or
+			$bref = $self->{sock}->my_bufread($size + 1) or
 				$self->fail(defined($bref) ?
 						'read EOF' : "read: $!");
 			chop($$bref) eq "\n" or
@@ -268,7 +230,6 @@ sub cat_async_step ($$) {
 		my $err = $! ? " ($!)" : '';
 		$self->fail("bad result from async cat-file: $head$err");
 	}
-	$self->{rbuf} = $rbuf if $$rbuf ne '';
 	splice(@$inflight, 0, 3); # don't retry $cb on ->fail
 	eval { $cb->($bref, $oid, $type, $size, $arg) };
 	async_err($self, $req, $oid, $@, $info ? 'check' : 'cat') if $@;
@@ -312,17 +273,15 @@ sub check_async_step ($$) {
 	my ($ck, $inflight) = @_;
 	die 'BUG: inflight empty or odd' if scalar(@$inflight) < 3;
 	my ($req, $cb, $arg) = @$inflight[0, 1, 2];
-	my $rbuf = delete($ck->{rbuf}) // \(my $new = '');
-	chomp(my $line = my_readline($ck->{sock}, $rbuf));
+	chomp(my $line = $ck->{sock}->my_readline);
 	my ($hex, $type, $size) = split(/ /, $line);
 
 	# git <2.21 would show `dangling' (2.21+ shows `ambiguous')
 	# https://public-inbox.org/git/20190118033845.s2vlrb3wd3m2jfzu@dcvr/T/
 	if ($hex eq 'dangling') {
-		my $ret = my_read($ck->{sock}, $rbuf, $type + 1);
+		my $ret = $ck->{sock}->my_bufread($type + 1);
 		$ck->fail(defined($ret) ? 'read EOF' : "read: $!") if !$ret;
 	}
-	$ck->{rbuf} = $rbuf if $$rbuf ne '';
 	splice(@$inflight, 0, 3); # don't retry $cb on ->fail
 	eval { $cb->(undef, $hex, $type, $size, $arg) };
 	async_err($ck, $req, $hex, $@, 'check') if $@;
@@ -643,8 +602,8 @@ sub event_step {
 		$self->cat_async_step($inflight);
 		return $self->close unless $self->{sock};
 		# don't loop here to keep things fair, but we must requeue
-		# if there's already-read data in rbuf
-		$self->requeue if exists($self->{rbuf});
+		# if there's already-read data in pi_io_rbuf
+		$self->requeue if $self->{sock}->has_rbuf;
 	}
 }
 
@@ -670,7 +629,7 @@ sub close {
 			warn "E: (in abort) $req: $@" if $@;
 		}
 	}
-	delete @$self{qw(-bc err_c inflight rbuf)};
+	delete @$self{qw(-bc err_c inflight)};
 	delete($self->{epwatch}) ? $self->SUPER::close : delete($self->{sock});
 }
 
