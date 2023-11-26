@@ -40,6 +40,7 @@ sub start_helper {
 		$cmd = [$^X, ($^W ? ('-w') : ()), "-M$cls", '-e',
 			$cls.'::start(@ARGV)', '--' ];
 	}
+	push @$cmd, @argv;
 	my $pid = spawn($cmd, $env, { 0 => $in });
 	my $self = bless { io => $sock, impl => $cls }, __PACKAGE__;
 	PublicInbox::IO::attach_pid($sock, $pid);
