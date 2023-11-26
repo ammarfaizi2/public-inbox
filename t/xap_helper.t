@@ -173,8 +173,7 @@ my @id2root;
 my $ar;
 for my $n (@NO_CXX) {
 	local $ENV{PI_NO_CXX} = $n;
-	my ($xhc, $pid) = PublicInbox::XapClient::start_helper('-j0');
-	$ar = PublicInbox::AutoReap->new($pid);
+	my $xhc = PublicInbox::XapClient::start_helper('-j0');
 	pipe(my $err_r, my $err_w);
 
 	# git patch-id --stable <t/data/0001.patch | awk '{print $1}'

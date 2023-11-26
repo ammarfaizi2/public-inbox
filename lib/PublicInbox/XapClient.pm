@@ -41,7 +41,9 @@ sub start_helper {
 			$cls.'::start(@ARGV)', '--' ];
 	}
 	my $pid = spawn($cmd, $env, { 0 => $in });
-	((bless { io => $sock, impl => $cls }, __PACKAGE__), $pid);
+	my $self = bless { io => $sock, impl => $cls }, __PACKAGE__;
+	PublicInbox::IO::attach_pid($sock, $pid);
+	$self;
 }
 
 1;

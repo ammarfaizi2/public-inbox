@@ -516,15 +516,9 @@ sub shard_commit { # via wq_io_do
 	send($op_p, "shard_done $self->{shard}", 0);
 }
 
-sub start_xhc () {
-	my ($xhc, $pid) = PublicInbox::XapClient::start_helper("-j$NPROC");
-	awaitpid($pid, \&cmd_done, ['xap_helper', "-j$NPROC"]);
-	$xhc;
-}
-
 sub dump_roots_start {
 	my ($self, $do_join) = @_;
-	$XHC //= start_xhc;
+	$XHC //= PublicInbox::XapClient::start_helper("-j$NPROC");
 	$do_join // die 'BUG: no $do_join';
 	progress($self, 'dumping IDs from coderepos');
 	local $self->{xdb};
@@ -577,7 +571,7 @@ EOM
 
 sub dump_ibx_start {
 	my ($self, $do_join) = @_;
-	$XHC //= start_xhc;
+	$XHC //= PublicInbox::XapClient::start_helper("-j$NPROC");
 	my ($sort_opt, $fold_opt);
 	pipe(local $sort_opt->{0}, $DUMP_IBX_WPIPE);
 	pipe(local $fold_opt->{0}, local $sort_opt->{1});
