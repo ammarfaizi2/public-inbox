@@ -31,15 +31,16 @@ sub new  {
 	$opt->{0} = $opt->{1} = $s2;
 	my $cmd = [$^X, $^W ? ('-w') : (),
 			qw[-MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop]];
-	PublicInbox::IO::attach_pid($s1, spawn($cmd, $env, $opt));
 	$self->{inflight} = [];
+	PublicInbox::IO::attach_pid($s1, spawn($cmd, $env, $opt),
+			\&PublicInbox::Git::gcf_drain, $self->{inflight});
 	$self->{epwatch} = \undef; # for Git->cleanup
 	$self->SUPER::new($s1, EPOLLIN);
 }
 
 sub gcf2_async ($$$;$) {
 	my ($self, $req, $cb, $arg) = @_;
-	my $inflight = $self->{inflight} or return $self->close;
+	my $inflight = $self->gcf_inflight or return;
 	PublicInbox::Git::write_all($self, $req, \&cat_async_step, $inflight);
 	push @$inflight, \$req, $cb, $arg; # ref prevents Git.pm retries
 }
@@ -49,6 +50,7 @@ sub alternates_changed {}
 
 no warnings 'once';
 
+*gcf_inflight = \&PublicInbox::Git::gcf_inflight; # for event_step
 *cat_async_step = \&PublicInbox::Git::cat_async_step; # for event_step
 *event_step = \&PublicInbox::Git::event_step;
 *fail = \&PublicInbox::Git::fail;

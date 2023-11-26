@@ -40,7 +40,7 @@ sub ibx_async_prefetch {
 	my ($ibx, $oid, $cb, $arg) = @_;
 	my $git = $ibx->git;
 	if (!defined($ibx->{topdir}) && $GCF2C) {
-		if (!@{$GCF2C->{inflight} // []}) {
+		if (!@{$GCF2C->gcf_inflight // []}) {
 			$oid .= " $git->{git_dir}\n";
 			return $GCF2C->gcf2_async($oid, $cb, $arg); # true
 		}

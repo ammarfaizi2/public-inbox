@@ -15,8 +15,10 @@ use Errno qw(EINTR EAGAIN);
 
 sub waitcb { # awaitpid callback
 	my ($pid, $errref, $cb, @args) = @_;
+	$errref //= \my $workaround_await_pids_clobbered;
 	$$errref = $?; # sets .cerr for _close
-	$cb->($pid, @args) if $cb;
+	$cb->($pid, @args) if $cb; # may clobber $?
+	$? = $$errref;
 }
 
 sub attach_pid {
@@ -33,6 +35,11 @@ sub attached_pid {
 	${${*$io}{pi_io_reap} // []}[1];
 }
 
+sub owner_pid {
+	my ($io) = @_;
+	${${*$io}{pi_io_reap} // [-1]}[0];
+}
+
 # caller cares about error result if they call close explicitly
 # reap->[2] may be set before this is called via waitcb
 sub close {
@@ -40,8 +47,12 @@ sub close {
 	my $ret = $io->SUPER::close;
 	my $reap = delete ${*$io}{pi_io_reap};
 	return $ret unless $reap && $reap->[0] == $$;
-	${$reap->[2]} // (my $w = awaitpid($reap->[1])); # sets [2]
-	($? = ${$reap->[2]}) ? '' : $ret;
+	if (defined ${$reap->[2]}) { # reap_pids already reaped asynchronously
+		$? = ${$reap->[2]};
+	} else { # wait synchronously
+		my $w = awaitpid($reap->[1]);
+	}
+	$? ? '' : $ret; # use $?, AWAIT_PIDS may be cleared on ->Reset (FIXME?)
 }
 
 sub DESTROY {
