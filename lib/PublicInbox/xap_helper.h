@@ -360,6 +360,13 @@ static void xclose(int fd)
 		EABORT("BUG: close");
 }
 
+static size_t off2size(off_t n)
+{
+	if (n < 0 || (uintmax_t)n > SIZE_MAX)
+		ABORT("off_t out of size_t range: %lld\n", (long long)n);
+	return (size_t)n;
+}
+
 #define CLEANUP_DUMP_ROOTS __attribute__((__cleanup__(dump_roots_ensure)))
 static void dump_roots_ensure(void *ptr)
 {
@@ -367,8 +374,9 @@ static void dump_roots_ensure(void *ptr)
 	if (drt->root2off_fd >= 0)
 		xclose(drt->root2off_fd);
 	hdestroy(); // idempotent
-	if (drt->mm_ptr && munmap(drt->mm_ptr, drt->sb.st_size))
-		EABORT("BUG: munmap(%p, %zu)", drt->mm_ptr, drt->sb.st_size);
+	size_t size = off2size(drt->sb.st_size);
+	if (drt->mm_ptr && munmap(drt->mm_ptr, size))
+		EABORT("BUG: munmap(%p, %zu)", drt->mm_ptr, size);
 	free(drt->entries);
 	fbuf_ensure(&drt->wbuf);
 }
@@ -516,20 +524,18 @@ static bool cmd_dump_roots(struct req *req)
 	// each entry is at least 43 bytes ({OIDHEX}\0{INT}\0),
 	// so /32 overestimates the number of expected entries by
 	// ~%25 (as recommended by Linux hcreate(3) manpage)
-	size_t est = (drt.sb.st_size / 32) + 1; //+1 for "\0" termination
-	if ((uint64_t)drt.sb.st_size > (uint64_t)SIZE_MAX)
-		err(EXIT_FAILURE, "%s size too big (%lld bytes > %zu)",
-			root2off_file, (long long)drt.sb.st_size, SIZE_MAX);
-	drt.mm_ptr = mmap(NULL, drt.sb.st_size, PROT_READ,
+	size_t size = off2size(drt.sb.st_size);
+	size_t est = (size / 32) + 1; //+1 for "\0" termination
+	drt.mm_ptr = mmap(NULL, size, PROT_READ,
 				MAP_PRIVATE, drt.root2off_fd, 0);
 	if (drt.mm_ptr == MAP_FAILED)
-		err(EXIT_FAILURE, "mmap(%zu, %s)",
-			drt.sb.st_size, root2off_file);
-	drt.entries = (char **)calloc(est * 2, sizeof(char *));
+		err(EXIT_FAILURE, "mmap(%zu, %s)", size, root2off_file);
+	size_t asize = est * 2;
+	if (asize < est) ABORT("too many entries: %zu", est);
+	drt.entries = (char **)calloc(asize, sizeof(char *));
 	if (!drt.entries)
 		err(EXIT_FAILURE, "calloc(%zu * 2, %zu)", est, sizeof(char *));
-	size_t tot = split2argv(drt.entries, (char *)drt.mm_ptr,
-				drt.sb.st_size, est * 2);
+	size_t tot = split2argv(drt.entries, (char *)drt.mm_ptr, size, asize);
 	if (tot <= 0) return false; // split2argv already warned on error
 	if (!hcreate(est))
 		err(EXIT_FAILURE, "hcreate(%zu)", est);
