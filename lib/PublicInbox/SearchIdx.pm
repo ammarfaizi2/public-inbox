@@ -414,6 +414,7 @@ sub index_list_id ($$$) {
 	for my $l ($hdr->header_raw('List-Id')) {
 		$l =~ /<([^>]+)>/ or next;
 		my $lid = lc $1;
+		$lid =~ tr/\n\t\r\0//d; # same rules as Message-ID
 		$doc->add_boolean_term('G' . $lid);
 		index_phrase($self, $lid, 1, 'XL'); # probabilistic
 	}
