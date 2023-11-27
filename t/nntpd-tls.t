@@ -187,8 +187,12 @@ for my $args (
 
 	my $s = tcp_connect($nntps);
 	syswrite($s, '->accept_SSL_ will fail on this!');
-	ok(!sysread($s, my $rbuf, 128), 'EOF or ECONNRESET on ->accept_SSL fail');
-
+	my @r;
+	do { # some platforms or OpenSSL versions need an extra read
+		push @r, sysread($s, my $rbuf, 128);
+	} while ($r[-1] && @r < 2);
+	ok(!$r[-1], 'EOF or ECONNRESET on ->accept_SSL fail') or
+		diag explain(\@r);
 	$c = undef;
 	$td->kill;
 	$td->join;
