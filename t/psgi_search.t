@@ -18,7 +18,8 @@ local $ENV{TZ} = 'UTC';
 my $digits = '10010260936330';
 my $ua = 'Pine.LNX.4.10';
 my $mid = "$ua.$digits.2460-100000\@penguin.transmeta.com";
-my $ibx = create_inbox 'git', indexlevel => 'full', tmpdir => "$tmpdir/1", sub {
+my $ibx = create_inbox '26-git', indexlevel => 'full', tmpdir => "$tmpdir/1",
+sub {
 	my ($im) = @_;
 	# n.b. these headers are not properly RFC2047-encoded
 	$im->add(PublicInbox::Eml->new(<<EOF)) or BAIL_OUT;
@@ -47,6 +48,17 @@ EOF
 Message-ID: <no-subject-at-all@example.com>
 From: no subject at all <no-subject-at-all@example.com>
 To: git@vger.kernel.org
+
+EOF
+	$im->add(PublicInbox::Eml->new(<<'EOF')) or BAIL_OUT;
+Message-ID: <ampersand@example.com>
+From: <e@example.com>
+To: git@vger.kernel.org
+Subject: git & ampersand
+
+hi +++ b/foo
+x=y
+s'more
 
 EOF
 };
@@ -155,6 +167,19 @@ test_psgi(sub { $www->call(@_) }, sub {
 	is($res->code, 200, 'successful mbox download w/ threads');
 	gunzip(\($res->content) => \(my $after));
 	isnt($before, $after);
+
+	$res = $cb->(GET('/test/?q=git+%26+ampersand&x=A'));
+	is $res->code, 200, 'Atom hit with ampersand';
+	unlike $res->content, qr/git\+&\+ampersand/, '& is HTML-escaped';
+
+	$res = $cb->(GET('/test/?q=%22hi+%2b%2b%2b+b/foo%22&x=A'));
+	is $res->code, 200, 'slashes and plusses search hit';
+	like $res->content, qr!q=%22hi\+(?:%2[bB]){3}\+b/foo%22!,
+		'+ and " escaped, but slash not escaped in query';
+
+	$res = $cb->(GET(q{/test/?q=%22s'more%22&x=A}));
+	is $res->code, 200, 'single quote inside phrase';
+	# TODO: more tests and odd cases
 });
 
 done_testing();

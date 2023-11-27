@@ -125,7 +125,7 @@ sub uniq_mids ($;$) {
 	\@ret;
 }
 
-# RFC3986, section 3.3:
+# RFC3986, section 3.3 (pathnames only):
 sub MID_ESC () { '^A-Za-z0-9\-\._~!\$\&\'\(\)\*\+,;=:@' }
 sub mid_escape ($) { uri_escape_utf8($_[0], MID_ESC) }
 

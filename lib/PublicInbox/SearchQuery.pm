@@ -6,7 +6,7 @@ package PublicInbox::SearchQuery;
 use strict;
 use v5.10.1;
 use URI::Escape qw(uri_escape);
-use PublicInbox::MID qw(MID_ESC);
+use PublicInbox::Hval qw(ascii_html);
 our $LIM = 200;
 
 sub new {
@@ -35,9 +35,13 @@ sub qs_html {
 	}
 	my $qs = '';
 	if (defined(my $q = $self->{'q'})) {
-		$q = uri_escape($q, MID_ESC);
+		# not using MID_ESC since that's for the path component and
+		# this is for the query component.  Unlike MID_ESC,
+		# this disallows [\&\'\+=] and allows slash [/] for
+		# nicer looking dfn: queries
+		$q = uri_escape($q, '^A-Za-z0-9\-\._~!\$\(\)\*,;:@/');
 		$q =~ s/%20/+/g; # improve URL readability
-		$qs .= "q=$q";
+		$qs .= 'q='.ascii_html($q);
 	}
 	if (my $o = $self->{o}) { # ignore o == 0
 		$qs .= "&amp;o=$o";
