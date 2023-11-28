@@ -91,8 +91,9 @@ sub git_quote ($) {
 
 sub new {
 	my ($class, $git_dir) = @_;
+	$git_dir .= '/';
 	$git_dir =~ tr!/!/!s;
-	$git_dir =~ s!/*\z!!s;
+	chop $git_dir;
 	# may contain {-tmp} field for File::Temp::Dir
 	bless { git_dir => $git_dir }, $class
 }
