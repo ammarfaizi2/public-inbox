@@ -6,6 +6,7 @@ use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use_ok 'PublicInbox::Admin';
+use autodie;
 my $v1 = create_inbox 'v1', -no_gc => 1, sub {};
 my ($tmpdir, $for_destroy) = tmpdir();
 my $git_dir = $v1->{inboxdir};
@@ -23,6 +24,17 @@ SKIP: {
 };
 
 *resolve_inboxdir = \&PublicInbox::Admin::resolve_inboxdir;
+*resolve_git_dir = \&PublicInbox::Admin::resolve_git_dir;
+
+{
+	symlink $git_dir, my $sym = "$tmpdir/v1-symlink.git";
+	for my $d ('') { # TODO: should work inside $sym/objects
+		local $ENV{PWD} = $sym.$d;
+		chdir $sym.$d;
+		is resolve_git_dir('.'), $sym,
+			"symlink preserved from {SYMLINKDIR}.git$d";
+	}
+}
 
 # v1
 is(resolve_inboxdir($git_dir), $git_dir, 'top-level GIT_DIR resolved');

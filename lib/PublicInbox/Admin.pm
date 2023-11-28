@@ -63,15 +63,32 @@ sub resolve_inboxdir {
 	$dir;
 }
 
+sub valid_pwd {
+	my $pwd = $ENV{PWD} // return;
+	my @st_pwd = stat $pwd or return;
+	my @st_cwd = stat '.' or die "stat(.): $!";
+	"@st_pwd[1,0]" eq "@st_cwd[1,0]" ? $pwd : undef;
+}
+
 sub resolve_git_dir {
-	my ($cd) = @_;
+	my ($cd) = @_; # cd may be `undef' for cwd
 	# try v1 bare git dirs
+	my $pwd = valid_pwd();
+	my $env;
+	defined($pwd) && substr($cd // '/', 0, 1) ne '/' and
+		$env->{PWD} = "$pwd/$cd";
 	my $cmd = [ qw(git rev-parse --git-dir) ];
-	my $dir = run_qx($cmd, undef, {-C => $cd});
+	my $dir = run_qx($cmd, $env, { -C => $cd });
 	die "error in @$cmd (cwd:${\($cd // '.')}): $?\n" if $?;
 	chomp $dir;
-	# --absolute-git-dir requires git v2.13.0+
-	$dir = rel2abs_collapsed($dir, $cd) if $dir !~ m!\A/!;
+	# --absolute-git-dir requires git v2.13.0+, and we want to
+	# respect symlinks when $ENV{PWD} if $ENV{PWD} ne abs_path('.')
+	# since we store absolute GIT_DIR paths in cindex.
+	if (substr($dir, 0, 1) ne '/') {
+		substr($cd // '/', 0, 1) eq '/' or
+			$cd = File::Spec->rel2abs($cd, $pwd);
+		$dir = rel2abs_collapsed($dir, $cd);
+	}
 	$dir;
 }
 
