@@ -628,10 +628,15 @@ sub event_step {
 	}
 }
 
+sub schedule_cleanup {
+	my ($self) = @_;
+	PublicInbox::DS::add_uniq_timer($self+0, 30, \&cleanup, $self, 1);
+}
+
 # idempotently registers with DS epoll/kqueue/select/poll
 sub watch_async ($) {
 	my ($self) = @_;
-	PublicInbox::DS::add_uniq_timer($self+0, 30, \&cleanup, $self, 1);
+	schedule_cleanup($self);
 	$self->{epwatch} //= do {
 		$self->SUPER::new($self->{sock}, EPOLLIN);
 		\undef;

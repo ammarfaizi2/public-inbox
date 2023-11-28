@@ -82,7 +82,10 @@ sub solve_existing ($$) {
 	my $try = $want->{try_gits} //= [ @{$self->{gits}} ]; # array copy
 	my $git = shift @$try or die 'BUG {try_gits} empty';
 	my $oid_b = $want->{oid_b};
+
+	# can't use async_check due to last_check_err :<
 	my ($oid_full, $type, $size) = $git->check($oid_b);
+	$git->schedule_cleanup if $self->{psgi_env}->{'pi-httpd.async'};
 
 	if ($oid_b eq ($oid_full // '') || (defined($type) &&
 				(!$self->{have_hints} || $type eq 'blob'))) {
