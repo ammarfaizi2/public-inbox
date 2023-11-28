@@ -56,7 +56,7 @@ sub next_smsg ($) {
 	$self->{smsg} = $over ? $over->next_by_mid(@{$self->{next_arg}})
 			: $ctx->gone('over');
 	if (!$self->{smsg}) {
-		$ctx->write($ctx->_html_end);
+		$ctx->write('</pre>', $ctx->_html_end);
 		return $ctx->close;
 	}
 	PublicInbox::DS::requeue($self) if $ctx->{env}->{'pi-httpd.async'};
