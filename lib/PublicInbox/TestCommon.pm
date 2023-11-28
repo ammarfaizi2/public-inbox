@@ -793,6 +793,19 @@ our %COMMIT_ENV = (
 	GIT_COMMITTER_EMAIL => 'c@example.com',
 );
 
+# for memoizing based on coderefs and various create_* params
+sub my_sum {
+	require PublicInbox::SHA;
+	require Data::Dumper;
+	my $d = Data::Dumper->new(\@_);
+	$d->$_(1) for qw(Deparse Sortkeys Terse);
+	my @l = split /\n/s, $d->Dump;
+	@l = grep !/\$\^H\{.+?[A-Z]+\(0x[0-9a-f]+\)/, @l; # autodie addresses
+	my @addr = grep /[A-Za-z]+\(0x[0-9a-f]+\)/, @l;
+	xbail 'undumpable addresses: ', \@addr if @addr;
+	substr PublicInbox::SHA::sha256_hex(join('', @l)), 0, 8;
+}
+
 sub create_coderepo ($$;@) {
 	my $ident = shift;
 	my $cb = pop;
@@ -801,15 +814,12 @@ sub create_coderepo ($$;@) {
 	require PublicInbox::Import;
 	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
 	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
-	my $dir = "t/data-gen/$base.$ident-$db";
-	my $new = !-d $dir;
-	if ($new && !CORE::mkdir($dir)) {
-		my $err = $!;
-		-d $dir or xbail "mkdir($dir): $err";
-	}
+	my $tmpdir = delete $opt{tmpdir};
+	my $dir = "t/data-gen/$base.$ident-".my_sum($db, $cb, \%opt);
+	require File::Path;
+	my $new = File::Path::make_path($dir);
 	my $lk = PublicInbox::Lock->new("$dir/creat.lock");
 	my $scope = $lk->lock_for_scope;
-	my $tmpdir = delete $opt{tmpdir};
 	if (!-f "$dir/creat.stamp") {
 		opendir(my $dfh, '.');
 		chdir($dir);
@@ -832,12 +842,10 @@ sub create_inbox ($;@) {
 	require PublicInbox::Import;
 	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
 	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
-	my $dir = "t/data-gen/$base.$ident-$db";
-	my $new = !-d $dir;
-	if ($new && !mkdir($dir)) {
-		my $err = $!;
-		-d $dir or xbail "mkdir($dir): $err";
-	}
+	my $tmpdir = delete $opt{tmpdir};
+	my $dir = "t/data-gen/$base.$ident-".my_sum($db, $cb, \%opt);
+	require File::Path;
+	my $new = File::Path::make_path($dir);
 	my $lk = PublicInbox::Lock->new("$dir/creat.lock");
 	$opt{inboxdir} = File::Spec->rel2abs($dir);
 	$opt{name} //= $ident;
@@ -846,7 +854,6 @@ sub create_inbox ($;@) {
 	$pre_cb->($dir) if $pre_cb && $new;
 	$opt{-no_fsync} = 1;
 	my $no_gc = delete $opt{-no_gc};
-	my $tmpdir = delete $opt{tmpdir};
 	my $addr = $opt{address} // [];
 	$opt{-primary_address} //= $addr->[0] // "$ident\@example.com";
 	my $parallel = delete($opt{importer_parallel}) // 0;
