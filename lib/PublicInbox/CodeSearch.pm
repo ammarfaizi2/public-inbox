@@ -339,6 +339,15 @@ EOM
 		my $s = $git->{ibx_score};
 		@$s = sort { $b->[0] <=> $a->[0] } @$s if $s;
 	}
+	my $ALL = $pi_cfg->ALL or return;
+	my @alls_gits = sort {
+		scalar @{$b->{ibx_score} // []} <=>
+			scalar @{$a->{ibx_score} // []}
+	} values %$coderepos;
+	my $gits = $ALL->{-repo_objs} //= [];
+	push @$gits, @alls_gits;
+	my $cr_score = $ALL->{-cr_score} //= {};
+	$cr_score->{$_->{nick}} //= scalar(@{$_->{ibx_score}//[]}) for @$gits;
 }
 
 sub repos_sorted {
