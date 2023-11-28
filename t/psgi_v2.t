@@ -287,6 +287,7 @@ my $client1 = sub {
 		'cr_mismatch is only diff context');
 	like($raw, qr!>\-pipe !s, 'pipe diff del line');
 	like($raw, qr!>\+pipe !s, 'pipe diff ins line');
+	unlike $raw, qr/No newline at end of file/;
 };
 
 test_psgi(sub { $www->call(@_) }, $client1);

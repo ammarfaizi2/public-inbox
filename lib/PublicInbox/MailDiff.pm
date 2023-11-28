@@ -24,7 +24,7 @@ sub write_part { # Eml->each_part callback
 	$s //= $part->body;
 	$s =~ s/\r\n/\n/gs; # TODO: consider \r+\n to match View
 	$s =~ s/\s*\z//s;
-	write_file '>:utf8', "$self->{curdir}/$idx.$sfx", $s;
+	write_file '>:utf8', "$self->{curdir}/$idx.$sfx", $s, "\n";
 }
 
 # public
