@@ -191,7 +191,6 @@ sub roots2paths { # for diagnostics
 			}
 			$size = $mset->size;
 		} while ($size);
-		substr($_, 0, 1, '/') for @$dirs; # s!^P!/!
 		@$dirs = sort @$dirs;
 	}
 	\%ret;
