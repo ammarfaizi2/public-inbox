@@ -13,6 +13,7 @@ our @EXPORT_OK = qw/ascii_html obfuscate_addrs to_filename src_escape
 		to_attr prurl mid_href fmt_ts ts2str utf8_maybe/;
 use POSIX qw(strftime);
 my $enc_ascii = find_encoding('us-ascii');
+use File::Spec;
 
 # safe-ish acceptable filename pattern for portability
 our $FN = '[a-zA-Z0-9][a-zA-Z0-9_\-\.]+[a-zA-Z0-9]'; # needs \z anchor
@@ -69,7 +70,16 @@ sub prurl ($$) {
 		$u = $host_match[0] // $u->[0];
 		# fall through to below:
 	}
-	index($u, '//') == 0 ? "$env->{'psgi.url_scheme'}:$u" : $u;
+	my $dslash = index($u, '//');
+	if ($dslash == 0) {
+		"$env->{'psgi.url_scheme'}:$u"
+	} elsif ($dslash < 0 && substr($u, 0, 1) ne '/' &&
+			substr(my $path = $env->{PATH_INFO}, 0, 1) eq '/') {
+		# this won't touch the FS at all:
+		File::Spec->abs2rel("/$u", $path);
+	} else {
+		$u;
+	}
 }
 
 # for misguided people who believe in this stuff, give them a
