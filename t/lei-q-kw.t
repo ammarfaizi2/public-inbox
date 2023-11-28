@@ -9,6 +9,8 @@ use IO::Compress::Gzip qw(gzip);
 use PublicInbox::MboxReader;
 use PublicInbox::LeiToMail;
 use PublicInbox::Spawn qw(popen_rd);
+use File::Path qw(make_path);
+use PublicInbox::IO qw(write_file);
 my $exp = {
 	'<qp@example.com>' => eml_load('t/plack-qp.eml'),
 	'<testmessage@example.com>' => eml_load('t/utf8.eml'),
@@ -41,6 +43,19 @@ ok(!glob("$o/cur/*"), '--no-import-before cleared destination');
 lei_ok(qw(q -o), "maildir:$o", qw(m:qp@example.com));
 @fn = glob("$o/cur/*:2,S");
 is(scalar(@fn), 1, "`seen' flag (but not `replied') set on Maildir file");
+
+{
+	$o = "$ENV{HOME}/dst-existing";
+	make_path(map { "$o/$_" } qw(new cur tmp));
+	my $bp = eml_load('t/data/binary.patch');
+	write_file '>', "$o/cur/binary-patch:2,S", $bp->as_string;
+	lei_ok qw(q --no-import-before m:qp@example.com -o), $o;
+	my @g = glob("$o/*/*");
+	is scalar(@g), 1, 'only newly imported message left';
+	is eml_load($g[0])->header_raw('Message-ID'), '<qp@example.com>';
+	lei qw(q m:binary-patch-test@example);
+	is $lei_out, "[null]\n", 'old message not imported';
+}
 
 SKIP: {
 	$o = "$ENV{HOME}/fifo";
@@ -80,9 +95,7 @@ my $write_file = sub {
 	if ($_[0] =~ /\.gz\z/) {
 		gzip(\($_[1]), $_[0]) or BAIL_OUT 'gzip';
 	} else {
-		open my $fh, '>', $_[0] or BAIL_OUT $!;
-		print $fh $_[1] or BAIL_OUT $!;
-		close $fh or BAIL_OUT;
+		write_file '>', $_[0], $_[1];
 	}
 };
 

@@ -108,8 +108,9 @@ Augment output destination instead of clobbering it.
 
 =item --no-import-before
 
-Do not import keywords before writing to an existing output
-destination.
+Do not import messages before writing to an existing output destination.
+Be certain you do not need existing data in your output before using
+this, it permanently erases data unless C<--augment> is used.
 
 =item --threads
 

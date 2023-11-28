@@ -353,6 +353,7 @@ my %OPTDESC = (
 'no-torsocks' => 'alias for --torsocks=no',
 'save!' =>  "do not save a search for `lei up'",
 'import-remote!' => 'do not memoize remote messages into local store',
+'import-before!' => 'do not import before writing to output (DANGEROUS)',
 
 'type=s' => [ 'any|mid|git', 'disambiguate type' ],
 
