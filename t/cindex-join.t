@@ -12,7 +12,7 @@ use autodie;
 use File::Spec;
 $ENV{TEST_REMOTE_JOIN} or plan skip_all => 'TEST_REMOTE_JOIN unset';
 local $ENV{TAIL_ALL} = $ENV{TAIL_ALL} // 1; # while features are unstable
-require_mods(qw(json Xapian DBD::SQLite));
+require_mods(qw(json Xapian DBD::SQLite +SCM_RIGHTS));
 my @code = qw(https://80x24.org/mwrap-perl.git
 		https://80x24.org/mwrap.git);
 my @inboxes = qw(https://80x24.org/mwrap-public 2 inbox.comp.lang.ruby.mwrap
