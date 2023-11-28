@@ -323,6 +323,7 @@ lib/PublicInbox/PktOp.pm
 lib/PublicInbox/Qspawn.pm
 lib/PublicInbox/Reply.pm
 lib/PublicInbox/RepoAtom.pm
+lib/PublicInbox/RepoList.pm
 lib/PublicInbox/RepoSnapshot.pm
 lib/PublicInbox/RepoTree.pm
 lib/PublicInbox/SHA.pm

@@ -19,6 +19,7 @@ use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
 use PublicInbox::RepoTree;
+use PublicInbox::RepoList;
 use PublicInbox::OnDestroy;
 use URI::Escape qw(uri_escape_utf8);
 use File::Spec;
@@ -354,6 +355,8 @@ sub srv { # endpoint called by PublicInbox::WWW
 	} elsif ($path_info =~ m!\A/(.+?)/(refs/(?:heads|tags))/\z! and
 			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		refs_foo($self, $ctx, $2);
+	} elsif ($path_info =~ m!\A/(.+?)/\z!) {
+		PublicInbox::RepoList::html($self, $ctx, $1) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)\z! and
 			($git = $pi_cfg->get_coderepo($1))) {
 		my $qs = $ctx->{env}->{QUERY_STRING};

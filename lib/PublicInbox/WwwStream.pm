@@ -17,8 +17,9 @@ http://7fh6tueqddpjyxjmgtdiueylzoqt6pt7hec3pukyptlmohoowvhde4yd.onion/public-inb
 https://public-inbox.org/public-inbox.git) ];
 
 sub base_url ($) {
-	my $ctx = shift;
-	my $base_url = ($ctx->{ibx} // $ctx->{git})->base_url($ctx->{env});
+	my ($ctx) = @_;
+	my $thing = $ctx->{ibx} // $ctx->{git} // return;
+	my $base_url = $thing->base_url($ctx->{env});
 	chop $base_url; # no trailing slash for clone
 	$base_url;
 }
@@ -40,7 +41,7 @@ sub async_eml { # for async_blob_cb
 
 sub html_repo_top ($) {
 	my ($ctx) = @_;
-	my $git = $ctx->{git};
+	my $git = $ctx->{git} // return $ctx->html_top_fallback;
 	my $desc = ascii_html($git->description);
 	my $title = delete($ctx->{-title_html}) // $desc;
 	my $upfx = $ctx->{-upfx} // '';
@@ -265,11 +266,11 @@ sub aresponse {
 }
 
 sub html_init {
-	my ($ctx) = @_;
+	my $ctx = $_[-1];
 	$ctx->{base_url} = base_url($ctx);
 	my $h = $ctx->{-res_hdr} = ['Content-Type', 'text/html; charset=UTF-8'];
 	$ctx->{gz} = PublicInbox::GzipFilter::gz_or_noop($h, $ctx->{env});
-	bless $ctx, __PACKAGE__;
+	bless $ctx, @_ > 1 ? $_[0] : __PACKAGE__;
 	print { $ctx->zfh } html_top($ctx);
 }
 

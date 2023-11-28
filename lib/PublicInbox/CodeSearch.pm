@@ -341,4 +341,12 @@ EOM
 	}
 }
 
+sub repos_sorted {
+	my $pi_cfg = shift;
+	my @recs = map { [ 0, $_ ] } @_; # PublicInbox::Git objects
+	my @todo = @recs;
+	$pi_cfg->each_cindex(\&load_commit_times, \@todo);
+	@recs = sort { $b->[0] <=> $a->[0] } @recs;
+}
+
 1;

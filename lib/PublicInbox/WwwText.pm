@@ -252,19 +252,17 @@ sub coderepos_raw ($$) {
 	my $cr = $cfg->repo_objs($ctx->{ibx}) or return ();
 	my $buf = 'Code repositories for project(s) associated with this '.
 		$ctx->{ibx}->thing_type . ":\n";
-	my @recs = map { [ 0, $_ ] } @$cr;
-	my @todo = @recs;
-	$cfg->each_cindex('load_commit_times', \@todo);
-	@recs = sort { $b->[0] <=> $a->[0] } @recs;
+	my @recs = PublicInbox::CodeSearch::repos_sorted($cfg, @$cr);
 	my $cr_score = $ctx->{ibx}->{-cr_score};
+	my $env = $ctx->{env};
 	for (@recs) {
 		my ($t, $git) = @$_;
-		for ($git->pub_urls($ctx->{env})) {
+		for ($git->pub_urls($env)) {
 			my $u = m!\A(?:[a-z\+]+:)?//!i ? $_ : $top_url.$_;
 			my $nr = $cr_score->{$git->{nick}};
 			$buf .= "\n";
 			$buf .= $nr ? sprintf('% 9u', $nr) : (' 'x9);
-			$buf .= ' '.fmt_ts($t).' '.prurl($ctx->{env}, $u);
+			$buf .= ' '.fmt_ts($t).' '.prurl($env, $u);
 		}
 	}
 	($buf);
