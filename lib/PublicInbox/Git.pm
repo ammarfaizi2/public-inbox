@@ -100,14 +100,17 @@ sub new {
 sub git_path ($$) {
 	my ($self, $path) = @_;
 	$self->{-git_path}->{$path} //= do {
-		local $/ = "\n";
-		chomp(my $str = $self->qx(qw(rev-parse --git-path), $path));
+		my $d = "$self->{git_dir}/$path";
+		if (-e $d) {
+			$d;
+		} else {
+			local $/ = "\n";
+			my $s = $self->qx(qw(rev-parse --git-path), $path);
+			chomp $s;
 
-		# git prior to 2.5.0 did not understand --git-path
-		if ($str eq "--git-path\n$path") {
-			$str = "$self->{git_dir}/$path";
+			# git prior to 2.5.0 did not understand --git-path
+			$s eq "--git-path\n$path" ? $d : $s;
 		}
-		$str;
 	};
 }
 
