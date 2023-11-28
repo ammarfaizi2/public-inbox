@@ -47,6 +47,8 @@ sub prep_a ($$) {
 	dump_eml($self, "$self->{tmp}/a", $eml);
 }
 
+# WWW-specific stuff below (TODO: split out for non-lei)
+
 sub next_smsg ($) {
 	my ($self) = @_;
 	my $ctx = $self->{ctx};
@@ -62,9 +64,12 @@ sub next_smsg ($) {
 
 sub emit_msg_diff {
 	my ($bref, $self) = @_; # bref is `git diff' output
+	require PublicInbox::Hval;
+
 	# will be escaped to `&#8226;' in HTML
 	$self->{ctx}->{ibx}->{obfuscate} and
-		obfuscate_addrs($self->{ctx}->{ibx}, $$bref, "\x{2022}");
+		PublicInbox::Hval::obfuscate_addrs($self->{ctx}->{ibx},
+						$$bref, "\x{2022}");
 	print { $self->{ctx}->{zfh} } '</pre><hr><pre>' if $self->{nr} > 1;
 	flush_diff($self->{ctx}, $bref);
 	next_smsg($self);
