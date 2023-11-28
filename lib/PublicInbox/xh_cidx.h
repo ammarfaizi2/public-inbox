@@ -107,8 +107,7 @@ static bool root2offs_str(struct fbuf *root_offs, Xapian::Document *doc)
 		fputs((const char *)ep->data, root_offs->fp);
 	}
 	fputc('\n', root_offs->fp);
-	if (ferror(root_offs->fp) | fclose(root_offs->fp))
-		err(EXIT_FAILURE, "ferror|fclose(root_offs)"); // ENOMEM
+	ERR_CLOSE(root_offs->fp, EXIT_FAILURE); // ENOMEM
 	root_offs->fp = NULL;
 	return true;
 }
@@ -138,38 +137,24 @@ static void dump_roots_term(struct req *req, const char *pfx,
 // buffering and rely on flock(2), here
 static bool dump_roots_flush(struct req *req, struct dump_roots_tmp *drt)
 {
-	char *p;
-	int fd = fileno(req->fp[0]);
 	bool ok = true;
+	off_t off = ftello(drt->wbuf.fp);
+	if (off < 0) EABORT("ftello");
+	if (!off) return ok;
 
-	if (!drt->wbuf.fp) return true;
-	if (fd < 0) EABORT("BUG: fileno");
-	if (ferror(drt->wbuf.fp) | fclose(drt->wbuf.fp)) // ENOMEM?
-		err(EXIT_FAILURE, "ferror|fclose(drt->wbuf.fp)");
-	drt->wbuf.fp = NULL;
-	if (!drt->wbuf.len) goto done_free;
+	ERR_FLUSH(drt->wbuf.fp); // ENOMEM
+	int fd = fileno(req->fp[0]);
+
 	while (flock(drt->root2off_fd, LOCK_EX)) {
 		if (errno == EINTR) continue;
 		err(EXIT_FAILURE, "LOCK_EX"); // ENOLCK?
 	}
-	p = drt->wbuf.ptr;
-	do { // write to client FD
-		ssize_t n = write(fd, p, drt->wbuf.len);
-		if (n > 0) {
-			drt->wbuf.len -= n;
-			p += n;
-		} else {
-			perror(n ? "write" : "write (zero bytes)");
-			return false;
-		}
-	} while (drt->wbuf.len);
+	ok = write_all(fd, &drt->wbuf, (size_t)off);
 	while (flock(drt->root2off_fd, LOCK_UN)) {
 		if (errno == EINTR) continue;
 		err(EXIT_FAILURE, "LOCK_UN"); // ENOLCK?
 	}
-done_free: // OK to skip on errors, dump_roots_ensure calls fbuf_ensure
-	free(drt->wbuf.ptr);
-	drt->wbuf.ptr = NULL;
+	if (fseeko(drt->wbuf.fp, 0, SEEK_SET)) EABORT("fseeko");
 	return ok;
 }
 
@@ -238,11 +223,11 @@ static bool cmd_dump_roots(struct req *req)
 	req->sort_col = -1;
 	Xapian::MSet mset = commit_mset(req, req->argv[optind + 1]);
 
+	fbuf_init(&drt.wbuf);
+
 	// @UNIQ_FOLD in CodeSearchIdx.pm can handle duplicate lines fine
 	// in case we need to retry on DB reopens
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
-		if (!drt.wbuf.fp)
-			fbuf_init(&drt.wbuf);
 		for (int t = 10; t > 0; --t)
 			switch (dump_roots_iter(req, &drt, &i)) {
 			case ITER_OK: t = 0; break; // leave inner loop

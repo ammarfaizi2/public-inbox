@@ -124,10 +124,12 @@ struct req { // argv and pfxv point into global rbuf
 	char *argv[MY_ARG_MAX];
 	char *pfxv[MY_ARG_MAX]; // -A <prefix>
 	struct srch *srch;
+	char *Pgit_dir;
 	char *Oeidx_key;
 	cmd fn;
 	unsigned long long max;
 	unsigned long long off;
+	unsigned long long threadid;
 	unsigned long timeout_sec;
 	size_t nr_out;
 	long sort_col; // value column, negative means BoolWeight
@@ -138,6 +140,8 @@ struct req { // argv and pfxv point into global rbuf
 	bool collapse_threads;
 	bool code_search;
 	bool relevance; // sort by relevance before column
+	bool emit_percent;
+	bool emit_docdata;
 	bool asc; // ascending sort
 };
 
@@ -230,12 +234,53 @@ static Xapian::MSet mail_mset(struct req *req, const char *qry_str)
 	return enquire_mset(req, &enq);
 }
 
+static bool starts_with(const std::string *s, const char *pfx, size_t pfx_len)
+{
+	return s->size() >= pfx_len && !memcmp(pfx, s->c_str(), pfx_len);
+}
+
+static void apply_roots_filter(struct req *req, Xapian::Query *qry)
+{
+	if (!req->Pgit_dir) return;
+	req->Pgit_dir[0] = 'P'; // modifies static rbuf
+	Xapian::Database *xdb = req->srch->db;
+	for (int i = 0; i < 9; i++) {
+		try {
+			std::string P = req->Pgit_dir;
+			Xapian::PostingIterator p = xdb->postlist_begin(P);
+			if (p == xdb->postlist_end(P)) {
+				warnx("W: %s not indexed?", req->Pgit_dir + 1);
+				return;
+			}
+			Xapian::TermIterator cur = xdb->termlist_begin(*p);
+			Xapian::TermIterator end = xdb->termlist_end(*p);
+			cur.skip_to("G");
+			if (cur == end) {
+				warnx("W: %s has no root commits?",
+					req->Pgit_dir + 1);
+				return;
+			}
+			Xapian::Query f = Xapian::Query(*cur);
+			for (++cur; cur != end; ++cur) {
+				std::string tn = *cur;
+				if (!starts_with(&tn, "G", 1))
+					continue;
+				f = Xapian::Query(Xapian::Query::OP_OR, f, tn);
+			}
+			*qry = Xapian::Query(Xapian::Query::OP_FILTER, *qry, f);
+			return;
+		} catch (const Xapian::DatabaseModifiedError & e) {
+			xdb->reopen();
+		}
+	}
+}
+
 // for cindex
 static Xapian::MSet commit_mset(struct req *req, const char *qry_str)
 {
 	struct srch *srch = req->srch;
 	Xapian::Query qry = srch->qp->parse_query(qry_str, srch->qp_flags);
-	// TODO: git_dir + roots_filter
+	apply_roots_filter(req, &qry);
 
 	// we only want commits:
 	qry = Xapian::Query(Xapian::Query::OP_FILTER, qry,
@@ -252,11 +297,6 @@ static void emit_mset_stats(struct req *req, const Xapian::MSet *mset)
 			(unsigned long long)mset->size(), req->nr_out);
 	else
 		ABORT("BUG: %s caller only passed 1 FD", req->argv[0]);
-}
-
-static bool starts_with(const std::string *s, const char *pfx, size_t pfx_len)
-{
-	return s->size() >= pfx_len && !memcmp(pfx, s->c_str(), pfx_len);
 }
 
 static int my_setlinebuf(FILE *fp) // glibc setlinebuf(3) can't report errors
@@ -283,6 +323,32 @@ static void fbuf_init(struct fbuf *fbuf)
 	fbuf->fp = open_memstream(&fbuf->ptr, &fbuf->len);
 	if (!fbuf->fp) err(EXIT_FAILURE, "open_memstream(fbuf)");
 }
+
+static bool write_all(int fd, const struct fbuf *wbuf, size_t len)
+{
+	const char *p = wbuf->ptr;
+	assert(wbuf->len >= len);
+	do { // write to client FD
+		ssize_t n = write(fd, p, len);
+		if (n > 0) {
+			len -= n;
+			p += n;
+		} else {
+			perror(n ? "write" : "write (zero bytes)");
+			return false;
+		}
+	} while (len);
+	return true;
+}
+
+#define ERR_FLUSH(f) do { \
+	if (ferror(f) | fflush(f)) err(EXIT_FAILURE, "ferror|fflush "#f); \
+} while (0)
+
+#define ERR_CLOSE(f, e) do { \
+	if (ferror(f) | fclose(f)) \
+		e ? err(e, "ferror|fclose "#f) : perror("ferror|fclose "#f); \
+} while (0)
 
 static void xclose(int fd)
 {
@@ -339,6 +405,7 @@ static bool cmd_test_inspect(struct req *req)
 	return false;
 }
 
+#include "xh_mset.h" // read-only (WWW, IMAP, lei) stuff
 #include "xh_cidx.h" // CodeSearchIdx.pm stuff
 
 #define CMD(n) { .fn_len = sizeof(#n) - 1, .fn_name = #n, .fn = cmd_##n }
@@ -348,6 +415,7 @@ static const struct cmd_entry {
 	cmd fn;
 } cmds[] = { // should be small enough to not need bsearch || gperf
 	// most common commands first
+	CMD(mset), // WWW and IMAP requests
 	CMD(dump_ibx), // many inboxes
 	CMD(dump_roots), // per-cidx shard
 	CMD(test_inspect), // least common commands last
@@ -520,7 +588,7 @@ static void dispatch(struct req *req)
 	char *end;
 	FILE *kfp;
 	struct srch **s;
-	req->fn = NULL;
+	req->threadid = ULLONG_MAX;
 	for (c = 0; c < (int)MY_ARRAY_SIZE(cmds); c++) {
 		if (cmds[c].fn_len == size &&
 			!memcmp(cmds[c].fn_name, req->argv[0], size)) {
@@ -540,12 +608,13 @@ static void dispatch(struct req *req)
 	optarg = NULL;
 	MY_DO_OPTRESET();
 
-	// keep sync with @PublicInbox::XapHelper::SPEC
-	while ((c = getopt(req->argc, req->argv, "acd:k:m:o:rtA:O:T:")) != -1) {
+	// XH_SPEC is generated from @PublicInbox::Search::XH_SPEC
+	while ((c = getopt(req->argc, req->argv, XH_SPEC)) != -1) {
 		switch (c) {
 		case 'a': req->asc = true; break;
 		case 'c': req->code_search = true; break;
 		case 'd': fwrite(optarg, strlen(optarg) + 1, 1, kfp); break;
+		case 'g': req->Pgit_dir = optarg - 1; break; // pad "P" prefix
 		case 'k':
 			req->sort_col = strtol(optarg, &end, 10);
 			if (*end) ABORT("-k %s", optarg);
@@ -563,6 +632,7 @@ static void dispatch(struct req *req)
 			if (*end || req->off == ULLONG_MAX)
 				ABORT("-o %s", optarg);
 			break;
+		case 'p': req->emit_percent = true; break;
 		case 'r': req->relevance = true; break;
 		case 't': req->collapse_threads = true; break;
 		case 'A':
@@ -570,17 +640,22 @@ static void dispatch(struct req *req)
 			if (MY_ARG_MAX == req->pfxc)
 				ABORT("too many -A");
 			break;
-		case 'O': req->Oeidx_key = optarg - 1; break; // pad "O" prefix
-		case 'T':
+		case 'D': req->emit_docdata = true; break;
+		case 'K':
 			req->timeout_sec = strtoul(optarg, &end, 10);
 			if (*end || req->timeout_sec == ULONG_MAX)
+				ABORT("-K %s", optarg);
+			break;
+		case 'O': req->Oeidx_key = optarg - 1; break; // pad "O" prefix
+		case 'T':
+			req->threadid = strtoull(optarg, &end, 10);
+			if (*end || req->threadid == ULLONG_MAX)
 				ABORT("-T %s", optarg);
 			break;
 		default: ABORT("bad switch `-%c'", c);
 		}
 	}
-	if (ferror(kfp) | fclose(kfp)) /* sets kbuf.srch */
-		err(EXIT_FAILURE, "ferror|fclose"); // likely ENOMEM
+	ERR_CLOSE(kfp, EXIT_FAILURE); // may ENOMEM, sets kbuf.srch
 	kbuf.srch->db = NULL;
 	kbuf.srch->qp = NULL;
 	kbuf.srch->paths_len = size - offsetof(struct srch, paths);
@@ -639,8 +714,7 @@ static void stderr_restore(FILE *tmp_err)
 	stderr = orig_err;
 	return;
 #endif
-	if (ferror(stderr) | fflush(stderr))
-		err(EXIT_FAILURE, "ferror|fflush stderr");
+	ERR_CLOSE(stderr, EXIT_FAILURE);
 	while (dup2(orig_err_fd, STDERR_FILENO) < 0) {
 		if (errno != EINTR)
 			err(EXIT_FAILURE, "dup2(%d => 2)", orig_err_fd);
@@ -670,12 +744,10 @@ static void recv_loop(void) // worker process loop
 			stderr_set(req.fp[1]);
 		req.argc = (int)SPLIT2ARGV(req.argv, rbuf, len);
 		dispatch(&req);
-		if (ferror(req.fp[0]) | fclose(req.fp[0]))
-			perror("ferror|fclose fp[0]");
+		ERR_CLOSE(req.fp[0], 0);
 		if (req.fp[1]) {
 			stderr_restore(req.fp[1]);
-			if (ferror(req.fp[1]) | fclose(req.fp[1]))
-				perror("ferror|fclose fp[1]");
+			ERR_CLOSE(req.fp[1], 0);
 		}
 	}
 }

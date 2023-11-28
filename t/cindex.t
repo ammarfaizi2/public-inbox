@@ -121,22 +121,70 @@ my $no_metadata_set = sub {
 
 use_ok 'PublicInbox::CodeSearch';
 
+
+my @xh_args;
+my $exp = [ 'initial with NUL character', 'remove NUL character' ];
+my $zp_git = abs_path("$zp/.git");
 if ('multi-repo search') {
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	my $mset = $csrch->mset('NUL');
 	is(scalar($mset->items), 2, 'got results');
-	my $exp = [ 'initial with NUL character', 'remove NUL character' ];
 	my @have = sort(map { $_->get_document->get_data } $mset->items);
 	is_xdeeply(\@have, $exp, 'got expected subjects');
 
 	$mset = $csrch->mset('NUL', { git_dir => "$tmp/wt0/.git" });
 	is(scalar($mset->items), 0, 'no results with other GIT_DIR');
 
-	$mset = $csrch->mset('NUL', { git_dir => abs_path("$zp/.git") });
+	$mset = $csrch->mset('NUL', { git_dir => $zp_git });
 	@have = sort(map { $_->get_document->get_data } $mset->items);
 	is_xdeeply(\@have, $exp, 'got expected subjects w/ GIT_DIR filter');
 	my @xdb = $csrch->xdb_shards_flat;
 	$no_metadata_set->(0, ['indexlevel'], \@xdb);
+	@xh_args = $csrch->xh_args;
+}
+
+my $test_xhc = sub {
+	my ($xhc) = @_;
+	my $impl = $xhc->{impl};
+	my ($r, @l);
+	$r = $xhc->mkreq([], qw(mset -D -c -g), $zp_git, @xh_args, 'NUL');
+	chomp(@l = <$r>);
+	is(shift(@l), 'mset.size=2', "got expected header $impl");
+	my %docid2data;
+	my @got = sort map {
+		my @f = split /\0/;
+		is scalar(@f), 2, 'got 2 entries';
+		$docid2data{$f[0]} = $f[1];
+		$f[1];
+	} @l;
+	is_deeply(\@got, $exp, "expected doc_data $impl");
+
+	$r = $xhc->mkreq([], qw(mset -c -g), "$tmp/wt0/.git", @xh_args, 'NUL');
+	chomp(@l = <$r>);
+	is(shift(@l), 'mset.size=0', "got miss in wrong dir $impl");
+	is_deeply(\@l, [], "no extra lines $impl");
+
+	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
+	while (my ($did, $expect) = each %docid2data) {
+		is_deeply($csrch->xdb->get_document($did)->get_data,
+			$expect, "docid=$did data matches");
+	}
+	ok(!$xhc->{io}->close, "$impl close");
+	is($?, 66 << 8, "got EX_NOINPUT from $impl exit");
+};
+
+SKIP: {
+	require_mods('+SCM_RIGHTS', 1);
+	require PublicInbox::XapClient;
+	my $xhc = PublicInbox::XapClient::start_helper('-j0');
+	$test_xhc->($xhc);
+	skip 'PI_NO_CXX set', 1 if $ENV{PI_NO_CXX};
+	$xhc->{impl} =~ /Cxx/ or
+		skip 'C++ compiler or xapian development libs missing', 1;
+	skip 'TEST_XH_CXX_ONLY set', 1 if $ENV{TEST_XH_CXX_ONLY};
+	local $ENV{PI_NO_CXX} = 1; # force XS or SWIG binding test
+	$xhc = PublicInbox::XapClient::start_helper('-j0');
+	$test_xhc->($xhc);
 }
 
 if ('--update') {

@@ -20,13 +20,15 @@ $ENV{PERL_INLINE_DIRECTORY} // die('BUG: PERL_INLINE_DIRECTORY unset');
 substr($dir, 0, 0) = "$ENV{PERL_INLINE_DIRECTORY}/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
-my @srcs = map { $srcpfx.$_ } qw(xap_helper.h xh_cidx.h);
+my @srcs = map { $srcpfx.$_ } qw(xh_mset.h xh_cidx.h xap_helper.h);
 my @pm_dep = map { $srcpfx.$_ } qw(Search.pm CodeSearch.pm);
 my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
 my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -pipe') . ' ' .
 	' -DTHREADID=' . PublicInbox::Search::THREADID .
-	' ' . ($ENV{LDFLAGS} // $ldflags);
+	' -DXH_SPEC="'.join('',
+		map { s/=.*/:/; $_ } @PublicInbox::Search::XH_SPEC) . '" ' .
+	($ENV{LDFLAGS} // $ldflags);
 my $xap_modversion;
 
 sub xap_cfg (@) {

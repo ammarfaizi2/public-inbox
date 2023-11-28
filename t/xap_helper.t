@@ -40,6 +40,7 @@ my $v2 = create_inbox 'v2', indexlevel => 'medium', version => 2,
 };
 
 my @ibx_idx = glob("$v2->{inboxdir}/xap*/?");
+my @ibx_shard_args = map { ('-d', $_) } @ibx_idx;
 my (@int) = glob("$crepo/public-inbox-cindex/cidx*/?");
 my (@ext) = glob("$crepo/cidx-ext/cidx*/?");
 is(scalar(@ext), 2, 'have 2 external shards') or diag explain(\@ext);
@@ -76,8 +77,7 @@ my $test = sub {
 	is($cinfo{has_threadid}, '0', 'has_threadid false for cindex');
 	is($cinfo{pid}, $info{pid}, 'PID unchanged for cindex');
 
-	my @dump = (qw(dump_ibx -A XDFID), (map { ('-d', $_) } @ibx_idx),
-			qw(13 rt:0..));
+	my @dump = (qw(dump_ibx -A XDFID), @ibx_shard_args, qw(13 rt:0..));
 	$r = $doreq->($s, @dump);
 	my @res;
 	while (sysread($r, my $buf, 512) != 0) { push @res, $buf }
@@ -89,7 +89,8 @@ my $test = sub {
 	my $res = do { local $/; <$r> };
 	is(join('', @res), $res, 'got identical response w/ error pipe');
 	my $stats = do { local $/; <$err_rd> };
-	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported');
+	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported') or
+		diag "res=$res";
 
 	return wantarray ? ($ar, $s) : $ar if $cinfo{pid} == $pid;
 
@@ -198,7 +199,47 @@ for my $n (@NO_CXX) {
 	is(scalar(@res), scalar(grep(/\A[0-9a-f]{40,} [0-9]+\n\z/, @res)),
 		'entries match format');
 	$err = do { local $/; <$err_r> };
-	is($err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})");
+	is $err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})";
+
+	$r = $xhc->mkreq([], qw(mset -p -A XDFID -A Q), @ibx_shard_args,
+				'dfn:lib/PublicInbox/Search.pm');
+	chomp((my $hdr, @res) = readline($r));
+	is $hdr, 'mset.size=1', "got expected header via mset ($xhc->{impl}";
+	is scalar(@res), 1, 'got one result';
+	@res = split /\0/, $res[0];
+	{
+		my $doc = $v2->search->xdb->get_document($res[0]);
+		my @q = PublicInbox::Search::xap_terms('Q', $doc);
+		is_deeply \@q, [ $mid ], 'docid usable';
+	}
+	ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
+	is $res[2], 'XDFID'.$dfid, 'XDFID result matches';
+	is $res[3], 'Q'.$mid, 'Q (msgid) mset result matches';
+	is scalar(@res), 4, 'only 4 columns in result';
+
+	$r = $xhc->mkreq([], qw(mset -p -A XDFID -A Q), @ibx_shard_args,
+				'dt:19700101'.'000000..');
+	chomp(($hdr, @res) = readline($r));
+	is $hdr, 'mset.size=6',
+		"got expected header via multi-result mset ($xhc->{impl}";
+	is(scalar(@res), 6, 'got 6 rows');
+	for my $r (@res) {
+		my ($docid, $pct, @rest) = split /\0/, $r;
+		my $doc = $v2->search->xdb->get_document($docid);
+		ok $pct > 0 && $pct <= 100,
+			"pct > 0 && <= 100 #$docid ($xhc->{impl})";
+		my %terms;
+		for (@rest) {
+			s/\A([A-Z]+)// or xbail 'no prefix=', \@rest;
+			push @{$terms{$1}}, $_;
+		}
+		while (my ($pfx, $vals) = each %terms) {
+			@$vals = sort @$vals;
+			my @q = PublicInbox::Search::xap_terms($pfx, $doc);
+			is_deeply $vals, \@q,
+				"#$docid $pfx as expected ($xhc->{impl})";
+		}
+	}
 }
 
 done_testing;

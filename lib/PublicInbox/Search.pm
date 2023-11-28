@@ -76,6 +76,25 @@ our @MAIL_VMAP = (
 );
 our @MAIL_NRP;
 
+# Getopt::Long spec, only short options for portability in C++ implementation
+our @XH_SPEC = (
+	'a', # ascending sort
+	'c', # code search
+	'd=s@', # shard dirs
+	'g=s', # git dir (with -c)
+	'k=i', # sort column (like sort(1))
+	'm=i', # maximum number of results
+	'o=i', # offset
+	'p', # show percent
+	'r', # 1=relevance then column
+	't', # collapse threads
+	'A=s@', # prefixes
+	'D', # emit docdata
+	'K=i', # timeout kill after i seconds
+	'O=s', # eidx_key
+	'T=i', # threadid
+);
+
 sub load_xapian () {
 	return 1 if defined $Xap;
 	# n.b. PI_XAPIAN is intended for development use only
@@ -245,6 +264,12 @@ sub mdocid {
 	my ($nshard, $mitem) = @_;
 	my $docid = $mitem->get_docid;
 	int(($docid - 1) / $nshard) + 1;
+}
+
+sub docids_to_artnums {
+	my $nshard = shift->{nshard};
+	# XXX does array vs arrayref make a difference in modern Perls?
+	map { int(($_ - 1) / $nshard) + 1 } @_;
 }
 
 sub mset_to_artnums {

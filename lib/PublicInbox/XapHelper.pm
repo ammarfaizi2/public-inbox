@@ -21,21 +21,6 @@ my $X = \%PublicInbox::Search::X;
 our (%SRCH, %WORKERS, $nworker, $workerset, $in);
 our $stderr = \*STDERR;
 
-# only short options for portability in C++ implementation
-our @SPEC = (
-	'a', # ascending sort
-	'c', # code search
-	'd=s@', # shard dirs
-	'k=i', # sort column (like sort(1))
-	'm=i', # maximum number of results
-	'o=i', # offset
-	'r', # 1=relevance then column
-	't', # collapse threads
-	'A=s@', # prefixes
-	'O=s', # eidx_key
-	'T=i', # timeout in seconds
-);
-
 sub cmd_test_inspect {
 	my ($req) = @_;
 	print { $req->{0} } "pid=$$ has_threadid=",
@@ -144,10 +129,44 @@ sub cmd_dump_roots {
 	emit_mset_stats($req, $mset);
 }
 
+sub mset_iter ($$) {
+	my ($req, $it) = @_;
+	eval {
+		my $buf = $it->get_docid;
+		$buf .= "\0".$it->get_percent if $req->{p};
+		my $doc = ($req->{A} || $req->{D}) ? $it->get_document : undef;
+		for my $p (@{$req->{A}}) {
+			$buf .= "\0".$p.$_ for xap_terms($p, $doc);
+		}
+		$buf .= "\0".$doc->get_data if $req->{D};
+		say { $req->{0} } $buf;
+	};
+	$@ ? iter_retry_check($req) : 0;
+}
+
+sub cmd_mset { # to be used by WWW + IMAP
+	my ($req, $qry_str) = @_;
+	$qry_str // die 'usage: mset [OPTIONS] QRY_STR';
+	my $opt = { limit => $req->{'m'}, offset => $req->{o} // 0 };
+	$opt->{relevance} = 1 if $req->{r};
+	$opt->{threads} = 1 if defined $req->{t};
+	$opt->{git_dir} = $req->{g} if defined $req->{g};
+	$opt->{eidx_key} = $req->{O} if defined $req->{O};
+	$opt->{threadid} = $req->{T} if defined $req->{T};
+	my $mset = $req->{srch}->mset($qry_str, $opt);
+	say { $req->{0} } 'mset.size=', $mset->size;
+	for my $it ($mset->items) {
+		for (my $t = 10; $t > 0; --$t) {
+			$t = mset_iter($req, $it) // $t;
+		}
+	}
+}
+
 sub dispatch {
 	my ($req, $cmd, @argv) = @_;
 	my $fn = $req->can("cmd_$cmd") or return;
-	$GLP->getoptionsfromarray(\@argv, $req, @SPEC) or return;
+	$GLP->getoptionsfromarray(\@argv, $req, @PublicInbox::Search::XH_SPEC)
+		or return;
 	my $dirs = delete $req->{d} or die 'no -d args';
 	my $key = join("\0", @$dirs);
 	$req->{srch} = $SRCH{$key} //= do {
