@@ -33,7 +33,7 @@ git gc -q
 EOM
 }; # /create_coderepo
 
-ok(run_script([qw(-cindex --dangerous -q), "$tmp/wt0"]), 'cindex internal');
+ok(run_script([qw(-cindex --dangerous -q -g), "$tmp/wt0"]), 'cindex internal');
 {
 	my $exists = -e "$tmp/wt0/.git/public-inbox-cindex/cidx.lock";
 	my @st = stat(_);
@@ -67,13 +67,14 @@ git gc -q
 EOM
 }; # /create_coderepo
 
-ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", $zp, "$tmp/wt0"]),
+ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext",
+		'-g', $zp, '-g', "$tmp/wt0" ]),
 	'cindex external');
 ok(-e "$tmp/ext/cidx.lock", 'external dir created');
 ok(!-d "$zp/.git/public-inbox-cindex", 'no cindex in original coderepo');
 
 ok(run_script([qw(-cindex -L medium --dangerous -q -d),
-	"$tmp/med", $zp, "$tmp/wt0"]), 'cindex external medium');
+	"$tmp/med", '-g', $zp, '-g', "$tmp/wt0"]), 'cindex external medium');
 
 
 SKIP: {
@@ -228,7 +229,7 @@ SKIP: { # --prune
 
 File::Path::remove_tree("$tmp/ext");
 mkdir("$tmp/ext", 0707);
-ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", $zp]),
+ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", '-g', $zp]),
 	'external on existing dir');
 {
 	my @st = stat("$tmp/ext/cidx.lock");

@@ -70,7 +70,7 @@ my $cidxdir = "$tmpdir/cidx";
 my $rdr = { 1 => \my $cout, 2 => \my $cerr };
 ok run_script([qw(-cindex -v --all --show=join_data),
 		'--join=aggressive,dt:..2022-12-01',
-		'-d', $cidxdir, values %code ],
+		'-d', $cidxdir, map { ('-g', $_) } values %code ],
 		$env, $rdr), 'initial join inboxes w/ coderepos';
 my $out = PublicInbox::Config->json->decode($cout);
 is($out->{join_data}->{dt}->[0], '19700101'.'000000',
@@ -79,4 +79,9 @@ is($out->{join_data}->{dt}->[0], '19700101'.'000000',
 ok run_script([qw(-cindex -v --all -u --join --show),
 		'-d', $cidxdir], $env, $rdr), 'incremental --join';
 
+ok run_script([qw(-cindex -v --no-scan --show),
+		'-d', $cidxdir], $env, $rdr), 'show';
+$out = PublicInbox::Config->json->decode($cout);
+is ref($out->{join_data}), 'HASH', 'got hash join data';
+is $cerr, '', 'no warnings or errors in stderr w/ --show';
 done_testing;

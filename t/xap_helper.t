@@ -20,10 +20,10 @@ my $crepo = create_coderepo 'for-cindex', sub {
 	xsys_e([qw(git init -q --bare)]);
 	xsys_e([qw(git fast-import --quiet)], undef, { 0 => $fi_fh });
 	chdir($dh);
-	run_script([qw(-cindex --dangerous -L medium --no-fsync -q -j1), $d])
+	run_script([qw(-cindex --dangerous -L medium --no-fsync -q -j1), '-g', $d])
 		or xbail '-cindex internal';
 	run_script([qw(-cindex --dangerous -L medium --no-fsync -q -j3 -d),
-		"$d/cidx-ext", $d]) or xbail '-cindex "external"';
+		"$d/cidx-ext", '-g', $d]) or xbail '-cindex "external"';
 };
 $dh = $fi_fh = undef;
 

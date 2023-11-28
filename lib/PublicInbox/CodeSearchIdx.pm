@@ -1131,8 +1131,6 @@ sub init_join_prefork ($) {
 	} split(/,/, join(',', @$subopt));
 	require PublicInbox::CidxXapHelperAux;
 	require PublicInbox::XapClient;
-	my $cfg = $self->{-opt}->{-pi_cfg} // die 'BUG: -pi_cfg unset';
-	$self->{-cfg_f} = $cfg->{-f} = rel2abs_collapsed($cfg->{-f});
 	my @unknown;
 	my $pfx = $JOIN{prefixes} // 'patchid';
 	for (split /\+/, $pfx) {
@@ -1223,7 +1221,8 @@ sub cidx_run { # main entry point
 				$PublicInbox::SearchIdx::BATCH_BYTES;
 	local $MAX_SIZE = $self->{-opt}->{max_size};
 	local $self->{PENDING} = {}; # used by PublicInbox::CidxXapHelperAux
-	local $self->{-cfg_f};
+	my $cfg = $self->{-opt}->{-pi_cfg} // die 'BUG: -pi_cfg unset';
+	$self->{-cfg_f} = $cfg->{-f} = rel2abs_collapsed($cfg->{-f});
 	if (grep { $_ } @{$self->{-opt}}{qw(prune join)}) {
 		require File::Temp;
 		$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);

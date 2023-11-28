@@ -4,8 +4,8 @@
 use v5.12;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
-usage: public-inbox-cindex [options] GIT_DIR...
-usage: public-inbox-cindex [options] --project-list=FILE PROJECT_ROOT
+usage: public-inbox-cindex [options] -g GIT_DIR...
+usage: public-inbox-cindex [options] --project-list=FILE -r PROJECT_ROOT
 
   Create and update search indices for code repos
 
@@ -29,7 +29,8 @@ GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
 		indexlevel|index-level|L=s join:s@
 		batch_size|batch-size=s max_size|max-size=s
 		include|I=s@ only=s@ all show:s@
-		project-list=s exclude=s@
+		project-list=s exclude=s@ project-root|r=s
+		git-dir|g=s@
 		sort-parallel=s sort-compress-program=s sort-buffer-size=s
 		d=s update|u scan! prune dry-run|n C=s@ help|h))
 	or die $help;
@@ -50,23 +51,36 @@ PublicInbox::Admin::progress_prepare($opt);
 my $env = PublicInbox::Admin::index_prepare($opt, $cfg);
 %ENV = (%ENV, %$env) if $env;
 
-require PublicInbox::CodeSearchIdx; # unstable internal API
 my @git_dirs;
-if (defined(my $pl = $opt->{'project-list'})) {
-	my $pfx = shift @ARGV // die <<EOM;
+require PublicInbox::CodeSearchIdx; # unstable internal API
+if (@ARGV) {
+	my @g = map { "-g $_" } @ARGV;
+	die <<EOM;
+Specify git directories with `-g' (or --git-dir=): @g
+Or use --project-list=... and --project-root=...
+EOM
+} elsif (defined(my $pl = $opt->{'project-list'})) {
+	my $pfx = $opt->{'project-root'} // die <<EOM;
 PROJECTS_ROOT required for --project-list
 EOM
-	@ARGV and die <<EOM;
---project-list does not accept additional directories
-(@ARGV)
-beyond `$pfx'
+	$opt->{'git-dir'} and die <<EOM;
+--project-list does not accept additional --git-dir directories
+(@{$opt->{'git-dir'}})
 EOM
 	open my $fh, '<', $pl or die "open($pl): $!\n";
 	chomp(@git_dirs = <$fh>);
-	$_ = PublicInbox::Admin::resolve_git_dir("$pfx/$_") for @git_dirs;
+	$pfx .= '/';
+	$pfx =~ tr!/!/!s;
+	substr($_, 0, 0, $pfx) for @git_dirs;
+} elsif (my $gd = $opt->{'git-dir'}) {
+	@git_dirs = @$gd;
+} elsif (grep defined, @$opt{qw(show update prune)}) {
 } else {
-	@git_dirs = map { PublicInbox::Admin::resolve_git_dir($_) } @ARGV;
+	warn "No --git-dir= nor --project-list= + --project-root= specified\n";
+	die $help;
 }
+
+$_ = PublicInbox::Admin::resolve_git_dir($_) for @git_dirs;
 if (defined $cidx_dir) { # external index
 	die "`%' is not allowed in $cidx_dir\n" if $cidx_dir =~ /\%/;
 	my $cidx = PublicInbox::CodeSearchIdx->new($cidx_dir, $opt);
