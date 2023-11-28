@@ -172,7 +172,7 @@ sub count_shards { scalar($_[0]->xdb_shards_flat) }
 sub update_commit ($$$) {
 	my ($self, $cmt, $roots) = @_; # fields from @FMT
 	my $x = 'Q'.$cmt->{H};
-	my ($docid, @extra) = sort { $a <=> $b } docids_by_postlist($self, $x);
+	my ($docid, @extra) = sort { $a <=> $b } $self->docids_by_postlist($x);
 	@extra and warn "W: $cmt->{H} indexed multiple times, pruning ",
 			join(', ', map { "#$_" } @extra), "\n";
 	$self->{xdb}->delete_document($_) for @extra;
@@ -377,15 +377,6 @@ sub seen ($$) {
 # used to select the shard for a GIT_DIR
 sub git_dir_hash ($) { hex(substr(sha256_hex($_[0]), 0, 8)) }
 
-sub docids_by_postlist ($$) { # consider moving to PublicInbox::Search
-	my ($self, $q) = @_;
-	my $cur = $self->{xdb}->postlist_begin($q);
-	my $end = $self->{xdb}->postlist_end($q);
-	my @ids;
-	for (; $cur != $end; $cur++) { push(@ids, $cur->get_docid) };
-	@ids;
-}
-
 sub _cb { # run_await cb
 	my ($pid, $cmd, undef, $opt, $cb, $self, $git, @arg) = @_;
 	return if $DO_QUIT;
@@ -452,7 +443,7 @@ sub prep_repo ($$) {
 
 sub check_existing { # retry_reopen callback
 	my ($shard, $self, $git) = @_;
-	my @docids = docids_by_postlist($shard, 'P'.$git->{git_dir});
+	my @docids = $shard->docids_by_postlist('P'.$git->{git_dir});
 	my $docid = shift(@docids) // return get_roots($self, $git);
 	my $doc = $shard->get_doc($docid) //
 			die "BUG: no #$docid ($git->{git_dir})";
@@ -778,7 +769,7 @@ sub prune_init { # via wq_io_do in IDX_SHARDS
 
 sub prune_one { # via wq_io_do in IDX_SHARDS
 	my ($self, $term) = @_;
-	my @docids = docids_by_postlist($self, $term);
+	my @docids = $self->docids_by_postlist($term);
 	for (@docids) {
 		$TXN_BYTES -= $self->{xdb}->get_doclength($_) * 42;
 		$self->{xdb}->delete_document($_);
@@ -894,10 +885,9 @@ sub current_join_data ($) {
 sub score_old_join_data ($$$) {
 	my ($self, $score, $ekeys_new) = @_;
 	my $old = ($JOIN{reset} ? undef : current_join_data($self)) or return;
-	my @old = @$old{qw(ekeys roots ibx2root)};
-	@old == 3 or return warn "W: ekeys/roots missing from old JOIN data\n";
 	progress($self, 'merging old join data...');
-	my ($ekeys_old, $roots_old, $ibx2root_old) = @old;
+	my ($ekeys_old, $roots_old, $ibx2root_old) =
+					@$old{qw(ekeys roots ibx2root)};
 	# score: "ibx_off root_off" => nr
 	my $i = -1;
 	my %root2id_new = map { $_ => ++$i } @OFF2ROOT;
@@ -905,16 +895,24 @@ sub score_old_join_data ($$$) {
 	my %ekey2id_new = map { $_ => ++$i } @$ekeys_new;
 	for my $ibx_off_old (0..$#$ibx2root_old) {
 		my $root_offs_old = $ibx2root_old->[$ibx_off_old];
-		my $ekey = $ekeys_old->[$ibx_off_old] //
-			warn "W: no ibx #$ibx_off_old in old JOIN data\n";
-		my $ibx_off_new = $ekey2id_new{$ekey // next} //
+		my $ekey = $ekeys_old->[$ibx_off_old] // do {
+			warn "W: no ibx #$ibx_off_old in old join data\n";
+			next;
+		};
+		my $ibx_off_new = $ekey2id_new{$ekey} // do {
 			warn "W: `$ekey' no longer exists\n";
+			next;
+		};
 		for (@$root_offs_old) {
 			my ($nr, $rid_old) = @$_;
-			my $root_old = $roots_old->[$rid_old] //
-				warn "W: no root #$rid_old in old JOIN data\n";
-			my $rid_new = $root2id_new{$root_old // next} //
+			my $root_old = $roots_old->[$rid_old] // do {
+				warn "W: no root #$rid_old in old data\n";
+				next;
+			};
+			my $rid_new = $root2id_new{$root_old} // do {
 				warn "W: root `$root_old' no longer exists\n";
+				next;
+			};
 			$score->{"$ibx_off_new $rid_new"} += $nr;
 		}
 	}
@@ -963,7 +961,7 @@ sub do_join {
 		progress($self, "$ekey => $root has $nr matches");
 		push @{$new->{ibx2root}->[$ibx_off]}, [ $nr, $root_off ];
 	}
-	for my $ary (values %$new) { # sort by nr
+	for my $ary (values %$new) { # sort by nr (largest first)
 		for (@$ary) { @$_ = sort { $b->[0] <=> $a->[0] } @$_ }
 	}
 	$new->{ekeys} = \@ekeys;

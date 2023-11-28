@@ -643,9 +643,13 @@ sub resolve_patch ($$) {
 # so user_cb never references the SolverGit object
 sub new {
 	my ($class, $ibx, $user_cb, $uarg) = @_;
+	my $gits = $ibx ? $ibx->{-repo_objs} : undef;
+
+	# FIXME: cindex --join= is super-aggressive and may hit too many
+	$gits = [ @$gits[0..2] ] if $gits && @$gits > 3;
 
 	bless { # $ibx is undef if coderepo only (see WwwCoderepo)
-		gits => $ibx ? $ibx->{-repo_objs} : undef,
+		gits => $gits,
 		user_cb => $user_cb,
 		uarg => $uarg,
 		# -cur_di, -qsp_err, -msg => temp fields for Qspawn callbacks

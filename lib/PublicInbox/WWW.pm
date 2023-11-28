@@ -189,6 +189,7 @@ sub preload {
 		}
 		$pi_cfg->ALL and require PublicInbox::Isearch;
 		$self->cgit;
+		$self->coderepo;
 		$self->stylesheets_prepare($_) for ('', '../', '../../');
 		$self->news_www;
 	}

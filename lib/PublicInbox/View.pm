@@ -80,7 +80,7 @@ sub msg_page {
 	# allow user to easily browse the range around this message if
 	# they have ->over
 	$ctx->{-t_max} = $smsg->{ts};
-	$ctx->{-spfx} = '../' if $ibx->{coderepo};
+	$ctx->{-spfx} = '../' if $ibx->{-repo_objs};
 	PublicInbox::WwwStream::aresponse($ctx, \&msg_page_i);
 }
 
@@ -443,7 +443,7 @@ sub thread_html {
 	my $ibx = $ctx->{ibx};
 	my ($nr, $msgs) = $ibx->over->get_thread($mid);
 	return missing_thread($ctx) if $nr == 0;
-	$ctx->{-spfx} = '../../' if $ibx->{coderepo};
+	$ctx->{-spfx} = '../../' if $ibx->{-repo_objs};
 
 	# link $INBOX_DIR/description text to "index_topics" view around
 	# the newest message in this thread
@@ -779,6 +779,9 @@ href=#t>this message</a>:
 <input type=submit value=search
 />\t(<a href=${upfx}_/text/help/#search>help</a>)</pre></form>
 EOM
+		# TODO: related codesearch
+		# my $csrchv = $ctx->{ibx}->{-csrch} // [];
+		# push @related, '<pre>'.ascii_html(Dumper($csrchv)).'</pre>';
 	}
 	if ($ctx->{ibx}->over) {
 		my $t = ts2str($ctx->{-t_max});

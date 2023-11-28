@@ -649,4 +649,21 @@ sub xh_args { # prep getopt args to feed to xap_helper.h socket
 	map { ('-d', $_) } shard_dirs($_[0]);
 }
 
+sub docids_by_postlist ($$) {
+	my ($self, $q) = @_;
+	my $cur = $self->xdb->postlist_begin($q);
+	my $end = $self->{xdb}->postlist_end($q);
+	my @ids;
+	for (; $cur != $end; $cur++) { push(@ids, $cur->get_docid) };
+	@ids;
+}
+
+sub get_doc ($$) {
+	my ($self, $docid) = @_;
+	eval { $self->{xdb}->get_document($docid) } // do {
+		die $@ if $@ && ref($@) !~ /\bDocNotFoundError\b/;
+		undef;
+	}
+}
+
 1;

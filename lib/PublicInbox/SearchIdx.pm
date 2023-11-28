@@ -545,17 +545,9 @@ sub add_message {
 	$smsg->{num};
 }
 
-sub get_doc ($$) {
-	my ($self, $docid) = @_;
-	eval { $self->{xdb}->get_document($docid) } // do {
-		die $@ if $@ && ref($@) !~ /\bDocNotFoundError\b/;
-		undef;
-	}
-}
-
 sub _get_doc ($$) {
 	my ($self, $docid) = @_;
-	get_doc($self, $docid) // do {
+	$self->get_doc($docid) // do {
 		warn "E: #$docid missing in Xapian\n";
 		undef;
 	}

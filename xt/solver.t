@@ -10,6 +10,7 @@ use_ok($_) for @psgi;
 use_ok 'PublicInbox::WWW';
 my $cfg = PublicInbox::Config->new;
 my $www = PublicInbox::WWW->new($cfg);
+$www->preload;
 my $app = sub {
 	my $env = shift;
 	$env->{'psgi.errors'} = \*STDERR;
@@ -63,7 +64,7 @@ while (my ($ibx_name, $urls) = each %$todo) {
 			skip(qq{[publicinbox "$ibx_name"] not configured},
 				scalar(@$urls));
 		}
-		if (!defined($ibx->{coderepo})) {
+		if (!defined($ibx->{-repo_objs})) {
 			push @gone, $ibx_name;
 			skip(qq{publicinbox.$ibx_name.coderepo not configured},
 				scalar(@$urls));

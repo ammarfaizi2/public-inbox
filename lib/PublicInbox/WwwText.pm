@@ -7,7 +7,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::Linkify;
 use PublicInbox::WwwStream;
-use PublicInbox::Hval qw(ascii_html prurl);
+use PublicInbox::Hval qw(ascii_html prurl fmt_ts);
 use HTTP::Date qw(time2str);
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::GzipFilter qw(gzf_maybe);
@@ -248,14 +248,23 @@ EOS
 
 sub coderepos_raw ($$) {
 	my ($ctx, $top_url) = @_;
-	my $cr = $ctx->{ibx}->{coderepo} // return ();
 	my $cfg = $ctx->{www}->{pi_cfg};
+	my $cr = $cfg->repo_objs($ctx->{ibx}) or return ();
 	my $buf = 'Code repositories for project(s) associated with this '.
-		$ctx->{ibx}->thing_type . "\n";
-	for my $git (@{$ctx->{www}->{pi_cfg}->repo_objs($ctx->{ibx})}) {
+		$ctx->{ibx}->thing_type . ":\n";
+	my @recs = map { [ 0, $_ ] } @$cr;
+	my @todo = @recs;
+	$cfg->each_cindex('load_commit_times', \@todo);
+	@recs = sort { $b->[0] <=> $a->[0] } @recs;
+	my $cr_score = $ctx->{ibx}->{-cr_score};
+	for (@recs) {
+		my ($t, $git) = @$_;
 		for ($git->pub_urls($ctx->{env})) {
 			my $u = m!\A(?:[a-z\+]+:)?//!i ? $_ : $top_url.$_;
-			$buf .= "\n\t" . prurl($ctx->{env}, $u);
+			my $nr = $cr_score->{$git->{nick}};
+			$buf .= "\n";
+			$buf .= $nr ? sprintf('% 9u', $nr) : (' 'x9);
+			$buf .= ' '.fmt_ts($t).' '.prurl($ctx->{env}, $u);
 		}
 	}
 	($buf);

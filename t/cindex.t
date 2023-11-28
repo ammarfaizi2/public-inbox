@@ -5,7 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use Cwd qw(getcwd abs_path);
 use List::Util qw(sum);
-use autodie qw(close open rename);
+use autodie qw(close mkdir open rename);
 require_mods(qw(json Xapian +SCM_RIGHTS));
 use_ok 'PublicInbox::CodeSearchIdx';
 use PublicInbox::Import;
@@ -227,7 +227,7 @@ SKIP: { # --prune
 }
 
 File::Path::remove_tree("$tmp/ext");
-ok(mkdir("$tmp/ext", 0707), 'create $tmp/ext with odd permissions');
+mkdir("$tmp/ext", 0707);
 ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext", $zp]),
 	'external on existing dir');
 {
@@ -263,6 +263,30 @@ EOM
 	ok(run_script($cmd, $env, $opt), 'join w/o search');
 	like($cidx_err, qr/W: \Q$basic->{inboxdir}\E not indexed for search/s,
 		'non-Xapian-enabled inbox noted');
+}
+
+# we need to support blank sections for a top-level repos
+# (e.g. <https://example.com/my-project>
+# git.kernel.org could use "pub" as section name, though, since all git repos
+# are currently under //git.kernel.org/pub/**/*
+{
+	mkdir(my $d = "$tmp/blanksection");
+	my $cfg = cfg_new($d, <<EOM);
+[cindex ""]
+	topdir = $tmp/ext
+	localprefix = $tmp
+EOM
+	my $csrch = $cfg->lookup_cindex('');
+	is ref($csrch), 'PublicInbox::CodeSearch', 'codesearch w/ blank name';
+	is_deeply $csrch->{localprefix}, [ "$tmp" ], 'localprefix respected';
+	my $nr = 0;
+	$cfg->each_cindex(sub {
+		my ($cs, @rest) = @_;
+		is $cs->{topdir}, $csrch->{topdir}, 'each_cindex works';
+		is_deeply \@rest, [ '.' ], 'got expected arg';
+		++$nr;
+	}, '.');
+	is $nr, 1, 'iterated through cindices';
 }
 
 done_testing;

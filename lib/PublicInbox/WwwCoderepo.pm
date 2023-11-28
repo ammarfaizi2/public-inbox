@@ -14,12 +14,14 @@ use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
 use PublicInbox::GitHTTPBackend;
 use PublicInbox::WwwStream;
-use PublicInbox::Hval qw(ascii_html utf8_maybe);
+use PublicInbox::Hval qw(prurl ascii_html utf8_maybe);
 use PublicInbox::ViewDiff qw(uri_escape_path);
 use PublicInbox::RepoSnapshot;
 use PublicInbox::RepoAtom;
 use PublicInbox::RepoTree;
 use PublicInbox::OnDestroy;
+use URI::Escape qw(uri_escape_utf8);
+use File::Spec;
 
 my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
@@ -62,6 +64,7 @@ sub prepare_coderepos {
 		my $eidx = $pi_cfg->lookup_ei($k) // next;
 		$pi_cfg->repo_objs($eidx);
 	}
+	$pi_cfg->each_cindex('load_coderepos', $pi_cfg);
 }
 
 sub new {
@@ -119,6 +122,41 @@ sub _refs_tags_link {
 		"</a>$align ", ascii_html($s), " ($cd)", @snap_fmt, "\n");
 }
 
+sub emit_joined_inboxes ($) {
+	my ($ctx) = @_;
+	my $names = $ctx->{git}->{ibx_names}; # coderepo directives in config
+	my $score = $ctx->{git}->{ibx_score}; # generated w/ cindex --join
+	($names || $score) or return;
+	my $pi_cfg = $ctx->{wcr}->{pi_cfg};
+	my ($u, $h);
+	my $zfh = $ctx->zfh;
+	print $zfh "\n# associated public inboxes:",
+		"\n# (number on the left is used for dev purposes)";
+	my @ns = map { [ 0, $_ ] } @$names;
+	my $env = $ctx->{env};
+	for (@ns, @$score) {
+		my ($nr, $name) = @$_;
+		my $ibx = $pi_cfg->lookup_name($name) // do {
+			warn "W: inbox `$name' gone for $ctx->{git}->{git_dir}";
+			say $zfh '# ', ascii_html($name), ' (missing inbox?)';
+			next;
+		};
+		if (scalar(@{$ibx->{url} // []})) {
+			$u = $h = ascii_html(prurl($env, $ibx->{url}));
+		} else {
+			$h = ascii_html(prurl($env, uri_escape_utf8($name)));
+			$h .= '/';
+			$u = ascii_html($name);
+		}
+		if ($nr) {
+			printf $zfh "\n% 11u", $nr;
+		} else {
+			print $zfh "\n", ' 'x11;
+		}
+		print $zfh qq{ <a\nhref="$h">$u</a>};
+	}
+}
+
 sub summary_END { # called via OnDestroy
 	my ($ctx) = @_;
 	my $wcb = delete($ctx->{-wcb}) or return; # already done
@@ -174,6 +212,7 @@ EOM
 	for (@r) { print $zfh _refs_tags_link($_, './', $snap_pfx, @snap_fmt) }
 	print $zfh $NO_TAGS if !@r;
 	print $zfh qq(<a href="refs/tags/">...</a>\n) if $last;
+	emit_joined_inboxes $ctx;
 	$wcb->($ctx->html_done('</pre>'));
 }
 

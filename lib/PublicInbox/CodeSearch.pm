@@ -21,7 +21,7 @@ use constant {
 our @CODE_NRP;
 our @CODE_VMAP = (
 	[ AT, 'd:' ], # mairix compat
-	[ AT, 'dt:' ], # mail compat
+	[ AT, 'dt:' ], # public-inbox mail compat
 	[ CT, 'ct:' ],
 );
 
@@ -51,7 +51,7 @@ my %prob_prefix = ( # copied from PublicInbox::Search
 sub new {
 	my ($cls, $dir, $cfg) = @_;
 	# can't have a PublicInbox::Config here due to circular refs
-	bless { xpfx => "$dir/cidx".CIDX_SCHEMA_VER,
+	bless { topdir => $dir, xpfx => "$dir/cidx".CIDX_SCHEMA_VER,
 		-cfg_f => $cfg->{-f} }, $cls;
 }
 
@@ -63,7 +63,20 @@ sub join_data {
 	my $cur = $self->xdb->get_metadata($key) or return;
 	$cur = eval { PublicInbox::Config::json()->decode(uncompress($cur)) };
 	warn "E: $@ (corrupt metadata in `$key' key?)" if $@;
-	$cur;
+	my @m = grep { ref($cur->{$_}) ne 'ARRAY' } qw(ekeys roots ibx2root);
+	if (@m) {
+		warn <<EOM;
+W: $self->{topdir} join data for $self->{-cfg_f} missing: @m
+EOM
+		undef;
+	} elsif (@{$cur->{ekeys}} != @{$cur->{ibx2root}}) {
+		warn <<EOM;
+W: $self->{topdir} join data for $self->{-cfg_f} mismatched ekeys and ibx2root
+EOM
+		undef;
+	} else {
+		$cur;
+	}
 }
 
 sub qparse_new ($) {
@@ -196,16 +209,136 @@ sub roots2paths { # for diagnostics
 	\%ret;
 }
 
-sub paths2roots { # for diagnostics
-	my ($self) = @_;
+sub root_oids ($$) {
+	my ($self, $git_dir) = @_;
+	my @ids = $self->docids_by_postlist('P'.$git_dir);
+	@ids or warn <<"";
+BUG? (non-fatal) `$git_dir' not indexed in $self->{topdir}
+
+	warn <<"" if @ids > 1;
+BUG: (non-fatal) $git_dir indexed multiple times in $self->{topdir}
+
 	my %ret;
-	my $tmp = roots2paths($self);
-	for my $root_oidhex (keys %$tmp) {
-		my $paths = delete $tmp->{$root_oidhex};
-		push @{$ret{$_}}, $root_oidhex for @$paths;
+	for my $docid (@ids) {
+		my @oids = xap_terms('G', $self->xdb, $docid);
+		@ret{@oids} = @oids;
 	}
-	@$_ = sort(@$_) for values %ret;
+	sort keys %ret;
+}
+
+sub paths2roots {
+	my ($self, $paths) = @_;
+	my %ret;
+	if ($paths) {
+		for my $p (keys %$paths) { @{$ret{$p}} = root_oids($self, $p) }
+	} else {
+		my $tmp = roots2paths($self);
+		for my $root_oidhex (keys %$tmp) {
+			my $paths = delete $tmp->{$root_oidhex};
+			push @{$ret{$_}}, $root_oidhex for @$paths;
+		}
+		@$_ = sort(@$_) for values %ret;
+	}
 	\%ret;
+}
+
+sub load_commit_times { # each_cindex callback
+	my ($self, $todo) = @_; # todo = [ [ time, git ], [ time, git ] ...]
+	my (@pending, $rec, $dir, @ids, $doc);
+	while ($rec = shift @$todo) {
+		@ids = $self->docids_by_postlist('P'.$rec->[1]->{git_dir});
+		if (@ids) {
+			warn <<EOM if @ids > 1;
+W: $rec->[1]->{git_dir} indexed multiple times in $self->{topdir}
+EOM
+			for (@ids) {
+				$doc = $self->get_doc($_) // next;
+				$rec->[0] = int_val($doc, CT);
+				last;
+			}
+		} else { # may be in another cindex:
+			push @pending, $rec;
+		}
+	}
+	@$todo = @pending;
+}
+
+sub load_coderepos { # each_cindex callback
+	my ($self, $pi_cfg) = @_;
+	my $name = $self->{name};
+	my $cfg_f = $pi_cfg->{-f};
+	my $lpfx = $self->{localprefix} or return warn <<EOM;
+W: cindex.$name.localprefix unset in $cfg_f, ignoring cindex.$name
+EOM
+	my $lre = join('|', map { $_ .= '/'; tr!/!/!s; quotemeta } @$lpfx);
+	$lre = qr!\A(?:$lre)!;
+	my $coderepos = $pi_cfg->{-coderepos};
+	my $nick_pfx = $name eq '' ? '' : "$name/";
+	my %dir2cr;
+	for my $p ($self->all_terms('P')) {
+		my $nick = $p;
+		$nick =~ s!$lre!$nick_pfx!s or next;
+		$dir2cr{$p} = $coderepos->{$nick} //= do {
+			my $git = PublicInbox::Git->new($p);
+			$git->{nick} = $nick; # for git->pub_urls
+			$git;
+		};
+	}
+	my $jd = join_data($self) or return warn <<EOM;
+W: cindex.$name.topdir=$self->{topdir} has no usable join data for $cfg_f
+EOM
+	my ($ekeys, $roots, $ibx2root) = @$jd{qw(ekeys roots ibx2root)};
+	my $roots2paths = roots2paths($self);
+	for my $root_offs (@$ibx2root) {
+		my $ekey = shift(@$ekeys) // die 'BUG: {ekeys} empty';
+		scalar(@$root_offs) or next;
+		my $ibx = $pi_cfg->lookup_eidx_key($ekey) // do {
+			warn "W: `$ekey' gone from $cfg_f\n";
+			next;
+		};
+		my $gits = $ibx->{-repo_objs} //= [];
+		my $cr_score = $ibx->{-cr_score} //= {};
+		my %ibx_p2g = map { $_->{git_dir} => $_ } @$gits;
+		my $ibx2self; # cindex has an association w/ inbox?
+		for (@$root_offs) { # sorted by $nr descending
+			my ($nr, $root_off) = @$_;
+			my $root_oid = $roots->[$root_off] // do {
+				warn <<EOM;
+BUG: root #$root_off invalid in join data for `$ekey' with $cfg_f
+EOM
+				next;
+			};
+			my $git_dirs = $roots2paths->{$root_oid};
+			my @gits = map { $dir2cr{$_} // () } @$git_dirs;
+			$cr_score->{$_->{nick}} //= $nr for @gits;
+			@$git_dirs = grep { !$ibx_p2g{$_} } @$git_dirs;
+			# @$git_dirs or warn "W: no matches for $root_oid\n";
+			for (@$git_dirs) {
+				if (my $git = $dir2cr{$_}) {
+					$ibx_p2g{$_} = $git;
+					$ibx2self = 1;
+					$ibx->{-hide}->{www} or
+						push @{$git->{ibx_score}},
+							[ $nr, $ibx->{name} ];
+					push @$gits, $git;
+				} else {
+					warn <<EOM;
+W: no coderepo available for $_ (localprefix=@$lpfx)
+EOM
+				}
+			}
+		}
+		if (@$gits) {
+			push @{$ibx->{-csrch}}, $self if $ibx2self;
+		} else {
+			delete $ibx->{-repo_objs};
+			delete $ibx->{-cr_score};
+		}
+	}
+	for my $git (values %dir2cr) {
+		my $s = $git->{ibx_score};
+		@$s = sort { $b->[0] <=> $a->[0] } @$s if $s;
+	}
 }
 
 1;

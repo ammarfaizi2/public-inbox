@@ -412,8 +412,8 @@ sub get_1 {
 
 sub repo_objs {
 	my ($self, $ibxish) = @_;
-	my $ibx_coderepos = $ibxish->{coderepo} // return;
 	$ibxish->{-repo_objs} // do {
+		my $ibx_coderepos = $ibxish->{coderepo} // return;
 		parse_cgitrc($self, undef, 0);
 		my $coderepos = $self->{-coderepos};
 		my @repo_objs;
@@ -566,6 +566,43 @@ sub _fill_ei ($$) {
 	return unless valid_foo_name($name, 'extindex');
 	$es->{name} = $name;
 	$es;
+}
+
+sub _fill_csrch ($$) {
+	my ($self, $name) = @_; # "" is a valid name for cindex
+	return if $name ne '' && !valid_foo_name($name, 'cindex');
+	eval { require PublicInbox::CodeSearch } or return;
+	my $pfx = "cindex.$name";
+	my $d = $self->{"$pfx.topdir"} // return;
+	-d $d or return;
+	if (index($d, "\n") >= 0) {
+		warn "E: `$d' must not contain `\\n'\n";
+		return;
+	}
+	my $csrch = PublicInbox::CodeSearch->new($d, $self);
+	for my $k (qw(localprefix)) {
+		my $v = $self->{"$pfx.$k"} // next;
+		$csrch->{$k} = _array($v);
+	}
+	$csrch->{name} = $name;
+	$csrch;
+}
+
+sub lookup_cindex ($$) {
+	my ($self, $name) = @_;
+	$self->{-csrch_by_name}->{$name} //= _fill_csrch($self, $name);
+}
+
+sub each_cindex {
+	my ($self, $cb, @arg) = @_;
+	my @csrch = map {
+		lookup_cindex($self, substr($_, length('cindex.'))) // ()
+	} grep(m!\Acindex\.[^\./]*\z!, @{$self->{-section_order}});
+	if (ref($cb) eq 'CODE') {
+		$cb->($_, @arg) for @csrch;
+	} else { # string function
+		$_->$cb(@arg) for @csrch;
+	}
 }
 
 sub config_cmd {
