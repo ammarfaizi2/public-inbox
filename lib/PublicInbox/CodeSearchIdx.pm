@@ -338,6 +338,9 @@ sub shard_done { # called via PktOp on shard_index completion
 
 sub repo_stored {
 	my ($self, $repo_ctx, $drs, $did) = @_;
+	# check @IDX_SHARDS instead of DO_QUIT to avoid wasting prior work
+	# because shard_commit is fast
+	return unless @IDX_SHARDS;
 	$did > 0 or die "BUG: $repo_ctx->{repo}->{git_dir}: docid=$did";
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx,
@@ -509,6 +512,7 @@ sub shard_commit { # via wq_io_do
 
 sub dump_roots_start {
 	my ($self, $do_join) = @_;
+	return if $DO_QUIT;
 	$XHC //= PublicInbox::XapClient::start_helper("-j$NPROC");
 	$do_join // die 'BUG: no $do_join';
 	progress($self, 'dumping IDs from coderepos');
@@ -562,6 +566,7 @@ EOM
 
 sub dump_ibx_start {
 	my ($self, $do_join) = @_;
+	return if $DO_QUIT;
 	$XHC //= PublicInbox::XapClient::start_helper("-j$NPROC");
 	my ($sort_opt, $fold_opt);
 	pipe(local $sort_opt->{0}, $DUMP_IBX_WPIPE);
