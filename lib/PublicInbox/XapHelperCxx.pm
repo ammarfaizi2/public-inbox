@@ -20,7 +20,7 @@ $ENV{PERL_INLINE_DIRECTORY} // die('BUG: PERL_INLINE_DIRECTORY unset');
 substr($dir, 0, 0) = "$ENV{PERL_INLINE_DIRECTORY}/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
-my @srcs = map { $srcpfx.$_ } qw(xap_helper.h);
+my @srcs = map { $srcpfx.$_ } qw(xap_helper.h xh_cidx.h);
 my @pm_dep = map { $srcpfx.$_ } qw(Search.pm CodeSearch.pm);
 my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
@@ -61,11 +61,9 @@ sub build () {
 	require PublicInbox::OnDestroy;
 	my ($prog) = ($bin =~ m!/([^/]+)\z!);
 	my $lk = PublicInbox::Lock->new("$dir/$prog.lock")->lock_for_scope;
-	open my $fh, '>', "$dir/$prog.cpp";
-	say $fh qq(# include "$_") for @srcs;
-	print $fh PublicInbox::Search::generate_cxx();
-	print $fh PublicInbox::CodeSearch::generate_cxx();
-	close $fh;
+	write_file '>', "$dir/$prog.cpp", qq{#include "xap_helper.h"\n},
+			PublicInbox::Search::generate_cxx(),
+			PublicInbox::CodeSearch::generate_cxx();
 
 	opendir my $dh, '.';
 	my $restore = PublicInbox::OnDestroy->new(\&chdir, $dh);

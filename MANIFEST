@@ -378,6 +378,7 @@ lib/PublicInbox/XapHelperCxx.pm
 lib/PublicInbox/Xapcmd.pm
 lib/PublicInbox/gcf2_libgit2.h
 lib/PublicInbox/xap_helper.h
+lib/PublicInbox/xh_cidx.h
 sa_config/Makefile
 sa_config/README
 sa_config/root/etc/spamassassin/public-inbox.pre
