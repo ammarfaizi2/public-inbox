@@ -24,7 +24,7 @@ Compatibility:
   -extindex.  Uppercase names will now be lowercased by default and
   warnings will be emitted.  Conflicting newsgroup names (and `inboxdir'
   entries if `newsgroup' isn't specified) will also generate warnings
-  since it breaks -extindex and the new -cindex (coderepo index)
+  since they break -extindex and the new -cindex (coderepo index).
 
 treewide
 

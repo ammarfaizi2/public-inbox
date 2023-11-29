@@ -1,6 +1,6 @@
 =head1 NAME
 
-public-inbox-cindex - create and update search for code repositories
+public-inbox-cindex - create and update code repository search indices
 
 =head1 SYNOPSIS
 
@@ -106,7 +106,7 @@ Used to override the default "~/.public-inbox/config" value.
 =item XAPIAN_FLUSH_THRESHOLD
 
 The number of documents to update before committing changes to
-disk.  This environment is handled directly by Xapian, refer to
+disk.  This variable is handled directly by Xapian, refer to
 Xapian API documentation for more details.
 
 Use C<publicinbox.indexBatchSize> instead.

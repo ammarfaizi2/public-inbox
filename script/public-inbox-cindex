@@ -61,7 +61,7 @@ Or use --project-list=... and --project-root=...
 EOM
 } elsif (defined(my $pl = $opt->{'project-list'})) {
 	my $pfx = $opt->{'project-root'} // die <<EOM;
-PROJECTS_ROOT required for --project-list
+PROJECT_ROOT required for --project-list
 EOM
 	$opt->{'git-dir'} and die <<EOM;
 --project-list does not accept additional --git-dir directories
