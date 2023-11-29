@@ -4,7 +4,7 @@
 use v5.12;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 my $help = <<EOF; # the following should fit w/o scrolling in 80x24 term:
-usage: public-inbox-cindex [options] -g GIT_DIR...
+usage: public-inbox-cindex [options] -g GIT_DIR [-g GIT_DIR]...
 usage: public-inbox-cindex [options] --project-list=FILE -r PROJECT_ROOT
 
   Create and update search indices for code repos

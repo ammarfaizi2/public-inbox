@@ -4,7 +4,7 @@ public-inbox-cindex - create and update search for code repositories
 
 =head1 SYNOPSIS
 
-public-inbox-cindex [OPTIONS] -g GIT_DIR [-g GIT_DIR]
+public-inbox-cindex [OPTIONS] -g GIT_DIR [-g GIT_DIR]...
 
 public-inbox-cindex [OPTIONS] --update
 
