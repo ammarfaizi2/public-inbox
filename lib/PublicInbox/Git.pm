@@ -24,7 +24,8 @@ use Carp qw(croak carp);
 use PublicInbox::SHA qw(sha_all);
 our %HEXLEN2SHA = (40 => 1, 64 => 256);
 our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
-our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN);
+our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN
+			$ck_unlinked_packs);
 our $in_cleanup;
 our $async_warn; # true in read-only daemons
 
@@ -597,27 +598,27 @@ sub manifest_entry {
 	$ent;
 }
 
+our $ck_unlinked_packs = $^O eq 'linux' ? sub {
+	# FIXME: port gcf2-like over to git.git so we won't need to
+	# deal with libgit2
+	my $s = try_cat "/proc/$_[0]/maps";
+	$s =~ /\.(?:idx|pack) \(deleted\)/s ? 1 : undef;
+} : undef;
+
 # returns true if there are pending cat-file processes
 sub cleanup_if_unlinked {
 	my ($self) = @_;
-	return cleanup($self, 1) if $^O ne 'linux';
+	$ck_unlinked_packs or return cleanup($self, 1);
 	# Linux-specific /proc/$PID/maps access
 	# TODO: support this inside git.git
-	my $ret = 0;
+	my $nr_live = 0;
 	for my $obj ($self, ($self->{ck} // ())) {
 		my $sock = $obj->{sock} // next;
 		my $pid = $sock->attached_pid // next;
-		open my $fh, '<', "/proc/$pid/maps" or return cleanup($self, 1);
-		while (<$fh>) {
-			# n.b. we do not restart for unlinked multi-pack-index
-			# since it's not too huge, and the startup cost may
-			# be higher.
-			/\.(?:idx|pack) \(deleted\)$/ and
-				return cleanup($self, 1);
-		}
-		++$ret;
+		$ck_unlinked_packs->($pid) and return cleanup($self, 1);
+		++$nr_live;
 	}
-	$ret;
+	$nr_live;
 }
 
 sub event_step {

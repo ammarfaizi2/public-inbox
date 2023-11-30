@@ -9,7 +9,7 @@ use PublicInbox::Spawn qw(which run_qx); # may set PERL_INLINE_DIRECTORY
 use Fcntl qw(SEEK_SET);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
-use PublicInbox::Git;
+use PublicInbox::Git qw($ck_unlinked_packs);
 use PublicInbox::Lock;
 use autodie qw(close open seek truncate);
 
@@ -86,16 +86,6 @@ sub add_alt ($$) {
 	1;
 }
 
-sub have_unlinked_files () {
-	# FIXME: port gcf2-like over to git.git so we won't need to
-	# deal with libgit2
-	return 1 if $^O ne 'linux';
-	if (my $s = PublicInbox::IO::try_cat("/proc/$$/maps")) {
-		return 1 if /\.(?:idx|pack) \(deleted\)/s;
-	}
-	undef;
-}
-
 # Usage: $^X -MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop [EXPIRE-TIMEOUT]
 # (see lib/PublicInbox/Gcf2Client.pm)
 sub loop (;$) {
@@ -104,6 +94,7 @@ sub loop (;$) {
 	my (%seen, $check_at);
 	STDERR->autoflush(1);
 	STDOUT->autoflush(1);
+	my $pid = $$;
 
 	while (<STDIN>) {
 		chomp;
@@ -130,7 +121,8 @@ sub loop (;$) {
 			$check_at //= $now + $exp;
 			if ($now > $check_at) {
 				undef $check_at;
-				if (have_unlinked_files()) {
+				if (!$ck_unlinked_packs ||
+						$ck_unlinked_packs->($pid)) {
 					$gcf2 = new();
 					%seen = ();
 				}
