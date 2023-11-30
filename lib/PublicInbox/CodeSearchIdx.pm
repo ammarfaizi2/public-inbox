@@ -365,7 +365,7 @@ sub repo_stored {
 	$did > 0 or die "BUG: $repo_ctx->{repo}->{git_dir}: docid=$did";
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx,
-		PublicInbox::OnDestroy->new($$, \&next_repos, $repo_ctx, $drs)];
+		PublicInbox::OnDestroy->new(\&next_repos, $repo_ctx, $drs)];
 	# shard_done fires when all shards are committed
 	my @active = keys %{$repo_ctx->{active}};
 	$IDX_SHARDS[$_]->wq_io_do('shard_commit', [ $p->{op_p} ]) for @active;
@@ -607,8 +607,8 @@ sub index_next ($) {
 		index_repo(undef, $self, shift @$IDXQ);
 	} elsif ($SCANQ && @$SCANQ) {
 		my $git = shift @$SCANQ;
-		my $prep_repo = PublicInbox::OnDestroy->new($$, \&prep_repo,
-							$self, $git);
+		my $prep_repo = PublicInbox::OnDestroy->new(\&prep_repo,
+								$self, $git);
 		fp_start($self, $git, $prep_repo);
 		ct_start($self, $git, $prep_repo);
 	} elsif ($TMPDIR) {
@@ -669,7 +669,7 @@ sub index_repo { # run_git cb
 	my $repo_ctx = $REPO_CTX = { self => $self, repo => $repo };
 	delete $git->{-cidx_gits_fini}; # may fire gits_fini
 	my $drs = delete $git->{-cidx_dump_roots_start};
-	my $index_done = PublicInbox::OnDestroy->new($$, \&index_done,
+	my $index_done = PublicInbox::OnDestroy->new(\&index_done,
 							$repo_ctx, $drs);
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx, $index_done ];
@@ -779,7 +779,7 @@ sub scan_git_dirs ($) {
 	my ($self) = @_;
 	@$SCANQ = () unless $self->{-opt}->{scan};
 	$GITS_NR = @$SCANQ or return;
-	my $gits_fini = PublicInbox::OnDestroy->new($$, \&gits_fini);
+	my $gits_fini = PublicInbox::OnDestroy->new(\&gits_fini);
 	$_->{-cidx_gits_fini} = $gits_fini for @$SCANQ;
 	if (my $drs = $TODO{dump_roots_start}) {
 		$_->{-cidx_dump_roots_start} = $drs for @$SCANQ;
@@ -851,7 +851,7 @@ sub prep_umask ($) {
 		umask == $um or progress($self, 'using umask from ',
 						$self->{cidx_dir}, ': ',
 						sprintf('0%03o', $um));
-		PublicInbox::OnDestroy->new($$, \&CORE::umask, umask($um));
+		PublicInbox::OnDestroy->new(\&CORE::umask, umask($um));
 	} else {
 		$self->{umask} = umask; # for SearchIdx->with_umask
 		undef;
@@ -1073,11 +1073,11 @@ EOM
 	($JOIN_DT[1]) = ($QRY_STR =~ /\.\.([0-9]{14})\z/); # YYYYmmddHHMMSS
 	($JOIN_DT[0]) = ($QRY_STR =~ /\Adt:([0-9]{14})/); # YYYYmmddHHMMSS
 	$JOIN_DT[0] //= '19700101'.'000000'; # git uses unsigned times
-	$TODO{do_join} = PublicInbox::OnDestroy->new($$, \&do_join, $self);
+	$TODO{do_join} = PublicInbox::OnDestroy->new(\&do_join, $self);
 	$TODO{joining} = 1; # keep shards_active() happy
-	$TODO{dump_ibx_start} = PublicInbox::OnDestroy->new($$,
-				\&dump_ibx_start, $self, $TODO{do_join});
-	$TODO{dump_roots_start} = PublicInbox::OnDestroy->new($$,
+	$TODO{dump_ibx_start} = PublicInbox::OnDestroy->new(\&dump_ibx_start,
+							$self, $TODO{do_join});
+	$TODO{dump_roots_start} = PublicInbox::OnDestroy->new(
 				\&dump_roots_start, $self, $TODO{do_join});
 	progress($self, "will join in $QRY_STR date range...");
 	my $id = -1;
@@ -1100,7 +1100,7 @@ sub init_prune ($) {
 	require_progs('prune', 'xapian-delve' => \@delve, sed => \@sed,
 			comm => \@COMM, awk => \@AWK);
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
-	my $run_prune = PublicInbox::OnDestroy->new($$, \&run_prune, $self,
+	my $run_prune = PublicInbox::OnDestroy->new(\&run_prune, $self,
 						$TODO{dump_roots_start});
 	my ($sort_opt, $sed_opt, $delve_opt);
 	pipe(local $sed_opt->{0}, local $delve_opt->{1});
