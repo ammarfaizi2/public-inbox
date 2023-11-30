@@ -258,15 +258,11 @@ sub load_ct { # retry_reopen cb
 
 sub load_commit_times { # each_cindex callback
 	my ($self, $todo) = @_; # todo = [ [ time, git ], [ time, git ] ...]
-	my (@pending, $rec, $dir, @ids, $doc);
+	my (@pending, $rec, $ct);
 	while ($rec = shift @$todo) {
-		@ids = docids_of_git_dir $self, $rec->[1]->{git_dir};
-		if (@ids) {
-			for (@ids) {
-				$doc = $self->get_doc($_) // next;
-				$rec->[0] = int_val($doc, CT);
-				last;
-			}
+		$ct = $self->retry_reopen(\&load_ct, $rec->[1]->{git_dir});
+		if (defined $ct) {
+			$rec->[0] = $ct;
 		} else { # may be in another cindex:
 			push @pending, $rec;
 		}
@@ -295,7 +291,7 @@ EOM
 			$git;
 		};
 	}
-	my $jd = join_data($self) or return warn <<EOM;
+	my $jd = $self->retry_reopen(\&join_data, $self) or return warn <<EOM;
 W: cindex.$name.topdir=$self->{topdir} has no usable join data for $cfg_f
 EOM
 	my ($ekeys, $roots, $ibx2root) = @$jd{qw(ekeys roots ibx2root)};
@@ -366,7 +362,7 @@ sub repos_sorted {
 	my @recs = map { [ 0, $_ ] } @_; # PublicInbox::Git objects
 	my @todo = @recs;
 	$pi_cfg->each_cindex(\&load_commit_times, \@todo);
-	@recs = sort { $b->[0] <=> $a->[0] } @recs;
+	@recs = sort { $b->[0] <=> $a->[0] } @recs; # sort by commit time
 }
 
 1;
