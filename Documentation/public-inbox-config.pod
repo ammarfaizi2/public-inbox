@@ -273,7 +273,9 @@ Default: 25
 
 A comma-delimited list of listings to hide the inbox from.
 
-Valid values are currently C<www> and C<manifest>.
+Valid values are currently C<www> and C<manifest> for non-C<404>
+values of L</publicinbox.wwwListing> and L</publicinbox.grokManifest>,
+respectively
 
 Default: none
 
@@ -378,6 +380,21 @@ TODO support showing cgit listing
 =back
 
 Default: C<404>
+
+=item publicinbox.nameIsUrl
+
+Treat the name of the public inbox as it's unqualified URL when
+using C<publicInbox.wwwListing=all>.  This is, every
+C<[publicinbox "foo"]> section implicitly sets C<publicinbox.foo.url=foo>.
+
+This is a convenient alternative to specifying
+C<publicinbox.E<lt>nameE<gt>.url> for every single inbox if
+your inbox URLs are domain-agnostic when using
+C<publicInbox.wwwListing=all>
+
+Default: false
+
+New in public-inbox 2.0.0 (PENDING).
 
 =item publicinbox.grokmanifest
 
