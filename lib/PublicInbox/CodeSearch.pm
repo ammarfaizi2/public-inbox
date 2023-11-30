@@ -209,14 +209,19 @@ sub roots2paths { # for diagnostics
 	\%ret;
 }
 
-sub root_oids ($$) {
+sub docids_of_git_dir ($$) {
 	my ($self, $git_dir) = @_;
 	my @ids = $self->docids_by_postlist('P'.$git_dir);
-	@ids or warn <<"";
-BUG? (non-fatal) `$git_dir' not indexed in $self->{topdir}
-
 	warn <<"" if @ids > 1;
 BUG: (non-fatal) $git_dir indexed multiple times in $self->{topdir}
+
+	@ids;
+}
+
+sub root_oids ($$) {
+	my ($self, $git_dir) = @_;
+	my @ids = docids_of_git_dir $self, $git_dir or warn <<"";
+BUG? (non-fatal) `$git_dir' not indexed in $self->{topdir}
 
 	my %ret;
 	for my $docid (@ids) {
@@ -242,15 +247,21 @@ sub paths2roots {
 	\%ret;
 }
 
+sub load_ct { # retry_reopen cb
+	my ($self, $git_dir) = @_;
+	my @ids = docids_of_git_dir $self, $git_dir or return;
+	for (@ids) {
+		my $doc = $self->get_doc($_) // next;
+		return int_val($doc, CT);
+	}
+}
+
 sub load_commit_times { # each_cindex callback
 	my ($self, $todo) = @_; # todo = [ [ time, git ], [ time, git ] ...]
 	my (@pending, $rec, $dir, @ids, $doc);
 	while ($rec = shift @$todo) {
-		@ids = $self->docids_by_postlist('P'.$rec->[1]->{git_dir});
+		@ids = docids_of_git_dir $self, $rec->[1]->{git_dir};
 		if (@ids) {
-			warn <<EOM if @ids > 1;
-W: $rec->[1]->{git_dir} indexed multiple times in $self->{topdir}
-EOM
 			for (@ids) {
 				$doc = $self->get_doc($_) // next;
 				$rec->[0] = int_val($doc, CT);
