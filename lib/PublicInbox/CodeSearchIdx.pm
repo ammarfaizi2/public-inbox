@@ -1087,7 +1087,7 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	# ) | awk | sort | comm | cidx_read_comm()
 	my ($awk_opt, $sort_opt, $batch_opt);
 	my $comm_opt = { -C => "$TMPDIR" };
-	pipe(local $awk_opt->{0}, local $batch_opt->{1});
+	pipe(local $awk_opt->{0}, $batch_opt->{1});
 	pipe(local $sort_opt->{0}, local $awk_opt->{1});
 	pipe(local $comm_opt->{0}, local $sort_opt->{1});
 	run_await(\@AWK, $CMD_ENV, $awk_opt, \&cmd_done);
