@@ -79,7 +79,7 @@ sub hide_key { 'www' }
 
 sub hide_inbox {
 	my ($ctx, $ibx, $re) = @_;
-	$ibx->{-hide}->{$ctx->hide_key} ||
+	$ibx->{'-hide_'.$ctx->hide_key} ||
 		!grep(/$re/, @{$ibx->{url} // $ctx->{-name_is_url} // []})
 }
 

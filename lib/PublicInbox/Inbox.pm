@@ -70,12 +70,8 @@ sub new {
 		delete $opts->{feedmax};
 	}
 	# allow any combination of multi-line or comma-delimited hide entries
-	my $hide = {};
-	if (defined(my $h = $opts->{hide})) {
-		foreach my $v (@$h) {
-			$hide->{$_} = 1 foreach (split(/\s*,\s*/, $v));
-		}
-		$opts->{-hide} = $hide;
+	for $v (@{delete($opts->{hide}) // []}) {
+		$opts->{-'hide_'.$_} = 1 for split(/\s*,\s*/, $v);
 	}
 	bless $opts, $class;
 }

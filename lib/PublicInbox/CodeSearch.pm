@@ -328,7 +328,7 @@ EOM
 				if (my $git = $dir2cr{$_}) {
 					$ibx_p2g{$_} = $git;
 					$ibx2self = 1;
-					$ibx->{-hide}->{www} or
+					$ibx->{-hide_www} or
 						push @{$git->{ibx_score}},
 							[ $nr, $ibx->{name} ];
 					push @$gits, $git;
