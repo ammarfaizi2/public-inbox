@@ -69,7 +69,7 @@ sub join_data {
 W: $self->{topdir} join data for $self->{-cfg_f} missing: @m
 EOM
 		undef;
-	} elsif (@{$cur->{ekeys}} != @{$cur->{ibx2root}}) {
+	} elsif (@{$cur->{ekeys}} < @{$cur->{ibx2root}}) {
 		warn <<EOM;
 W: $self->{topdir} join data for $self->{-cfg_f} mismatched ekeys and ibx2root
 EOM
