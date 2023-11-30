@@ -383,8 +383,8 @@ sub git_dir_hash ($) { hex(substr(sha256_hex($_[0]), 0, 8)) }
 sub _cb { # run_await cb
 	my ($pid, $cmd, undef, $opt, $cb, $self, $git, @arg) = @_;
 	return if $DO_QUIT;
-	($git->{-cidx_err} = $?) ? warn("W: @$cmd (\$?=$?)\n") :
-				$cb->($opt, $self, $git, @arg);
+	$? ? ($git->{-cidx_err} = warn("W: @$cmd (\$?=$?)\n")) :
+			$cb->($opt, $self, $git, @arg);
 }
 
 sub run_git {
