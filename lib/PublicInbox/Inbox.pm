@@ -12,28 +12,20 @@ use List::Util qw(max);
 use Carp qw(croak);
 use PublicInbox::Compat qw(uniqstr);
 
-# returns true if further checking is required
+# in case DBs get replaced (Xapcmd does it for v1)
 sub check_inodes ($) {
 	for (qw(over mm)) { $_[0]->{$_}->check_inodes if $_[0]->{$_} }
 }
 
+# search/over/mm hold onto FDs and description+cloneurl may get updated.
+# creating long-lived allocations in the same phase as short-lived
+# allocations also leads to fragmentation, so we don't want some stuff
+# living too long.
 sub do_cleanup {
 	my ($ibx) = @_;
-	my $live;
-	if (defined $ibx->{git}) {
-		$live = $ibx->isa(__PACKAGE__) ? $ibx->{git}->cleanup(1)
-					: $ibx->{git}->cleanup_if_unlinked;
-		delete($ibx->{git}) unless $live;
-	}
-	if ($live) {
-		check_inodes($ibx);
-	} else {
-		delete(@$ibx{qw(over mm description cloneurl
-				-imap_url -nntp_url -pop3_url)});
-	}
-	my $srch = $ibx->{search} // $ibx;
+	my ($srch) = delete @$ibx{qw(search over mm description cloneurl)};
+	$srch //= $ibx; # extsearch
 	delete @$srch{qw(xdb qp)};
-	PublicInbox::DS::add_uniq_timer($ibx+0, 5, \&do_cleanup, $ibx) if $live;
 }
 
 sub _cleanup_later ($) {
@@ -370,7 +362,7 @@ sub unsubscribe_unlock {
 # called by inotify
 sub on_unlock {
 	my ($self) = @_;
-	check_inodes($self);
+	check_inodes($self); # DB files may be replaced while holding lock
 	my $subs = $self->{unlock_subs} or return;
 	for my $obj (values %$subs) {
 		eval { $obj->on_inbox_unlock($self) };
