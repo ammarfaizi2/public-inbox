@@ -355,8 +355,11 @@ sub index_body_text {
 	my $rd;
 	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms) { # start patch-id in parallel
 		my $git = ($self->{ibx} // $self->{eidx} // $self)->git;
+		my $fh = PublicInbox::IO::write_file '+>:utf8', undef, $$sref;
+		$fh->flush or die "flush: $!";
+		sysseek($fh, 0, SEEK_SET);
 		$rd = popen_rd($git->cmd(qw(patch-id --stable)), undef,
-				{ 0 => [ ':utf8', $sref ] });
+				{ 0 => $fh });
 	}
 
 	# split off quoted and unquoted blocks:

@@ -332,18 +332,6 @@ sub which ($) {
 	undef;
 }
 
-sub scalar_redirect {
-	my ($layer, $opt, $child_fd, $bref) = @_;
-	open my $fh, '+>'.$layer, undef;
-	$opt->{"fh.$child_fd"} = $fh;
-	if ($child_fd == 0) {
-		print $fh $$bref;
-		$fh->flush or die "flush: $!";
-		sysseek($fh, 0, SEEK_SET);
-	}
-	fileno($fh);
-}
-
 sub spawn ($;$$) {
 	my ($cmd, $env, $opt) = @_;
 	my $f = which($cmd->[0]) // die "$cmd->[0]: command not found\n";
@@ -354,14 +342,18 @@ sub spawn ($;$$) {
 	}
 	for my $child_fd (0..2) {
 		my $pfd = $opt->{$child_fd};
-		if ('ARRAY' eq ref($pfd)) {
-			my ($layer, $bref) = @$pfd;
-			$pfd = scalar_redirect($layer, $opt, $child_fd, $bref)
-		} elsif ('SCALAR' eq ref($pfd)) {
-			$pfd = scalar_redirect('', $opt, $child_fd, $pfd);
+		if ('SCALAR' eq ref($pfd)) {
+			open my $fh, '+>', undef;
+			$opt->{"fh.$child_fd"} = $fh; # for read_out_err
+			if ($child_fd == 0) {
+				print $fh $$pfd;
+				$fh->flush or die "flush: $!";
+				sysseek($fh, 0, SEEK_SET);
+			}
+			$pfd = fileno($fh);
 		} elsif (defined($pfd) && $pfd !~ /\A[0-9]+\z/) {
 			my $fd = fileno($pfd) //
-					die "$pfd not an IO GLOB? $!";
+					croak "BUG: $pfd not an IO GLOB? $!";
 			$pfd = $fd;
 		}
 		$rdr[$child_fd] = $pfd // $child_fd;
@@ -399,9 +391,7 @@ sub read_out_err ($) {
 	for my $fd (1, 2) { # read stdout/stderr
 		my $fh = delete($opt->{"fh.$fd"}) // next;
 		seek($fh, 0, SEEK_SET);
-		my $dst = $opt->{$fd};
-		$dst = $opt->{$fd} = $dst->[1] if ref($dst) eq 'ARRAY';
-		PublicInbox::IO::read_all $fh, 0, $dst
+		PublicInbox::IO::read_all $fh, undef, $opt->{$fd};
 	}
 }
 

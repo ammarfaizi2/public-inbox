@@ -65,6 +65,7 @@ sub next_smsg ($) {
 sub emit_msg_diff {
 	my ($bref, $self) = @_; # bref is `git diff' output
 	require PublicInbox::Hval;
+	PublicInbox::Hval::utf8_maybe($$bref);
 
 	# will be escaped to `&#8226;' in HTML
 	$self->{ctx}->{ibx}->{obfuscate} and
@@ -81,7 +82,7 @@ sub do_diff {
 	my $dir = "$self->{tmp}/$n";
 	$self->dump_eml($dir, $eml);
 	my $cmd = [ qw(git diff --no-index --no-color -- a), $n ];
-	my $opt = { -C => "$self->{tmp}", quiet => 1, 1 => [':utf8', \my $o] };
+	my $opt = { -C => "$self->{tmp}", quiet => 1 };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $opt);
 	$qsp->psgi_qx($self->{ctx}->{env}, undef, \&emit_msg_diff, $self);
 }
