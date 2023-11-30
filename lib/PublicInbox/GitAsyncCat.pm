@@ -9,11 +9,11 @@ our $GCF2C; # singleton PublicInbox::Gcf2Client
 
 sub ibx_async_cat ($$$$) {
 	my ($ibx, $oid, $cb, $arg) = @_;
-	my $git = $ibx->{git} // $ibx->git;
+	my $isrch = $ibx->{isrch};
+	my $git = $isrch ? $isrch->{es}->git : ($ibx->{git} // $ibx->git);
 	# {topdir} means ExtSearch (likely [extindex "all"]) with potentially
-	# 100K alternates.  git(1) has a proposed patch for 100K alternates:
-	# <https://lore.kernel.org/git/20210624005806.12079-1-e@80x24.org/>
-	if (!defined($ibx->{topdir}) && !defined($git->{-tmp}) &&
+	# 100K alternates.  git v2.33+ can handle 100k alternates fairly well.
+	if (!$isrch && !defined($ibx->{topdir}) && !defined($git->{-tmp}) &&
 		($GCF2C //= eval {
 		require PublicInbox::Gcf2Client;
 		PublicInbox::Gcf2Client::new();
