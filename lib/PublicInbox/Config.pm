@@ -361,12 +361,19 @@ sub parse_cgitrc {
 	cgit_repo_merge($self, $repo->{dir}, $repo) if $repo;
 }
 
+sub valid_dir ($$) {
+	my $dir = get_1($_[0], $_[1]) // return;
+	index($dir, "\n") < 0 ? $dir : do {
+		warn "E: `$_[1]=$dir' must not contain `\\n'\n";
+		undef;
+	}
+}
+
 # parse a code repo, only git is supported at the moment
 sub fill_coderepo {
 	my ($self, $nick) = @_;
 	my $pfx = "coderepo.$nick";
-	my $dir = $self->{"$pfx.dir"} // return undef; # aka "GIT_DIR"
-	my $git = PublicInbox::Git->new($dir);
+	my $git = PublicInbox::Git->new(valid_dir($self, "$pfx.dir") // return);
 	if (defined(my $cgits = $self->{"$pfx.cgiturl"})) {
 		$git->{cgit_url} = $cgits = _array($cgits);
 		$self->{"$pfx.cgiturl"} = $cgits;
@@ -450,18 +457,15 @@ sub _fill_ibx {
 		my $v = $self->{"$pfx.$k"};
 		$ibx->{$k} = $v if defined $v;
 	}
-	for my $k (qw(filter inboxdir newsgroup replyto httpbackendmax feedmax
+	for my $k (qw(filter newsgroup replyto httpbackendmax feedmax
 			indexlevel indexsequentialshard boost)) {
 		my $v = get_1($self, "$pfx.$k") // next;
 		$ibx->{$k} = $v;
 	}
 
 	# "mainrepo" is backwards compatibility:
-	my $dir = $ibx->{inboxdir} //= $self->{"$pfx.mainrepo"} // return;
-	if (index($dir, "\n") >= 0) {
-		warn "E: `$dir' must not contain `\\n'\n";
-		return;
-	}
+	my $dir = $ibx->{inboxdir} = valid_dir($self, "$pfx.inboxdir") //
+				valid_dir($self, "$pfx.mainrepo") // return;
 	for my $k (qw(obfuscate)) {
 		my $v = $self->{"$pfx.$k"} // next;
 		if (defined(my $bval = git_bool($v))) {
@@ -548,12 +552,8 @@ sub _fill_ei ($$) {
 	my ($self, $name) = @_;
 	eval { require PublicInbox::ExtSearch } or return;
 	my $pfx = "extindex.$name";
-	my $d = $self->{"$pfx.topdir"} // return;
+	my $d = valid_dir($self, "$pfx.topdir") // return;
 	-d $d or return;
-	if (index($d, "\n") >= 0) {
-		warn "E: `$d' must not contain `\\n'\n";
-		return;
-	}
 	my $es = PublicInbox::ExtSearch->new($d);
 	for my $k (qw(indexlevel indexsequentialshard)) {
 		my $v = get_1($self, "$pfx.$k") // next;
@@ -573,12 +573,8 @@ sub _fill_csrch ($$) {
 	return if $name ne '' && !valid_foo_name($name, 'cindex');
 	eval { require PublicInbox::CodeSearch } or return;
 	my $pfx = "cindex.$name";
-	my $d = $self->{"$pfx.topdir"} // return;
+	my $d = valid_dir($self, "$pfx.topdir") // return;
 	-d $d or return;
-	if (index($d, "\n") >= 0) {
-		warn "E: `$d' must not contain `\\n'\n";
-		return;
-	}
 	my $csrch = PublicInbox::CodeSearch->new($d, $self);
 	for my $k (qw(localprefix)) {
 		my $v = $self->{"$pfx.$k"} // next;
