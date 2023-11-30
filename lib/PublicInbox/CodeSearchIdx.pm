@@ -613,14 +613,14 @@ sub next_repos { # OnDestroy cb
 
 sub index_done { # OnDestroy cb called when done indexing each code repo
 	my ($repo_ctx, $drs) = @_;
-	my ($self, $repo, $active) = @$repo_ctx{qw(self repo active)};
-
 	return if $DO_QUIT;
+	my ($self, $repo, $active) = @$repo_ctx{qw(self repo active)};
+	# $active may be undef here, but it's fine to vivify
 	my $n = grep { ! $repo_ctx->{shard_ok}->{$_} } keys %$active;
 	die "E: $repo->{git_dir} $n shards failed" if $n;
 	$repo_ctx->{shard_ok} = {}; # reset for future shard_done
 	$n = $repo->{shard_n};
-	$active->{$n} = undef;
+	$repo_ctx->{active}->{$n} = undef; # may vivify $repo_ctx->{active}
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{repo_stored} = [ $self, $repo_ctx, $drs ];
 	$IDX_SHARDS[$n]->wq_io_do('store_repo', [ $p->{op_p} ], $repo);
