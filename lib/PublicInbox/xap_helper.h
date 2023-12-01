@@ -64,7 +64,7 @@
 #	define MY_DO_OPTRESET() do { optind = optreset = 1; } while (0)
 #endif
 
-#if defined(__FreeBSD__) || defined(__GLIBC__)
+#if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__GLIBC__)
 #	define STDERR_ASSIGNABLE (1)
 #else
 #	define STDERR_ASSIGNABLE (0)
