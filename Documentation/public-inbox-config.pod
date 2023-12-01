@@ -383,7 +383,7 @@ Default: C<404>
 
 =item publicinbox.nameIsUrl
 
-Treat the name of the public inbox as it's unqualified URL when
+Treat the name of the public inbox as its unqualified URL when
 using C<publicInbox.wwwListing=all>.  This is, every
 C<[publicinbox "foo"]> section implicitly sets C<publicinbox.foo.url=foo>.
 
