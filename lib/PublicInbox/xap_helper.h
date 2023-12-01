@@ -714,7 +714,7 @@ static void stderr_restore(FILE *tmp_err)
 	stderr = orig_err;
 	return;
 #endif
-	ERR_CLOSE(stderr, EXIT_FAILURE);
+	ERR_FLUSH(stderr);
 	while (dup2(orig_err_fd, STDERR_FILENO) < 0) {
 		if (errno != EINTR)
 			err(EXIT_FAILURE, "dup2(%d => 2)", orig_err_fd);
