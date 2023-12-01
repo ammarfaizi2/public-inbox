@@ -59,6 +59,7 @@ my $doreq = sub {
 	$x;
 };
 
+local $SIG{PIPE} = 'IGNORE';
 my $env = { PERL5LIB => join(':', @INC) };
 my $test = sub {
 	my (@cmd) = @_;
