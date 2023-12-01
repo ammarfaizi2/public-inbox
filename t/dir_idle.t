@@ -16,10 +16,12 @@ my $end = 3 + now;
 local @PublicInbox::DS::post_loop_do = (sub { scalar(@x) == 0 && now < $end });
 rmdir("$tmpdir/a/b") or xbail "rmdir $!";
 PublicInbox::DS::event_loop();
-is(scalar(@x), 1, 'got an rmdir event') or xbail explain(\@x);
-if (@x) {
+if (is(scalar(@x), 1, 'got an rmdir event')) {
 	is($x[0]->[0]->fullname, "$tmpdir/a/b", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE, 'IN_DELETE set');
+} else {
+	check_broken_tmpfs;
+	xbail explain(\@x);
 }
 
 rmdir("$tmpdir/a") or xbail "rmdir $!";
@@ -30,6 +32,7 @@ if (is(scalar(@x), 1, 'got an event after rmdir')) {
 	is($x[0]->[0]->fullname, "$tmpdir/a", 'got expected fullname') and
 	ok($x[0]->[0]->IN_DELETE_SELF, 'IN_DELETE_SELF set');
 } else {
+	check_broken_tmpfs;
 	diag explain(\@x);
 }
 rename("$tmpdir/c", "$tmpdir/j") or xbail "rmdir $!";

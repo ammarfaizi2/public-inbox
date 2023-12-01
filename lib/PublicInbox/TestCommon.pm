@@ -24,7 +24,7 @@ BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
-		create_coderepo require_bsd
+		create_coderepo require_bsd kernel_version check_broken_tmpfs
 		quit_waiter_pipe wait_for_eof
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
@@ -35,6 +35,27 @@ BEGIN {
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
 	die $@ if $@;
 	push @EXPORT, @methods;
+}
+
+sub kernel_version () {
+	state $version = do {
+		require POSIX;
+		my @u = POSIX::uname();
+		if ($u[2] =~ /\A([0-9]+(?:\.[0-9]+)+)/) {
+			eval "v$1";
+		} else {
+			local $" = "', `";
+			diag "Unable to get kernel version from: `@u'";
+			undef;
+		}
+	};
+}
+
+sub check_broken_tmpfs () {
+	return if $^O ne 'dragonfly' || kernel_version ge v6.5;
+	diag 'EVFILT_VNODE + tmpfs is broken on dragonfly <= 6.4 (have: '.
+		sprintf('%vd', kernel_version).')';
+	1;
 }
 
 sub require_bsd (;$) {

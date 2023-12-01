@@ -62,6 +62,6 @@ is_xdeeply($hit, \@unlink, 'unlinked files match');
 # this is unreliable on Dragonfly tmpfs (fixed post-6.4)
 rmdir "$tmpdir/new";
 $hit = [ sort(map { $_->fullname } $kqn->read) ];
-is(scalar(@$hit), 1, 'detected self removal');
+is(scalar(@$hit), 1, 'detected self removal') or check_broken_tmpfs;
 
 done_testing;
