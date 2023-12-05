@@ -107,6 +107,8 @@ our (
 	$DUMP_IBX_WPIPE, # goes to sort(1)
 	$ANY_SHARD, # shard round-robin for scan fingerprinting
 	@OFF2ROOT,
+	$GIT_VER,
+	@NO_ABBREV,
 );
 
 # stop walking history if we see >$SEEN_MAX existing commits, this assumes
@@ -304,7 +306,7 @@ sub shard_index { # via wq_io_do in IDX_SHARDS
 	my $in = delete($self->{0}) // die 'BUG: no {0} input';
 	my $op_p = delete($self->{1}) // die 'BUG: no {1} op_p';
 	sysseek($in, 0, SEEK_SET);
-	my $cmd = $git->cmd(@LOG_STDIN);
+	my $cmd = $git->cmd(@NO_ABBREV, @LOG_STDIN);
 	my $rd = popen_rd($cmd, undef, { 0 => $in },
 				\&cidx_reap_log, $cmd, $self, $op_p);
 	PublicInbox::CidxLogP->new($rd, $self, $git, $roots);
@@ -1151,15 +1153,14 @@ sub run_prune { # OnDestroy when `git config extensions.objectFormat' are done
 	run_await([@SORT, '-u'], $CMD_ENV, $sort_opt, \&cmd_done);
 	my $comm_rd = popen_rd(\@COMM, $CMD_ENV, $comm_opt, \&cmd_done, \@COMM);
 	PublicInbox::CidxComm->new($comm_rd, $self, $drs); # ->cidx_read_comm
-	my $git_ver = PublicInbox::Git::git_version();
-	push @PRUNE_BATCH, '--buffer' if $git_ver ge v2.6;
+	push @PRUNE_BATCH, '--buffer' if $GIT_VER ge v2.6;
 
 	# Yes, we pipe --unordered git output to sort(1) because sorting
 	# inside git leads to orders-of-magnitude slowdowns on rotational
 	# storage.  GNU sort(1) also works well on larger-than-memory
 	# datasets, and it's not worth eliding sort(1) for old git.
-	push @PRUNE_BATCH, '--unordered' if $git_ver ge v2.19;
-	warn(sprintf(<<EOM, $git_ver)) if $git_ver lt v2.19;
+	push @PRUNE_BATCH, '--unordered' if $GIT_VER ge v2.19;
+	warn(sprintf(<<EOM, $GIT_VER)) if $GIT_VER lt v2.19;
 W: git v2.19+ recommended for high-latency storage (have git v%vd)
 EOM
 	dump_git_commits(undef, undef, undef, $batch_opt, $self);
@@ -1281,7 +1282,7 @@ sub cidx_run { # main entry point
 	local $SCANQ = [];
 	local ($DO_QUIT, $REINDEX, $TXN_BYTES, @GIT_DIR_GONE, @PRUNEQ,
 		$REPO_CTX, %ALT_FH, $TMPDIR, @AWK, @COMM, $CMD_ENV,
-		%TODO, @IBXQ, @IBX, @JOIN, %JOIN, @JOIN_PFX,
+		%TODO, @IBXQ, @IBX, @JOIN, %JOIN, @JOIN_PFX, @NO_ABBREV,
 		@JOIN_DT, $DUMP_IBX_WPIPE, @OFF2ROOT, $XHC, @SORT, $GITS_NR);
 	local $BATCH_BYTES = $self->{-opt}->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
@@ -1289,6 +1290,8 @@ sub cidx_run { # main entry point
 	local $self->{PENDING} = {}; # used by PublicInbox::CidxXapHelperAux
 	my $cfg = $self->{-opt}->{-pi_cfg} // die 'BUG: -pi_cfg unset';
 	$self->{-cfg_f} = $cfg->{-f} = rel2abs_collapsed($cfg->{-f});
+	local $GIT_VER = PublicInbox::Git::git_version();
+	@NO_ABBREV = ('-c', 'core.abbrev='.($GIT_VER lt v2.31.0 ? 40 : 'no'));
 	if (grep { $_ } @{$self->{-opt}}{qw(prune join)}) {
 		require File::Temp;
 		$TMPDIR = File::Temp->newdir('cidx-all-git-XXXX', TMPDIR => 1);

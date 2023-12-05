@@ -288,6 +288,9 @@ EOM
 		++$nr;
 	}, '.');
 	is $nr, 1, 'iterated through cindices';
+	my $oid = 'dba13ed2ddf783ee8118c6a581dbf75305f816a3';
+	my $mset = $csrch->mset("dfpost:$oid");
+	is $mset->size, 1, 'got result from full OID search';
 }
 
 done_testing;
