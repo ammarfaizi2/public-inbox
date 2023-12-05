@@ -715,7 +715,6 @@ sub nr_quiet_rm { delete($_[0]->{-quiet_rm}) // 0 }
 sub index_git_blob_id {
 	my ($doc, $pfx, $objid) = @_;
 
-	my $len = length($objid);
 	for (my $len = length($objid); $len >= 7; ) {
 		$doc->add_term($pfx.$objid);
 		$objid = substr($objid, 0, --$len);
