@@ -909,21 +909,23 @@ sub prep_alternate_read { # run_git cb for config extensions.objectFormat
 
 sub prep_alternate_start {
 	my ($self, $git, $run_prune) = @_;
-	my $o = $git->git_path('objects');
+	local $self->{xdb};
+	my ($o, $n, @ids, @fmt);
+start:
+	$o = $git->git_path('objects');
 	while (!-d $o) {
 		$git = shift(@PRUNEQ) // return;
 		$o = $git->git_path('objects');
 	}
-	my $n = git_dir_hash($git->{git_dir}) % scalar(@RDONLY_XDB);
-	local $self->{xdb} = $RDONLY_XDB[$n] // croak("BUG: no shard[$n]");
-	my @ids = $self->docids_by_postlist('P'.$git->{git_dir});
-	my @fmt = @ids ? xap_terms('H', $self->{xdb}, $ids[0]) : ();
+	$n = git_dir_hash($git->{git_dir}) % scalar(@RDONLY_XDB);
+	$self->{xdb} = $RDONLY_XDB[$n] // croak("BUG: no shard[$n]");
+	@ids = $self->docids_by_postlist('P'.$git->{git_dir});
+	@fmt = @ids ? xap_terms('H', $self->{xdb}, $ids[0]) : ();
 	@fmt > 1 and warn "BUG? multi `H' for shard[$n] #$ids[0]: @fmt";
 
 	if (@fmt) { # cache hit
-		@PRUNEQ and
-			prep_alternate_start($self, shift(@PRUNEQ), $run_prune);
 		prep_alternate_end $o, $fmt[0];
+		$git = shift(@PRUNEQ) and goto start;
 	} else { # compatibility w/ early cidx format
 		run_git([qw(config extensions.objectFormat)], { quiet => 1 },
 			\&prep_alternate_read, $self, $git, $o, $ids[0], $n,
