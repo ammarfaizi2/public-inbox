@@ -3,7 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
 use PublicInbox::TestCommon;
-use Cwd qw(getcwd abs_path);
+use Cwd qw(getcwd);
 use List::Util qw(sum);
 use autodie qw(close mkdir open rename);
 require_mods(qw(json Xapian +SCM_RIGHTS));
@@ -67,6 +67,7 @@ git gc -q
 EOM
 }; # /create_coderepo
 
+$zp = File::Spec->rel2abs($zp);
 ok(run_script([qw(-cindex --dangerous -q -d), "$tmp/ext",
 		'-g', $zp, '-g', "$tmp/wt0" ]),
 	'cindex external');
@@ -125,7 +126,7 @@ use_ok 'PublicInbox::CodeSearch';
 
 my @xh_args;
 my $exp = [ 'initial with NUL character', 'remove NUL character' ];
-my $zp_git = abs_path("$zp/.git");
+my $zp_git = "$zp/.git";
 if ('multi-repo search') {
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	my $mset = $csrch->mset('NUL');
