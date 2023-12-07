@@ -47,9 +47,9 @@ then
 	rm_list="$rm_list $PREMSG"
 	set +e
 	mv -f $TMPMSG $PREMSG
-	$spamc -E --headers <$PREMSG >$TMPMSG
+	$spamc -E <$PREMSG >$TMPMSG
 else
-	$spamc -E --headers <$CDMSG >$TMPMSG
+	$spamc -E <$CDMSG >$TMPMSG
 fi
 err=$?
 

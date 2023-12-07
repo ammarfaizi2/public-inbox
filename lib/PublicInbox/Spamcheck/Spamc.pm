@@ -11,7 +11,7 @@ use Fcntl qw(SEEK_SET);
 sub new {
 	my ($class) = @_;
 	bless {
-		checkcmd => [qw(spamc -E --headers)],
+		checkcmd => [qw(spamc -E)],
 		hamcmd => [qw(spamc -L ham)],
 		spamcmd => [qw(spamc -L spam)],
 	}, $class;
