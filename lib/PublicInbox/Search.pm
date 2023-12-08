@@ -614,16 +614,16 @@ sub get_pct ($) { # mset item
 
 sub xap_terms ($$;@) {
 	my ($pfx, $xdb_or_doc, @docid) = @_; # @docid may be empty ()
-	my %ret;
 	my $end = $xdb_or_doc->termlist_end(@docid);
 	my $cur = $xdb_or_doc->termlist_begin(@docid);
+	$cur->skip_to($pfx);
+	my (@ret, $tn);
+	my $pfxlen = length($pfx);
 	for (; $cur != $end; $cur++) {
-		$cur->skip_to($pfx);
-		last if $cur == $end;
-		my $tn = $cur->get_termname;
-		$ret{substr($tn, length($pfx))} = undef if !index($tn, $pfx);
+		$tn = $cur->get_termname;
+		index($tn, $pfx) ? last : push(@ret, substr($tn, $pfxlen));
 	}
-	wantarray ? sort(keys(%ret)) : \%ret;
+	wantarray ? @ret : +{ map { $_ => undef } @ret };
 }
 
 # get combined docid from over.num:
@@ -638,11 +638,12 @@ sub all_terms {
 	my ($self, $pfx) = @_;
 	my $cur = xdb($self)->allterms_begin($pfx);
 	my $end = $self->{xdb}->allterms_end($pfx);
-	my %ret;
+	my $pfxlen = length($pfx);
+	my @ret;
 	for (; $cur != $end; $cur++) {
-		$ret{substr($cur->get_termname, length($pfx))} = undef;
+		push @ret, substr($cur->get_termname, $pfxlen);
 	}
-	wantarray ? (sort keys %ret) : \%ret;
+	wantarray ? @ret : +{ map { $_ => undef } @ret };
 }
 
 sub xh_args { # prep getopt args to feed to xap_helper.h socket

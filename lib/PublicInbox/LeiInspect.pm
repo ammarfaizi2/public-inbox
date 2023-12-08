@@ -97,7 +97,6 @@ sub _inspect_doc ($$) {
 		my $term = ($1 // '');
 		push @{$ent->{terms}->{$term}}, $tn;
 	}
-	@$_ = sort(@$_) for values %{$ent->{terms} // {}};
 	$cur = $doc->values_begin;
 	$end = $doc->values_end;
 	for (; $cur != $end; $cur++) {

@@ -42,7 +42,7 @@ my $BASE85 = qr/[a-zA-Z0-9\!\#\$\%\&\(\)\*\+\-;<=>\?\@\^_`\{\|\}\~]+/;
 my $xapianlevels = qr/\A(?:full|medium)\z/;
 my $hex = '[a-f0-9]';
 my $OID = $hex .'{40,}';
-my @VMD_MAP = (kw => 'K', L => 'L');
+my @VMD_MAP = (kw => 'K', L => 'L'); # value order matters
 our $INDEXLEVELS = qr/\A(?:full|medium|basic)\z/;
 
 sub new {
@@ -608,17 +608,16 @@ sub set_vmd {
 	my ($self, $docid, $vmd) = @_;
 	begin_txn_lazy($self);
 	my $doc = _get_doc($self, $docid) or return;
-	my ($end, @rm, @add);
+	my ($v, @rm, @add);
 	my @x = @VMD_MAP;
+	my ($cur, $end) = ($doc->termlist_begin, $doc->termlist_end);
 	while (my ($field, $pfx) = splice(@x, 0, 2)) {
 		my $set = $vmd->{$field} // next;
 		my %keep = map { $_ => 1 } @$set;
 		my %add = %keep;
-		$end //= $doc->termlist_end;
-		for (my $cur = $doc->termlist_begin; $cur != $end; $cur++) {
-			$cur->skip_to($pfx);
-			last if $cur == $end;
-			my $v = $cur->get_termname;
+		$cur->skip_to($pfx); # works due to @VMD_MAP order
+		for (; $cur != $end; $cur++) {
+			$v = $cur->get_termname;
 			$v =~ s/\A$pfx//s or next;
 			$keep{$v} ? delete($add{$v}) : push(@rm, $pfx.$v);
 		}

@@ -11,7 +11,7 @@ static void emit_doc_term(FILE *fp, const char *pfx, Xapian::Document *doc)
 
 	for (cur.skip_to(pfx); cur != end; cur++) {
 		std::string tn = *cur;
-		if (!starts_with(&tn, pfx, pfx_len)) continue;
+		if (!starts_with(&tn, pfx, pfx_len)) break;
 		fputc(0, fp);
 		fwrite(tn.data(), tn.size(), 1, fp);
 	}

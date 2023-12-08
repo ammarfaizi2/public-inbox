@@ -12,12 +12,9 @@ static void dump_ibx_term(struct req *req, const char *pfx,
 
 	for (cur.skip_to(pfx); cur != end; cur++) {
 		std::string tn = *cur;
-
-		if (starts_with(&tn, pfx, pfx_len)) {
-			fprintf(req->fp[0], "%s %s\n",
-				tn.c_str() + pfx_len, ibx_id);
-			++req->nr_out;
-		}
+		if (!starts_with(&tn, pfx, pfx_len)) break;
+		fprintf(req->fp[0], "%s %s\n", tn.c_str() + pfx_len, ibx_id);
+		++req->nr_out;
 	}
 }
 
@@ -95,8 +92,7 @@ static bool root2offs_str(struct fbuf *root_offs, Xapian::Document *doc)
 	fbuf_init(root_offs);
 	for (cur.skip_to("G"); cur != end; cur++) {
 		std::string tn = *cur;
-		if (!starts_with(&tn, "G", 1))
-			continue;
+		if (!starts_with(&tn, "G", 1)) break;
 		union { const char *in; char *out; } u;
 		u.in = tn.c_str() + 1;
 		e.key = u.out;
@@ -125,8 +121,7 @@ static void dump_roots_term(struct req *req, const char *pfx,
 
 	for (cur.skip_to(pfx); cur != end; cur++) {
 		std::string tn = *cur;
-		if (!starts_with(&tn, pfx, pfx_len))
-			continue;
+		if (!starts_with(&tn, pfx, pfx_len)) break;
 		fputs(tn.c_str() + pfx_len, drt->wbuf.fp);
 		fwrite(root_offs->ptr, root_offs->len, 1, drt->wbuf.fp);
 		++req->nr_out;
