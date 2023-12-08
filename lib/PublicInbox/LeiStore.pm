@@ -27,6 +27,7 @@ use PublicInbox::MDA;
 use PublicInbox::Spawn qw(spawn);
 use PublicInbox::MdirReader;
 use PublicInbox::LeiToMail;
+use PublicInbox::Compat qw(uniqstr);
 use File::Temp qw(tmpnam);
 use POSIX ();
 use IO::Handle (); # ->autoflush
@@ -341,15 +342,15 @@ sub _add_vmd ($$$$) {
 sub _docids_and_maybe_kw ($$) {
 	my ($self, $docids) = @_;
 	return $docids unless wantarray;
-	my $kw = {};
+	my (@kw, $idx, @tmp);
 	for my $num (@$docids) { # likely only 1, unless ContentHash changes
 		# can't use ->search->msg_keywords on uncommitted docs
-		my $idx = $self->{priv_eidx}->idx_shard($num);
-		my $tmp = eval { $idx->ipc_do('get_terms', 'K', $num) };
-		if ($@) { warn "#$num get_terms: $@" }
-		else { @$kw{keys %$tmp} = values(%$tmp) };
+		$idx = $self->{priv_eidx}->idx_shard($num);
+		@tmp = eval { $idx->ipc_do('get_terms', 'K', $num) };
+		$@ ? warn("#$num get_terms: $@") : push(@kw, @tmp);
 	}
-	($docids, [ sort keys %$kw ]);
+	@kw = sort(uniqstr(@kw)) if @$docids > 1;
+	($docids, \@kw);
 }
 
 sub _reindex_1 { # git->cat_async callback

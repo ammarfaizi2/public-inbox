@@ -9,6 +9,7 @@ use v5.12;
 use parent qw(PublicInbox::Search);
 use PublicInbox::Config;
 use PublicInbox::Search qw(retry_reopen int_val xap_terms);
+use PublicInbox::Compat qw(uniqstr);
 use Compress::Zlib qw(uncompress);
 use constant {
 	AT => 0, # author time YYYYMMDDHHMMSS, dt: for mail)
@@ -199,12 +200,11 @@ sub roots2paths { # for diagnostics
 		do {
 			my $mset = $enq->get_mset($off += $size, $lim);
 			for my $x ($mset->items) {
-				my $tmp = xap_terms('P', $x->get_document);
-				push @$dirs, keys %$tmp;
+				push @$dirs, xap_terms('P', $x->get_document);
 			}
 			$size = $mset->size;
 		} while ($size);
-		@$dirs = sort @$dirs;
+		@$dirs = sort(uniqstr(@$dirs));
 	}
 	\%ret;
 }
@@ -223,12 +223,9 @@ sub root_oids ($$) {
 	my @ids = docids_of_git_dir $self, $git_dir or warn <<"";
 BUG? (non-fatal) `$git_dir' not indexed in $self->{topdir}
 
-	my %ret;
-	for my $docid (@ids) {
-		my @oids = xap_terms('G', $self->xdb, $docid);
-		@ret{@oids} = @oids;
-	}
-	sort keys %ret;
+	my @ret = map { xap_terms('G', $self->xdb, $_) } @ids;
+	@ret = uniqstr(@ret) if @ids > 1;
+	@ret;
 }
 
 sub paths2roots {

@@ -9,6 +9,7 @@ use parent qw(PublicInbox::ExtSearch); # PublicInbox::Search->reopen
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::ContentHash qw(content_digest content_hash git_sha);
 use PublicInbox::MID qw(mids mids_for_index);
+use PublicInbox::Compat qw(uniqstr);
 use Carp qw(croak);
 
 sub _msg_kw { # retry_reopen callback
@@ -44,20 +45,16 @@ sub oidbin_keywords {
 sub _xsmsg_vmd { # retry_reopen
 	my ($self, $smsg, $want_label) = @_;
 	my $xdb = $self->xdb; # set {nshard};
-	my (%kw, %L, $doc, $x);
-	$kw{flagged} = 1 if delete($smsg->{lei_q_tt_flagged});
+	my (@kw, @L, $doc, $x);
+	@kw = qw(flagged) if delete($smsg->{lei_q_tt_flagged});
 	my @num = $self->over->blob_exists($smsg->{blob});
 	for my $num (@num) { # there should only be one...
 		$doc = $xdb->get_document($self->num2docid($num));
-		$x = xap_terms('K', $doc);
-		%kw = (%kw, %$x);
-		if ($want_label) { # JSON/JMAP only
-			$x = xap_terms('L', $doc);
-			%L = (%L, %$x);
-		}
+		push @kw, xap_terms('K', $doc);
+		push @L, xap_terms('L', $doc) if $want_label # JSON/JMAP only
 	}
-	$smsg->{kw} = [ sort keys %kw ] if scalar(keys(%kw));
-	$smsg->{L} = [ sort keys %L ] if scalar(keys(%L));
+	@{$smsg->{kw}} = sort(uniqstr(@kw)) if @kw;
+	@{$smsg->{L}} = uniqstr(@L) if @L;
 }
 
 # lookup keywords+labels for external messages
