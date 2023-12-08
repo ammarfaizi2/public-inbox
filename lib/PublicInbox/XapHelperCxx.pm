@@ -60,16 +60,11 @@ sub build () {
 	}
 	require PublicInbox::CodeSearch;
 	require PublicInbox::Lock;
-	require PublicInbox::OnDestroy;
 	my ($prog) = ($bin =~ m!/([^/]+)\z!);
 	my $lk = PublicInbox::Lock->new("$dir/$prog.lock")->lock_for_scope;
 	write_file '>', "$dir/$prog.cpp", qq{#include "xap_helper.h"\n},
 			PublicInbox::Search::generate_cxx(),
 			PublicInbox::CodeSearch::generate_cxx();
-
-	opendir my $dh, '.';
-	my $restore = PublicInbox::OnDestroy->new(\&chdir, $dh);
-	chdir $dir;
 
 	# xap_modversion may be set by needs_rebuild
 	$xap_modversion //= xap_cfg('--modversion');
@@ -83,15 +78,15 @@ sub build () {
 	$^O eq 'netbsd' and $fl =~ s/(\A|[ \t])\-L([^ \t]+)([ \t]|\z)/
 				"$1-L$2 -Wl,-rpath=$2$3"/egsx;
 	my @xflags = split(' ', "$fl $xflags"); # ' ' awk-mode eats leading WS
-	my @cflags = grep(!/\A-(?:Wl|l|L)/, @xflags);
-	run_die([$cxx, '-c', "$prog.cpp", '-I', $srcpfx, @cflags]);
-	run_die([$cxx, '-o', "$prog.tmp", "$prog.o", @xflags]);
-	unlink "$prog.cpp", "$prog.o";
-	write_file '>', 'XFLAGS.tmp', $xflags, "\n";
-	write_file '>', 'xap_modversion.tmp', $xap_modversion, "\n";
+	my @cflags = ('-I', $srcpfx, grep(!/\A-(?:Wl|l|L)/, @xflags));
+	run_die([$cxx, '-o', "$dir/$prog.o", '-c', "$dir/$prog.cpp", @cflags]);
+	run_die([$cxx, '-o', "$dir/$prog.tmp", "$dir/$prog.o", @xflags]);
+	unlink "$dir/$prog.cpp", "$dir/$prog.o";
+	write_file '>', "$dir/XFLAGS.tmp", $xflags, "\n";
+	write_file '>', "$dir/xap_modversion.tmp", $xap_modversion, "\n";
 	undef $xap_modversion; # do we ever build() twice?
 	# not quite atomic, but close enough :P
-	rename("$_.tmp", $_) for ($prog, qw(XFLAGS xap_modversion));
+	rename("$dir/$_.tmp", "$dir/$_") for ($prog, qw(XFLAGS xap_modversion));
 }
 
 sub check_build () {
