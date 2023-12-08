@@ -34,6 +34,19 @@ my @syn = (@EXE_FILES, grep(m!^lib/.*\.pm$!, @manifest), @scripts);
 @syn = grep(!/SaPlugin/, @syn) if !eval { require Mail::SpamAssasin };
 $v->{syn_files} = \@syn;
 $v->{my_syntax} = [map { "$_.syntax" } @syn];
+my %native = (
+	XapHelperCxx => [ qw(xh_cidx.h xh_mset.h xap_helper.h) ],
+);
+my @ck_build;
+for my $m (sort keys %native) {
+	my $hdr = $native{$m};
+	my @dep = map { "lib/PublicInbox/$_" } ("$m.pm", @$hdr);
+	$t->{"$m.check_build: @dep"} = [ "\$(PERL) -w -I lib ".
+		"-MPublicInbox::$m -e PublicInbox::${m}::check_build" ];
+	push @ck_build, "$m.check_build";
+}
+$t->{"check-build: @ck_build"} = [];
+
 my @no_pod;
 $v->{-m1} = [ map {
 		my $x = (split('/'))[-1];
