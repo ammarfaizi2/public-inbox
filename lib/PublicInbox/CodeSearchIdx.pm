@@ -34,9 +34,9 @@
 # The $IBX_OFF here is ephemeral (per-join_data) and NOT related to
 # the `ibx_off' column of `over.sqlite3' for extindex.
 # @ROOT_COMMIT_OID_OFFS is space-delimited
-# In both cases, $PFX is typically the value of the patchid (XDFID) but it
-# can be configured to use any combination of patchid, dfpre, dfpost or
-# dfblob.
+# In both cases, $PFX is typically the value of the 7-(hex)char dfpost
+# XDFPOST but it can be configured to use any combination of patchid,
+# dfpre, dfpost or dfblob.
 #
 # WARNING: this is vulnerable to arbitrary memory usage attacks if we
 # attempt to index or join against malicious coderepos with
@@ -1199,11 +1199,13 @@ sub init_join_prefork ($) {
 	require PublicInbox::CidxXapHelperAux;
 	require PublicInbox::XapClient;
 	my @unknown;
-	my $pfx = $JOIN{prefixes} // 'patchid';
-	for (split /\+/, $pfx) {
-		my $v = $PublicInbox::Search::PATCH_BOOL_COMMON{$_} //
-			push(@unknown, $_);
-		push(@JOIN_PFX, split(/ /, $v));
+	my $pfx = $JOIN{prefixes} // 'dfpost7';
+	for my $p (split /\+/, $pfx) {
+		my $n = '';
+		$p =~ s/([0-9]+)\z// and $n = $1;
+		my $v = $PublicInbox::Search::PATCH_BOOL_COMMON{$p} //
+			push(@unknown, $p);
+		push(@JOIN_PFX, map { $_.$n } split(/ /, $v));
 	}
 	@unknown and die <<EOM;
 E: --join=prefixes= contains unsupported prefixes: @unknown
