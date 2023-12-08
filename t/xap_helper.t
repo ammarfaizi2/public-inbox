@@ -241,6 +241,39 @@ for my $n (@NO_CXX) {
 				"#$docid $pfx as expected ($xhc->{impl})";
 		}
 	}
+	my $nr;
+	for my $i (7, 8, 39, 40) {
+		pipe($err_r, $err_w);
+		$r = $xhc->mkreq([ undef, $err_w ], qw(dump_roots -c -A),
+				"XDFPOST$i", (map { ('-d', $_) } @int),
+				$root2id_file, 'dt:19700101'.'000000..');
+		close $err_w;
+		@res = <$r>;
+		my @err = <$err_r>;
+		if (defined $nr) {
+			is scalar(@res), $nr,
+				"got expected results ($xhc->{impl})";
+		} else {
+			$nr //= scalar @res;
+			ok $nr, "got initial results ($xhc->{impl})";
+		}
+		my @oids = (join('', @res) =~ /^([a-f0-9]+) /gms);
+		is_deeply [grep { length == $i } @oids], \@oids,
+			"all OIDs match expected length ($xhc->{impl})";
+		my ($nr_out) = ("@err" =~ /nr_out=(\d+)/);
+		is $nr_out, scalar(@oids), "output count matches $xhc->{impl}"
+			or diag explain(\@res, \@err);
+	}
+	pipe($err_r, $err_w);
+	$r = $xhc->mkreq([ undef, $err_w ], qw(dump_ibx -A XDFPOST7),
+			@ibx_shard_args, qw(13 rt:0..));
+	close $err_w;
+	@res = <$r>;
+	my @err = <$err_r>;
+	my ($nr_out) = ("@err" =~ /nr_out=(\d+)/);
+	my @oids = (join('', @res) =~ /^([a-f0-9]{7}) /gms);
+	is $nr_out, scalar(@oids), "output count matches $xhc->{impl}" or
+		diag explain(\@res, \@err);
 }
 
 done_testing;

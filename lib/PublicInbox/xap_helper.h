@@ -123,6 +123,7 @@ typedef bool (*cmd)(struct req *);
 struct req { // argv and pfxv point into global rbuf
 	char *argv[MY_ARG_MAX];
 	char *pfxv[MY_ARG_MAX]; // -A <prefix>
+	size_t *lenv; // -A <prefix>LENGTH
 	struct srch *srch;
 	char *Pgit_dir;
 	char *Oeidx_key;
@@ -727,6 +728,13 @@ static void sigw(int sig) // SIGTERM handler for worker
 	sock_fd = -1; // break out of recv_loop
 }
 
+#define CLEANUP_REQ __attribute__((__cleanup__(req_cleanup)))
+static void req_cleanup(void *ptr)
+{
+	struct req *req = (struct req *)ptr;
+	free(req->lenv);
+}
+
 static void recv_loop(void) // worker process loop
 {
 	static char rbuf[4096 * 33]; // per-process
@@ -737,7 +745,8 @@ static void recv_loop(void) // worker process loop
 
 	while (sock_fd == 0) {
 		size_t len = sizeof(rbuf);
-		struct req req = {};
+		CLEANUP_REQ struct req req = {};
+
 		if (!recv_req(&req, rbuf, &len))
 			continue;
 		if (req.fp[1])

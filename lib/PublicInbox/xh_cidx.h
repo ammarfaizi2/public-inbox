@@ -3,16 +3,49 @@
 // This file is only intended to be included by xap_helper.h
 // it implements pieces used by CodeSearchIdx.pm
 
-static void dump_ibx_term(struct req *req, const char *pfx,
+static void term_length_extract(struct req *req)
+{
+	req->lenv = (size_t *)calloc(req->pfxc, sizeof(size_t));
+	if (!req->lenv)
+		EABORT("lenv = calloc(%d %zu)", req->pfxc, sizeof(size_t));
+	for (int i = 0; i < req->pfxc; i++) {
+		char *pfx = req->pfxv[i];
+		// extract trailing digits as length:
+		// $len = s/([0-9]+)\z// ? ($1+0) : 0
+		for (size_t j = 0; pfx[j]; j++) {
+			if (pfx[j] < '0' || pfx[j] > '9')
+				continue;
+			if (j == 0) {
+				warnx("W: `%s' not a valid prefix", pfx);
+				continue;
+			}
+			char *end;
+			unsigned long long tmp = strtoull(pfx + j, &end, 10);
+			if (*end || tmp >= (unsigned long long)SIZE_MAX) {
+				warnx("W: `%s' not recognized", pfx);
+			} else {
+				req->lenv[i] = (size_t)tmp;
+				pfx[j] = 0;
+				break;
+			}
+		}
+	}
+}
+
+static void dump_ibx_term(struct req *req, int p,
 			Xapian::Document *doc, const char *ibx_id)
 {
 	Xapian::TermIterator cur = doc->termlist_begin();
 	Xapian::TermIterator end = doc->termlist_end();
+	const char *pfx = req->pfxv[p];
 	size_t pfx_len = strlen(pfx);
+	size_t term_len = req->lenv[p];
 
 	for (cur.skip_to(pfx); cur != end; cur++) {
 		std::string tn = *cur;
 		if (!starts_with(&tn, pfx, pfx_len)) break;
+		if (term_len > 0 && (tn.length() - pfx_len) != term_len)
+			continue;
 		fprintf(req->fp[0], "%s %s\n", tn.c_str() + pfx_len, ibx_id);
 		++req->nr_out;
 	}
@@ -24,7 +57,7 @@ static enum exc_iter dump_ibx_iter(struct req *req, const char *ibx_id,
 	try {
 		Xapian::Document doc = i->get_document();
 		for (int p = 0; p < req->pfxc; p++)
-			dump_ibx_term(req, req->pfxv[p], &doc, ibx_id);
+			dump_ibx_term(req, p, &doc, ibx_id);
 	} catch (const Xapian::DatabaseModifiedError & e) {
 		req->srch->db->reopen();
 		return ITER_RETRY;
@@ -46,6 +79,7 @@ static bool cmd_dump_ibx(struct req *req)
 		EABORT("setlinebuf(fp[0])"); // WTF?
 	req->asc = true;
 	req->sort_col = -1;
+	term_length_extract(req);
 	Xapian::MSet mset = mail_mset(req, req->argv[optind + 1]);
 
 	// @UNIQ_FOLD in CodeSearchIdx.pm can handle duplicate lines fine
@@ -110,18 +144,22 @@ static bool root2offs_str(struct fbuf *root_offs, Xapian::Document *doc)
 
 // writes term values matching @pfx for a given @doc, ending the line
 // with the contents of @root_offs
-static void dump_roots_term(struct req *req, const char *pfx,
+static void dump_roots_term(struct req *req, int p,
 				struct dump_roots_tmp *drt,
 				struct fbuf *root_offs,
 				Xapian::Document *doc)
 {
 	Xapian::TermIterator cur = doc->termlist_begin();
 	Xapian::TermIterator end = doc->termlist_end();
+	const char *pfx = req->pfxv[p];
 	size_t pfx_len = strlen(pfx);
+	size_t term_len = req->lenv[p];
 
 	for (cur.skip_to(pfx); cur != end; cur++) {
 		std::string tn = *cur;
 		if (!starts_with(&tn, pfx, pfx_len)) break;
+		if (term_len > 0 && (tn.length() - pfx_len) != term_len)
+			continue;
 		fputs(tn.c_str() + pfx_len, drt->wbuf.fp);
 		fwrite(root_offs->ptr, root_offs->len, 1, drt->wbuf.fp);
 		++req->nr_out;
@@ -163,8 +201,7 @@ static enum exc_iter dump_roots_iter(struct req *req,
 		if (!root2offs_str(&root_offs, &doc))
 			return ITER_ABORT; // bad request, abort
 		for (int p = 0; p < req->pfxc; p++)
-			dump_roots_term(req, req->pfxv[p], drt,
-					&root_offs, &doc);
+			dump_roots_term(req, p, drt, &root_offs, &doc);
 	} catch (const Xapian::DatabaseModifiedError & e) {
 		req->srch->db->reopen();
 		return ITER_RETRY;
@@ -217,6 +254,7 @@ static bool cmd_dump_roots(struct req *req)
 	req->asc = true;
 	req->sort_col = -1;
 	Xapian::MSet mset = commit_mset(req, req->argv[optind + 1]);
+	term_length_extract(req);
 
 	fbuf_init(&drt.wbuf);
 

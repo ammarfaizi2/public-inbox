@@ -39,13 +39,24 @@ sub iter_retry_check ($) {
 	}
 }
 
+sub term_length_extract ($) {
+	my ($req) = @_;
+	@{$req->{A_len}} = map {
+		my $len = s/([0-9]+)\z// ? ($1 + 0) : undef;
+		[ $_, $len ];
+	} @{$req->{A}};
+}
+
 sub dump_ibx_iter ($$$) {
 	my ($req, $ibx_id, $it) = @_;
 	my $out = $req->{0};
 	eval {
 		my $doc = $it->get_document;
-		for my $p (@{$req->{A}}) {
-			for (xap_terms($p, $doc)) {
+		for my $pair (@{$req->{A_len}}) {
+			my ($pfx, $len) = @$pair;
+			my @t = xap_terms($pfx, $doc);
+			@t = grep { length == $len } @t if defined($len);
+			for (@t) {
 				print $out "$_ $ibx_id\n" or die "print: $!";
 				++$req->{nr_out};
 			}
@@ -64,6 +75,7 @@ sub cmd_dump_ibx {
 	my ($req, $ibx_id, $qry_str) = @_;
 	$qry_str // die 'usage: dump_ibx [OPTIONS] IBX_ID QRY_STR';
 	$req->{A} or die 'dump_ibx requires -A PREFIX';
+	term_length_extract $req;
 	my $max = $req->{'m'} // $req->{srch}->{xdb}->get_doccount;
 	my $opt = { relevance => -1, limit => $max, offset => $req->{o} // 0 };
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
@@ -82,8 +94,11 @@ sub dump_roots_iter ($$$) {
 	eval {
 		my $doc = $it->get_document;
 		my $G = join(' ', map { $root2off->{$_} } xap_terms('G', $doc));
-		for my $p (@{$req->{A}}) {
-			for (xap_terms($p, $doc)) {
+		for my $pair (@{$req->{A_len}}) {
+			my ($pfx, $len) = @$pair;
+			my @t = xap_terms($pfx, $doc);
+			@t = grep { length == $len } @t if defined($len);
+			for (@t) {
 				$req->{wbuf} .= "$_ $G\n";
 				++$req->{nr_out};
 			}
@@ -106,6 +121,7 @@ sub cmd_dump_roots {
 	my ($req, $root2off_file, $qry_str) = @_;
 	$qry_str // die 'usage: dump_roots [OPTIONS] ROOT2ID_FILE QRY_STR';
 	$req->{A} or die 'dump_roots requires -A PREFIX';
+	term_length_extract $req;
 	open my $fh, '<', $root2off_file;
 	my $root2off; # record format: $OIDHEX "\0" uint32_t
 	my @x = split(/\0/, read_all $fh);
