@@ -1,7 +1,7 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
+use v5.12;
 use Test::More;
 use_ok 'PublicInbox::Address';
 
@@ -10,6 +10,7 @@ sub test_pkg {
 	my $emails = $pkg->can('emails');
 	my $names = $pkg->can('names');
 	my $pairs = $pkg->can('pairs');
+	my $objects = $pkg->can('objects');
 
 	is_deeply([qw(e@example.com e@example.org)],
 		[$emails->('User <e@example.com>, e@example.org')],
@@ -34,6 +35,18 @@ sub test_pkg {
 			[ 'John A. Doe', 'j@d' ], [ undef, 'x@x' ],
 			[ 'xyz', 'y@x' ], [ 'U Ser', 'u@x' ] ],
 		"pairs extraction works for $pkg");
+
+	# only what's used by PublicInbox::IMAP:
+	my @objs = $objects->($s);
+	my @exp = (qw(User e e), qw(e e e), ('John A. Doe', qw(j d)),
+		qw(x x x), qw(xyz y x), ('U Ser', qw(u x)));
+	for (my $i = 0; $i <= $#objs; $i++) {
+		my $exp_name = shift @exp;
+		my $name = $objs[$i]->name;
+		is $name, $exp_name, "->name #$i matches";
+		is $objs[$i]->user, shift @exp, "->user #$i matches";
+		is $objs[$i]->host , shift @exp, "->host #$i matches";
+	}
 
 	@names = $names->('"user@example.com" <user@example.com>');
 	is_deeply(['user'], \@names,

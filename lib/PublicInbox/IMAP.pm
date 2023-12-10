@@ -39,13 +39,7 @@ use PublicInbox::DS qw(now);
 use PublicInbox::GitAsyncCat;
 use Text::ParseWords qw(parse_line);
 use Errno qw(EAGAIN);
-
-my $Address;
-for my $mod (qw(Email::Address::XS Mail::Address)) {
-	eval "require $mod" or next;
-	$Address = $mod and last;
-}
-die "neither Email::Address::XS nor Mail::Address loaded: $@" if !$Address;
+use PublicInbox::Address;
 
 sub LINE_MAX () { 8000 } # RFC 2683 3.2.1.5
 
@@ -438,7 +432,7 @@ sub addr_envelope ($$;$) {
 	my $v = $eml->header_raw($x) //
 		($y ? $eml->header_raw($y) : undef) // return 'NIL';
 
-	my @x = $Address->parse($v) or return 'NIL';
+	my @x = PublicInbox::Address::objects($v) or return 'NIL';
 	'(' . join('',
 		map { '(' . join(' ',
 				_esc($_->name), 'NIL',

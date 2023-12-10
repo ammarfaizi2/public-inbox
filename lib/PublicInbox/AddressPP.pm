@@ -1,7 +1,8 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::AddressPP;
 use strict;
+use v5.10.1; # TODO check regexps for unicode_strings compat
 
 # very loose regexes, here.  We don't need RFC-compliance,
 # just enough to make thing sanely displayable and pass to git
@@ -55,5 +56,14 @@ sub pairs { # for JMAP, RFC 8621 section 4.1.2.3
 		}
 	} emails($s) ];
 }
+
+# Mail::Address->name is inconsistent with Email::Address::XS, so we're
+# doing our own thing, here:
+sub objects { map { bless $_, __PACKAGE__ } @{pairs($_[0])} }
+
+# OO API for objects() results
+sub user { (split(/@/, $_[0]->[1]))[0] }
+sub host { (split(/@/, $_[0]->[1]))[1] }
+sub name { $_[0]->[0] // user($_[0]) }
 
 1;

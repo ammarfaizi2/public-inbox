@@ -196,8 +196,7 @@ sub require_mods {
 			push @mods, qw(Plack::Builder Plack::Util);
 			next;
 		} elsif ($mod eq '-imapd') {
-			push @mods, qw(Parse::RecDescent DBD::SQLite
-					Email::Address::XS||Mail::Address);
+			push @mods, qw(Parse::RecDescent DBD::SQLite);
 			next;
 		} elsif ($mod eq '-nntpd' || $mod eq 'v2') {
 			push @mods, qw(DBD::SQLite);

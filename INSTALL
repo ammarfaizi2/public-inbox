@@ -83,8 +83,7 @@ Numerous optional modules are likely to be useful as well:
 - Email::Address::XS               deb: libemail-address-xs-perl
                                    pkg: p5-Email-Address-XS
                                    (correct parsing of tricky email
-                                    addresses, phrases and comments,
-                                    required for IMAP)
+                                    addresses, phrases and comments)
 
 - Parse::RecDescent                deb: libparse-recdescent-perl
                                    pkg: p5-Parse-RecDescent

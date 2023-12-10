@@ -1,9 +1,8 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::Address;
-use strict;
-use v5.10.1;
-use parent 'Exporter';
+use v5.12;
+use parent qw(Exporter);
 our @EXPORT_OK = qw(pairs);
 
 sub xs_emails {
@@ -31,6 +30,7 @@ eval {
 	*emails = \&xs_emails;
 	*names = \&xs_names;
 	*pairs = \&xs_pairs;
+	*objects = sub { Email::Address::XS->parse(@_) };
 };
 
 if ($@) {
@@ -38,6 +38,7 @@ if ($@) {
 	*emails = \&PublicInbox::AddressPP::emails;
 	*names = \&PublicInbox::AddressPP::names;
 	*pairs = \&PublicInbox::AddressPP::pairs;
+	*objects = \&PublicInbox::AddressPP::objects;
 }
 
 1;
