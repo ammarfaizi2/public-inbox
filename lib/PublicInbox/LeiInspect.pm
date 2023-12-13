@@ -12,7 +12,6 @@ use parent qw(PublicInbox::IPC);
 use PublicInbox::Config;
 use PublicInbox::MID qw(mids);
 use PublicInbox::NetReader qw(imap_uri nntp_uri);
-use POSIX qw(strftime);
 use PublicInbox::LeiOverview;
 *iso8601 = \&PublicInbox::LeiOverview::iso8601;
 
