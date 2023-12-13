@@ -16,8 +16,9 @@ use autodie;
 my $cxx = which($ENV{CXX} // 'c++');
 my $dir = substr("$cxx-$Config{archname}", 1); # drop leading '/'
 $dir =~ tr!/!-!;
-$ENV{PERL_INLINE_DIRECTORY} // die('BUG: PERL_INLINE_DIRECTORY unset');
-substr($dir, 0, 0) = "$ENV{PERL_INLINE_DIRECTORY}/";
+my $idir = ($ENV{XDG_CACHE_HOME} //
+	(($ENV{HOME} // die('HOME unset')).'/.cache')).'/public-inbox/jaot';
+substr($dir, 0, 0) = "$idir/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
 my @srcs = map { $srcpfx.$_ } qw(xh_mset.h xh_cidx.h xap_helper.h);
@@ -54,9 +55,9 @@ sub needs_rebuild () {
 }
 
 sub build () {
-	if (!-d $dir && !CORE::mkdir($dir)) {
-		my $err = $!;
-		die "mkdir($dir): $err" if !-d $dir;
+	if (!-d $dir) {
+		require File::Path;
+		File::Path::make_path($dir);
 	}
 	require PublicInbox::CodeSearch;
 	require PublicInbox::Lock;

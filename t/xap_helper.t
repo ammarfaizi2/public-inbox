@@ -149,8 +149,10 @@ unless ($ENV{TEST_XH_CXX_ONLY}) {
 	no_pollerfd($ar->{pid});
 }
 SKIP: {
-	require PublicInbox::XapHelperCxx;
-	my $cmd = eval { PublicInbox::XapHelperCxx::cmd() };
+	my $cmd = eval {
+		require PublicInbox::XapHelperCxx;
+		PublicInbox::XapHelperCxx::cmd();
+	};
 	skip "XapHelperCxx build: $@", 1 if $@;
 
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
