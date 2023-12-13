@@ -42,6 +42,14 @@ Other OS tuning knobs
 
 Scalability to many inboxes
 
+=item 9
+
+public-inbox-cindex --join performance
+
+=item 10
+
+public-inbox-clone with shared object stores
+
 =back
 
 =head2 New inboxes: public-inbox-init -V2
@@ -174,6 +182,21 @@ for thousands of inboxes with L<public-inbox-extindex(1)>.
 
 Frequent packing (via L<git-gc(1)>) both improves performance
 and reduces the need to increase C<sys.vm.max_map_count>.
+
+=head2 public-inbox-cindex --join performance
+
+A C++ compiler and the Xapian development files makes C<--join> or
+C<--join=aggressive> orders of magnitude faster in L<public-inbox-cindex(1)>.
+On Debian-based systems this is C<libxapian-dev>.  RPM-based distros have
+these in C<xapian-core-devel> or C<xapian14-core-libs>.  *BSDs typically
+package development files together with runtime libraries, so the C<xapian>
+or C<xapian-core> package will already have the development files.
+
+=head2 public-inbox-clone with shared object stores
+
+When mirroring manifests with many forks using the same objstore,
+git 2.41+ is highly recommended for performance as we automatically
+use the C<fetch.hideRefs> feature to speed up negotiation.
 
 =head1 CONTACT
 

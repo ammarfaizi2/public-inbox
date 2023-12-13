@@ -4,11 +4,24 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
 Content-Disposition: inline
 
-This release includes several new features and fixes.
+This release includes several new features and fixes; mostly
+around improved integration between inboxes and coderepos for
+solver.  Portability and reliability is also improved.
 
-There is also ongoing work to integrate coderepo handling into
-the codebase and the idea of `lei p2q' is integrated into the
-WWW UI.
+public-inbox-cindex is a new command to index coderepos for
+WWW search and perform automatic associations between
+coderepos and inboxes.  This makes solver vastly more useful
+for the WWW UI as admins will no longer have to manually
+associate coderepos with inboxes.
+
+public-inbox-clone gains the ability to mirror entire (or partial)
+grokmirror-compatible manifests.
+
+Internal process and object management data structures are vastly
+simplified throughout and error handling made more robust.
+
+git SHA-256 support remains a work-in-progress for inboxes and
+extindex due to the need to interoperate with SHA-1 epochs.
 
 Upgrading:
 
@@ -32,7 +45,7 @@ treewide
 
   * standardize on `#' prefix for stderr diagnostics (previously `I:')
 
-  * avoid O(n) behavior for reaping dead processes in daemons
+  * SHA-256 coderepos are fully-supported (inboxes not yet)
 
 PublicInbox::WWW
 
@@ -54,6 +67,10 @@ PublicInbox::WWW
   * add /$INBOX/$MSGID/d/ endpoint to show diffs in reused Message-IDs
     (`lei mail-diff' for the web)
 
+  * support POST /$INBOX/$MSGID/?x=m&q= to limit mbox results to a thread
+
+  * add topics_(new|active).(html|atom) endpoints
+
 lei
 
   * use http.proxy / http.<remote>.proxy from system-wide git-config if
@@ -71,6 +88,12 @@ lei
   * `lei import' now sets labels+keywords consistently on all
      already imported messages
 
+  * fix `lei up' on saved local queries which previously used -t/--threads
+
+  * `lei convert' output to v2 public-inboxes is now idempotent
+
+  * improved bash completion for labels (see contrib/completion)
+
 solver (used by lei (rediff|blob), and PublicInbox::WWW)
 
   * handle copies in patches properly
@@ -86,6 +109,14 @@ portability
   * fix excessive pipelining to `git cat-file' on systems with small
     getdelim(3) buffers (mainly affects musl)
 
+  * support Alpine Linux, Dragonfly, NetBSD and OpenBSD.  This resulted
+    not only in bugfixes to our code, but also to Dragonfly and OpenBSD.
+
+public-inbox-pop3d
+
+  * support `limit=NUM' and `initial_limit=NUM' query parameters
+    in mailbox names to limit results
+
 public-inbox-nntpd
 
   * fix LISTGROUP with range (affects neomutt)
@@ -96,11 +127,13 @@ public-inbox-clone / public-inbox-fetch / `lei add-external --mirror'
 
 public-inbox-clone:
 
-  * parallel mirroring of multiple inboxes/coderepos via manifest
+  * parallel mirroring of multiple inboxes/coderepos via manifest,
+    public-inbox-fetch is not used in this mode
 
   * new flags to support manifest mirroring include:
-    --dry-run, --inbox-config=, --project-list=, --prune,
-    --keep-going, --jobs, --include=, --exclude=, --objstore=, ...
+    --dry-run, --inbox-config=, --project-list=, --prune, --purge,
+    --keep-going, --jobs, --include=, --exclude=, --objstore=,
+    --manifest=, --remote-manifest=
     See public-inbox-clone(1) man page for more details.
 
 PublicInbox::SaPlugin::ListMirror
@@ -110,6 +143,7 @@ PublicInbox::SaPlugin::ListMirror
 Search improvements (lei and PublicInbox::WWW)
 
   * quoted text inside base-85 binary patches is no longer indexed
+
 
 Thanks to all the bug reporters and users who made this release
 possible.
