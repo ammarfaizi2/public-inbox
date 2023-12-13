@@ -106,7 +106,7 @@ sub translate {
 		zmore($self, @_);
 		length($self->{zbuf}) >= 8192 ? delete($self->{zbuf}) : '';
 	} else { # undef == EOF
-		zflush($self);
+		$self->zflush;
 	}
 }
 
