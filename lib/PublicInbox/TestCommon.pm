@@ -978,7 +978,7 @@ sub strace (@) {
 		chomp $ps;
 		skip "strace unusable on daemons\n$f is `$ps' (!= 0)" if $ps;
 	}
-	require_cmd('strace', 1);
+	require_cmd('strace', 1) or skip 'strace not available', 1;
 }
 
 sub strace_inject (;$) {
