@@ -7,6 +7,7 @@ use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
+require_git_http_backend;
 
 # FIXME: too much setup
 my ($tmpdir, $for_destroy) = tmpdir();

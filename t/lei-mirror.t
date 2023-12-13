@@ -5,6 +5,7 @@ use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::Inbox;
 require_mods(qw(-httpd lei DBD::SQLite));
 require_cmd('curl');
+require_git_http_backend;
 use PublicInbox::Spawn qw(which);
 require PublicInbox::Msgmap;
 my $sock = tcp_server();

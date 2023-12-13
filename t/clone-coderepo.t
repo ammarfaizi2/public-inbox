@@ -8,6 +8,7 @@ use File::Temp;
 use File::Path qw(remove_tree);
 use PublicInbox::SHA qw(sha1_hex);
 require_mods(qw(json Plack::Builder HTTP::Date HTTP::Status));
+require_git_http_backend;
 require_git '1.8.5';
 require_cmd 'curl';
 require_ok 'PublicInbox::LeiMirror';

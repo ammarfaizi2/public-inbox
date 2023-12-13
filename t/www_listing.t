@@ -77,6 +77,7 @@ sub tiny_test {
 
 my $td;
 SKIP: {
+	require_git_http_backend 1;
 	my $err = "$tmpdir/stderr.log";
 	my $out = "$tmpdir/stdout.log";
 	my $alt = "$tmpdir/alt.git";

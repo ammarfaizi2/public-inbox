@@ -25,7 +25,7 @@ BEGIN {
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
 		create_coderepo require_bsd kernel_version check_broken_tmpfs
-		quit_waiter_pipe wait_for_eof
+		quit_waiter_pipe wait_for_eof require_git_http_backend
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
@@ -161,6 +161,23 @@ sub require_git ($;$) {
 	return plan skip_all => "git $req+ required, have $cur_ver" if !$nr;
 	defined(wantarray) ? undef :
 		skip("git $req+ required (have $cur_ver), skipping $nr tests")
+}
+
+sub require_git_http_backend (;$) {
+	my ($nr) = @_;
+	state $ok = do {
+		require PublicInbox::Git;
+		my $git = PublicInbox::Git::check_git_exe() or plan
+			skip_all => 'nothing in public-inbox works w/o git';
+		my $rdr = { 1 => \my $out, 2 => \my $err };
+		xsys([$git, qw(http-backend)], undef, $rdr);
+		$out =~ /^Status:/ism;
+	};
+	if (!$ok) {
+		my $msg = "`git http-backend' not available";
+		defined($nr) ? skip $msg, $nr : plan skip_all => $msg;
+	}
+	$ok;
 }
 
 my %IPv6_VERSION = (
