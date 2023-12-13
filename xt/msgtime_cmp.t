@@ -36,7 +36,7 @@ sub quiet_is_deeply ($$$$$) {
 			($old->[0] != $cur->[0]) ||
 			($old->[1] != $cur->[1]))) {
 		for ($cur, $old) {
-			$_->[2] = strftime('%Y-%m-%d %k:%M:%S', gmtime($_->[0]))
+			$_->[2] = strftime('%F %T', gmtime($_->[0]))
 		}
 		is_deeply($cur, $old, "$func $oid");
 		diag('got: ', explain($cur));

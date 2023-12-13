@@ -20,7 +20,6 @@ use parent qw(PublicInbox::ExtSearch PublicInbox::Umask PublicInbox::Lock);
 use Carp qw(croak carp);
 use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
-use POSIX qw(strftime);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use PublicInbox::MultiGit;
 use PublicInbox::Search;
@@ -34,6 +33,7 @@ use PublicInbox::ContentHash qw(content_hash);
 use PublicInbox::Eml;
 use PublicInbox::DS qw(now add_timer);
 use DBI qw(:sql_types); # SQL_BLOB
+use PublicInbox::Admin qw(fmt_localtime);
 
 sub new {
 	my (undef, $dir, $opt) = @_;
@@ -749,7 +749,7 @@ sub eidxq_lock_acquire ($) {
 		return $locked if $locked eq $cur;
 	}
 	my ($pid, $time, $euid, $ident) = split(/-/, $cur, 4);
-	my $t = strftime('%Y-%m-%d %k:%M %z', localtime($time));
+	my $t = fmt_localtime($time);
 	local $self->{current_info} = 'eidxq';
 	if ($euid == $> && $ident eq host_ident) {
 		kill(0, $pid) and warn <<EOM and return;

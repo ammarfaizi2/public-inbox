@@ -6,7 +6,7 @@
 package PublicInbox::Admin;
 use v5.12;
 use parent qw(Exporter);
-our @EXPORT_OK = qw(setup_signals);
+our @EXPORT_OK = qw(setup_signals fmt_localtime);
 use PublicInbox::Config;
 use PublicInbox::Inbox;
 use PublicInbox::Spawn qw(run_qx);
@@ -379,6 +379,14 @@ sub do_chdir ($) {
 		next if $d eq ''; # same as git(1)
 		chdir $d or die "cd $d: $!";
 	}
+}
+
+sub fmt_localtime ($) {
+	require POSIX;
+	my @lt = localtime $_[0];
+	my (undef, $M, $H, $d, $m, $Y) = @lt;
+	sprintf('%u-%02u-%02u % 2u:%02u ', $Y + 1900, $m + 1, $d, $H, $M)
+		.POSIX::strftime('%z', @lt);
 }
 
 1;

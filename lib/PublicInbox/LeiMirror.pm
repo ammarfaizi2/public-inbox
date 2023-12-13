@@ -21,6 +21,7 @@ use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
 use PublicInbox::SHA qw(sha256_hex sha_all);
 use POSIX qw(strftime);
+use PublicInbox::Admin qw(fmt_localtime);
 use autodie qw(chdir chmod close open pipe readlink
 		seek symlink sysopen sysseek truncate unlink);
 
@@ -1232,8 +1233,7 @@ EOM
 	# set by clone_v2_prep/-I/--exclude
 	my $mis = delete $self->{chg}->{fp_mismatch};
 	if ($mis) {
-		my $t = (stat($ft))[9];
-		$t = strftime('%F %k:%M:%S %z', localtime($t));
+		my $t = fmt_localtime((stat($ft))[9]);
 		warn <<EOM;
 W: Fingerprints for the following repositories do not match
 W: $mf_url @ $t:

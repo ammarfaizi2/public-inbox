@@ -145,7 +145,11 @@ sub to_attr ($) {
 sub ts2str ($) { strftime('%Y%m%d%H%M%S', gmtime($_[0])) };
 
 # human-friendly format
-sub fmt_ts ($) { strftime('%Y-%m-%d %k:%M', gmtime($_[0])) }
+sub fmt_ts ($) {
+	# strftime %k is not portable and leading zeros in %H slow me down
+	my (undef, $M, $H, $d, $m, $Y) = gmtime $_[0];
+	sprintf '%u-%02u-%02u % 2u:%02u', $Y + 1900, $m + 1, $d, $H, $M;
+}
 
 sub utf8_maybe ($) {
 	utf8::decode($_[0]);

@@ -12,13 +12,12 @@ use strict;
 use v5.10.1;
 use parent qw(Exporter);
 use Fcntl qw(SEEK_SET O_RDONLY O_NONBLOCK);
-use POSIX qw(strftime);
 use HTTP::Date qw(time2str);
 use HTTP::Status qw(status_message);
 use Errno qw(EACCES ENOTDIR ENOENT);
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::GzipFilter qw(gzf_maybe);
-use PublicInbox::Hval qw(ascii_html);
+use PublicInbox::Hval qw(ascii_html fmt_ts);
 use Plack::MIME;
 our @EXPORT_OK = qw(@NO_CACHE r path_info_raw);
 
@@ -299,7 +298,7 @@ sub dir_response ($$$) {
 		$pad = 1 if $pad <= 0;
 		$entry = qq(\n<a\nhref="$href">$name</a>) .
 				(' ' x $pad) .
-				strftime('%Y-%m-%d %k:%M', gmtime($mtime)) .
+				fmt_ts($mtime) .
 				sprintf('% 8s', $hsize);
 	}
 
