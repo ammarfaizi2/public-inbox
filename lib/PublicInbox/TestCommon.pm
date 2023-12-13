@@ -29,7 +29,7 @@ BEGIN {
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
-		strace strace_inject);
+		strace strace_inject lsof_pid);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -951,6 +951,26 @@ sub test_httpd ($$;$$) {
 	}
 };
 
+# TODO: support fstat(1) on OpenBSD, lsof already works on FreeBSD + Linux
+# don't use this for deleted file checks, we only check that on Linux atm
+# and we can readlink /proc/PID/fd/* directly
+sub lsof_pid ($;$) {
+	my ($pid, $rdr) = @_;
+	state $lsof = require_cmd('lsof', 1);
+	$lsof or skip 'lsof missing/broken', 1;
+	my @out = xqx([$lsof, '-p', $pid], undef, $rdr);
+	if ($?) {
+		undef $lsof;
+		skip "lsof -p PID broken \$?=$?", 1;
+	}
+	my @cols = split ' ', $out[0];
+	if (($cols[7] // '') eq 'NODE') { # normal lsof
+		@out;
+	} else { # busybox lsof ignores -p, so we DIY it
+		grep /\b$pid\b/, @out;
+	}
+}
+
 sub no_pollerfd ($) {
 	my ($pid) = @_;
 	my ($re, @cmd);
@@ -966,6 +986,7 @@ sub no_pollerfd ($) {
 		my @of = xqx(\@cmd, {}, {2 => \(my $e)});
 		my $err = $?;
 		skip "$bin broken? (\$?=$err) ($e)", 1 if $err;
+		@of = grep /\b$pid\b/, @of; # busybox lsof ignores -p
 		is(grep(/$re/, @of), 0, "no $re FDs") or diag explain(\@of);
 	}
 }

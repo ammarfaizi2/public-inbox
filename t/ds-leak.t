@@ -29,11 +29,8 @@ if ('close-on-exec for epoll and kqueue') {
 	is($l, undef, 'cloexec works and sleep(1) is running');
 
 	SKIP: {
-		my $lsof = require_cmd('lsof', 1) or skip 'lsof missing', 1;
 		my $rdr = { 2 => \(my $null) };
-		my @of = grep(/$evfd_re/, xqx([$lsof, '-p', $pid], {}, $rdr));
-		my $err = $?;
-		skip "lsof broken ? (\$?=$err)", 1 if $err;
+		my @of = grep /$evfd_re/, lsof_pid $pid, $rdr;
 		is_deeply(\@of, [], 'no FDs leaked to subprocess');
 	};
 	if (defined $pid) {

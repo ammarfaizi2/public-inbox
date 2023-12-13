@@ -14,7 +14,6 @@ use PublicInbox::DS;
 my $version = $ENV{PI_TEST_VERSION} || 1;
 require_git('2.6') if $version == 2;
 use_ok 'PublicInbox::Msgmap';
-my $lsof = require_cmd('lsof', 1);
 my $fast_idle = eval { require Linux::Inotify2; 1 } //
 		eval { require IO::KQueue; 1 };
 
@@ -332,9 +331,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 				($ENV{TEST_RUN_MODE} // 2)) {
 			skip 'Xapian.pm pre-loaded (by xt/check-run.t?)', 1;
 		}
-		$lsof or skip 'lsof missing', 1;
-		my @of = xqx([$lsof, '-p', $td->{pid}], undef, $noerr);
-		skip('lsof broken', 1) if (!scalar(@of) || $?);
+		my @of = lsof_pid $td->{pid}, $noerr;
 		my @xap = grep m!\bXapian\b!, @of;
 		is_deeply(\@xap, [], 'Xapian not loaded in nntpd') or
 			diag explain(\@of);
@@ -364,12 +361,13 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 		tick($fast_idle ? 0.1 : 2.1);
 		$art = $n->article($ex->header('Message-ID'));
 		ok($art, 'new article retrieved after compact');
-		$lsof or skip 'lsof missing', 1;
-		($^O =~ /\A(?:linux)\z/) or
+		$^O eq 'linux' or
 			skip "lsof /(deleted)/ check untested on $^O", 1;
-		my @lsof = xqx([$lsof, '-p', $td->{pid}], undef, $noerr);
-		my $d = [ grep(/\(deleted\)/, grep(!/batch-command\.err/, @lsof)) ];
-		is_deeply($d, [], 'no deleted files') or diag explain($d);
+		my $fd = "/proc/$td->{pid}/fd";
+		-d $fd or skip '/proc/PID/fd missing', 1;
+		my @of = map readlink, glob "$fd/*";
+		my @d = grep /\(deleted\)/, grep !/batch-command\.err/, @of;
+		is_deeply(\@d, [], 'no deleted files') or diag explain(\@d);
 	};
 	SKIP: { test_watch($tmpdir, $host_port, $group) };
 	{

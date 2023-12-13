@@ -639,30 +639,21 @@ SKIP: {
 };
 
 SKIP: {
-	skip 'only testing lsof(8) output on Linux', 1 if $^O ne 'linux';
-	my $lsof = require_cmd('lsof', 1) or skip 'no lsof in PATH', 1;
-	my $null_in = '';
-	my $rdr = { 2 => \(my $null_err), 0 => \$null_in };
-	my @lsof = xqx([$lsof, '-p', $td->{pid}], undef, $rdr);
-	my $d = [ grep(/\(deleted\)/, @lsof) ];
-	is_deeply($d, [], 'no lingering deleted inputs') or diag explain($d);
+	skip 'only testing /proc/PID/fd on Linux', 1 if $^O ne 'linux';
+	my $fd_dir = "/proc/$td->{pid}/fd";
+	-d $fd_dir or skip '/proc/$PID/fd missing', 1;
+	my @child = grep defined, map readlink, glob "$fd_dir/*";
+	my @d = grep /\(deleted\)/, @child;
+	is_deeply(\@d, [], 'no lingering deleted inputs') or diag explain(\@d);
 
 	# filter out pipes inherited from the parent
-	my @this = xqx([$lsof, '-p', $$], undef, $rdr);
-	my $bad;
-	my $extract_inodes = sub {
-		map {;
-			my @f = split(' ', $_);
-			my $inode = $f[-2];
-			$bad = $_ if $inode !~ /\A[0-9]+\z/;
-			$inode => 1;
-		} grep (/\bpipe\b/, @_);
-	};
-	my %child = $extract_inodes->(@lsof);
+	my @this = grep defined, map readlink, glob "/proc/$$/fd/*";
+	my $extract_inodes = sub { map { $_ => 1 } grep /\bpipe\b/, @_ };
+	my %child = $extract_inodes->(@child);
 	my %parent = $extract_inodes->(@this);
-	skip("inode not in expected format: $bad", 1) if defined($bad);
 	delete @child{(keys %parent)};
-	is_deeply([], [keys %child], 'no extra pipes with -W0');
+	is_deeply([], [keys %child], 'no extra pipes with -W0') or
+		diag explain([child => \%child, parent => \%parent]);
 };
 
 # ensure compatibility with other PSGI servers

@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use PublicInbox::Eml;
@@ -549,9 +549,8 @@ is($err, '', 'no errors from --xapian-only');
 undef $for_destroy;
 SKIP: {
 	skip 'only testing lsof(8) output on Linux', 1 if $^O ne 'linux';
-	my $lsof = require_cmd('lsof', 1) or skip 'no lsof in PATH', 1;
 	my $rdr = { 2 => \(my $null_err) };
-	my @d = grep(m!/xap[0-9]+/!, xqx([$lsof, '-p', $$], undef, $rdr));
+	my @d = grep m!/xap[0-9]+/!, lsof_pid $$, $rdr;
 	is_deeply(\@d, [], 'no deleted index files') or diag explain(\@d);
 }
 done_testing();
