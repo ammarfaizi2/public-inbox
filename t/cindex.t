@@ -247,11 +247,12 @@ SKIP: {
 	ok(run_script([qw(-xcpdb --compact), "$tmp/ext"]), 'xcpdb compact');
 };
 
-my $basic = create_inbox 'basic', indexlevel => 'basic', sub {
-	my ($im, $ibx) = @_;
-	$im->add(eml_load('t/plack-qp.eml'));
-};
-{
+SKIP: {
+	require_cmd('join', 1);
+	my $basic = create_inbox 'basic', indexlevel => 'basic', sub {
+		my ($im, $ibx) = @_;
+		$im->add(eml_load('t/plack-qp.eml'));
+	};
 	my $env = { PI_CONFIG => "$tmp/pi_config" };
 	PublicInbox::IO::write_file '>', $env->{PI_CONFIG}, <<EOM;
 [publicinbox "basictest"]
