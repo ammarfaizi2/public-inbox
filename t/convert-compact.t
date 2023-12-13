@@ -35,14 +35,14 @@ EOF
 	$im->add($eml) or BAIL_OUT '->add';
 };
 umask(077) or BAIL_OUT "umask: $!";
-oct_is(((stat("$ibx->{inboxdir}/public-inbox"))[2]) & 07777, 0755,
+oct_is(((stat("$ibx->{inboxdir}/public-inbox"))[2]) & 05777, 0755,
 	'sharedRepository respected for v1');
-oct_is(((stat("$ibx->{inboxdir}/public-inbox/msgmap.sqlite3"))[2]) & 07777,
+oct_is(((stat("$ibx->{inboxdir}/public-inbox/msgmap.sqlite3"))[2]) & 05777,
 	0644, 'sharedRepository respected for v1 msgmap');
 my @xdir = glob("$ibx->{inboxdir}/public-inbox/xap*/*");
 foreach (@xdir) {
 	my @st = stat($_);
-	oct_is($st[2] & 07777, -f _ ? 0644 : 0755,
+	oct_is($st[2] & 05777, -f _ ? 0644 : 0755,
 		'sharedRepository respected on file after convert');
 }
 
@@ -55,7 +55,7 @@ ok(run_script($cmd, undef, $rdr), 'v1 compact works');
 
 @xdir = glob("$ibx->{inboxdir}/public-inbox/xap*");
 is(scalar(@xdir), 1, 'got one xapian directory after compact');
-oct_is(((stat($xdir[0]))[2]) & 07777, 0755,
+oct_is(((stat($xdir[0]))[2]) & 05777, 0755,
 	'sharedRepository respected on v1 compact');
 
 my $hwm = do {
@@ -71,7 +71,7 @@ ok(run_script($cmd, undef, $rdr), 'convert --no-index works');
 $cmd = [ '-convert', $ibx->{inboxdir}, "$tmpdir/x/v2" ];
 ok(run_script($cmd, undef, $rdr), 'convert works');
 @xdir = glob("$tmpdir/x/v2/xap*/*");
-foreach (@xdir) {
+for (@xdir) { # TODO: should public-inbox-convert preserve S_ISGID bit?
 	my @st = stat($_);
 	oct_is($st[2] & 07777, -f _ ? 0644 : 0755,
 		'sharedRepository respected after convert');
