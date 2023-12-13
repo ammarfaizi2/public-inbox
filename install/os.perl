@@ -50,8 +50,13 @@ EOM
 	die "$^O unsupported";
 }
 $VERSION_ID //= 0; # numeric? could be 'sid', actually...
-my %MIN_VER = (freebsd => v11, openbsd => v7.3, netbsd => v9.3,
-	dragonfly => v6.4);
+my %MIN_VER = ( # likely older versions work for many of these...
+	alpine => v3.19,
+	dragonfly => v6.4,
+	freebsd => v11,
+	netbsd => v9.3,
+	openbsd => v7.3,
+);
 
 if (defined(my $min_ver = $MIN_VER{$^O})) {
 	my $vid = $VERSION_ID;
@@ -64,7 +69,8 @@ EOM
 }
 
 sub pkg_fmt () {
-	if ($ID =~ /\A(?:freebsd|dragonfly)\z/) { 'pkg' }
+	if ($ID eq 'alpine') { 'apk' }
+	elsif ($ID =~ /\A(?:freebsd|dragonfly)\z/) { 'pkg' }
 	# *shrug*, as long as the (Net|Open)BSD names don't conflict w/ FreeBSD
 	elsif ($ID eq 'netbsd') { 'pkgin' }
 	elsif ($ID eq 'openbsd') { 'pkg_add' }

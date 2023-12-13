@@ -130,33 +130,48 @@ my $non_auto = { # git and perl (+autodie) are essential
 		pkg_add => [ qw(curl p5-Time-TimeDate git) ],
 	},
 	perl => {
+		apk => [ qw(perl perl-utils) ],
 		pkg => 'perl5',
 		pkgin => 'perl',
 		pkg_add => [], # Perl is part of OpenBSD base
 	},
 	# optional stuff:
+	'BSD::Resource' => {
+		apk => [], # not packaged for Alpine 3.19
+	},
 	'Date::Parse' => {
+		apk => 'perl-timedate',
 		deb => 'libtimedate-perl',
 		pkg => 'p5-TimeDate',
 		rpm => 'perl-TimeDate',
 		pkg_add => 'p5-Time-TimeDate',
 	},
 	'Inline::C' => {
+		apk => [ qw(perl-inline-c perl-dev) ],
 		pkg_add => 'p5-Inline', # tested OpenBSD 7.3
 		rpm => 'perl-Inline', # for CentOS 7.x, at least
 	},
 	'DBD::SQLite' => { deb => 'libdbd-sqlite3-perl' },
+	'Plack::Middleware::ReverseProxy' => {
+		apk => [], # not packaged for Alpine 3.19.0
+	},
 	'Plack::Test' => {
+		apk => 'perl-plack',
 		deb => 'libplack-perl',
 		pkg => 'p5-Plack',
 	},
+	'Plack::Test::ExternalServer' => {
+		apk => [], # not packaged for Alpine 3.19.0
+	},
 	'Xapian' => {
+		apk => 'xapian-bindings-perl',
 		deb => 'libsearch-xapian-perl',
 		pkg => 'p5-Xapian',
 		pkg_add => 'xapian-bindings-perl',
 		rpm => [], # xapian14-bindings-perl in 3rd-party repo
 	},
 	'highlight.pm' => {
+		apk => [],
 		deb => 'libhighlight-perl',
 		pkg => [],
 		pkgin => 'p5-highlight',
@@ -171,6 +186,7 @@ my $non_auto = { # git and perl (+autodie) are essential
 
 	# some distros have both sqlite 2 and 3, we've only ever used 3
 	'libsqlite3' => {
+		apk => [], # handled by apk w/ perl-dbd-sqlite
 		pkg => 'sqlite3',
 		rpm => [], # `sqlite' is not removable due to yum/systemd
 		deb => [], # libsqlite3-0, but no need to specify
@@ -184,22 +200,26 @@ my $non_auto = { # git and perl (+autodie) are essential
 		rpm => 'xapian-core',
 	},
 	'libxapian-dev' => {
+		apk => 'xapian-core-dev',
 		pkg => 'xapian-core',
 		pkgin => 'xapian',
 		rpm => 'xapian-core-devel',
 	},
 	'pkg-config' => {
+		apk => [], # handled by apk w/ xapian-core-dev
 		pkg_add => [], # part of the OpenBSD base system
 		pkg => 'pkgconf', # pkg-config is a symlink to pkgconf
 		pkgin => 'pkg-config',
 	},
 	'sqlite3' => { # this is just the executable binary on deb
+		apk => 'sqlite',
 		rpm => [], # `sqlite' is not removable due to yum/systemd
 	},
 
 	# we call xapian-compact(1) in public-inbox-compact(1) and
 	# xapian-delve(1) in public-inbox-cindex(1)
 	'xapian-tools' => {
+		apk => 'xapian-core',
 		pkg => 'xapian-core',
 		pkgin => 'xapian',
 		rpm => 'xapian-core', # ???
@@ -207,6 +227,7 @@ my $non_auto = { # git and perl (+autodie) are essential
 
 	# OS-specific
 	'IO::KQueue' => {
+		apk => [],
 		deb => [],
 		rpm => [],
 	},
@@ -226,6 +247,7 @@ for (qw(autodie Digest::SHA ExtUtils::MakeMaker IO::Compress Sys::Syslog
 		deb => 'perl', # libperl5.XX, but the XX varies
 		pkg => 'perl5',
 		pkg_add => [], # perl is in the OpenBSD base system
+		apk => 'perl',
 		pkgin => 'perl',
 		rpm => "perl-$rpm",
 	};
@@ -240,8 +262,9 @@ if ($pkg_fmt =~ /\A(?:pkg_add|pkgin)\z/) {
 }
 
 my %inst_check = ( # subs which return true if a package is intalled
-	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
+	apk => sub { system(qw(apk info -q -e), $_[0]) == 0 },
 	deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
+	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },
 	pkg_add => sub { system(qw(pkg_info -q -e), "$_[0]->=0") == 0 },
 	pkgin => sub { system(qw(pkg_info -q -e), $_[0]) == 0 },
 	rpm => sub { system("rpm -qs $_[0] >/dev/null 2>&1") == 0 },
@@ -290,7 +313,10 @@ my (%add, %rm); # uniquify lists
 (@pkg_remove || @pkg_install) or warn "# no packages to install nor remove\n";
 
 # OS-specific cleanups appreciated
-if ($pkg_fmt eq 'deb') {
+if ($pkg_fmt eq 'apk') {
+	root('apk', 'add', @pkg_install) if @pkg_install;
+	root('apk', 'del', @pkg_remove) if @pkg_remove;
+} elsif ($pkg_fmt eq 'deb') {
 	my @apt_opt = qw(-o APT::Install-Recommends=false
 			-o APT::Install-Suggests=false);
 	push @apt_opt, '-y' if $opt->{yes};
@@ -340,10 +366,12 @@ sub pkg2ospkg {
 
 	# check common Perl module name patterns:
 	if ($pkg =~ /::/ || $pkg =~ /\A[A-Z]/) {
-		if ($fmt eq 'deb') {
+		if ($fmt eq 'apk') {
 			$pkg =~ s/::/-/g;
-			$pkg =~ tr/A-Z/a-z/;
-			return "lib$pkg-perl";
+			return "perl-\L$pkg"
+		} elsif ($fmt eq 'deb') {
+			$pkg =~ s/::/-/g;
+			return "lib\L$pkg-perl";
 		} elsif ($fmt eq 'rpm') {
 			$pkg =~ s/::/-/g;
 			return "perl-$pkg"
