@@ -273,7 +273,7 @@ sub zflush { $_[0]->SUPER::zflush('</pre>', $_[0]->_html_end) }
 # called by GzipFilter->write or GetlineResponse->getline
 sub translate {
 	my $ctx = shift;
-	my $rec = $_[0] // return zflush($ctx); # getline
+	$_[0] // return zflush($ctx); # getline caller
 	my @out;
 	my $fbuf = delete($ctx->{fbuf}) // shift;
 	$fbuf .= shift while @_;
@@ -290,8 +290,8 @@ sub translate {
 						$snap_pfx, @snap_fmt);
 		}
 	}
-	$ctx->{fbuf} = $fbuf;
-	$ctx->SUPER::translate(@out);
+	$ctx->{fbuf} = $fbuf; # may be incomplete
+	@out ? $ctx->SUPER::translate(@out) : ''; # not EOF, yet
 }
 
 sub _refs_parse_hdr { # {parse_hdr} for Qspawn

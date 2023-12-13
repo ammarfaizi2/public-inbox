@@ -43,7 +43,7 @@ sub zflush { $_[0]->SUPER::zflush('</feed>') }
 # called by GzipFilter->write or GetlineResponse->getline
 sub translate {
 	my $self = shift;
-	my $rec = $_[0] // return $self->zflush; # getline
+	$_[0] // return zflush($self); # getline caller
 	my @out;
 	my $lbuf = delete($self->{lbuf}) // shift;
 	$lbuf .= shift while @_;
@@ -87,7 +87,7 @@ xmlns="http://www.w3.org/1999/xhtml"><pre style="white-space:pre-wrap">
 	}
 	$self->{lbuf} = $lbuf;
 	chomp @out;
-	$self->SUPER::translate(@out);
+	@out ? $self->SUPER::translate(@out) : ''; # not EOF, yet
 }
 
 # $REPO/tags.atom endpoint

@@ -405,14 +405,16 @@ EOF
 		is($res->code, 200, 'Atom feed');
 		SKIP: {
 			require_mods('XML::TreePP', 1);
-			my $t = XML::TreePP->new->parse($res->content);
+			my $t = eval { XML::TreePP->new->parse($res->content) }
+				or diag explain($res);
 			is(scalar @{$t->{feed}->{entry}}, 50,
-				'got 50 entries');
+				'got 50 entries') or diag explain([$t, $res]);
 
 			$res = $cb->(GET('/public-inbox/atom/COPYING'));
 			is($res->code, 200, 'file Atom feed');
 			$t = XML::TreePP->new->parse($res->content);
-			ok($t->{feed}->{entry}, 'got entry');
+			ok($t->{feed}->{entry}, 'got entry') or
+				diag explain([ $t, $res ]);
 
 			$res = $cb->(GET('/public-inbox/atom/README.md'));
 			is($res->code, 404, '404 on missing file Atom feed');
