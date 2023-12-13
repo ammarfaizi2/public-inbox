@@ -7,13 +7,13 @@
 # The resulting executable is not linked to Perl in any way.
 package PublicInbox::XapHelperCxx;
 use v5.12;
-use PublicInbox::Spawn qw(run_die run_qx which);
+use PublicInbox::Spawn qw(run_die run_qx run_wait which);
 use PublicInbox::IO qw(try_cat write_file);
 use PublicInbox::Search;
 use Fcntl qw(SEEK_SET);
 use Config;
 use autodie;
-my $cxx = which($ENV{CXX} // 'c++');
+my $cxx = which($ENV{CXX} // 'c++') // which('clang') // die 'no C++ compiler';
 my $dir = substr("$cxx-$Config{archname}", 1); # drop leading '/'
 $dir =~ tr!/!-!;
 my $idir = ($ENV{XDG_CACHE_HOME} //
@@ -81,7 +81,16 @@ sub build () {
 	my @xflags = split(' ', "$fl $xflags"); # ' ' awk-mode eats leading WS
 	my @cflags = ('-I', $srcpfx, grep(!/\A-(?:Wl|l|L)/, @xflags));
 	run_die([$cxx, '-o', "$dir/$prog.o", '-c', "$dir/$prog.cpp", @cflags]);
-	run_die([$cxx, '-o', "$dir/$prog.tmp", "$dir/$prog.o", @xflags]);
+
+	# xapian on Alpine Linux (tested 3.19.0) is linked against libstdc++,
+	# and clang needs to be told to use it (rather than libc++):
+	my @try = rindex($cxx, 'clang') >= 0 ? qw(-lstdc++) : ();
+	my @cmd = ($cxx, '-o', "$dir/$prog.tmp", "$dir/$prog.o", @xflags);
+	while (run_wait(\@cmd) and @try) {
+		warn("# attempting to link again with $try[0]...\n");
+		push(@cmd, shift(@try));
+	}
+	die "# @cmd failed: \$?=$?" if $?;
 	unlink "$dir/$prog.cpp", "$dir/$prog.o";
 	write_file '>', "$dir/XFLAGS.tmp", $xflags, "\n";
 	write_file '>', "$dir/xap_modversion.tmp", $xap_modversion, "\n";
