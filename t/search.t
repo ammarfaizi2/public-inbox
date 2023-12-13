@@ -34,11 +34,6 @@ my $rw_commit = sub {
 	$ibx->search->reopen;
 };
 
-sub oct_is ($$$) {
-	my ($got, $exp, $msg) = @_;
-	is(sprintf('0%03o', $got), sprintf('0%03o', $exp), $msg);
-}
-
 {
 	# git repository perms
 	use_ok 'PublicInbox::Umask';

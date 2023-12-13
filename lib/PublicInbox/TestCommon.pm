@@ -29,7 +29,7 @@ BEGIN {
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
-		strace strace_inject lsof_pid);
+		strace strace_inject lsof_pid oct_is);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -1031,6 +1031,12 @@ sub strace_inject (;$) {
 	$ver ge v4.16 or skip "$cmd too old for syscall injection (".
 				sprintf('v%vd', $ver). ' < v4.16)';
 	$cmd
+}
+
+sub oct_is ($$$) {
+	my ($got, $exp, $msg) = @_;
+	@_ = (sprintf('0%03o', $got), sprintf('0%03o', $exp), $msg);
+	goto &is; # tail recursion to get lineno from callers on failure
 }
 
 package PublicInbox::TestCommon::InboxWakeup;

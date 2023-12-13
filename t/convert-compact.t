@@ -35,14 +35,14 @@ EOF
 	$im->add($eml) or BAIL_OUT '->add';
 };
 umask(077) or BAIL_OUT "umask: $!";
-is(((stat("$ibx->{inboxdir}/public-inbox"))[2]) & 07777, 0755,
+oct_is(((stat("$ibx->{inboxdir}/public-inbox"))[2]) & 07777, 0755,
 	'sharedRepository respected for v1');
-is(((stat("$ibx->{inboxdir}/public-inbox/msgmap.sqlite3"))[2]) & 07777, 0644,
-	'sharedRepository respected for v1 msgmap');
+oct_is(((stat("$ibx->{inboxdir}/public-inbox/msgmap.sqlite3"))[2]) & 07777,
+	0644, 'sharedRepository respected for v1 msgmap');
 my @xdir = glob("$ibx->{inboxdir}/public-inbox/xap*/*");
 foreach (@xdir) {
 	my @st = stat($_);
-	is($st[2] & 07777, -f _ ? 0644 : 0755,
+	oct_is($st[2] & 07777, -f _ ? 0644 : 0755,
 		'sharedRepository respected on file after convert');
 }
 
@@ -55,7 +55,7 @@ ok(run_script($cmd, undef, $rdr), 'v1 compact works');
 
 @xdir = glob("$ibx->{inboxdir}/public-inbox/xap*");
 is(scalar(@xdir), 1, 'got one xapian directory after compact');
-is(((stat($xdir[0]))[2]) & 07777, 0755,
+oct_is(((stat($xdir[0]))[2]) & 07777, 0755,
 	'sharedRepository respected on v1 compact');
 
 my $hwm = do {
@@ -73,7 +73,7 @@ ok(run_script($cmd, undef, $rdr), 'convert works');
 @xdir = glob("$tmpdir/x/v2/xap*/*");
 foreach (@xdir) {
 	my @st = stat($_);
-	is($st[2] & 07777, -f _ ? 0644 : 0755,
+	oct_is($st[2] & 07777, -f _ ? 0644 : 0755,
 		'sharedRepository respected after convert');
 }
 
@@ -87,17 +87,17 @@ is($ibx->mm->num_highwater, $hwm, 'highwater mark unchanged in v2 inbox');
 @xdir = glob("$tmpdir/x/v2/xap*/*");
 foreach (@xdir) {
 	my @st = stat($_);
-	is($st[2] & 07777, -f _ ? 0644 : 0755,
+	oct_is($st[2] & 07777, -f _ ? 0644 : 0755,
 		'sharedRepository respected after v2 compact');
 }
-is(((stat("$tmpdir/x/v2/msgmap.sqlite3"))[2]) & 07777, 0644,
+oct_is(((stat("$tmpdir/x/v2/msgmap.sqlite3"))[2]) & 07777, 0644,
 	'sharedRepository respected for v2 msgmap');
 
 @xdir = (glob("$tmpdir/x/v2/git/*.git/objects/*/*"),
 	 glob("$tmpdir/x/v2/git/*.git/objects/pack/*"));
 foreach (@xdir) {
 	my @st = stat($_);
-	is($st[2] & 07777, -f _ ? 0444 : 0755,
+	oct_is($st[2] & 07777, -f _ ? 0444 : 0755,
 		'sharedRepository respected after v2 compact');
 }
 my $msgs = $ibx->over->recent({limit => 1000});
