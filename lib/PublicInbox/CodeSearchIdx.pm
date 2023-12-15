@@ -1305,6 +1305,8 @@ sub cidx_run { # main entry point
 			my $v = $self->{-opt}->{"sort-$_"};
 			push @SORT, "--$_=$v" if defined $v;
 		}
+		($self->{-opt}->{prune} && $GIT_VER le v2.6) and
+			die "W: --prune requires git v2.6+\n";
 		init_join_prefork($self)
 	}
 	local @IDX_SHARDS = cidx_init($self); # forks workers

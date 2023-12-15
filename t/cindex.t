@@ -209,6 +209,7 @@ EOM
 
 SKIP: { # --prune
 	require_cmd($ENV{XAPIAN_DELVE} || 'xapian-delve', 1);
+	require_git v2.6, 1;
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	is(scalar($csrch->mset('s:hi')->items), 1, 'got hit');
 
