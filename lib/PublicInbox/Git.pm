@@ -107,7 +107,9 @@ sub git_path ($$) {
 			$d;
 		} else {
 			local $/ = "\n";
-			my $s = $self->qx(qw(rev-parse --git-path), $path);
+			my $rdr = { 2 => \my $err };
+			my $s = $self->qx([qw(rev-parse --git-path), $path],
+					undef, $rdr);
 			chomp $s;
 
 			# git prior to 2.5.0 did not understand --git-path
