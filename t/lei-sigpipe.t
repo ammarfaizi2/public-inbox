@@ -11,7 +11,7 @@ use autodie qw(close open pipe seek sysread);
 use PublicInbox::IO qw(write_file);
 my $inboxdir = $ENV{GIANT_INBOX_DIR};
 SKIP: {
-	$inboxdir // skip 'GIANT_INBOX_DIR unset to test large results';
+	$inboxdir // skip 'GIANT_INBOX_DIR unset to test large results', 1;
 	require PublicInbox::Inbox;
 	my $ibx = PublicInbox::Inbox->new({
 		name => 'unconfigured-test',

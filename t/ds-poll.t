@@ -48,7 +48,7 @@ is(scalar @$events, 0, 'nothing ready after EPOLL_CTL_DEL');
 is($p->ep_add($r, EPOLLIN), 0, 're-add');
 SKIP: {
 	$cls =~ m!::(?:DSPoll|Select)\z! or
-		skip 'EBADF test for select|poll only';
+		skip 'EBADF test for select|poll only', 1;
 	my $old_fd = fileno($r);
 	close $r;
 	my @w;

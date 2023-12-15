@@ -64,7 +64,7 @@ sub require_bsd (;$) {
 	return 1 if $ok;
 	return if defined(wantarray);
 	my $m = "$0 is BSD-only (\$^O=$^O)";
-	@_ ? skip($m) : plan(skip_all => $m);
+	@_ ? skip($m, 1) : plan(skip_all => $m);
 }
 
 sub xbail (@) { BAIL_OUT join(' ', map { ref() ? (explain($_)) : ($_) } @_) }
@@ -142,8 +142,7 @@ sub require_cmd ($;$) {
 	my $bin = $CACHE{$cmd} //= PublicInbox::Spawn::which($cmd);
 	return $bin if $bin;
 	return plan(skip_all => "$cmd missing from PATH for $0") if !$nr;
-	defined(wantarray) ? undef :
-		skip("$cmd missing, skipping $nr tests", $nr);
+	defined(wantarray) ? undef : skip("$cmd missing", $nr);
 }
 
 sub have_xapian_compact (;$) {
@@ -160,7 +159,7 @@ sub require_git ($;$) {
 	state $cur_ver = sprintf('%vd', $cur_vstr);
 	return plan skip_all => "git $req+ required, have $cur_ver" if !$nr;
 	defined(wantarray) ? undef :
-		skip("git $req+ required (have $cur_ver), skipping $nr tests")
+		skip("git $req+ required (have $cur_ver)", $nr)
 }
 
 sub require_git_http_backend (;$) {
@@ -189,12 +188,13 @@ my %IPv6_VERSION = (
 
 sub need_accept_filter ($) {
 	my ($af) = @_;
-	return if $^O eq 'netbsd'; # since NetBSD 5.0
+	return if $^O eq 'netbsd'; # since NetBSD 5.0, no kldstat needed
 	$^O =~ /\A(?:freebsd|dragonfly)\z/ or
-		skip 'SO_ACCEPTFILTER is FreeBSD/NetBSD/Dragonfly-only so far';
+		skip 'SO_ACCEPTFILTER is FreeBSD/NetBSD/Dragonfly-only so far',
+			1;
 	state $tried = {};
 	($tried->{$af} //= system("kldstat -m $af >/dev/null")) and
-		skip "$af not loaded: kldload $af";
+		skip "$af not loaded: kldload $af", 1;
 }
 
 sub require_mods {
@@ -1004,7 +1004,7 @@ sub cfg_new ($;@) {
 our $strace_cmd;
 sub strace (@) {
 	my ($for_daemon) = @_;
-	skip 'linux only test' if $^O ne 'linux';
+	skip 'linux only test', 1 if $^O ne 'linux';
 	if ($for_daemon) {
 		my $f = '/proc/sys/kernel/yama/ptrace_scope';
 		# TODO: we could fiddle with prctl in the daemon to make
@@ -1014,7 +1014,7 @@ sub strace (@) {
 			CORE::open($fh, '<', $f) ? readline($fh) : 0;
 		};
 		chomp $ps;
-		skip "strace unusable on daemons\n$f is `$ps' (!= 0)" if $ps;
+		skip "strace unusable on daemons\n$f is `$ps' (!= 0)", 1 if $ps;
 	}
 	require_cmd('strace', 1) or skip 'strace not available', 1;
 }
@@ -1029,7 +1029,7 @@ sub strace_inject (;$) {
 		eval("v$1");
 	};
 	$ver ge v4.16 or skip "$cmd too old for syscall injection (".
-				sprintf('v%vd', $ver). ' < v4.16)';
+				sprintf('v%vd', $ver). ' < v4.16)', 1;
 	$cmd
 }
 

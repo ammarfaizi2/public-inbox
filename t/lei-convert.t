@@ -165,7 +165,7 @@ EOM
 			$ok = $x;
 			last;
 		}
-		skip 'pigz || gzip do not support --rsyncable' if !$ok;
+		skip 'pigz || gzip do not support --rsyncable', 1 if !$ok;
 		lei_ok qw(convert --rsyncable), "mboxrd:$d/qp.gz",
 			'-o', "mboxcl2:$d/qp2.gz";
 		undef $fh; # necessary to make IO::Uncompress::Gunzip happy

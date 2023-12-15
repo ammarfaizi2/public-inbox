@@ -32,7 +32,7 @@ test_lei({ daemon_only => 1 }, sub {
 	SKIP: {
 		skip 'only testing open files on Linux', 1 if $^O ne 'linux';
 		my $d = "/proc/$pid/fd";
-		skip "no $d on Linux" unless -d $d;
+		skip "no $d on Linux", 1 unless -d $d;
 		my @before = sort(glob("$d/*"));
 		my $addr = pack_sockaddr_un($sock);
 		open my $null, '<', '/dev/null' or BAIL_OUT "/dev/null: $!";

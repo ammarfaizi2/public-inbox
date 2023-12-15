@@ -28,7 +28,7 @@ my @zmods = qw(PublicInbox::GzipFilter IO::Uncompress::Gunzip);
 # using socket activation:
 my ($defer_accept_val, $accf_arg, $TCP_DEFER_ACCEPT);
 SKIP: {
-	skip 'TCP_DEFER_ACCEPT is Linux-only' if $^O ne 'linux';
+	skip 'TCP_DEFER_ACCEPT is Linux-only', 1 if $^O ne 'linux';
 	$TCP_DEFER_ACCEPT = eval { Socket::TCP_DEFER_ACCEPT() } // 9;
 	setsockopt($sock, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 5);
 	my $x = getsockopt($sock, IPPROTO_TCP, $TCP_DEFER_ACCEPT);
