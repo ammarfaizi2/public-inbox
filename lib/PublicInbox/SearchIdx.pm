@@ -44,6 +44,7 @@ my $hex = '[a-f0-9]';
 my $OID = $hex .'{40,}';
 my @VMD_MAP = (kw => 'K', L => 'L'); # value order matters
 our $INDEXLEVELS = qr/\A(?:full|medium|basic)\z/;
+our $PATCHID_BROKEN;
 
 sub new {
 	my ($class, $ibx, $creat, $shard) = @_;
@@ -63,6 +64,7 @@ sub new {
 			die("Invalid indexlevel $ibx->{indexlevel}\n");
 		}
 	}
+	undef $PATCHID_BROKEN; # retry on new instances in case of upgrades
 	$ibx = PublicInbox::InboxWritable->new($ibx);
 	my $self = PublicInbox::Search->new($ibx);
 	bless $self, $class;
@@ -353,7 +355,8 @@ sub index_diff ($$$) {
 sub index_body_text {
 	my ($self, $doc, $sref) = @_;
 	my $rd;
-	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms) { # start patch-id in parallel
+	# start patch-id in parallel
+	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms && !$PATCHID_BROKEN) {
 		my $git = ($self->{ibx} // $self->{eidx} // $self)->git;
 		my $fh = PublicInbox::IO::write_file '+>:utf8', undef, $$sref;
 		$fh->flush or die "flush: $!";
@@ -386,7 +389,12 @@ sub index_body_text {
 	if (defined $rd) { # reap `git patch-id'
 		(readline($rd) // '') =~ /\A([a-f0-9]{40,})/ and
 			$doc->add_term('XDFID'.$1);
-		$rd->close or warn "W: git patch-id failed: \$?=$? (non-fatal)"
+		if (!$rd->close) {
+			my $c = 'git patch-id --stable';
+			$PATCHID_BROKEN = ($? >> 8) == 129;
+			$PATCHID_BROKEN ? warn("W: $c requires git v2.1.0+\n")
+				: warn("W: $c failed: \$?=$? (non-fatal)");
+		}
 	}
 }
 
