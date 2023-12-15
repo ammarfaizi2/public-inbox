@@ -24,7 +24,7 @@ body $n
 EOM
 };
 
-my $ibx = create_inbox 'pop3d-limit', version => 2, -primary_address => $addr,
+my $ibx = create_inbox 'pop3d-limit', -primary_address => $addr,
 			indexlevel => 'basic', tmpdir => "$tmpdir/ibx", sub {
 	my ($im, $ibx) = @_;
 	$add_msg->($im, $_) for (1..3);
