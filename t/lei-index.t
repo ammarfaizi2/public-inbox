@@ -48,9 +48,10 @@ symlink(File::Spec->rel2abs('t/mda-mime.eml'), "$tmpdir/md1/cur/x:2,S") or
 test_lei({ tmpdir => $tmpdir }, sub {
 	my $store_path = "$ENV{HOME}/.local/share/lei/store/";
 
-	lei_ok('index', "$tmpdir/md");
+	lei_ok qw(index +L:md), "$tmpdir/md";
 	lei_ok(qw(q mid:qp@example.com));
 	my $res_a = json_utf8->decode($lei_out);
+	is_deeply $res_a->[0]->{L}, [ 'md' ], 'label set on index';
 	my $blob = $res_a->[0]->{'blob'};
 	like($blob, qr/\A[0-9a-f]{40,}\z/, 'got blob from qp@example');
 	lei_ok(qw(-C / blob), $blob);
