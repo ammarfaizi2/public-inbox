@@ -38,7 +38,7 @@ sub export_kw_md { # LeiMailSync->each_src callback
 		} elsif ($! == EEXIST) { # lost race with lei/store?
 			return;
 		} elsif ($! != ENOENT) {
-			$lei->child_error(1,
+			$lei->child_error(0,
 				"E: rename_noreplace($src -> $dst): $!");
 		} # else loop @try
 	}
@@ -46,7 +46,7 @@ sub export_kw_md { # LeiMailSync->each_src callback
 	# both tries failed
 	my $oidhex = unpack('H*', $oidbin);
 	my $src = "$mdir/{".join(',', @try)."}/$$id";
-	$lei->child_error(1, "rename_noreplace($src -> $dst) ($oidhex): $e");
+	$lei->child_error(0, "rename_noreplace($src -> $dst) ($oidhex): $e");
 	for (@try) { return if -e "$mdir/$_/$$id" }
 	$self->{lms}->clear_src("maildir:$mdir", $id);
 }

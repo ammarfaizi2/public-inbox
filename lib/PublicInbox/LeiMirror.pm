@@ -1175,7 +1175,7 @@ sub try_manifest {
 	local $self->{-local_manifest} = load_current_manifest($self);
 	local $self->{-new_symlinks} = [];
 	my ($path_pfx, $n, $multi) = multi_inbox($self, \$path, $m);
-	return $lei->child_error(1, $multi) if !ref($multi);
+	return $lei->child_error(0, $multi) if !ref($multi);
 	my $v2 = delete $multi->{v2};
 	if ($v2) {
 		for my $name (sort keys %$v2) {
