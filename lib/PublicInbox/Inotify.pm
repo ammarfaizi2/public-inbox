@@ -5,12 +5,29 @@
 package PublicInbox::Inotify;
 use v5.12;
 our @ISA;
-BEGIN {
-	eval { require Linux::Inotify2 };
-	if ($@) { # TODO: get rid of XS dependency
-		die "W: Linux::Inotify2 missing: $@\n";
+BEGIN { # prefer pure Perl since it works out-of-the-box
+	my $isa;
+	for my $m (qw(PublicInbox::Inotify3 Linux::Inotify2)) {
+		eval "require $m";
+		next if $@;
+		$isa = $m;
+	}
+	if ($isa) {
+		push @ISA, $isa;
+		my $buf = '';
+		for (qw(IN_MOVED_TO IN_CREATE IN_DELETE IN_DELETE_SELF
+				IN_MOVE_SELF IN_MOVED_FROM IN_MODIFY)) {
+			$buf .= "*$_ = \\&PublicInbox::Inotify3::$_;\n";
+		}
+		eval $buf;
+		die $@ if $@;
 	} else {
-		push @ISA, 'Linux::Inotify2';
+		die <<EOM;
+W: inotify syscall numbers unknown on your platform and
+W: Linux::Inotify2 missing: $@
+W: public-inbox hackers welcome the plain-text output of ./devel/sysdefs-list
+W: at meta\@public-inbox.org
+EOM
 	}
 };
 

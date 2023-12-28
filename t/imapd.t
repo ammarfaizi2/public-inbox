@@ -250,7 +250,7 @@ SKIP: {
 
 ok($mic->logout, 'logout works');
 
-my $have_inotify = eval { require Linux::Inotify2; 1 };
+my $have_inotify = eval { require PublicInbox::Inotify; 1 };
 
 for my $ibx (@ibx) {
 	my $name = $ibx->{name};

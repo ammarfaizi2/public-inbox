@@ -11,7 +11,7 @@ use PublicInbox::Syscall qw(EPOLLIN);
 my $IN_MODIFY = 0x02; # match Linux inotify
 my $ino_cls;
 if ($^O eq 'linux' && eval { require PublicInbox::Inotify }) {
-	$IN_MODIFY = Linux::Inotify2::IN_MODIFY();
+	$IN_MODIFY = PublicInbox::Inotify::IN_MODIFY();
 	$ino_cls = 'PublicInbox::Inotify';
 } elsif (eval { require PublicInbox::KQNotify }) {
 	$IN_MODIFY = PublicInbox::KQNotify::NOTE_WRITE();
@@ -34,7 +34,7 @@ sub in2_arm ($$) { # PublicInbox::Config::each_inbox callback
 		$ibx->{unlock_subs} = $old_ibx->{unlock_subs};
 		%{$ibx->{unlock_subs}} = (%$u, %{$ibx->{unlock_subs}}) if $u;
 
-		# Linux::Inotify2::Watch::name matches if watches are the
+		# *::Inotify*::Watch::name matches if watches are the
 		# same, no point in replacing a watch of the same name
 		if ($cur->[1]->name eq $lock) {
 			$self->{on_unlock}->{$lock} = $ibx;
@@ -87,7 +87,7 @@ sub new {
 sub event_step {
 	my ($self) = @_;
 	eval {
-		my @events = $self->{inot}->read; # Linux::Inotify2::read
+		my @events = $self->{inot}->read; # PublicInbox::Inotify3::read
 		my $on_unlock = $self->{on_unlock};
 		for my $ev (@events) {
 			my $fn = $ev->fullname // next; # cancelled

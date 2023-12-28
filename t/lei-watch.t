@@ -5,11 +5,11 @@ use strict; use v5.10.1; use PublicInbox::TestCommon;
 use File::Path qw(make_path remove_tree);
 plan skip_all => "TEST_FLAKY not enabled for $0" if !$ENV{TEST_FLAKY};
 require_mods('lei');
-my $have_fast_inotify = eval { require Linux::Inotify2 } ||
+my $have_fast_inotify = eval { require PublicInbox::Inotify } ||
 	eval { require IO::KQueue };
 
 $have_fast_inotify or
-	diag("$0 IO::KQueue or Linux::Inotify2 missing, test will be slow");
+	diag("$0 IO::KQueue or inotify missing, test will be slow");
 
 my ($ro_home, $cfg_path) = setup_public_inboxes;
 test_lei(sub {

@@ -9,9 +9,9 @@ use PublicInbox::DS qw(now);
 
 my ($TAIL_MOD, $ino_cls);
 if ($^O eq 'linux' && eval { require PublicInbox::Inotify; 1 }) {
-	$TAIL_MOD = Linux::Inotify2::IN_MOVED_TO() |
-		Linux::Inotify2::IN_CREATE() |
-		Linux::Inotify2::IN_MODIFY();
+	$TAIL_MOD = PublicInbox::Inotify::IN_MOVED_TO() |
+		PublicInbox::Inotify::IN_CREATE() |
+		PublicInbox::Inotify::IN_MODIFY();
 	$ino_cls = 'PublicInbox::Inotify';
 } elsif (eval { require PublicInbox::KQNotify }) {
 	$TAIL_MOD = PublicInbox::KQNotify::MOVED_TO_OR_CREATE() |

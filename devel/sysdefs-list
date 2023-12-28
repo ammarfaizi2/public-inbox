@@ -88,9 +88,37 @@ int main(void)
 	MAYBE D(SYS_epoll_wait);
 	D(SYS_epoll_pwait);
 	D(SYS_signalfd4);
+
+	X(IN_CLOEXEC);
+	X(IN_ACCESS);
+	X(IN_ALL_EVENTS);
+	X(IN_ATTRIB);
+	X(IN_CLOSE);
+	X(IN_CLOSE_NOWRITE);
+	X(IN_CLOSE_WRITE);
+	X(IN_CREATE);
+	X(IN_DELETE);
+	X(IN_DELETE_SELF);
+	X(IN_DONT_FOLLOW);
+	X(IN_EXCL_UNLINK);
+	X(IN_IGNORED);
+	X(IN_ISDIR);
+	X(IN_MASK_ADD);
+	X(IN_MODIFY);
+	X(IN_MOVE);
+	X(IN_MOVED_FROM);
+	X(IN_MOVED_TO);
+	X(IN_MOVE_SELF);
+	X(IN_ONESHOT);
+	X(IN_ONLYDIR);
+	X(IN_OPEN);
+	X(IN_Q_OVERFLOW);
+	X(IN_UNMOUNT);
+
 	D(SYS_inotify_init1);
 	D(SYS_inotify_add_watch);
 	D(SYS_inotify_rm_watch);
+
 	D(SYS_prctl);
 	D(SYS_fstatfs);
 

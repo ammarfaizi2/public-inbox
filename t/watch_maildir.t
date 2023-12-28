@@ -182,7 +182,7 @@ EOM
 
 	# wait for -watch to setup inotify watches
 	my $sleep = 1;
-	if (eval { require Linux::Inotify2 } && -d "/proc/$wm->{pid}/fd") {
+	if (eval { require PublicInbox::Inotify } && -d "/proc/$wm->{pid}/fd") {
 		my $end = time + 2;
 		my (@ino, @ino_info);
 		do {

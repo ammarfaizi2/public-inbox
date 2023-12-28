@@ -223,10 +223,13 @@ lib/PublicInbox/IPC.pm
 lib/PublicInbox/IdxStack.pm
 lib/PublicInbox/Import.pm
 lib/PublicInbox/In2Tie.pm
+lib/PublicInbox/In3Event.pm
+lib/PublicInbox/In3Watch.pm
 lib/PublicInbox/Inbox.pm
 lib/PublicInbox/InboxIdle.pm
 lib/PublicInbox/InboxWritable.pm
 lib/PublicInbox/Inotify.pm
+lib/PublicInbox/Inotify3.pm
 lib/PublicInbox/InputPipe.pm
 lib/PublicInbox/Isearch.pm
 lib/PublicInbox/KQNotify.pm
@@ -493,6 +496,7 @@ t/index-git-times.t
 t/indexlevels-mirror-v1.t
 t/indexlevels-mirror.t
 t/init.t
+t/inotify3.t
 t/io.t
 t/ipc.t
 t/iso-2202-jp.eml

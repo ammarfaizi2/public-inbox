@@ -14,7 +14,7 @@ use PublicInbox::DS;
 my $version = $ENV{PI_TEST_VERSION} || 1;
 require_git('2.6') if $version == 2;
 use_ok 'PublicInbox::Msgmap';
-my $fast_idle = eval { require Linux::Inotify2; 1 } //
+my $fast_idle = eval { require PublicInbox::Inotify; 1 } //
 		eval { require IO::KQueue; 1 };
 
 my ($tmpdir, $for_destroy) = tmpdir();

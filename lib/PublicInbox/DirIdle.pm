@@ -10,12 +10,12 @@ use PublicInbox::In2Tie;
 
 my ($MAIL_IN, $MAIL_GONE, $ino_cls);
 if ($^O eq 'linux' && eval { require PublicInbox::Inotify; 1 }) {
-	$MAIL_IN = Linux::Inotify2::IN_MOVED_TO() |
-		Linux::Inotify2::IN_CREATE();
-	$MAIL_GONE = Linux::Inotify2::IN_DELETE() |
-			Linux::Inotify2::IN_DELETE_SELF() |
-			Linux::Inotify2::IN_MOVE_SELF() |
-			Linux::Inotify2::IN_MOVED_FROM();
+	$MAIL_IN = PublicInbox::Inotify::IN_MOVED_TO() |
+		PublicInbox::Inotify::IN_CREATE();
+	$MAIL_GONE = PublicInbox::Inotify::IN_DELETE() |
+			PublicInbox::Inotify::IN_DELETE_SELF() |
+			PublicInbox::Inotify::IN_MOVE_SELF() |
+			PublicInbox::Inotify::IN_MOVED_FROM();
 	$ino_cls = 'PublicInbox::Inotify';
 # Perl 5.22+ is needed for fileno(DIRHANDLE) support:
 } elsif ($^V ge v5.22 && eval { require PublicInbox::KQNotify }) {
@@ -79,7 +79,7 @@ sub event_step {
 	my $cb = $self->{cb} or return;
 	local $PublicInbox::DS::in_loop = 0; # waitpid() synchronously (FIXME)
 	eval {
-		my @events = $self->{inot}->read; # Linux::Inotify2->read
+		my @events = $self->{inot}->read; # Inotify3->read
 		$cb->($_) for @events;
 	};
 	warn "$self->{inot}->read err: $@\n" if $@;
@@ -88,7 +88,7 @@ sub event_step {
 sub force_close {
 	my ($self) = @_;
 	my $inot = delete $self->{inot} // return;
-	if ($inot->can('fh')) { # Linux::Inotify2 2.3+
+	if ($inot->can('fh')) { # Inotify3 or Linux::Inotify2 2.3+
 		$inot->fh->close or warn "CLOSE ERROR: $!";
 	} elsif ($inot->isa('Linux::Inotify2')) {
 		require PublicInbox::LI2Wrap;

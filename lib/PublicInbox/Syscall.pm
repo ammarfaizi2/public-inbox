@@ -22,6 +22,7 @@ use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
 our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
+our $INOTIFY;
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
@@ -98,6 +99,11 @@ if ($^O eq "linux") {
 	$SYS_fstatfs = 100;
 	$SYS_sendmsg = 370;
 	$SYS_recvmsg = 372;
+	$INOTIFY = { # usage: `use constant $PublicInbox::Syscall::INOTIFY'
+		SYS_inotify_init1 => 332,
+		SYS_inotify_add_watch => 292,
+		SYS_inotify_rm_watch => 293,
+	};
 	$FS_IOC_GETFLAGS = 0x80046601;
 	$FS_IOC_SETFLAGS = 0x40046602;
     } elsif ($machine eq "x86_64") {
@@ -109,6 +115,11 @@ if ($^O eq "linux") {
 	$SYS_fstatfs = 138;
 	$SYS_sendmsg = 46;
 	$SYS_recvmsg = 47;
+	$INOTIFY = {
+		SYS_inotify_init1 => 294,
+		SYS_inotify_add_watch => 254,
+		SYS_inotify_rm_watch => 255,
+	};
 	$FS_IOC_GETFLAGS = 0x80086601;
 	$FS_IOC_SETFLAGS = 0x40086602;
     } elsif ($machine eq 'x32') {
@@ -122,6 +133,11 @@ if ($^O eq "linux") {
 	$SYS_recvmsg = 0x40000207;
 	$FS_IOC_GETFLAGS = 0x80046601;
 	$FS_IOC_SETFLAGS = 0x40046602;
+	$INOTIFY = {
+		SYS_inotify_init1 => 1073742118,
+		SYS_inotify_add_watch => 1073742078,
+		SYS_inotify_rm_watch => 1073742079,
+	};
     } elsif ($machine eq 'sparc64') {
 	$SYS_epoll_create = 193;
 	$SYS_epoll_ctl = 194;
@@ -154,6 +170,11 @@ if ($^O eq "linux") {
 	$SYS_recvmsg = 342;
 	$FS_IOC_GETFLAGS = 0x40086601;
 	$FS_IOC_SETFLAGS = 0x80086602;
+	$INOTIFY = {
+		SYS_inotify_init1 => 318,
+		SYS_inotify_add_watch => 276,
+		SYS_inotify_rm_watch => 277,
+	};
     } elsif ($machine eq "ppc") {
         $SYS_epoll_create = 236;
         $SYS_epoll_ctl    = 237;
@@ -188,7 +209,7 @@ if ($^O eq "linux") {
         $u64_mod_8        = 1;
         $SYS_signalfd4 = 484;
 	$SFD_CLOEXEC = 010000000;
-    } elsif ($machine =~ /\A(?:loong)?aarch64\z/ || $machine eq 'riscv64') {
+    } elsif ($machine =~ /\A(?:loong|a)arch64\z/ || $machine eq 'riscv64') {
         $SYS_epoll_create = 20;  # (sys_epoll_create1)
         $SYS_epoll_ctl    = 21;
         $SYS_epoll_wait   = 22;  # (sys_epoll_pwait)
@@ -199,6 +220,11 @@ if ($^O eq "linux") {
 	$SYS_fstatfs = 44;
 	$SYS_sendmsg = 211;
 	$SYS_recvmsg = 212;
+	$INOTIFY = {
+		SYS_inotify_init1 => 26,
+		SYS_inotify_add_watch => 27,
+		SYS_inotify_rm_watch => 28,
+	};
 	$FS_IOC_GETFLAGS = 0x80086601;
 	$FS_IOC_SETFLAGS = 0x40086602;
     } elsif ($machine =~ m/arm(v\d+)?.*l/) { # ARM OABI (untested on cfarm)
@@ -236,6 +262,11 @@ if ($^O eq "linux") {
 	$FS_IOC_GETFLAGS = 0x40046601;
 	$FS_IOC_SETFLAGS = 0x80046602;
 	$SIGNUM{WINCH} = 20;
+	$INOTIFY = {
+		SYS_inotify_init1 => 4329,
+		SYS_inotify_add_watch => 4285,
+		SYS_inotify_rm_watch => 4286,
+	};
     } else {
         warn <<EOM;
 machine=$machine ptrsize=$Config{ptrsize} has no syscall definitions
@@ -251,6 +282,10 @@ EOM
         *epoll_ctl = \&epoll_ctl_mod4;
     }
 }
+
+# SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
+$INOTIFY->{IN_CLOEXEC} //= 0x80000 if $INOTIFY;
+
 # use Inline::C for *BSD-only or general POSIX stuff.
 # Linux guarantees stable syscall numbering, BSDs only offer a stable libc
 # use devel/sysdefs-list on Linux to detect new syscall numbers and
