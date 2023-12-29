@@ -296,6 +296,7 @@ lib/PublicInbox/Linkify.pm
 lib/PublicInbox/Listener.pm
 lib/PublicInbox/Lock.pm
 lib/PublicInbox/MDA.pm
+lib/PublicInbox/MHreader.pm
 lib/PublicInbox/MID.pm
 lib/PublicInbox/MIME.pm
 lib/PublicInbox/MailDiff.pm
@@ -305,6 +306,7 @@ lib/PublicInbox/MboxGz.pm
 lib/PublicInbox/MboxLock.pm
 lib/PublicInbox/MboxReader.pm
 lib/PublicInbox/MdirReader.pm
+lib/PublicInbox/MdirSort.pm
 lib/PublicInbox/MiscIdx.pm
 lib/PublicInbox/MiscSearch.pm
 lib/PublicInbox/MsgIter.pm
@@ -547,6 +549,7 @@ t/mda-mime.eml
 t/mda.t
 t/mda_filter_rubylang.t
 t/mdir_reader.t
+t/mh_reader.t
 t/mid.t
 t/mime.t
 t/miscsearch.t

@@ -36,7 +36,7 @@ sub ipc_atfork_child {
 sub ck_update_kw { # via wq_io_do
 	my ($self, $url, $uid, $kw) = @_;
 	my @oidbin = $self->{-lms_rw}->num_oidbin($url, $uid);
-	my $uid_url = "$url/;UID=$uid";
+	my $uid_url = index($url, 'mh:') == 0 ? $url.$uid : "$url/;UID=$uid";
 	@oidbin > 1 and warn("W: $uid_url not unique:\n",
 				map { "\t".unpack('H*', $_)."\n" } @oidbin);
 	my @docids = sort { $a <=> $b } uniqstr

@@ -35,7 +35,7 @@ sub lei_index {
 
 no warnings 'once';
 no strict 'refs';
-for my $m (qw(pmdir_cb input_net_cb)) {
+for my $m (qw(pmdir_cb input_net_cb input_mh_cb)) {
 	*$m = PublicInbox::LeiImport->can($m);
 }
 

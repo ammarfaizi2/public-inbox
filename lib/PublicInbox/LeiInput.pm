@@ -69,6 +69,11 @@ sub input_maildir_cb {
 	$self->input_eml_cb($eml);
 }
 
+sub input_mh_cb {
+	my ($dn, $n, $kw, $eml, $self) = @_;
+	$self->input_eml_cb($eml);
+}
+
 sub input_net_cb { # imap_each, nntp_each cb
 	my ($url, $uid, $kw, $eml, $self) = @_;
 	$self->input_eml_cb($eml);
@@ -190,7 +195,7 @@ sub input_path_url {
 		$ifmt = lc($1);
 	} elsif ($input =~ /\.(?:patch|eml)\z/i) {
 		$ifmt = 'eml';
-	} elsif (-f $input && $input =~ m{\A(?:.+)/(?:new|cur)/([^/]+)\z}) {
+	} elsif ($input =~ m{\A(?:.+)/(?:new|cur)/([^/]+)\z} && -f $input) {
 		my $bn = $1;
 		my $fl = PublicInbox::MdirReader::maildir_basename_flags($bn);
 		return if index($fl, 'T') >= 0;
@@ -204,6 +209,10 @@ sub input_path_url {
 	my $devfd = $lei->path_to_fd($input) // return;
 	if ($devfd >= 0) {
 		$self->input_fh($ifmt, $lei->{$devfd}, $input, @args);
+	} elsif ($devfd < 0 && $input =~ m{\A(.+/)([0-9]+)\z} && -f $input) {
+		my ($dn, $n) = ($1, $2);
+		my $mhr = PublicInbox::MHreader->new($dn, $lei->{3});
+		$mhr->mh_read_one($n, $self->can('input_mh_cb'), $self);
 	} elsif (-f $input && $ifmt eq 'eml') {
 		open my $fh, '<', $input or
 					return $lei->fail("open($input): $!");
@@ -231,6 +240,10 @@ sub input_path_url {
 						$self->can('input_maildir_cb'),
 						$self, @args);
 		}
+	} elsif (-d _ && $ifmt eq 'mh') {
+		my $mhr = PublicInbox::MHreader->new($input.'/', $lei->{3});
+		$mhr->{sort} = $lei->{opt}->{sort};
+		$mhr->mh_each_eml($self->can('input_mh_cb'), $self, @args);
 	} elsif (-d _ && $ifmt =~ /\A(?:v1|v2)\z/) {
 		my $ibx = PublicInbox::Inbox->new({inboxdir => $input});
 		each_ibx_eml($self, $ibx, @args);
@@ -354,13 +367,15 @@ sub prepare_inputs { # returns undef on error
 				PublicInbox::MboxReader->reads($ifmt) or return
 					$lei->fail("$ifmt not supported");
 			} elsif (-d $input_path) { # TODO extindex
-				$ifmt =~ /\A(?:maildir|v1|v2|extindex)\z/ or
+				$ifmt =~ /\A(?:maildir|mh|v1|v2|extindex)\z/ or
 					return$lei->fail("$ifmt not supported");
 				$input = $input_path;
 				add_dir $lei, $istate, $ifmt, \$input;
-			} elsif ($self->{missing_ok} && !-e _) {
+			} elsif ($self->{missing_ok} &&
+					$ifmt =~ /\A(?:maildir|mh)\z/ &&
+					!-e $input_path) {
 				# for "lei rm-watch" on missing Maildir
-				$may_sync and $input = 'maildir:'.
+				$may_sync and $input = "$ifmt:".
 						$lei->abs_path($input_path);
 			} else {
 				my $m = "Unable to handle $input";
@@ -373,7 +388,7 @@ sub prepare_inputs { # returns undef on error
 $input is `eml', not --in-format=$in_fmt
 
 			push @{$sync->{no}}, $input if $sync;
-		} elsif (-f $input && $input =~ m{\A(.+)/(new|cur)/([^/]+)\z}) {
+		} elsif ($input =~ m{\A(.+)/(new|cur)/([^/]+)\z} && -f $input) {
 			# single file in a Maildir
 			my ($mdir, $nc, $bn) = ($1, $2, $3);
 			my $other = $mdir . ($nc eq 'new' ? '/cur' : '/new');
@@ -385,12 +400,24 @@ $input is `eml', not --in-format=$in_fmt
 
 			if ($sync) {
 				$input = $lei->abs_path($mdir) . "/$nc/$bn";
-				push @{$sync->{ok}}, $input if $sync;
+				push @{$sync->{ok}}, $input;
 			}
 			require PublicInbox::MdirReader;
 		} else {
 			my $devfd = $lei->path_to_fd($input) // return;
-			if ($devfd >= 0 || -f $input || -p _) {
+			if ($devfd < 0 && $input =~ m{\A(.+)/([0-9]+)\z} &&
+					-f $input) { # single file in MH dir
+				my ($mh, $n) = ($1, $2);
+				lc($in_fmt//'eml') eq 'eml' or
+						return $lei->fail(<<"");
+$input is `eml', not --in-format=$in_fmt
+
+				if ($sync) {
+					$input = $lei->abs_path($mh)."/$n";
+					push @{$sync->{ok}}, $input;
+				}
+				require PublicInbox::MHreader;
+			} elsif ($devfd >= 0 || -f $input || -p _) {
 				push @{$sync->{no}}, $input if $sync;
 				push @f, $input;
 			} elsif (-d "$input/new" && -d "$input/cur") {
@@ -401,10 +428,13 @@ $input is `eml', not --in-format=$in_fmt
 				add_dir $lei, $istate, 'v1', \$input;
 			} elsif (-e "$input/ei.lock") {
 				add_dir $lei, $istate, 'extindex', \$input;
+			} elsif (-f "$input/.mh_sequences") {
+				add_dir $lei, $istate, 'mh', \$input;
 			} elsif ($self->{missing_ok} && !-e $input) {
 				if ($lei->{cmd} eq 'p2q') {
 					# will run "git format-patch"
 				} elsif ($may_sync) { # for lei rm-watch
+					# FIXME: support MH, here
 					$input = 'maildir:'.
 						$lei->abs_path($input);
 				}
@@ -444,6 +474,14 @@ $input is `eml', not --in-format=$in_fmt
 		if ($may_sync && $lei->{sto}) {
 			$lei->lms(1)->lms_write_prepare->add_folders(@$md);
 			$lei->refresh_watches;
+		}
+	}
+	if (my $mh = $istate->{mh}) {
+		require PublicInbox::MHreader;
+		grep(!m!\Amh:!i, @$mh) and die "BUG: @$mh (no pfx)";
+		if ($may_sync && $lei->{sto}) {
+			$lei->lms(1)->lms_write_prepare->add_folders(@$mh);
+			# $lei->refresh_watches; TODO
 		}
 	}
 	require PublicInbox::ExtSearch if $istate->{extindex};

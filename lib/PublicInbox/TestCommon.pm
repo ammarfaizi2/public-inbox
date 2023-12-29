@@ -24,6 +24,7 @@ BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
 		have_xapian_compact json_utf8 setup_public_inboxes create_inbox
+		create_dir
 		create_coderepo require_bsd kernel_version check_broken_tmpfs
 		quit_waiter_pipe wait_for_eof require_git_http_backend
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
@@ -843,31 +844,36 @@ sub my_sum {
 	substr PublicInbox::SHA::sha256_hex(join('', @l)), 0, 8;
 }
 
-sub create_coderepo ($$;@) {
-	my $ident = shift;
-	my $cb = pop;
+sub create_dir (@) {
+	my ($ident, $cb) = (shift, pop);
 	my %opt = @_;
 	require PublicInbox::Lock;
 	require PublicInbox::Import;
-	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
-	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
 	my $tmpdir = delete $opt{tmpdir};
-	my $dir = "t/data-gen/$base.$ident-".my_sum($db, $cb, \%opt);
+	my ($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!);
+	my $dir = "t/data-gen/$base.$ident-".my_sum($cb, \%opt);
 	require File::Path;
 	my $new = File::Path::make_path($dir);
 	my $lk = PublicInbox::Lock->new("$dir/creat.lock");
 	my $scope = $lk->lock_for_scope;
 	if (!-f "$dir/creat.stamp") {
-		opendir(my $dfh, '.');
+		opendir(my $cwd, '.');
 		chdir($dir);
 		local %ENV = (%ENV, %COMMIT_ENV);
 		$cb->($dir);
-		chdir($dfh);
+		chdir($cwd); # some $cb chdir around
 		open my $s, '>', "$dir/creat.stamp";
 	}
 	return $dir if !defined($tmpdir);
 	xsys_e([qw(/bin/cp -Rp), $dir, $tmpdir]);
 	$tmpdir;
+}
+
+sub create_coderepo (@) {
+	my $ident = shift;
+	require PublicInbox::Import;
+	my ($db) = (PublicInbox::Import::default_branch() =~ m!([^/]+)\z!);
+	create_dir "$ident-$db", @_;
 }
 
 sub create_inbox ($;@) {

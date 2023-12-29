@@ -267,7 +267,7 @@ import => [ 'LOCATION...|--stdin [LABELS...]',
 	'one-time import/update from URL or filesystem',
 	qw(stdin| offset=i recursive|r exclude=s include|I=s new-only
 	lock=s@ in-format|F=s kw! verbose|v+ incremental! mail-sync!
-	commit-delay=i),
+	commit-delay=i sort|s:s@),
 	@net_opt, @c_opt ],
 'forget-mail-sync' => [ 'LOCATION...',
 	'forget sync information for a mail folder', @c_opt ],
@@ -280,7 +280,7 @@ import => [ 'LOCATION...|--stdin [LABELS...]',
 'convert' => [ 'LOCATION...|--stdin',
 	'one-time conversion from URL or filesystem to another format',
 	qw(stdin| in-format|F=s out-format|f=s output|mfolder|o=s lock=s@ kw!
-		rsyncable),
+		rsyncable sort|s:s@),
 	@net_opt, @c_opt ],
 'p2q' => [ 'LOCATION_OR_COMMIT...|--stdin',
 	"use a patch to generate a query for `lei q --stdin'",
@@ -321,6 +321,9 @@ import => [ 'LOCATION...|--stdin [LABELS...]',
 my $stdin_formats = [ 'MAIL_FORMAT|eml|mboxrd|mboxcl2|mboxcl|mboxo',
 			'specify message input format' ];
 my $ls_format = [ 'OUT|plain|json|null', 'listing output format' ];
+my $sort_out = [ 'VAL|received|relevance|docid',
+		"order of results is `--output'-dependent"];
+my $sort_in = [ 'sequence|mtime|size', 'sort input (format-dependent)' ];
 
 # we use \x{a0} (non-breaking SP) to avoid wrapping in PublicInbox::LeiHelp
 my %OPTDESC = (
@@ -428,8 +431,10 @@ my %OPTDESC = (
 'limit|n=i@' => ['NUM', 'limit on number of matches (default: 10000)' ],
 'offset=i' => ['OFF', 'search result offset (default: 0)'],
 
-'sort|s=s' => [ 'VAL|received|relevance|docid',
-		"order of results is `--output'-dependent"],
+'sort|s=s	q' => $sort_out,
+'sort|s=s	lcat' => $sort_out,
+'sort|s:s@	convert' => $sort_in,
+'sort|s:s@	import' => $sort_in,
 'reverse|r' => 'reverse search results', # like sort(1)
 
 'boost=i' => 'increase/decrease priority of results (default: 0)',

@@ -400,6 +400,11 @@ sub new {
 				"$dst exists and is not a directory\n";
 		$lei->{ovv}->{dst} = $dst .= '/' if substr($dst, -1) ne '/';
 		$lei->{opt}->{save} //= \1 if $lei->{cmd} eq 'q';
+	} elsif ($fmt eq 'mh') {
+		-e $dst && !-d _ and die
+				"$dst exists and is not a directory\n";
+		$lei->{ovv}->{dst} = $dst .= '/' if substr($dst, -1) ne '/';
+		$lei->{opt}->{save} //= \1 if $lei->{cmd} eq 'q';
 	} elsif (substr($fmt, 0, 4) eq 'mbox') {
 		require PublicInbox::MboxReader;
 		$self->can("eml2$fmt") or die "bad mbox format: $fmt\n";

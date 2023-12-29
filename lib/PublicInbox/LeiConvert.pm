@@ -28,6 +28,11 @@ sub input_maildir_cb {
 	$self->{wcb}->(undef, { kw => $kw }, $eml);
 }
 
+sub input_mh_cb {
+	my ($dn, $bn, $kw, $eml, $self) = @_;
+	$self->{wcb}->(undef, { kw => $kw }, $eml);
+}
+
 sub process_inputs { # via wq_do
 	my ($self) = @_;
 	local $PublicInbox::DS::in_loop = 0; # force synchronous awaitpid

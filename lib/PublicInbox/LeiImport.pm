@@ -53,6 +53,29 @@ sub pmdir_cb { # called via wq_io_do from LeiPmdir->each_mdir_fn
 	}
 }
 
+sub input_mh_cb {
+	my ($mhdir, $n, $kw, $eml, $self) = @_;
+	substr($mhdir, 0, 0) = 'mh:'; # add prefix
+	my $lse = $self->{lse} //= $self->{lei}->{sto}->search;
+	my $lms = $self->{-lms_rw} //= $self->{lei}->lms; # may be 0 or undef
+	my @oidbin = $lms ? $lms->num_oidbin($mhdir, $n) : ();
+	@oidbin > 1 and warn("W: $mhdir/$n not unique:\n",
+				map { "\t".unpack('H*', $_)."\n" } @oidbin);
+	my @docids = sort { $a <=> $b } uniqstr
+			map { $lse->over->oidbin_exists($_) } @oidbin;
+	if (scalar @docids) {
+		$lse->kw_changed(undef, $kw, \@docids) or return;
+	}
+	if (defined $eml) {
+		my $vmd = $self->{-import_kw} ? { kw => $kw } : undef;
+		$vmd->{sync_info} = [ $mhdir, $n + 0 ] if $self->{-mail_sync};
+		$self->input_eml_cb($eml, $vmd);
+	}
+	# TODO:
+	# elsif (my $ikw = $self->{lei}->{ikw}) { # old message, kw only
+	#	$ikw->wq_io_do('ck_update_kw', [], "mh:$dir", $uid, $kw);
+}
+
 sub input_net_cb { # imap_each / nntp_each
 	my ($uri, $uid, $kw, $eml, $self) = @_;
 	if (defined $eml) {

@@ -435,15 +435,24 @@ sub folders {
 	map { $_->[0] } @{$sth->fetchall_arrayref};
 }
 
+sub blob_mismatch ($$$) {
+	my ($f, $oidhex, $rawref) = @_;
+	my $sha = $HEXLEN2SHA{length($oidhex)};
+	my $got = git_sha($sha, $rawref)->hexdigest;
+	$got eq $oidhex ? undef : warn("$f changed $oidhex => $got\n");
+}
+
 sub local_blob {
 	my ($self, $oidhex, $vrfy) = @_;
 	my $dbh = $self->{dbh} //= dbh_new($self);
+	my $oidbin = pack('H*', $oidhex);
+
 	my $b2n = $dbh->prepare(<<'');
 SELECT f.loc,b.name FROM blob2name b
 LEFT JOIN folders f ON b.fid = f.fid
 WHERE b.oidbin = ?
 
-	$b2n->bind_param(1, pack('H*', $oidhex), SQL_BLOB);
+	$b2n->bind_param(1, $oidbin, SQL_BLOB);
 	$b2n->execute;
 	while (my ($d, $n) = $b2n->fetchrow_array) {
 		substr($d, 0, length('maildir:')) = '';
@@ -456,18 +465,27 @@ WHERE b.oidbin = ?
 			my $f = "$d/$x/$n";
 			open my $fh, '<', $f or next;
 			# some (buggy) Maildir writers are non-atomic:
-			next unless -s $fh;
-			my $raw = read_all($fh, -s _);
-			if ($vrfy) {
-				my $sha = $HEXLEN2SHA{length($oidhex)};
-				my $got = git_sha($sha, \$raw)->hexdigest;
-				if ($got ne $oidhex) {
-					warn "$f changed $oidhex => $got\n";
-					next;
-				}
-			}
+			my $raw = read_all($fh, -s $fh // next);
+			next if $vrfy && blob_mismatch $f, $oidhex, \$raw;
 			return \$raw;
 		}
+	}
+
+	# MH, except `uid' is not always unique (can be packed)
+	$b2n = $dbh->prepare(<<'');
+SELECT f.loc,b.uid FROM blob2num b
+LEFT JOIN folders f ON b.fid = f.fid
+WHERE b.oidbin = ? AND f.loc REGEXP '^mh:/'
+
+	$b2n->bind_param(1, $oidbin, SQL_BLOB);
+	$b2n->execute;
+	while (my ($f, $n) = $b2n->fetchrow_array) {
+		$f =~ s/\Amh://s or die "BUG: not MH: $f";
+		$f .= "/$n";
+		open my $fh, '<', $f or next;
+		my $raw = read_all($fh, -s $fh // next);
+		next if blob_mismatch $f, $oidhex, \$raw;
+		return \$raw;
 	}
 	undef;
 }

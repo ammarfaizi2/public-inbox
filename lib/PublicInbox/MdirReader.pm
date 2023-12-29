@@ -1,7 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# Maildirs for now, MH eventually
+# Maildirs only (PublicInbox::MHreader exists, now)
 # ref: https://cr.yp.to/proto/maildir.html
 #	https://wiki2.dovecot.org/MailboxFormat/Maildir
 package PublicInbox::MdirReader;
