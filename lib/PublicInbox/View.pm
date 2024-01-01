@@ -885,8 +885,8 @@ sub thread_results {
 			my $tip = splice(@$rootset, $idx, 1);
 			@$rootset = reverse @$rootset;
 			unshift @$rootset, $tip;
-			$ctx->{sl_note} = strict_loose_note($nr);
 		}
+		$ctx->{sl_note} = strict_loose_note($nr);
 	}
 	$rootset
 }
