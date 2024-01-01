@@ -200,6 +200,11 @@ ORDER BY $sort_col DESC
 		# TODO separate strict and loose matches here once --reindex
 		# is fixed to preserve `tid' properly
 		push @$msgs, @$loose;
+
+		# we wanted to retrieve the latest loose messages; but preserve
+		# chronological ordering for threading /$INBOX/$MSGID/[tT]/
+		$sort_col eq 'ds' and
+			@$msgs = sort { $a->{ds} <=> $b->{ds} } @$msgs;
 	}
 	($nr, $msgs);
 }
