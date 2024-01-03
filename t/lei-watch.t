@@ -3,6 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use File::Path qw(make_path remove_tree);
+use PublicInbox::IO qw(write_file);
 plan skip_all => "TEST_FLAKY not enabled for $0" if !$ENV{TEST_FLAKY};
 require_mods('lei');
 my $have_fast_inotify = eval { require PublicInbox::Inotify } ||
@@ -13,7 +14,7 @@ $have_fast_inotify or
 
 my ($ro_home, $cfg_path) = setup_public_inboxes;
 test_lei(sub {
-	my $md = "$ENV{HOME}/md";
+	my ($md, $mh1, $mh2) = map { "$ENV{HOME}/$_" } qw(md mh1 mh2);
 	my $cfg_f = "$ENV{HOME}/.config/lei/config";
 	my $md2 = $md.'2';
 	lei_ok 'ls-watch';
@@ -45,13 +46,14 @@ test_lei(sub {
 	}
 
 	# first, make sure tag-ro works
-	make_path("$md/new", "$md/cur", "$md/tmp");
+	make_path("$md/new", "$md/cur", "$md/tmp", $mh1, $mh2);
 	lei_ok qw(add-watch --state=tag-ro), $md;
 	lei_ok 'ls-watch';
 	like($lei_out, qr/^\Qmaildir:$md\E$/sm, 'maildir shown');
 	lei_ok qw(q mid:testmessage@example.com -o), $md, '-I', "$ro_home/t1";
 	my @f = glob("$md/cur/*:2,");
 	is(scalar(@f), 1, 'got populated maildir with one result');
+
 	rename($f[0], "$f[0]S") or xbail "rename $!"; # set (S)een
 	tick($have_fast_inotify ? 0.2 : 2.2); # always needed for 1 CPU systems
 	lei_ok qw(note-event done); # flushes immediately (instead of 5s)
@@ -94,6 +96,12 @@ test_lei(sub {
 		my $cmp = [ <$fh> ];
 		is_xdeeply($cmp, $ino_contents, 'inotify Maildir watches gone');
 	};
+
+	write_file '>', "$mh1/.mh_sequences";
+	lei_ok qw(add-watch --state=tag-ro), $mh1, "mh:$mh2";
+	lei_ok 'ls-watch', \'refresh watches';
+	like $lei_out, qr/^\Qmh:$mh1\E$/sm, 'MH 1 shown';
+	like $lei_out, qr/^\Qmh:$mh2\E$/sm, 'MH 2 shown';
 });
 
 done_testing;

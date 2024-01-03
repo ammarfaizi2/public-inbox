@@ -425,9 +425,13 @@ sub folders {
 	my $re;
 	if (defined($pfx[0])) {
 		$sql .= ' WHERE loc REGEXP ?'; # DBD::SQLite uses perlre
-		$re = !!$pfx[1] ? '.*' : '';
-		$re .= quotemeta($pfx[0]);
-		$re .= '.*';
+		if (ref($pfx[0])) { # assume qr// "Regexp"
+			$re = $pfx[0];
+		} else {
+			$re = !!$pfx[1] ? '.*' : '';
+			$re .= quotemeta($pfx[0]);
+			$re .= '.*';
+		}
 	}
 	my $sth = ($self->{dbh} //= dbh_new($self))->prepare($sql);
 	$sth->bind_param(1, $re) if defined($re);

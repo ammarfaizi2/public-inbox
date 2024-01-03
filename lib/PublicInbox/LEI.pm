@@ -28,7 +28,7 @@ use PublicInbox::IPC;
 use Time::HiRes qw(stat); # ctime comparisons for config cache
 use File::Path ();
 use File::Spec;
-use Carp ();
+use Carp qw(carp);
 use Sys::Syslog qw(openlog syslog closelog);
 our $quit = \&CORE::exit;
 our ($current_lei, $errors_log, $listener, $oldset, $dir_idle);
@@ -38,7 +38,7 @@ my $GLP_PASS = Getopt::Long::Parser->new;
 $GLP_PASS->configure(qw(gnu_getopt no_ignore_case auto_abbrev pass_through));
 
 our (%PATH2CFG, # persistent for socket daemon
-$MDIR2CFGPATH, # /path/to/maildir => { /path/to/config => [ ino watches ] }
+$MDIR2CFGPATH, # location => { /path/to/config => [ ino watches ] }
 $OPT, # shared between optparse and opt_dash callback (for Getopt::Long)
 $daemon_pid
 );
@@ -606,7 +606,7 @@ sub _lei_atfork_child {
 	$dir_idle->force_close if $dir_idle;
 	undef $dir_idle;
 	%PATH2CFG = ();
-	$MDIR2CFGPATH = {};
+	$MDIR2CFGPATH = undef;
 	eval 'no warnings; undef $PublicInbox::LeiNoteEvent::to_flush';
 	undef $errors_log;
 	$quit = \&CORE::exit;
@@ -1252,32 +1252,43 @@ sub cfg2lei ($) {
 	$lei;
 }
 
+sub note_event ($@) { # runs lei_note_event for a given config file
+	my ($cfg_f, @args) = @_;
+	my $cfg = $PATH2CFG{$cfg_f} // return;
+	eval { cfg2lei($cfg)->dispatch('note-event', @args) };
+	carp "E: note-event $cfg_f: $@\n" if $@;
+}
+
 sub dir_idle_handler ($) { # PublicInbox::DirIdle callback
 	my ($ev) = @_; # Linux::Inotify2::Event or duck type
 	my $fn = $ev->fullname;
 	if ($fn =~ m!\A(.+)/(new|cur)/([^/]+)\z!) { # Maildir file
-		my ($mdir, $nc, $bn) = ($1, $2, $3);
-		$nc = '' if $ev->IN_DELETE || $ev->IN_MOVED_FROM;
-		for my $f (keys %{$MDIR2CFGPATH->{$mdir} // {}}) {
-			my $cfg = $PATH2CFG{$f} // next;
-			eval {
-				my $lei = cfg2lei($cfg);
-				$lei->dispatch('note-event',
-						"maildir:$mdir", $nc, $bn, $fn);
-			};
-			warn "E: note-event $f: $@\n" if $@;
+		my ($loc, $new_cur, $bn) = ("maildir:$1", $2, $3);
+		$new_cur = '' if $ev->IN_DELETE || $ev->IN_MOVED_FROM;
+		for my $cfg_f (keys %{$MDIR2CFGPATH->{$loc} // {}}) {
+			note_event($cfg_f, $loc, $new_cur, $bn, $fn);
 		}
-	}
+	} elsif ($fn =~ m!\A(.+)/([0-9]+)\z!) { # MH mail message file
+		my ($loc, $n, $new_cur) = ("mh:$1", $2, '+');
+		$new_cur = '' if $ev->IN_DELETE || $ev->IN_MOVED_FROM;
+		for my $cfg_f (keys %{$MDIR2CFGPATH->{$loc} // {}}) {
+			note_event($cfg_f, $loc, $new_cur, $n, $fn);
+		}
+	} elsif ($fn =~ m!\A(.+)/\.mh_sequences\z!) { # reread flags
+		my $loc = "mh:$1";
+		for my $cfg_f (keys %{$MDIR2CFGPATH->{$loc} // {}}) {
+			note_event($cfg_f, $loc, '.mh_sequences')
+		}
+	} # else we don't care
 	if ($ev->can('cancel') && ($ev->IN_IGNORE || $ev->IN_UNMOUNT)) {
 		$ev->cancel;
 	}
 	if ($fn =~ m!\A(.+)/(?:new|cur)\z! && !-e $fn) {
-		delete $MDIR2CFGPATH->{$1};
+		delete $MDIR2CFGPATH->{"maildir:$1"};
 	}
-	if (!-e $fn) { # config file or Maildir gone
-		for my $cfgpaths (values %$MDIR2CFGPATH) {
-			delete $cfgpaths->{$fn};
-		}
+	if (!-e $fn) { # config file, Maildir, or MH dir gone
+		delete $_->{$fn} for values %$MDIR2CFGPATH; # config file
+		delete @$MDIR2CFGPATH{"maildir:$fn", "mh:$fn"};
 		delete $PATH2CFG{$fn};
 	}
 }
@@ -1442,19 +1453,22 @@ sub watch_state_ok ($) {
 	$state =~ /\Apause|(?:import|index|tag)-(?:ro|rw)\z/;
 }
 
-sub cancel_maildir_watch ($$) {
-	my ($d, $cfg_f) = @_;
-	my $w = delete $MDIR2CFGPATH->{$d}->{$cfg_f};
-	scalar(keys %{$MDIR2CFGPATH->{$d}}) or
-		delete $MDIR2CFGPATH->{$d};
-	for my $x (@{$w // []}) { $x->cancel }
+sub cancel_dir_watch ($$$) {
+	my ($type, $d, $cfg_f) = @_;
+	my $loc = "$type:".canonpath_harder($d);
+	my $w = delete $MDIR2CFGPATH->{$loc}->{$cfg_f};
+	delete $MDIR2CFGPATH->{$loc} if !(keys %{$MDIR2CFGPATH->{$loc}});
+	$_->cancel for @$w;
 }
 
-sub add_maildir_watch ($$) {
-	my ($d, $cfg_f) = @_;
-	if (!exists($MDIR2CFGPATH->{$d}->{$cfg_f})) {
-		my @w = $dir_idle->add_watches(["$d/cur", "$d/new"], 1);
-		push @{$MDIR2CFGPATH->{$d}->{$cfg_f}}, @w if @w;
+sub add_dir_watch ($$$) {
+	my ($type, $d, $cfg_f) = @_;
+	$d = canonpath_harder($d);
+	my $loc = "$type:$d";
+	my @dirs = $type eq 'mh' ? ($d) : ("$d/cur", "$d/new");
+	if (!exists($MDIR2CFGPATH->{$loc}->{$cfg_f})) {
+		my @w = $dir_idle->add_watches(\@dirs, 1);
+		push @{$MDIR2CFGPATH->{$loc}->{$cfg_f}}, @w if @w;
 	}
 }
 
@@ -1467,24 +1481,20 @@ sub refresh_watches {
 	my %seen;
 	my $cfg_f = $cfg->{'-f'};
 	for my $w (grep(/\Awatch\..+\.state\z/, keys %$cfg)) {
-		my $url = substr($w, length('watch.'), -length('.state'));
+		my $loc = substr($w, length('watch.'), -length('.state'));
 		require PublicInbox::LeiWatch;
-		$watches->{$url} //= PublicInbox::LeiWatch->new($url);
-		$seen{$url} = undef;
-		my $state = $cfg->get_1("watch.$url.state");
+		$watches->{$loc} //= PublicInbox::LeiWatch->new($loc);
+		$seen{$loc} = undef;
+		my $state = $cfg->get_1("watch.$loc.state");
 		if (!watch_state_ok($state)) {
-			warn("watch.$url.state=$state not supported\n");
-			next;
-		}
-		if ($url =~ /\Amaildir:(.+)/i) {
-			my $d = canonpath_harder($1);
-			if ($state eq 'pause') {
-				cancel_maildir_watch($d, $cfg_f);
-			} else {
-				add_maildir_watch($d, $cfg_f);
-			}
+			warn("watch.$loc.state=$state not supported\n");
+		} elsif ($loc =~ /\A(maildir|mh):(.+)\z/i) {
+			my ($type, $d) = ($1, $2);
+			$state eq 'pause' ?
+				cancel_dir_watch($type, $d, $cfg_f) :
+				add_dir_watch($type, $d, $cfg_f);
 		} else { # TODO: imap/nntp/jmap
-			$lei->child_error(0, "E: watch $url not supported, yet")
+			$lei->child_error(0, "E: watch $loc not supported, yet")
 		}
 	}
 
@@ -1492,29 +1502,28 @@ sub refresh_watches {
 	my $lms = $lei->lms;
 	if ($lms) {
 		$lms->lms_write_prepare;
-		for my $d ($lms->folders('maildir:')) {
-			substr($d, 0, length('maildir:')) = '';
-
+		for my $loc ($lms->folders(qr/\A(?:maildir|mh):/)) {
+			my $old = $loc;
+			my ($type, $d) = split /:/, $loc, 2;
 			# fixup old bugs while we're iterating:
-			my $cd = canonpath_harder($d);
-			my $f = "maildir:$cd";
-			$lms->rename_folder("maildir:$d", $f) if $d ne $cd;
-			next if $watches->{$f}; # may be set to pause
+			$d = canonpath_harder($d);
+			$loc = "$type:$d";
+			$lms->rename_folder($old, $loc) if $old ne $loc;
+			next if $watches->{$loc}; # may be set to pause
 			require PublicInbox::LeiWatch;
-			$watches->{$f} = PublicInbox::LeiWatch->new($f);
-			$seen{$f} = undef;
-			add_maildir_watch($cd, $cfg_f);
+			$watches->{$loc} = PublicInbox::LeiWatch->new($loc);
+			$seen{$loc} = undef;
+			add_dir_watch($type, $d, $cfg_f);
 		}
 	}
 	if ($old) { # cull old non-existent entries
-		for my $url (keys %$old) {
-			next if exists $seen{$url};
-			delete $old->{$url};
-			if ($url =~ /\Amaildir:(.+)/i) {
-				my $d = canonpath_harder($1);
-				cancel_maildir_watch($d, $cfg_f);
+		for my $loc (keys %$old) {
+			next if exists $seen{$loc};
+			delete $old->{$loc};
+			if ($loc =~ /\A(maildir|mh):(.+)\z/i) {
+				cancel_dir_watch($1, $2, $cfg_f);
 			} else { # TODO: imap/nntp/jmap
-				$lei->child_error(0, "E: watch $url TODO");
+				$lei->child_error(0, "E: watch $loc TODO");
 			}
 		}
 	}

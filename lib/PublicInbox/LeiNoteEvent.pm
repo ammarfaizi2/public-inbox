@@ -60,6 +60,18 @@ sub maildir_event { # via wq_nonblock_do
 	} # else: eml_from_path already warns
 }
 
+sub _mh_cb { # mh_read_one cb
+	my ($dir, $bn, $kw, $eml, $self, $state) = @_;
+}
+
+sub mh_event { # via wq_nonblock_do
+	my ($self, $folder, $bn, $state) = @_;
+	my $dir = substr($folder, 3);
+	require PublicInbox::MHreader; # if we forked early
+	my $mhr = PublicInbox::MHreader->new($dir, $self->{lei}->{3});
+	$mhr->mh_read_one($bn, \&_mh_cb, $self, $state);
+}
+
 sub lei_note_event {
 	my ($lei, $folder, $new_cur, $bn, $fn, @rest) = @_;
 	die "BUG: unexpected: @rest" if @rest;
@@ -72,11 +84,14 @@ sub lei_note_event {
 	$lms->arg2folder($lei, [ $folder ]);
 	my $state = $cfg->get_1("watch.$folder.state") // 'tag-rw';
 	return if $state eq 'pause';
-	return $lms->clear_src($folder, \$bn) if $new_cur eq '';
+	if ($new_cur eq '') {
+		my $id = $folder =~ /\Amaildir:/ ? \$bn : $bn + 0;
+		return $lms->clear_src($folder, $id);
+	}
 	$lms->lms_pause;
 	$lei->ale; # prepare
 	$sto->write_prepare($lei);
-	require PublicInbox::MdirReader;
+	require PublicInbox::MHreader if $folder =~ /\Amh:/; # optimistic
 	my $self = $cfg->{-lei_note_event} //= do {
 		my $wq = bless { lms => $lms }, __PACKAGE__;
 		# MUAs such as mutt can trigger massive rename() storms so
@@ -91,12 +106,15 @@ sub lei_note_event {
 		$lei->{lne} = $wq;
 	};
 	if ($folder =~ /\Amaildir:/i) {
+		require PublicInbox::MdirReader;
 		my $fl = PublicInbox::MdirReader::maildir_basename_flags($bn)
 			// return;
 		return if index($fl, 'T') >= 0;
 		my $kw = PublicInbox::MdirReader::flags2kw($fl);
 		my $vmd = { kw => $kw, sync_info => [ $folder, \$bn ] };
 		$self->wq_nonblock_do('maildir_event', $fn, $vmd, $state);
+	} elsif ($folder =~ /\Amh:/) {
+		$self->wq_nonblock_do('mh_event', $folder, $bn, $state);
 	} # else: TODO: imap
 }
 

@@ -82,7 +82,7 @@ sub kw_for ($$) {
 	\@kw;
 }
 
-sub _file2eml { # mh_each_file cb
+sub _file2eml { # mh_each_file / mh_read_one cb
 	my ($dir, $n, $self, $ucb, @arg) = @_;
 	my $eml = eml_from_path($n);
 	$ucb->($dir, $n, kw_for($self, $n), $eml, @arg) if $eml;
