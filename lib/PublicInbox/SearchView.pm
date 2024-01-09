@@ -322,7 +322,7 @@ EOM
 
 	# link $INBOX_DIR/description text to "recent" view around
 	# the newest message in this result set:
-	$ctx->{-t_max} = max(map { delete $_->{ts} } @$msgs);
+	$ctx->{-t_max} = max(map { $_->{ts} } @$msgs);
 
 	@$msgs = reverse @$msgs if $r;
 	$ctx->{msgs} = $msgs;

@@ -38,7 +38,7 @@ sub msg_page_i {
 				: $ctx->gone('over');
 		$ctx->{mhref} = ($ctx->{nr} || $ctx->{smsg}) ?
 				"../${\mid_href($smsg->{mid})}/" : '';
-		if (_msg_page_prepare($eml, $ctx)) {
+		if (_msg_page_prepare($eml, $ctx, $smsg->{ts})) {
 			$eml->each_part(\&add_text_body, $ctx, 1);
 			print { $ctx->{zfh} } '</pre><hr>';
 		}
@@ -183,6 +183,59 @@ sub nr_to_s ($$$) {
 	$nr == 1 ? "$nr $singular" : "$nr $plural";
 }
 
+sub addr2urlmap ($) {
+	my ($ctx) = @_;
+	# cache makes a huge difference with /[tT] and large threads
+	my $key = PublicInbox::Git::host_prefix_url($ctx->{env}, '');
+	my $ent = $ctx->{www}->{pi_cfg}->{-addr2urlmap}->{$key} // do {
+		my $by_addr = $ctx->{www}->{pi_cfg}->{-by_addr};
+		my (%addr2url, $url);
+		while (my ($addr, $ibx) = each %$by_addr) {
+			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
+			$addr2url{$addr} = ascii_html($url) if defined $url;
+		}
+		# don't allow attackers to randomly change Host: headers
+		# and OOM us if the server handles all hostnames:
+		my $tmp = $ctx->{www}->{pi_cfg}->{-addr2urlmap};
+		my @k = keys %$tmp; # random order
+		delete @$tmp{@k[0..3]} if scalar(@k) > 7;
+		my $re = join('|', map { quotemeta } keys %addr2url);
+		$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
+	};
+	@$ent;
+}
+
+sub to_cc_html ($$$$) {
+	my ($ctx, $eml, $field, $t) = @_;
+	my @vals = $eml->header($field) or return ('', 0);
+	my (undef, $addr2url) = addr2urlmap($ctx);
+	my $pairs = PublicInbox::Address::pairs(join(', ', @vals));
+	my ($len, $line_len, $html) = (0, 0, '');
+	my ($pair, $url);
+	my ($cur_ibx, $env) = @$ctx{qw(ibx env)};
+	# avoid excessive ascii_html calls (already hot in profiles):
+	my @html = split /\n/, ascii_html(join("\n", map {
+		$_->[0] // (split(/\@/, $_->[1]))[0]; # addr user if no name
+	} @$pairs));
+	for my $n (@html) {
+		$pair = shift @$pairs;
+		if ($line_len) { # 9 = display width of ",\t":
+			if ($line_len + length($n) > COLS - 9) {
+				$html .= ",\n\t";
+				$len += $line_len;
+				$line_len = 0;
+			} else {
+				$html .= ', ';
+				$line_len += 2;
+			}
+		}
+		$line_len += length($n);
+		$url = $addr2url->{lc $pair->[1]};
+		$html .= $url ? qq(<a\nhref="$url$t">$n</a>) : $n;
+	}
+	($html, $len + $line_len);
+}
+
 # Displays the text of of the message for /$INBOX/$MSGID/[Tt]/ endpoint
 # this is already inside a <pre>
 sub eml_entry {
@@ -207,7 +260,8 @@ sub eml_entry {
 	my $ds = delete $smsg->{ds}; # for v1 non-Xapian/SQLite users
 
 	# Deleting these fields saves about 400K as we iterate across 1K msgs
-	delete @$smsg{qw(ts blob)};
+	my ($t, undef) = delete @$smsg{qw(ts blob)};
+	$t = $t ? '?t='.ts2str($t) : '';
 
 	my $from = _hdr_names_html($eml, 'From');
 	obfuscate_addrs($obfs_ibx, $from) if $obfs_ibx;
@@ -216,9 +270,8 @@ sub eml_entry {
 	my $mhref = $upfx . mid_href($mid_raw) . '/';
 	$rv .= qq{ (<a\nhref="$mhref">permalink</a> / };
 	$rv .= qq{<a\nhref="${mhref}raw">raw</a>)\n};
-	my $to = fold_addresses(_hdr_names_html($eml, 'To'));
-	my $cc = fold_addresses(_hdr_names_html($eml, 'Cc'));
-	my ($tlen, $clen) = (length($to), length($cc));
+	my ($to, $tlen) = to_cc_html($ctx, $eml, 'To', $t);
+	my ($cc, $clen) = to_cc_html($ctx, $eml, 'Cc', $t);
 	my $to_cc = '';
 	if (($tlen + $clen) > COLS) {
 		$to_cc .= '  To: '.$to."\n" if $tlen;
@@ -447,7 +500,7 @@ sub thread_html {
 
 	# link $INBOX_DIR/description text to "index_topics" view around
 	# the newest message in this thread
-	my $t = ts2str($ctx->{-t_max} = max(map { delete $_->{ts} } @$msgs));
+	my $t = ts2str($ctx->{-t_max} = max(map { $_->{ts} } @$msgs));
 	my $t_fmt = fmt_ts($ctx->{-t_max});
 
 	my $skel = '<hr><pre>';
@@ -613,7 +666,7 @@ sub add_text_body { # callback for each_part
 }
 
 sub _msg_page_prepare {
-	my ($eml, $ctx) = @_;
+	my ($eml, $ctx, $ts) = @_;
 	my $have_over = !!$ctx->{ibx}->over;
 	my $mids = mids_for_index($eml);
 	my $nr = $ctx->{nr}++;
@@ -649,6 +702,9 @@ href="d/">diff</a>)</pre><pre>];
 	$title[0] = $subj[0] // '(no subject)';
 	$hbuf .= "Date: $_\n" for $eml->header('Date');
 	$hbuf = ascii_html($hbuf);
+	my $t = $ts ? '?t='.ts2str($ts) : '';
+	my ($re, $addr2url) = addr2urlmap($ctx);
+	$hbuf =~ s!$re!qq(<a\nhref=").$addr2url->{lc $1}.qq($t">$1</a>)!sge;
 	$ctx->{-title_html} = ascii_html(join(' - ', @title));
 	if (my $obfs_ibx = $ctx->{-obfs_ibx}) {
 		obfuscate_addrs($obfs_ibx, $hbuf);
