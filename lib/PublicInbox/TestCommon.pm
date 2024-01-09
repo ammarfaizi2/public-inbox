@@ -342,7 +342,7 @@ use subs qw(exit);
 sub main {
 # the below "line" directive is a magic comment, see perlsyn(1) manpage
 # line 1 "$f"
-$str
+{ $str }
 	0;
 }
 1;
