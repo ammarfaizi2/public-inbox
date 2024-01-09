@@ -28,6 +28,7 @@ use PublicInbox::Eml;
 use Text::Wrap qw(wrap);
 use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe);
 use POSIX qw(strftime);
+use autodie qw(open);
 my $hl = eval {
 	require PublicInbox::HlMod;
 	PublicInbox::HlMod->new;
@@ -154,8 +155,7 @@ sub show_commit_start { # ->psgi_qx callback
 	}
 	my $patchid = (split(/ /, $$bref))[0]; # ignore commit
 	$ctx->{-q_value_html} = "patchid:$patchid" if defined $patchid;
-	open my $fh, '<', "$ctx->{-tmp}/h" or
-		die "open $ctx->{-tmp}/h: $!";
+	open my $fh, '<', "$ctx->{-tmp}/h";
 	chop(my $buf = do { local $/ = "\0"; <$fh> });
 	utf8_maybe($buf); # non-UTF-8 commits exist
 	chomp $buf;
@@ -244,7 +244,7 @@ committer $co
 EOM
 	print $zfh "\n", $ctx->{-linkify}->to_html($bdy) if length($bdy);
 	$bdy = '';
-	open my $fh, '<', "$ctx->{-tmp}/p" or die "open $ctx->{-tmp}/p: $!";
+	open my $fh, '<', "$ctx->{-tmp}/p";
 	if (-s $fh > $MAX_SIZE) {
 		print $zfh "---\n patch is too large to show\n";
 	} else { # prepare flush_diff:
@@ -599,10 +599,7 @@ sub show ($$;$) {
 	}
 	$ctx->{fn} = $fn;
 	$ctx->{-tmp} = File::Temp->newdir("solver.$oid_b-XXXX", TMPDIR => 1);
-	unless ($ctx->{lh}) {
-		open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log" or
-			die "open: $!";
-	}
+	$ctx->{lh} or open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log";
 	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
 						\&solve_result, $ctx);
 	$solver->{gits} //= [ $ctx->{git} ];

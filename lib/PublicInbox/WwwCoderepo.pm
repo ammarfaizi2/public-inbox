@@ -23,6 +23,7 @@ use PublicInbox::RepoList;
 use PublicInbox::OnDestroy;
 use URI::Escape qw(uri_escape_utf8);
 use File::Spec;
+use autodie qw(fcntl open);
 
 my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
@@ -81,11 +82,11 @@ sub new {
 	$self->{$_} = 10 for qw(summary_log);
 
 	# try reuse STDIN if it's already /dev/null
-	open $self->{log_fh}, '+>', '/dev/null' or die "open: $!";
+	open $self->{log_fh}, '+>', '/dev/null';
 	my @l = stat($self->{log_fh}) or die "stat: $!";
 	my @s = stat(STDIN) or die "stat(STDIN): $!";
 	if ("@l[0, 1]" eq "@s[0, 1]") {
-		my $f = fcntl(STDIN, F_GETFL, 0) // die "F_GETFL: $!";
+		my $f = fcntl(STDIN, F_GETFL, 0);
 		$self->{log_fh} = *STDIN{IO} if $f & O_RDWR;
 	}
 	$self;
