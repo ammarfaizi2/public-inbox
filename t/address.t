@@ -77,6 +77,10 @@ sub test_pkg {
 	is_deeply([], \@emails , 'no address for local address');
 	@names = $emails->('Local User <user>');
 	is_deeply([], \@names, 'no address, no name');
+
+	my $p = $pairs->('NAME, a@example, wtf@');
+	is scalar(grep { defined($_->[0] // $_->[1]) } @$p),
+		scalar(@$p), 'something is always defined in bogus pairs';
 }
 
 test_pkg('PublicInbox::Address');

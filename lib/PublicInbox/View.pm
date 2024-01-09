@@ -230,7 +230,7 @@ sub to_cc_html ($$$$) {
 			}
 		}
 		$line_len += length($n);
-		$url = $addr2url->{lc $pair->[1]};
+		$url = $addr2url->{lc($pair->[1] // '')};
 		$html .= $url ? qq(<a\nhref="$url$t">$n</a>) : $n;
 	}
 	($html, $len + $line_len);

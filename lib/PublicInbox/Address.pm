@@ -19,8 +19,11 @@ sub xs_names {
 }
 
 sub xs_pairs { # for JMAP, RFC 8621 section 4.1.2.3
-	[ map { # LHS (name) may be undef
-		[ $_->phrase // $_->comment, $_->address ]
+	[ map { # LHS (name) may be undef if there's an address
+		my @p = ($_->phrase // $_->comment, $_->address);
+		# show original if totally bogus:
+		$p[0] = $_->original unless defined $p[1];
+		\@p;
 	} parse_email_addresses($_[0]) ];
 }
 
