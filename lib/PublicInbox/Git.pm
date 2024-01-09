@@ -505,7 +505,7 @@ sub host_prefix_url ($$) {
 	my $host_port = $env->{HTTP_HOST} //
 		"$env->{SERVER_NAME}:$env->{SERVER_PORT}";
 	my $sn = $env->{SCRIPT_NAME} // '';
-	"$env->{'psgi.url_scheme'}://$host_port$sn/$url";
+	"$env->{'psgi.url_scheme'}://\L$host_port\E$sn/$url";
 }
 
 sub base_url { # for coderepos, PSGI-only
