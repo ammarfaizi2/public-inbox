@@ -42,7 +42,11 @@ sub input_path_url { # overrides LeiInput version
 		my $uri = PublicInbox::URInntps->new($url);
 		my $nn = $lei->{net}->nn_get($uri) or
 			return $lei->err("E: $uri");
-		my $l = $nn->newsgroups($uri->group); # name => description
+		# $l = name => description
+		my $l = $nn->newsgroups($uri->group) // return $lei->err(<<EOM);
+E: $uri LIST NEWSGROUPS: ${\($lei->{net}->ndump($nn->message))}
+E: login may be required, try adding `-c nntp.debug' to your command
+EOM
 		my $sec = $lei->{net}->can('uri_section')->($uri);
 		if ($json) {
 			my $all = $nn->list;

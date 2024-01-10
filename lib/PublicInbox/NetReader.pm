@@ -14,7 +14,7 @@ our @EXPORT = qw(uri_section imap_uri nntp_uri);
 
 sub ndump {
 	require Data::Dumper;
-	Data::Dumper->new(\@_)->Useqq(1)->Terse(1)->Dump;
+	Data::Dumper->new([ $_[-1] ])->Useqq(1)->Terse(1)->Dump;
 }
 
 # returns the git config section name, e.g [imap "imaps://user@example.com"]
@@ -240,19 +240,19 @@ sub nn_new ($$$$) {
 				try_starttls($nn_arg->{Host})) {
 			# soft fail by default
 			$nn->starttls or warn <<"";
-W: <$uri> STARTTLS tried and failed (not requested)
+W: <$uri> STARTTLS tried and failed (not requested): ${\(ndump($nn->message))}
 
 		} elsif ($nntp_cfg->{starttls}) {
 			# hard fail if explicitly configured
 			$nn->starttls or die <<"";
-E: <$uri> STARTTLS requested and failed
+E: <$uri> STARTTLS requested and failed: ${\(ndump($nn->message))}
 
 		}
 	} elsif ($nntp_cfg->{starttls}) {
 		$nn->can('starttls') or
 			die "E: <$uri> Net::NNTP too old for STARTTLS\n";
 		$nn->starttls or die <<"";
-E: <$uri> STARTTLS requested and failed
+E: <$uri> STARTTLS requested and failed: ${\(ndump($nn->message))}
 
 	}
 	$nn;
@@ -298,18 +298,21 @@ sub nn_for ($$$$) { # nn = Net::NNTP
 		if ($nn->authinfo($u, $p)) {
 			push @{$nntp_cfg->{-postconn}}, [ 'authinfo', $u, $p ];
 		} else {
-			warn "E: <$uri> AUTHINFO $u XXXX failed\n";
+			warn <<EOM;
+E: <$uri> AUTHINFO $u XXXX: ${\(ndump($nn->message))}
+EOM
 			$nn = undef;
 		}
 	}
-
-	if ($nntp_cfg->{compress}) {
+	if ($nn && $nntp_cfg->{compress}) {
 		# https://rt.cpan.org/Ticket/Display.html?id=129967
 		if ($nn->can('compress')) {
 			if ($nn->compress) {
 				push @{$nntp_cfg->{-postconn}}, [ 'compress' ];
 			} else {
-				warn "W: <$uri> COMPRESS failed\n";
+				warn <<EOM;
+W: <$uri> COMPRESS: ${\(ndump($nn->message))}
+EOM
 			}
 		} else {
 			delete $nntp_cfg->{compress};
