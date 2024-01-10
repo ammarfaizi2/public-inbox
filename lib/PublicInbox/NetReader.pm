@@ -291,7 +291,10 @@ sub nn_for ($$$$) { # nn = Net::NNTP
 	return if $self->{quit};
 	$nn // die "E: <$uri> new: $@".onion_hint($lei, $uri);
 	if ($cred) {
-		$cred->fill($lei) unless defined($p); # may prompt user here
+		$p //= do {
+			$cred->fill($lei); # may prompt user here
+			$cred->{password};
+		};
 		if ($nn->authinfo($u, $p)) {
 			push @{$nntp_cfg->{-postconn}}, [ 'authinfo', $u, $p ];
 		} else {
