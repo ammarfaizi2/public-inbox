@@ -407,7 +407,9 @@ sub new {
 		$lei->{opt}->{save} //= \1 if $lei->{cmd} eq 'q';
 	} elsif (substr($fmt, 0, 4) eq 'mbox') {
 		require PublicInbox::MboxReader;
-		$self->can("eml2$fmt") or die "bad mbox format: $fmt\n";
+		$self->can("eml2$fmt") or die <<EOM;
+E: bad mbox format: $fmt (did you mean: mboxrd, mboxo, mboxcl, or mboxcl2?)
+EOM
 		$self->{base_type} = 'mbox';
 		if ($lei->{cmd} eq 'q' &&
 				(($lei->path_to_fd($dst) // -1) < 0) &&
