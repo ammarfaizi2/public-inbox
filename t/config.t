@@ -296,8 +296,9 @@ is_deeply($glob2re->('\\\\{a,b}'), '\\\\\\\\(a|b)', 'fake escape brace');
 is_deeply($glob2re->('**/foo'), '.*/foo', 'double asterisk start');
 is_deeply($glob2re->('foo/**'), 'foo/.*', 'double asterisk end');
 my $re = $glob2re->('a/**/b');
-is_deeply($re, 'a/.*?b', 'double asterisk middle');
+is_deeply($re, 'a(?:/.*?/|/)b', 'double asterisk middle');
 like($_, qr!$re!, "a/**/b matches $_") for ('a/b', 'a/c/b', 'a/c/a/b');
+unlike($_, qr!$re!, "a/**/b doesn't match $_") for ('a/ab');
 
 {
 	my $w = '';
