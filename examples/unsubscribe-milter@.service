@@ -24,7 +24,13 @@ Sockets = unsubscribe-milter.socket
 
 # the corresponding PSGI app needs permissions to modify the
 # mlmmj spool, so we might as well use the same user since
+# they both need to read /home/mlmmj/.unsubscribe.key
 User = mlmmj
+
+# only kill the parent process when using the default Sendmail::PMilter
+# postfork dispatcher, children will die naturally when they're done
+# with a given message.
+KillMode = process
 
 [Install]
 WantedBy = multi-user.target
