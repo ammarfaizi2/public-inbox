@@ -356,8 +356,12 @@ sub srv { # endpoint called by PublicInbox::WWW
 	} elsif ($path_info =~ m!\A/(.+?)/(refs/(?:heads|tags))/\z! and
 			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		refs_foo($self, $ctx, $2);
+	} elsif ($path_info =~ m!\A/(.*?\*.*?)/*\z!) {
+		my $re = PublicInbox::Config::glob2re($1);
+		PublicInbox::RepoList::html($self, $ctx, qr!$re\z!) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)/\z!) {
-		PublicInbox::RepoList::html($self, $ctx, $1) // r(404);
+		my $re = qr!\A\Q$1\E/!;
+		PublicInbox::RepoList::html($self, $ctx, $re) // r(404);
 	} elsif ($path_info =~ m!\A/(.+?)\z! and
 			($git = $pi_cfg->get_coderepo($1))) {
 		my $qs = $ctx->{env}->{QUERY_STRING};

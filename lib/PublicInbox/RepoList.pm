@@ -16,9 +16,9 @@ sub html_top_fallback { # WwwStream->html_repo_top
 }
 
 sub html ($$$) {
-	my ($wcr, $ctx, $pfx) = @_;
+	my ($wcr, $ctx, $re) = @_;
 	my $cr = $wcr->{pi_cfg}->{-coderepos};
-	my @nicks = grep(m!\A\Q$pfx\E/!, keys %$cr) or return; # 404
+	my @nicks = grep(m!$re!, keys %$cr) or return; # 404
 	__PACKAGE__->html_init($ctx);
 	my $zfh = $ctx->zfh;
 	print $zfh "<pre>matching coderepos\n";
