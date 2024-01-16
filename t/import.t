@@ -98,7 +98,8 @@ ok($@, 'Import->add fails on non-existent dir');
 
 my @cls = qw(PublicInbox::Eml);
 SKIP: {
-	require_mods('PublicInbox::MIME', 1);
+	require_mods('Email::MIME', 1);
+	require PublicInbox::MIME;
 	push @cls, 'PublicInbox::MIME';
 };
 

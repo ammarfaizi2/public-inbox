@@ -266,6 +266,7 @@ sub require_mods {
 	}
 	return unless @need;
 	my $m = join(', ', @need)." missing for $0";
+	$m =~ s/\bEmail::MIME\b/Email::MIME (development purposes only)/;
 	skip($m, $maybe) if $maybe;
 	plan(skip_all => $m)
 }

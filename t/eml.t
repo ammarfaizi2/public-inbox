@@ -1,8 +1,8 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+use v5.10.1; # TODO: check unicode_strings w/ 5.12
 use strict;
-use Test::More;
 use PublicInbox::TestCommon;
 use PublicInbox::MsgIter qw(msg_part_text);
 my @classes = qw(PublicInbox::Eml);
@@ -355,7 +355,7 @@ if ('maxparts is a feature unique to us') {
 }
 
 SKIP: {
-	require_mods('PublicInbox::MIME', 1);
+	require_mods('Email::MIME', 1);
 	my $eml = eml_load 't/utf8.eml';
 	my $mime = mime_load 't/utf8.eml';
 	for my $h (qw(Subject From To)) {
