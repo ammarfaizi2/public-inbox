@@ -699,8 +699,8 @@ sub get_coderepo {
 	$self->{-coderepos}->{$nick} // do {
 		defined($self->{-cgit_scan_path}) ? do {
 			apply_cgit_scan_path($self);
-			$self->{-coderepos}->{$nick} =
-					fill_coderepo($self, $nick);
+			my $cr = fill_coderepo($self, $nick);
+			$cr ? ($self->{-coderepos}->{$nick} = $cr) : undef;
 		} : undef;
 	};
 }
