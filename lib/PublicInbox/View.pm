@@ -1201,7 +1201,11 @@ sub pagination_footer ($$) {
 		$next = $next ? "$next | " : '             | ';
 		$prev .= qq[ | <a\nhref="$latest">latest</a>];
 	}
-	($next || $prev) ? "<hr><pre id=nav>page: $next$prev</pre>" : '';
+	my $rv = '<hr><pre id=nav>';
+	$rv .= "page: $next$prev\n" if $next || $prev;
+	$rv .= q{- recent:[<b>subjects (threaded)</b>|<a
+href="./topics_new.html">topics (new)</a>|<a
+href="./topics_active.html">topics (active)</a>]</pre>};
 }
 
 sub paginate_recent ($$) {
