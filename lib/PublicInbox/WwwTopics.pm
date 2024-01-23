@@ -9,7 +9,7 @@ sub add_topic_html ($$) {
 	my (undef, $smsg) = @_;
 	my $s = ascii_html($smsg->{subject});
 	$s = '(no subject)' if $s eq '';
-	$_[0] .= "\n".fmt_ts($smsg->{'MAX(ds)'} // $smsg->{ds}) .
+	$_[0] .= "\n".fmt_ts($smsg->{ds}) .
 		qq{ <a\nhref="}.mid_href($smsg->{mid}).qq{/#r">$s</a>};
 	my $nr = $smsg->{'COUNT(num)'};
 	$_[0] .= " $nr+ messages" if $nr > 1;
@@ -29,7 +29,7 @@ EOS
 
 sub topics_active ($) {
         $_[0]->do_get(<<EOS);
-SELECT ddd,MAX(ds),COUNT(num) FROM over WHERE tid IN
+SELECT ddd,MAX(ds) as ds,COUNT(num) FROM over WHERE tid IN
 (SELECT DISTINCT(tid) FROM over WHERE tid > 0 ORDER BY ts DESC LIMIT 200)
 AND +num > 0
 GROUP BY tid
@@ -43,7 +43,6 @@ sub topics_atom { # GET /$INBOX_NAME/topics_(new|active).atom
 	my ($ctx) = @_;
 	require PublicInbox::WwwAtomStream;
 	my ($hdr, $smsg, $val);
-	$_->{ds} //= $_->{'MAX(ds)'} // 0 for @{$ctx->{msgs}};
 	PublicInbox::WwwAtomStream->response($ctx, \&topics_i);
 }
 
