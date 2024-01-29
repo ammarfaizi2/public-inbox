@@ -22,7 +22,7 @@ use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
 our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
-our $INOTIFY;
+our ($INOTIFY, %PACK);
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
@@ -44,26 +44,21 @@ use constant {
 	EPOLL_CTL_MOD => 3,
 	SIZEOF_int => $Config{intsize},
 	SIZEOF_size_t => $Config{sizesize},
+	SIZEOF_ptr => $Config{ptrsize},
 	NUL => "\0",
 };
 
-use constant {
-	TMPL_size_t => SIZEOF_size_t == 8 ? 'Q' : 'L',
-	BYTES_4_hole => SIZEOF_size_t == 8 ? 'L' : '',
-	# cmsg_len, cmsg_level, cmsg_type
-	SIZEOF_cmsghdr => SIZEOF_int * 2 + SIZEOF_size_t,
-};
-
-my @BYTES_4_hole = BYTES_4_hole ? (0) : ();
+use constant TMPL_size_t => SIZEOF_size_t == 8 ? 'Q' : 'L';
 
 our ($SYS_epoll_create,
 	$SYS_epoll_ctl,
 	$SYS_epoll_wait,
 	$SYS_signalfd4,
 	$SYS_renameat2,
-	$F_SETPIPE_SZ);
+	$F_SETPIPE_SZ,
+	$SYS_sendmsg,
+	$SYS_recvmsg);
 
-my ($SYS_sendmsg, $SYS_recvmsg);
 my $SYS_fstatfs; # don't need fstatfs64, just statfs.f_type
 my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS);
 my $SFD_CLOEXEC = 02000000; # Perl does not expose O_CLOEXEC
@@ -78,7 +73,7 @@ if ($^O eq "linux") {
 	# boundaries.
 	my $u64_mod_8 = 0;
 
-	if ($Config{ptrsize} == 4) {
+	if (SIZEOF_ptr == 4) {
 		# if we're running on an x86_64 kernel, but a 32-bit process,
 		# we need to use the x32 or i386 syscall numbers.
 		if ($machine eq 'x86_64') {
@@ -281,15 +276,51 @@ EOM
 		*epoll_wait = \&epoll_wait_mod4;
 		*epoll_ctl = \&epoll_ctl_mod4;
 	}
+} elsif ($^O =~ /\A(?:freebsd|openbsd|netbsd|dragonfly)\z/) {
+# don't use syscall.ph here, name => number mappings are not stable on *BSD
+# but the actual numbers are.
+# OpenBSD perl redirects syscall perlop to libc functions
+# https://cvsweb.openbsd.org/src/gnu/usr.bin/perl/gen_syscall_emulator.pl
+# https://www.netbsd.org/docs/internals/en/chap-processes.html#syscall_versioning
+# https://wiki.freebsd.org/AddingSyscalls#Backward_compatibily
+# (I'm assuming Dragonfly copies FreeBSD, here, too)
+	$SYS_recvmsg = 27;
+	$SYS_sendmsg = 28;
+}
+
+BEGIN {
+	if ($^O eq 'linux') {
+		%PACK = (
+			TMPL_cmsg_len => TMPL_size_t,
+			# cmsg_len, cmsg_level, cmsg_type
+			SIZEOF_cmsghdr => SIZEOF_int * 2 + SIZEOF_size_t,
+			CMSG_DATA_off => '',
+			TMPL_msghdr => 'PL' . # msg_name, msg_namelen
+				'@'.(2 * SIZEOF_ptr).'P'. # msg_iov
+				'i'. # msg_iovlen
+				'@'.(4 * SIZEOF_ptr).'P'. # msg_control
+				'L'. # msg_controllen (socklen_t)
+				'i', # msg_flags
+		);
+	} elsif ($^O =~ /\A(?:freebsd|openbsd|netbsd|dragonfly)\z/) {
+		%PACK = (
+			TMPL_cmsg_len => 'L', # socklen_t
+			SIZEOF_cmsghdr => SIZEOF_int * 3,
+			CMSG_DATA_off => SIZEOF_ptr == 8 ? '@16' : '',
+			TMPL_msghdr => 'PL' . # msg_name, msg_namelen
+				'@'.(2 * SIZEOF_ptr).'P'. # msg_iov
+				TMPL_size_t. # msg_iovlen
+				'@'.(4 * SIZEOF_ptr).'P'. # msg_control
+				TMPL_size_t. # msg_controllen
+				'i', # msg_flags
+
+		)
+	}
+	$PACK{CMSG_ALIGN_size} = SIZEOF_size_t;
 }
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
 $INOTIFY->{IN_CLOEXEC} //= 0x80000 if $INOTIFY;
-
-# use Inline::C for *BSD-only or general POSIX stuff.
-# Linux guarantees stable syscall numbering, BSDs only offer a stable libc
-# use devel/sysdefs-list on Linux to detect new syscall numbers and
-# other system constants
 
 sub epoll_create {
 	syscall($SYS_epoll_create, $no_deprecated ? 0 : 100);
@@ -420,11 +451,13 @@ sub nodatacow_dir {
 	if (open my $fh, '<', $_[0]) { nodatacow_fh($fh) }
 }
 
-sub CMSG_ALIGN ($) { ($_[0] + SIZEOF_size_t - 1) & ~(SIZEOF_size_t - 1) }
+use constant \%PACK;
+sub CMSG_ALIGN ($) { ($_[0] + CMSG_ALIGN_size - 1) & ~(CMSG_ALIGN_size - 1) }
 use constant CMSG_ALIGN_SIZEOF_cmsghdr => CMSG_ALIGN(SIZEOF_cmsghdr);
 sub CMSG_SPACE ($) { CMSG_ALIGN($_[0]) + CMSG_ALIGN_SIZEOF_cmsghdr }
 sub CMSG_LEN ($) { CMSG_ALIGN_SIZEOF_cmsghdr + $_[0] }
-use constant msg_controllen => CMSG_SPACE(10 * SIZEOF_int) + 16; # 10 FDs
+use constant msg_controllen_max =>
+	CMSG_SPACE(10 * SIZEOF_int) + SIZEOF_cmsghdr; # space for 10 FDs
 
 if (defined($SYS_sendmsg) && defined($SYS_recvmsg)) {
 no warnings 'once';
@@ -436,20 +469,15 @@ require PublicInbox::CmdIPC4;
 			$_[2] // NUL, length($_[2] // NUL) || 1);
 	my $fd_space = scalar(@$fds) * SIZEOF_int;
 	my $msg_controllen = CMSG_SPACE($fd_space);
-	my $cmsghdr = pack(TMPL_size_t . # cmsg_len
+	my $cmsghdr = pack(TMPL_cmsg_len .
 			'LL' .  # cmsg_level, cmsg_type,
-			('i' x scalar(@$fds)) . # CMSG_DATA
+			CMSG_DATA_off.('i' x scalar(@$fds)). # CMSG_DATA
 			'@'.($msg_controllen - 1).'x1', # pad to space, not len
 			CMSG_LEN($fd_space), # cmsg_len
 			SOL_SOCKET, SCM_RIGHTS, # cmsg_{level,type}
 			@$fds); # CMSG_DATA
-	my $mh = pack('PL' . # msg_name, msg_namelen (socklen_t (U32))
-			BYTES_4_hole . # 4-byte padding on 64-bit
-			'P'.TMPL_size_t . # msg_iov, msg_iovlen,
-			'P'.TMPL_size_t . # msg_control, msg_controllen,
-			'i', # msg_flags
-			NUL, 0, # msg_name, msg_namelen (unused)
-			@BYTES_4_hole,
+	my $mh = pack(TMPL_msghdr,
+			undef, 0, # msg_name, msg_namelen (unused)
 			$iov, 1, # msg_iov, msg_iovlen
 			$cmsghdr, # msg_control
 			$msg_controllen,
@@ -465,18 +493,13 @@ require PublicInbox::CmdIPC4;
 *recv_cmd4 = sub ($$$) {
 	my ($sock, undef, $len) = @_;
 	vec($_[1] //= '', $len - 1, 8) = 0;
-	my $cmsghdr = "\0" x msg_controllen; # 10 * sizeof(int)
+	my $cmsghdr = "\0" x msg_controllen_max; # 10 * sizeof(int)
 	my $iov = pack('P'.TMPL_size_t, $_[1], $len);
-	my $mh = pack('PL' . # msg_name, msg_namelen (socklen_t (U32))
-			BYTES_4_hole . # 4-byte padding on 64-bit
-			'P'.TMPL_size_t . # msg_iov, msg_iovlen,
-			'P'.TMPL_size_t . # msg_control, msg_controllen,
-			'i', # msg_flags
-			NUL, 0, # msg_name, msg_namelen (unused)
-			@BYTES_4_hole,
+	my $mh = pack(TMPL_msghdr,
+			undef, 0, # msg_name, msg_namelen (unused)
 			$iov, 1, # msg_iov, msg_iovlen
 			$cmsghdr, # msg_control
-			msg_controllen,
+			msg_controllen_max,
 			0); # msg_flags
 	my $r;
 	do {
@@ -489,8 +512,9 @@ require PublicInbox::CmdIPC4;
 	substr($_[1], $r, length($_[1]), '');
 	my @ret;
 	if ($r > 0) {
-		my ($len, $lvl, $type, @fds) = unpack(TMPL_size_t . # cmsg_len
-					'LLi*', # cmsg_level, cmsg_type, @fds
+		my ($len, $lvl, $type, @fds) = unpack(TMPL_cmsg_len.
+					'LL'. # cmsg_level, cmsg_type
+					CMSG_DATA_off.'i*', # @fds
 					$cmsghdr);
 		if ($lvl == SOL_SOCKET && $type == SCM_RIGHTS) {
 			$len -= CMSG_ALIGN_SIZEOF_cmsghdr;

@@ -2,8 +2,6 @@
 # License: AGPL-3.0+ <http://www.gnu.org/licenses/agpl-3.0.txt>
 # Dump system-specific constant numbers this is to maintain
 # PublicInbox::Syscall and any other system-specific pieces.
-# DO NOT USE syscall numbers for *BSDs, none of the current BSD kernels
-# we know about promise stable syscall numbers (unlike Linux).
 # However, sysconf(3) constants are stable ABI on all safe to dump.
 eval 'exec perl -S $0 ${1+"$@"}' # no shebang
 	if 0; # running under some shell
@@ -178,6 +176,13 @@ int main(void)
 		PR_NUM(cmsg_level);
 		PR_NUM(cmsg_type);
 	STRUCT_END;
+
+	{
+		struct cmsghdr cmsg;
+		uintptr_t cmsg_data_off;
+		cmsg_data_off = (uintptr_t)CMSG_DATA(&cmsg) - (uintptr_t)&cmsg;
+		D(cmsg_data_off);
+	}
 
 	return 0;
 }

@@ -143,14 +143,13 @@ SKIP: {
 }
 
 SKIP: {
-	skip 'not Linux', 1 if $^O ne 'linux';
 	require_ok 'PublicInbox::Syscall';
 	$send = PublicInbox::Syscall->can('send_cmd4') or
-		skip 'send_cmd4 not defined for arch', 1;
+		skip "send_cmd4 not defined for $^O arch", 1;
 	$recv = PublicInbox::Syscall->can('recv_cmd4') or
-		skip 'recv_cmd4 not defined for arch', 1;
-	$do_test->(SOCK_STREAM, 0, 'PP Linux stream');
-	$do_test->(SOCK_SEQPACKET, 0, 'PP Linux seqpacket');
+		skip "recv_cmd4 not defined for $^O arch", 1;
+	$do_test->(SOCK_STREAM, 0, 'pure Perl stream');
+	$do_test->(SOCK_SEQPACKET, 0, 'pure Perl seqpacket');
 }
 
 done_testing;
