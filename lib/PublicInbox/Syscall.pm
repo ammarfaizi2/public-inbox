@@ -4,7 +4,7 @@
 #
 # See devel/sysdefs-list in the public-inbox source tree for maintenance
 # <https://80x24.org/public-inbox.git>, and machines from the GCC Farm:
-# <https://cfarm.tetaneutral.net/>
+# <https://portal.cfarm.net/>
 #
 # This license differs from the rest of public-inbox
 #
@@ -26,10 +26,10 @@ our $INOTIFY;
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
-                  EPOLLIN EPOLLOUT EPOLLET
-                  EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
-                  EPOLLONESHOT EPOLLEXCLUSIVE
-                  signalfd rename_noreplace %SIGNUM $F_SETPIPE_SZ);
+		EPOLLIN EPOLLOUT EPOLLET
+		EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
+		EPOLLONESHOT EPOLLEXCLUSIVE
+		signalfd rename_noreplace %SIGNUM $F_SETPIPE_SZ);
 use constant {
 	EPOLLIN => 1,
 	EPOLLOUT => 4,
@@ -71,216 +71,216 @@ our $no_deprecated = 0;
 
 if ($^O eq "linux") {
 	$F_SETPIPE_SZ = 1031;
-    my (undef, undef, $release, undef, $machine) = POSIX::uname();
-    my ($maj, $min) = ($release =~ /\A([0-9]+)\.([0-9]+)/);
-    $SYS_renameat2 = 0 if "$maj.$min" < 3.15;
-    # whether the machine requires 64-bit numbers to be on 8-byte
-    # boundaries.
-    my $u64_mod_8 = 0;
+	my (undef, undef, $release, undef, $machine) = POSIX::uname();
+	my ($maj, $min) = ($release =~ /\A([0-9]+)\.([0-9]+)/);
+	$SYS_renameat2 = 0 if "$maj.$min" < 3.15;
+	# whether the machine requires 64-bit numbers to be on 8-byte
+	# boundaries.
+	my $u64_mod_8 = 0;
 
-    if ($Config{ptrsize} == 4) {
-	# if we're running on an x86_64 kernel, but a 32-bit process,
-	# we need to use the x32 or i386 syscall numbers.
-	if ($machine eq 'x86_64') {
-	    my $s = $Config{cppsymbols};
-	    $machine = ($s =~ /\b__ILP32__=1\b/ && $s =~ /\b__x86_64__=1\b/) ?
+	if ($Config{ptrsize} == 4) {
+		# if we're running on an x86_64 kernel, but a 32-bit process,
+		# we need to use the x32 or i386 syscall numbers.
+		if ($machine eq 'x86_64') {
+			my $s = $Config{cppsymbols};
+			$machine = ($s =~ /\b__ILP32__=1\b/ &&
+					$s =~ /\b__x86_64__=1\b/) ?
 				'x32' : 'i386'
-	} elsif ($machine eq 'mips64') { # similarly for mips64 vs mips
-	    $machine = 'mips';
+		} elsif ($machine eq 'mips64') { # similarly for mips64 vs mips
+			$machine = 'mips';
+		}
 	}
-    }
-
-    if ($machine =~ m/^i[3456]86$/) {
-        $SYS_epoll_create = 254;
-        $SYS_epoll_ctl    = 255;
-        $SYS_epoll_wait   = 256;
-        $SYS_signalfd4 = 327;
-        $SYS_renameat2 //= 353;
-	$SYS_fstatfs = 100;
-	$SYS_sendmsg = 370;
-	$SYS_recvmsg = 372;
-	$INOTIFY = { # usage: `use constant $PublicInbox::Syscall::INOTIFY'
-		SYS_inotify_init1 => 332,
-		SYS_inotify_add_watch => 292,
-		SYS_inotify_rm_watch => 293,
-	};
-	$FS_IOC_GETFLAGS = 0x80046601;
-	$FS_IOC_SETFLAGS = 0x40046602;
-    } elsif ($machine eq "x86_64") {
-        $SYS_epoll_create = 213;
-        $SYS_epoll_ctl    = 233;
-        $SYS_epoll_wait   = 232;
-        $SYS_signalfd4 = 289;
-	$SYS_renameat2 //= 316;
-	$SYS_fstatfs = 138;
-	$SYS_sendmsg = 46;
-	$SYS_recvmsg = 47;
-	$INOTIFY = {
-		SYS_inotify_init1 => 294,
-		SYS_inotify_add_watch => 254,
-		SYS_inotify_rm_watch => 255,
-	};
-	$FS_IOC_GETFLAGS = 0x80086601;
-	$FS_IOC_SETFLAGS = 0x40086602;
-    } elsif ($machine eq 'x32') {
-        $SYS_epoll_create = 1073742037;
-        $SYS_epoll_ctl = 1073742057;
-        $SYS_epoll_wait = 1073742056;
-        $SYS_signalfd4 = 1073742113;
-	$SYS_renameat2 //= 0x40000000 + 316;
-	$SYS_fstatfs = 138;
-	$SYS_sendmsg = 0x40000206;
-	$SYS_recvmsg = 0x40000207;
-	$FS_IOC_GETFLAGS = 0x80046601;
-	$FS_IOC_SETFLAGS = 0x40046602;
-	$INOTIFY = {
-		SYS_inotify_init1 => 1073742118,
-		SYS_inotify_add_watch => 1073742078,
-		SYS_inotify_rm_watch => 1073742079,
-	};
-    } elsif ($machine eq 'sparc64') {
-	$SYS_epoll_create = 193;
-	$SYS_epoll_ctl = 194;
-	$SYS_epoll_wait = 195;
-	$u64_mod_8 = 1;
-	$SYS_signalfd4 = 317;
-	$SYS_renameat2 //= 345;
-	$SFD_CLOEXEC = 020000000;
-	$SYS_fstatfs = 158;
-	$SYS_sendmsg = 114;
-	$SYS_recvmsg = 113;
-	$FS_IOC_GETFLAGS = 0x40086601;
-	$FS_IOC_SETFLAGS = 0x80086602;
-    } elsif ($machine =~ m/^parisc/) {
-        $SYS_epoll_create = 224;
-        $SYS_epoll_ctl    = 225;
-        $SYS_epoll_wait   = 226;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 309;
-        $SIGNUM{WINCH} = 23;
-    } elsif ($machine =~ m/^ppc64/) {
-        $SYS_epoll_create = 236;
-        $SYS_epoll_ctl    = 237;
-        $SYS_epoll_wait   = 238;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 313;
-	$SYS_renameat2 //= 357;
-	$SYS_fstatfs = 100;
-	$SYS_sendmsg = 341;
-	$SYS_recvmsg = 342;
-	$FS_IOC_GETFLAGS = 0x40086601;
-	$FS_IOC_SETFLAGS = 0x80086602;
-	$INOTIFY = {
-		SYS_inotify_init1 => 318,
-		SYS_inotify_add_watch => 276,
-		SYS_inotify_rm_watch => 277,
-	};
-    } elsif ($machine eq "ppc") {
-        $SYS_epoll_create = 236;
-        $SYS_epoll_ctl    = 237;
-        $SYS_epoll_wait   = 238;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 313;
-	$SYS_renameat2 //= 357;
-	$SYS_fstatfs = 100;
-	$FS_IOC_GETFLAGS = 0x40086601;
-	$FS_IOC_SETFLAGS = 0x80086602;
-    } elsif ($machine =~ m/^s390/) { # untested, no machine on cfarm
-        $SYS_epoll_create = 249;
-        $SYS_epoll_ctl    = 250;
-        $SYS_epoll_wait   = 251;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 322;
-	$SYS_renameat2 //= 347;
-	$SYS_fstatfs = 100;
-	$SYS_sendmsg = 370;
-	$SYS_recvmsg = 372;
-    } elsif ($machine eq 'ia64') { # untested, no machine on cfarm
-        $SYS_epoll_create = 1243;
-        $SYS_epoll_ctl    = 1244;
-        $SYS_epoll_wait   = 1245;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 289;
-    } elsif ($machine eq "alpha") { # untested, no machine on cfarm
-        # natural alignment, ints are 32-bits
-        $SYS_epoll_create = 407;
-        $SYS_epoll_ctl    = 408;
-        $SYS_epoll_wait   = 409;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 484;
-	$SFD_CLOEXEC = 010000000;
-    } elsif ($machine =~ /\A(?:loong|a)arch64\z/ || $machine eq 'riscv64') {
-        $SYS_epoll_create = 20;  # (sys_epoll_create1)
-        $SYS_epoll_ctl    = 21;
-        $SYS_epoll_wait   = 22;  # (sys_epoll_pwait)
-        $u64_mod_8        = 1;
-        $no_deprecated    = 1;
-        $SYS_signalfd4 = 74;
-	$SYS_renameat2 //= 276;
-	$SYS_fstatfs = 44;
-	$SYS_sendmsg = 211;
-	$SYS_recvmsg = 212;
-	$INOTIFY = {
-		SYS_inotify_init1 => 26,
-		SYS_inotify_add_watch => 27,
-		SYS_inotify_rm_watch => 28,
-	};
-	$FS_IOC_GETFLAGS = 0x80086601;
-	$FS_IOC_SETFLAGS = 0x40086602;
-    } elsif ($machine =~ m/arm(v\d+)?.*l/) { # ARM OABI (untested on cfarm)
-        $SYS_epoll_create = 250;
-        $SYS_epoll_ctl    = 251;
-        $SYS_epoll_wait   = 252;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 355;
-	$SYS_renameat2 //= 382;
-	$SYS_fstatfs = 100;
-	$SYS_sendmsg = 296;
-	$SYS_recvmsg = 297;
-    } elsif ($machine =~ m/^mips64/) { # cfarm only has 32-bit userspace
-        $SYS_epoll_create = 5207;
-        $SYS_epoll_ctl    = 5208;
-        $SYS_epoll_wait   = 5209;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 5283;
-	$SYS_renameat2 //= 5311;
-	$SYS_fstatfs = 5135;
-	$SYS_sendmsg = 5045;
-	$SYS_recvmsg = 5046;
-	$FS_IOC_GETFLAGS = 0x40046601;
-	$FS_IOC_SETFLAGS = 0x80046602;
-    } elsif ($machine =~ m/^mips/) { # 32-bit, tested on mips64 cfarm machine
-        $SYS_epoll_create = 4248;
-        $SYS_epoll_ctl    = 4249;
-        $SYS_epoll_wait   = 4250;
-        $u64_mod_8        = 1;
-        $SYS_signalfd4 = 4324;
-	$SYS_renameat2 //= 4351;
-	$SYS_fstatfs = 4100;
-	$SYS_sendmsg = 4179;
-	$SYS_recvmsg = 4177;
-	$FS_IOC_GETFLAGS = 0x40046601;
-	$FS_IOC_SETFLAGS = 0x80046602;
-	$SIGNUM{WINCH} = 20;
-	$INOTIFY = {
-		SYS_inotify_init1 => 4329,
-		SYS_inotify_add_watch => 4285,
-		SYS_inotify_rm_watch => 4286,
-	};
-    } else {
-        warn <<EOM;
+	if ($machine =~ m/^i[3456]86$/) {
+		$SYS_epoll_create = 254;
+		$SYS_epoll_ctl = 255;
+		$SYS_epoll_wait = 256;
+		$SYS_signalfd4 = 327;
+		$SYS_renameat2 //= 353;
+		$SYS_fstatfs = 100;
+		$SYS_sendmsg = 370;
+		$SYS_recvmsg = 372;
+		$INOTIFY = { # usage: `use constant $PublicInbox::Syscall::INOTIFY'
+			SYS_inotify_init1 => 332,
+			SYS_inotify_add_watch => 292,
+			SYS_inotify_rm_watch => 293,
+		};
+		$FS_IOC_GETFLAGS = 0x80046601;
+		$FS_IOC_SETFLAGS = 0x40046602;
+	} elsif ($machine eq "x86_64") {
+		$SYS_epoll_create = 213;
+		$SYS_epoll_ctl = 233;
+		$SYS_epoll_wait = 232;
+		$SYS_signalfd4 = 289;
+		$SYS_renameat2 //= 316;
+		$SYS_fstatfs = 138;
+		$SYS_sendmsg = 46;
+		$SYS_recvmsg = 47;
+		$INOTIFY = {
+			SYS_inotify_init1 => 294,
+			SYS_inotify_add_watch => 254,
+			SYS_inotify_rm_watch => 255,
+		};
+		$FS_IOC_GETFLAGS = 0x80086601;
+		$FS_IOC_SETFLAGS = 0x40086602;
+	} elsif ($machine eq 'x32') {
+		$SYS_epoll_create = 1073742037;
+		$SYS_epoll_ctl = 1073742057;
+		$SYS_epoll_wait = 1073742056;
+		$SYS_signalfd4 = 1073742113;
+		$SYS_renameat2 //= 0x40000000 + 316;
+		$SYS_fstatfs = 138;
+		$SYS_sendmsg = 0x40000206;
+		$SYS_recvmsg = 0x40000207;
+		$FS_IOC_GETFLAGS = 0x80046601;
+		$FS_IOC_SETFLAGS = 0x40046602;
+		$INOTIFY = {
+			SYS_inotify_init1 => 1073742118,
+			SYS_inotify_add_watch => 1073742078,
+			SYS_inotify_rm_watch => 1073742079,
+		};
+	} elsif ($machine eq 'sparc64') {
+		$SYS_epoll_create = 193;
+		$SYS_epoll_ctl = 194;
+		$SYS_epoll_wait = 195;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 317;
+		$SYS_renameat2 //= 345;
+		$SFD_CLOEXEC = 020000000;
+		$SYS_fstatfs = 158;
+		$SYS_sendmsg = 114;
+		$SYS_recvmsg = 113;
+		$FS_IOC_GETFLAGS = 0x40086601;
+		$FS_IOC_SETFLAGS = 0x80086602;
+	} elsif ($machine =~ m/^parisc/) { # untested, no machine on cfarm
+		$SYS_epoll_create = 224;
+		$SYS_epoll_ctl = 225;
+		$SYS_epoll_wait = 226;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 309;
+		$SIGNUM{WINCH} = 23;
+	} elsif ($machine =~ m/^ppc64/) {
+		$SYS_epoll_create = 236;
+		$SYS_epoll_ctl = 237;
+		$SYS_epoll_wait = 238;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 313;
+		$SYS_renameat2 //= 357;
+		$SYS_fstatfs = 100;
+		$SYS_sendmsg = 341;
+		$SYS_recvmsg = 342;
+		$FS_IOC_GETFLAGS = 0x40086601;
+		$FS_IOC_SETFLAGS = 0x80086602;
+		$INOTIFY = {
+			SYS_inotify_init1 => 318,
+			SYS_inotify_add_watch => 276,
+			SYS_inotify_rm_watch => 277,
+		};
+	} elsif ($machine eq "ppc") { # untested, no machine on cfarm
+		$SYS_epoll_create = 236;
+		$SYS_epoll_ctl = 237;
+		$SYS_epoll_wait = 238;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 313;
+		$SYS_renameat2 //= 357;
+		$SYS_fstatfs = 100;
+		$FS_IOC_GETFLAGS = 0x40086601;
+		$FS_IOC_SETFLAGS = 0x80086602;
+	} elsif ($machine =~ m/^s390/) { # untested, no machine on cfarm
+		$SYS_epoll_create = 249;
+		$SYS_epoll_ctl = 250;
+		$SYS_epoll_wait = 251;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 322;
+		$SYS_renameat2 //= 347;
+		$SYS_fstatfs = 100;
+		$SYS_sendmsg = 370;
+		$SYS_recvmsg = 372;
+	} elsif ($machine eq 'ia64') { # untested, no machine on cfarm
+		$SYS_epoll_create = 1243;
+		$SYS_epoll_ctl = 1244;
+		$SYS_epoll_wait = 1245;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 289;
+	} elsif ($machine eq "alpha") { # untested, no machine on cfarm
+		# natural alignment, ints are 32-bits
+		$SYS_epoll_create = 407;
+		$SYS_epoll_ctl = 408;
+		$SYS_epoll_wait = 409;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 484;
+		$SFD_CLOEXEC = 010000000;
+	} elsif ($machine =~ /\A(?:loong|a)arch64\z/ || $machine eq 'riscv64') {
+		$SYS_epoll_create = 20; # (sys_epoll_create1)
+		$SYS_epoll_ctl = 21;
+		$SYS_epoll_wait = 22; # (sys_epoll_pwait)
+		$u64_mod_8 = 1;
+		$no_deprecated = 1;
+		$SYS_signalfd4 = 74;
+		$SYS_renameat2 //= 276;
+		$SYS_fstatfs = 44;
+		$SYS_sendmsg = 211;
+		$SYS_recvmsg = 212;
+		$INOTIFY = {
+			SYS_inotify_init1 => 26,
+			SYS_inotify_add_watch => 27,
+			SYS_inotify_rm_watch => 28,
+		};
+		$FS_IOC_GETFLAGS = 0x80086601;
+		$FS_IOC_SETFLAGS = 0x40086602;
+	} elsif ($machine =~ m/arm(v\d+)?.*l/) { # ARM OABI (untested on cfarm)
+		$SYS_epoll_create = 250;
+		$SYS_epoll_ctl = 251;
+		$SYS_epoll_wait = 252;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 355;
+		$SYS_renameat2 //= 382;
+		$SYS_fstatfs = 100;
+		$SYS_sendmsg = 296;
+		$SYS_recvmsg = 297;
+	} elsif ($machine =~ m/^mips64/) { # cfarm only has 32-bit userspace
+		$SYS_epoll_create = 5207;
+		$SYS_epoll_ctl = 5208;
+		$SYS_epoll_wait = 5209;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 5283;
+		$SYS_renameat2 //= 5311;
+		$SYS_fstatfs = 5135;
+		$SYS_sendmsg = 5045;
+		$SYS_recvmsg = 5046;
+		$FS_IOC_GETFLAGS = 0x40046601;
+		$FS_IOC_SETFLAGS = 0x80046602;
+	} elsif ($machine =~ m/^mips/) { # 32-bit, tested on mips64 cfarm host
+		$SYS_epoll_create = 4248;
+		$SYS_epoll_ctl = 4249;
+		$SYS_epoll_wait = 4250;
+		$u64_mod_8 = 1;
+		$SYS_signalfd4 = 4324;
+		$SYS_renameat2 //= 4351;
+		$SYS_fstatfs = 4100;
+		$SYS_sendmsg = 4179;
+		$SYS_recvmsg = 4177;
+		$FS_IOC_GETFLAGS = 0x40046601;
+		$FS_IOC_SETFLAGS = 0x80046602;
+		$SIGNUM{WINCH} = 20;
+		$INOTIFY = {
+			SYS_inotify_init1 => 4329,
+			SYS_inotify_add_watch => 4285,
+			SYS_inotify_rm_watch => 4286,
+		};
+	} else {
+		warn <<EOM;
 machine=$machine ptrsize=$Config{ptrsize} has no syscall definitions
 git clone https://80x24.org/public-inbox.git and
 Send the output of ./devel/sysdefs-list to meta\@public-inbox.org
 EOM
-    }
-    if ($u64_mod_8) {
-        *epoll_wait = \&epoll_wait_mod8;
-        *epoll_ctl = \&epoll_ctl_mod8;
-    } else {
-        *epoll_wait = \&epoll_wait_mod4;
-        *epoll_ctl = \&epoll_ctl_mod4;
-    }
+	}
+	if ($u64_mod_8) {
+		*epoll_wait = \&epoll_wait_mod8;
+		*epoll_ctl = \&epoll_ctl_mod8;
+	} else {
+		*epoll_wait = \&epoll_wait_mod4;
+		*epoll_ctl = \&epoll_ctl_mod4;
+	}
 }
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
@@ -291,10 +291,6 @@ $INOTIFY->{IN_CLOEXEC} //= 0x80000 if $INOTIFY;
 # use devel/sysdefs-list on Linux to detect new syscall numbers and
 # other system constants
 
-############################################################################
-# epoll functions
-############################################################################
-
 sub epoll_create {
 	syscall($SYS_epoll_create, $no_deprecated ? 0 : 100);
 }
@@ -302,10 +298,13 @@ sub epoll_create {
 # epoll_ctl wrapper
 # ARGS: (epfd, op, fd, events_mask)
 sub epoll_ctl_mod4 {
-    syscall($SYS_epoll_ctl, $_[0]+0, $_[1]+0, $_[2]+0, pack("LLL", $_[3], $_[2], 0));
+	syscall($SYS_epoll_ctl, $_[0]+0, $_[1]+0, $_[2]+0,
+		pack("LLL", $_[3], $_[2], 0));
 }
+
 sub epoll_ctl_mod8 {
-    syscall($SYS_epoll_ctl, $_[0]+0, $_[1]+0, $_[2]+0, pack("LLLL", $_[3], 0, $_[2], 0));
+	syscall($SYS_epoll_ctl, $_[0]+0, $_[1]+0, $_[2]+0,
+		pack("LLLL", $_[3], 0, $_[2], 0));
 }
 
 # epoll_wait wrapper
