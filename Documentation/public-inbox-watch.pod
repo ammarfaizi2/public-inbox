@@ -48,9 +48,11 @@ of large Maildirs.
 Upon startup, it scans the mailbox for new messages to be
 imported while it was not running.
 
-As of public-inbox 1.6.0, Maildirs, IMAP folders, and NNTP
-newsgroups are supported.  Previous versions of public-inbox
-only supported Maildirs.
+All versions of public-inbox-watch support Maildirs.  public-inbox
+1.6.0 added support for IMAP folders and NNTP newsgroups.
+public-inbox 2.0 adds support for MH directories.  There are no
+plans to support the mbox family since new messages are expensive
+to detect in large mboxes.
 
 public-inbox-watch should be run inside a L<screen(1)> session
 or as a L<systemd(1)> service.  Errors are emitted to stderr.
@@ -84,12 +86,16 @@ C<imap://> and C<imaps://> URLs:
 		watch = nntp://news.example.com/inbox.test.group
 		watch = imaps://user@mail.example.com/INBOX.test
 
+2.0+ supports MH:
+
+		watch = mh:/path/to/MH/inbox.test
+
 This may be specified multiple times to combine several mailboxes
 into a single public-inbox.  URLs requiring authentication
 will require L<netrc(5)> and/or L<git-credential(1)> (preferred) to fill
 in the username and password.
 
-public-inbox 2.0+ supports boolean C<false> to prevent the global
+public-inbox 2.0+ also supports boolean C<false> to prevent the global
 L</publicinboxwatch.watchspam> directive from writing to the inbox.
 
 Default: none
@@ -127,7 +133,7 @@ Messages without the (S)een flag are not considered for hiding.
 This hiding affects all configured public-inboxes in PI_CONFIG.
 
 As with C<publicinbox.$NAME.watch>, C<imap://> and C<imaps://> URLs
-are supported in public-inbox 1.6.0+.
+are supported in public-inbox 1.6.0+, and C<MH> in 2.0+.
 
 Default: none; only for L<public-inbox-watch(1)> users
 

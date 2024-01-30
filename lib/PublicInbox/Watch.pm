@@ -16,6 +16,7 @@ use PublicInbox::DS qw(now add_timer awaitpid);
 use PublicInbox::MID qw(mids);
 use PublicInbox::ContentHash qw(content_hash);
 use POSIX qw(_exit WNOHANG);
+use constant { D_MAILDIR => 1, D_MH => 2 };
 
 sub compile_watchheaders ($) {
 	my ($ibx) = @_;
@@ -40,9 +41,22 @@ sub compile_watchheaders ($) {
 	$ibx->{-watchheaders} = $watch_hdrs if scalar @$watch_hdrs;
 }
 
+sub d_type_set ($$$) {
+	my ($d_type, $dir, $is) = @_;
+	my $isnt = D_MAILDIR;
+	if ($is == D_MAILDIR) {
+		$isnt = D_MH;
+		$d_type->{"$dir/cur"} |= $is;
+		$d_type->{"$dir/new"} |= $is;
+	}
+	warn <<EOM if ($d_type->{$dir} |= $is) & $isnt;
+W: `$dir' is both Maildir and MH (non-fatal)
+EOM
+}
+
 sub new {
 	my ($class, $cfg) = @_;
-	my (%mdmap);
+	my (%d_map, %d_type);
 	my (%imap, %nntp); # url => [inbox objects] or 'watchspam'
 	my (@imap, @nntp);
 	PublicInbox::Import::load_config($cfg);
@@ -57,7 +71,11 @@ sub new {
 			my $uri;
 			if (is_maildir($dir)) {
 				# skip "new", no MUA has seen it, yet.
-				$mdmap{"$dir/cur"} = 'watchspam';
+				$d_map{"$dir/cur"} = 'watchspam';
+				d_type_set \%d_type, $dir, D_MAILDIR;
+			} elsif (is_mh($dir)) {
+				$d_map{$dir} = 'watchspam';
+				d_type_set \%d_type, $dir, D_MH;
 			} elsif ($uri = imap_uri($dir)) {
 				$imap{$$uri} = 'watchspam';
 				push @imap, $uri;
@@ -69,7 +87,6 @@ sub new {
 			}
 		}
 	}
-
 	my $k = 'publicinboxwatch.spamcheck';
 	my $default = undef;
 	my $spamcheck = PublicInbox::Spamcheck::get($cfg, $k, $default);
@@ -91,10 +108,17 @@ sub new {
 			} elsif (is_maildir($watch)) {
 				compile_watchheaders($ibx);
 				my ($new, $cur) = ("$watch/new", "$watch/cur");
-				my $cur_dst = $mdmap{$cur} //= [];
+				my $cur_dst = $d_map{$cur} //= [];
 				return if is_watchspam($cur, $cur_dst, $ibx);
-				push @{$mdmap{$new} //= []}, $ibx;
+				push @{$d_map{$new} //= []}, $ibx;
 				push @$cur_dst, $ibx;
+				d_type_set \%d_type, $watch, D_MAILDIR;
+			} elsif (is_mh($watch)) {
+				my $cur_dst = $d_map{$watch} //= [];
+				return if is_watchspam($watch, $cur_dst, $ibx);
+				compile_watchheaders($ibx);
+				push(@$cur_dst, $ibx);
+				d_type_set \%d_type, $watch, D_MH;
 			} elsif ($uri = imap_uri($watch)) {
 				my $cur_dst = $imap{$$uri} //= [];
 				return if is_watchspam($uri, $cur_dst, $ibx);
@@ -111,18 +135,19 @@ sub new {
 		}
 	});
 
-	my $mdre;
-	if (scalar keys %mdmap) {
-		$mdre = join('|', map { quotemeta($_) } keys %mdmap);
-		$mdre = qr!\A($mdre)/!;
+	my $d_re;
+	if (scalar keys %d_map) {
+		$d_re = join('|', map quotemeta, keys %d_map);
+		$d_re = qr!\A($d_re)/!;
 	}
-	return unless $mdre || scalar(keys %imap) || scalar(keys %nntp);
+	return unless $d_re || scalar(keys %imap) || scalar(keys %nntp);
 
 	bless {
 		max_batch => 10, # avoid hogging locks for too long
 		spamcheck => $spamcheck,
-		mdmap => \%mdmap,
-		mdre => $mdre,
+		d_map => \%d_map,
+		d_re => $d_re,
+		d_type => \%d_type,
 		pi_cfg => $cfg,
 		imap => scalar keys %imap ? \%imap : undef,
 		nntp => scalar keys %nntp? \%nntp : undef,
@@ -220,17 +245,23 @@ sub import_eml ($$$) {
 
 sub _try_path {
 	my ($self, $path) = @_;
-	my $fl = PublicInbox::MdirReader::maildir_path_flags($path) // return;
-	return if $fl =~ /[DT]/; # no Drafts or Trash
-	if ($path !~ $self->{mdre}) {
-		warn "unrecognized path: $path\n";
-		return;
+	$path =~ $self->{d_re} or
+		return warn("BUG? unrecognized path: $path\n");
+	my $dir = $1;
+	my $inboxes = $self->{d_map}->{$dir} //
+		return warn("W: unmappable dir: $dir\n");
+	my ($md_fl, $mh_seq);
+	if ($self->{d_type}->{$dir} & D_MH) {
+		$path =~ m!/([0-9]+)\z! ? ($mh_seq = $1) : return;
 	}
-	my $inboxes = $self->{mdmap}->{$1};
-	unless ($inboxes) {
-		warn "unmappable dir: $1\n";
-		return;
-	}
+	$self->{d_type}->{$dir} & D_MAILDIR and
+		$md_fl = PublicInbox::MdirReader::maildir_path_flags($path);
+	$md_fl // $mh_seq // return;
+	return if ($md_fl // '') =~ /[DT]/; # no Drafts or Trash
+	# n.b. none of the MH keywords are relevant for public mail,
+	# mh_seq is only used to validate we're reading an email
+	# and not treating .mh_sequences as an email
+
 	my $warn_cb = $SIG{__WARN__} || \&CORE::warn;
 	local $SIG{__WARN__} = sub {
 		my $pfx = ($_[0] // '') =~ /^([A-Z]: )/g ? $1 : '';
@@ -288,7 +319,7 @@ sub watch_fs_init ($) {
 	require PublicInbox::DirIdle;
 	# inotify_create + EPOLL_CTL_ADD
 	my $dir_idle = $self->{dir_idle} = PublicInbox::DirIdle->new($cb);
-	$dir_idle->add_watches([keys %{$self->{mdmap}}]);
+	$dir_idle->add_watches([keys %{$self->{d_map}}]);
 }
 
 sub net_cb { # NetReader::(nntp|imap)_each callback
@@ -437,7 +468,7 @@ sub event_step {
 		};
 		die $@ if $@;
 	}
-	fs_scan_step($self) if $self->{mdre};
+	fs_scan_step($self) if $self->{d_re};
 }
 
 sub watch_imap_fetch_all ($$) {
@@ -541,7 +572,7 @@ sub watch { # main entry point
 		# poll all URIs for a given interval sequentially
 		add_timer(0, \&poll_fetch_fork, $self, $intvl, $uris);
 	}
-	watch_fs_init($self) if $self->{mdre};
+	watch_fs_init($self) if $self->{d_re};
 	local @PublicInbox::DS::post_loop_do = (\&quit_inprogress, $self);
 	PublicInbox::DS::event_loop($first_sig); # calls ->event_step
 	_done_for_now($self);
@@ -572,7 +603,7 @@ sub fs_scan_step {
 		$opendirs->{$dir} = $dh if $n < 0;
 	}
 	if ($op && $op eq 'full') {
-		foreach my $dir (keys %{$self->{mdmap}}) {
+		foreach my $dir (keys %{$self->{d_map}}) {
 			next if $opendirs->{$dir}; # already in progress
 			my $ok = opendir(my $dh, $dir);
 			unless ($ok) {
@@ -642,6 +673,13 @@ sub _spamcheck_cb {
 
 sub is_maildir {
 	$_[0] =~ s!\Amaildir:!! or return;
+	$_[0] =~ tr!/!/!s;
+	$_[0] =~ s!/\z!!;
+	$_[0];
+}
+
+sub is_mh {
+	$_[0] =~ s!\Amh:!!i or return;
 	$_[0] =~ tr!/!/!s;
 	$_[0] =~ s!/\z!!;
 	$_[0];

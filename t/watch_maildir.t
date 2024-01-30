@@ -46,7 +46,7 @@ my $sem = PublicInbox::Emergency->new($spamdir); # create dirs
 EOF
 	my $wm = PublicInbox::Watch->new($cfg);
 	is(scalar grep(/is a spam folder/, @w), 1, 'got warning about spam');
-	is_deeply($wm->{mdmap}, { "$spamdir/cur" => 'watchspam' },
+	is_deeply($wm->{d_map}, { "$spamdir/cur" => 'watchspam' },
 		'only got the spam folder to watch');
 }
 
