@@ -31,14 +31,17 @@ sub setup_rlimit {
 		} elsif (scalar(@rlimit) != 2) {
 			warn "could not parse $k: $v\n";
 		}
-		eval { require BSD::Resource };
-		if ($@) {
-			warn "BSD::Resource missing for $rlim";
-			next;
-		}
+		my $inf = $v =~ /\binfinity\b/i ?
+			$PublicInbox::Spawn::RLIMITS{RLIM_INFINITY} // eval {
+				require BSD::Resource;
+				BSD::Resource::RLIM_INFINITY();
+			} // do {
+				warn "BSD::Resource missing for $rlim";
+				next;
+			} : undef;
 		for my $i (0..$#rlimit) {
 			next if $rlimit[$i] ne 'INFINITY';
-			$rlimit[$i] = BSD::Resource::RLIM_INFINITY();
+			$rlimit[$i] = $inf;
 		}
 		$self->{$rlim} = \@rlimit;
 	}

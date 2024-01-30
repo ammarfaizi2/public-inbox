@@ -22,6 +22,7 @@ use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
 use PublicInbox::MultiGit;
+use PublicInbox::Spawn ();
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(prepare_stack is_ancestor is_bad_blob);
 use PublicInbox::OverIdx;

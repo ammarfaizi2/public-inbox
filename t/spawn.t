@@ -6,7 +6,7 @@ use Test::More;
 use PublicInbox::Spawn qw(which spawn popen_rd run_qx);
 require PublicInbox::Sigfd;
 require PublicInbox::DS;
-
+my $rlimit_map = PublicInbox::Spawn->can('rlimit_map');
 {
 	my $true = which('true');
 	ok($true, "'true' command found with which()");
@@ -192,14 +192,19 @@ EOF
 }
 
 SKIP: {
-	eval {
-		require BSD::Resource;
-		defined(BSD::Resource::RLIMIT_CPU())
-	} or skip 'BSD::Resource::RLIMIT_CPU missing', 3;
+	if ($rlimit_map) { # Inline::C installed
+		my %rlim = $rlimit_map->();
+		ok defined($rlim{RLIMIT_CPU}), 'RLIMIT_CPU defined';
+	} else {
+		eval {
+			require BSD::Resource;
+			defined(BSD::Resource::RLIMIT_CPU())
+		} or skip 'BSD::Resource::RLIMIT_CPU missing', 3;
+	}
 	my $cmd = [ $^X, qw(-w -e), <<'EOM' ];
 use POSIX qw(:signal_h);
-use BSD::Resource qw(times);
 use Time::HiRes qw(time); # gettimeofday
+my $have_bsd_resource = eval { require BSD::Resource };
 my $set = POSIX::SigSet->new;
 $set->emptyset; # spawn() defaults to blocking all signals
 sigprocmask(SIG_SETMASK, $set) or die "SIG_SETMASK: $!";
@@ -211,10 +216,10 @@ while (1) {
 	# and `write' (via Perl warn)) on otherwise idle systems to
 	# hit RLIMIT_CPU and fire signals:
 	# https://marc.info/?i=02A4BB8D-313C-464D-845A-845EB6136B35@gmail.com
-	my @t = times;
+	my @t = $have_bsd_resource ? BSD::Resource::times() : (0, 0);
 	$tot = $t[0] + $t[1];
 	if (time > $next) {
-		warn "# T: @t (utime, ctime, cutime, cstime)\n";
+		warn "# T: @t (utime, ctime, cutime, cstime)\n" if @t;
 		$next = time + 1.1;
 	}
 }

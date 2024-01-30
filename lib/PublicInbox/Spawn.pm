@@ -21,10 +21,11 @@ use IO::Handle ();
 use Carp qw(croak);
 use PublicInbox::IO;
 our @EXPORT_OK = qw(which spawn popen_rd popen_wr run_die run_wait run_qx);
-our @RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
+our (@RLIMITS, %RLIMITS);
 use autodie qw(close open pipe seek sysseek truncate);
 
 BEGIN {
+	@RLIMITS = qw(RLIMIT_CPU RLIMIT_CORE RLIMIT_DATA);
 	my $all_libc = <<'ALL_LIBC'; # all *nix systems we support
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -283,14 +284,28 @@ void recv_cmd4(PerlIO *s, SV *buf, STRLEN n)
 	Inline_Stack_Done;
 }
 #endif /* defined(CMSG_SPACE) && defined(CMSG_LEN) */
-ALL_LIBC
 
+void rlimit_map()
+{
+	Inline_Stack_Vars;
+	Inline_Stack_Reset;
+ALL_LIBC
 	my $inline_dir = $ENV{PERL_INLINE_DIRECTORY} // (
 			$ENV{XDG_CACHE_HOME} //
 			( ($ENV{HOME} // '/nonexistent').'/.cache' )
 		).'/public-inbox/inline-c';
 	undef $all_libc unless -d $inline_dir;
 	if (defined $all_libc) {
+		for (@RLIMITS, 'RLIM_INFINITY') {
+			$all_libc .= <<EOM;
+	Inline_Stack_Push(sv_2mortal(newSVpvs("$_")));
+	Inline_Stack_Push(sv_2mortal(newSViv($_)));
+EOM
+		}
+		$all_libc .= <<EOM;
+	Inline_Stack_Done;
+} // rlimit_map
+EOM
 		local $ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		# CentOS 7.x ships Inline 0.53, 0.64+ has built-in locking
 		my $lk = PublicInbox::Lock->new($inline_dir.
@@ -316,6 +331,7 @@ ALL_LIBC
 	}
 	if (defined $all_libc) { # set for Gcf2
 		$ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
+		%RLIMITS = rlimit_map();
 	} else {
 		require PublicInbox::SpawnPP;
 		*pi_fork_exec = \&PublicInbox::SpawnPP::pi_fork_exec
@@ -361,11 +377,12 @@ sub spawn ($;$$) {
 	my $rlim = [];
 	foreach my $l (@RLIMITS) {
 		my $v = $opt->{$l} // next;
-		my $r = eval "require BSD::Resource; BSD::Resource::$l();";
-		unless (defined $r) {
-			warn "$l undefined by BSD::Resource: $@\n";
-			next;
-		}
+		my $r = $RLIMITS{$l} //
+			eval "require BSD::Resource; BSD::Resource::$l();" //
+			do {
+				warn "$l undefined by BSD::Resource: $@\n";
+				next;
+			};
 		push @$rlim, $r, @$v;
 	}
 	my $cd = $opt->{'-C'} // ''; # undef => NULL mapping doesn't work?
