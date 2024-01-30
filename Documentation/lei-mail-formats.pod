@@ -83,9 +83,19 @@ mbox.
 
 =head1 MH
 
-Not yet supported, locking semantics (or lack thereof) appear to
-make it unsuitable for parallel access.  It is widely-supported
-by a variety of MUAs and mailing list managers, however.
+Preliminary support for reads as of 2.0.0.  Locking semantics differ
+incompatibly amongst existing writers: Python and nmh appear
+compatible with each other, while mutt appears racy and unsuitable
+for parallel access due to rename(2) potentially clobbering the
+C<.mh_sequences> file.  More info about other clients is greatly
+appreciated.
+
+Sequence numbers may be packed and reused by some writers, so lei
+users may need to run L<lei-refresh-mail-sync(1)> if inotify|kevent
+missed packing while L<lei-daemon(8)> wasn't running.
+
+lei is safe for reading mlmmj archives as MH since mlmmj neither
+packs nor uses a .mh_sequences file to store state.
 
 =head1 MMDF
 
