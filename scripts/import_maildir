@@ -1,21 +1,29 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2014, Eric Wong <e@80x24.org> and all contributors
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-#
-# Script to import a Maildir into a public-inbox
 =begin usage
+Ancient script to import a Maildir into a v1 public-inbox
+
+	# this is only if you want a v1 inbox
 	export GIT_DIR=/path/to/your/repo.git
 	export GIT_AUTHOR_EMAIL='list@example.com'
 	export GIT_AUTHOR_NAME='list name'
 	./import_maildir /path/to/maildir/
+
+For v2 (strongly recommended), use:
+
+	lei convert /path/to/maildir -o /path/to/v2-inbox
+	# (and `lei daemon-kill' if you don't want the daemon to linger)
 =cut
-use strict;
-use warnings;
+use v5.12;
 use Date::Parse qw/str2time/;
 use PublicInbox::Eml;
 use PublicInbox::Git;
 use PublicInbox::Import;
-sub usage { "Usage:\n".join('', grep(/\t/, `head -n 24 $0`)) }
+sub usage {
+	open my $fh, '<', __FILE__;
+	("Usage:\n", grep { /^=begin usage/../^=cut/ and !/^=/m } <$fh>);
+}
 my $dir = shift @ARGV or die usage();
 my $git_dir = `git rev-parse --git-dir`;
 chomp $git_dir;
