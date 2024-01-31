@@ -1,51 +1,55 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2013-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-#
-# One-off script to convert an slrnpull news spool to Maildir
 =begin usage
+One-off script to convert an slrnpull spool from gmane to Maildir
+Note: this contains Gmane-specific header munging to workaround
+the munging done by Gmane.
+
 	./slrnspool2maildir SLRNPULL_ROOT/news/foo/bar /path/to/maildir/
+
+A generic replacement w/o Gmane-specific munging could treat
+the slrnpull spool as an MH folder with lei:
+
+	lei convert mh:SLRNPULL_ROOT/news/foo/bar -o /path/to/maildir
+	# (and `lei daemon-kill' if you don't want the daemon to linger)
 =cut
-use strict;
-use warnings;
-use Email::Filter;
-use Email::LocalDelivery;
-use File::Glob qw(bsd_glob GLOB_NOSORT);
-sub usage { "Usage:\n".join('',grep(/\t/, `head -n 12 $0`)) }
+use v5.12;
+use autodie;
+# warning: unstable internal APIs:
+use PublicInbox::Eml;
+use PublicInbox::LeiToMail;
+use PublicInbox::MHreader;
+use PublicInbox::IO qw(read_all);
+use File::Path qw(make_path);
+use File::Spec ();
+sub usage {
+	open my $fh, '<', __FILE__;
+	("Usage:\n", grep { /^=begin usage/../^=cut/ and !/^=/m } <$fh>);
+}
 my $spool = shift @ARGV or die usage();
-my $dir = shift @ARGV or die usage();
--d $dir or die "$dir is not a directory\n";
-$dir .= '/' unless $dir =~ m!/\z!;
-foreach my $sub (qw(cur new tmp)) {
-	my $nd = "$dir/$sub";
-	-d $nd and next;
-	mkdir $nd or die "mkdir $nd failed: $!\n";
-}
-
-foreach my $n (grep(/\d+\z/, bsd_glob("$spool/*", GLOB_NOSORT))) {
-	if (open my $fh, '<', $n) {
-		my $f = Email::Filter->new(data => do { local $/; <$fh> });
-		my $s = $f->simple;
-
-		# gmane rewrites Received headers, which increases spamminess
-		# Some older archives set Original-To
-		foreach my $x (qw(Received To)) {
-			my @h = $s->header("Original-$x");
-			if (@h) {
-				$s->header_set($x, @h);
-				$s->header_set("Original-$x");
-			}
+my $dst = shift @ARGV or die usage();
+$dst .= '/' unless $dst =~ m!/\z!;
+File::Path::make_path(map { $dst.$_ } qw(tmp new cur));
+$dst = File::Spec->rel2abs($dst).'/';
+opendir my $cwdfh, '.';
+my $mhr = PublicInbox::MHreader->new($spool, $cwdfh);
+my $smsg;
+$mhr->mh_each_eml(sub {
+	my ($d, $n, $kw, $eml) = @_;
+	# gmane rewrites Received headers, which increases spamminess
+	# Some older archives set Original-To
+	for my $x (qw(Received To)) {
+		my @h = $eml->header_raw("Original-$x");
+		if (@h) {
+			$eml->header_set($x, @h);
+			$eml->header_set("Original-$x");
 		}
-
-		# triggers for the SA HEADER_SPAM rule
-		foreach my $drop (qw(Approved)) { $s->header_set($drop) }
-
-		# appears to be an old gmane bug:
-		$s->header_set('connect()');
-
-		$f->exit(0);
-		$f->accept($dir);
-	} else {
-		warn "Failed to open $n: $!\n";
 	}
-}
+	# `Approved' triggers the SA HEADER_SPAM rule
+	# `connect()' appears to be an old gmane bug:
+	$eml->header_set($_) for ('Approved', 'connect()');
+	my $buf = $eml->as_string;
+	$smsg->{blob} = $n;
+	PublicInbox::LeiToMail::_buf2maildir($dst, \$buf, $smsg, 'new/');
+});
