@@ -16,7 +16,6 @@ use PublicInbox::MsgTime qw(msg_datestamp);
 use PublicInbox::ContentHash qw(content_digest);
 use PublicInbox::MDA;
 use PublicInbox::Eml;
-use PublicInbox::IO;
 use POSIX qw(strftime);
 use autodie qw(socketpair);
 use Carp qw(croak);
