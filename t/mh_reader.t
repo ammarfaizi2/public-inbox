@@ -101,7 +101,14 @@ test_lei(sub {
 	lei_ok qw(index), 'mh:'.$stale;
 	lei qw(q -f mboxrd), 's:msg 4';
 	like $lei_out, qr/^Subject: msg 4\nStatus: RO\n\n\n/ms,
-		"message retrieved after `lei index'"
+		"message retrieved after `lei index'";
+
+	# ensure sort works for _input_ when output disallows sort
+	my $v2out = "$ENV{HOME}/v2-out";
+	lei_ok qw(convert -s sequence), "mh:$for_sort", '-o', "v2:$v2out";
+	my $git = PublicInbox::Git->new("$v2out/git/0.git");
+	chomp(my @l = $git->qx(qw(log --pretty=oneline --format=%s)));
+	is_xdeeply \@l, [1, 22, 333], 'sequence order preserved for v2';
 });
 
 done_testing;

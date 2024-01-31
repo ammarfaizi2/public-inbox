@@ -52,6 +52,7 @@ sub lei_convert { # the main "lei convert" method
 	my ($lei, @inputs) = @_;
 	$lei->{opt}->{kw} //= 1;
 	$lei->{opt}->{dedupe} //= 'none';
+	$lei->{input_opt}->{sort} = 1; # for LeiToMail conflict check
 	my $self = bless {}, __PACKAGE__;
 	my $ovv = PublicInbox::LeiOverview->new($lei, 'out-format');
 	$lei->{l2m} or return

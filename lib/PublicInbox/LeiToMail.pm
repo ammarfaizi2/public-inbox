@@ -451,6 +451,8 @@ EOM
 		(-d $dst || (-e _ && !-w _)) and die
 			"$dst exists and is not a writable file\n";
 	}
+	$lei->{input_opt} and # lei_convert sets this
+		@conflict = grep { !$lei->{input_opt}->{$_} } @conflict;
 	my @err = map { defined($lei->{opt}->{$_}) ? "--$_" : () } @conflict;
 	die "@err incompatible with $fmt\n" if @err;
 	$self->{dst} = $dst;
