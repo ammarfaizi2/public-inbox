@@ -7,6 +7,7 @@ use PublicInbox::IO qw(write_file);
 use PublicInbox::Lock;
 use PublicInbox::OnDestroy;
 use PublicInbox::Eml;
+use File::Path qw(remove_tree);
 use autodie;
 opendir my $cwdfh, '.';
 
@@ -103,12 +104,17 @@ test_lei(sub {
 	like $lei_out, qr/^Subject: msg 4\nStatus: RO\n\n\n/ms,
 		"message retrieved after `lei index'";
 
+	lei_ok qw(convert -s none -f text), "mh:$for_sort", \'--sort=none';
+
 	# ensure sort works for _input_ when output disallows sort
 	my $v2out = "$ENV{HOME}/v2-out";
-	lei_ok qw(convert -s sequence), "mh:$for_sort", '-o', "v2:$v2out";
-	my $git = PublicInbox::Git->new("$v2out/git/0.git");
-	chomp(my @l = $git->qx(qw(log --pretty=oneline --format=%s)));
-	is_xdeeply \@l, [1, 22, 333], 'sequence order preserved for v2';
+	for my $sort (['--sort=sequence'], []) { # sequence is the default
+		lei_ok qw(convert), @$sort, "mh:$for_sort", '-o', "v2:$v2out";
+		my $g = PublicInbox::Git->new("$v2out/git/0.git");
+		chomp(my @l = $g->qx(qw(log --pretty=oneline --format=%s)));
+		is_xdeeply \@l, [1, 22, 333], 'sequence order preserved for v2';
+		File::Path::remove_tree $v2out;
+	}
 });
 
 done_testing;

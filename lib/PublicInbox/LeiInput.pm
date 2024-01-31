@@ -242,7 +242,7 @@ sub input_path_url {
 		}
 	} elsif (-d _ && $ifmt eq 'mh') {
 		my $mhr = PublicInbox::MHreader->new($input.'/', $lei->{3});
-		$mhr->{sort} = $lei->{opt}->{sort};
+		$mhr->{sort} = $lei->{opt}->{sort} // [ 'sequence'];
 		$mhr->mh_each_eml($self->can('input_mh_cb'), $self, @args);
 	} elsif (-d _ && $ifmt =~ /\A(?:v1|v2)\z/) {
 		my $ibx = PublicInbox::Inbox->new({inboxdir => $input});

@@ -54,7 +54,8 @@ sub mh_each_file {
 	opendir(my $dh, my $dir = $self->{dir});
 	my $restore = PublicInbox::OnDestroy->new($$, \&chdir, $self->{cwdfh});
 	chdir($dh);
-	if (defined(my $sort = $self->{sort})) {
+	my $sort = $self->{sort};
+	if (defined $sort && "@$sort" ne 'none') {
 		my @sort = map {
 			my @tmp = $_ eq '' ? ('sequence') : split(/[, ]/);
 			# sorting by name alphabetically makes no sense for MH:
