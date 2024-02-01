@@ -18,18 +18,32 @@ my ($FLOCK_TMPL, @FLOCK_ORDER);
 if ($^O =~ /\A(?:linux|dragonfly)\z/ || $^O =~ /bsd/) {
 	require Config;
 	my $off_t;
+	my @LE_pad = ('', '');
 	my $sz = $Config::Config{lseeksize};
-
-	if ($sz == 8 && eval('length(pack("q", 1)) == 8')) { $off_t = 'q' }
-	elsif ($sz == 4) { $off_t = 'l' }
-	else { warn "sizeof(off_t)=$sz requires File::FcntlLock\n" }
-
+	if ($sz == 8) {
+		if (eval('length(pack("q", 1)) == 8')) {
+			$off_t = 'q';
+		} elsif ($Config::Config{byteorder} == 1234) { # OpenBSD i386
+			$off_t = 'l';
+			@LE_pad = ('@8', '@16');
+		} else { # I have no 32-bit BE machine to test on...
+			warn <<EOM;
+Perl built with 64-bit file support but not 64-bit int (pack("q")) support.
+byteorder=$Config::Config{byteorder}
+EOM
+		}
+	} elsif ($sz == 4) {
+		$off_t = 'l';
+	} else {
+		warn "sizeof(off_t)=$sz requires File::FcntlLock\n"
+	}
 	if (defined($off_t)) {
 		if ($^O eq 'linux') {
-			$FLOCK_TMPL = "ss\@8$off_t$off_t\@32";
+			$FLOCK_TMPL = 'ss@8'.$off_t.$LE_pad[0].$off_t.'@32';
 			@FLOCK_ORDER = qw(l_type l_whence l_start l_len);
 		} else { # *bsd including dragonfly
-			$FLOCK_TMPL = "${off_t}${off_t}lss\@256";
+			$FLOCK_TMPL = $off_t.$LE_pad[0].$off_t.$LE_pad[1].
+					'lss@256';
 			@FLOCK_ORDER = qw(l_start l_len l_pid l_type l_whence);
 		}
 	}

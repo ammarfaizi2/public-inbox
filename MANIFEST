@@ -575,6 +575,7 @@ t/plack-qp.eml
 t/plack.t
 t/pop3d-limit.t
 t/pop3d.t
+t/pop3d_lock.t
 t/precheck.t
 t/psgi_attach.eml
 t/psgi_attach.t
