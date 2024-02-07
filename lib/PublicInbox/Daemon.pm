@@ -143,8 +143,11 @@ sub load_mod ($;$$) {
 		$tlsd->{$f} = $logs{$p} //= open_log_path(my $fh, $p);
 		warn "# $scheme://$addr $f=$p\n";
 	}
+	# for per-listener $SIG{__WARN__}:
 	my $err = $tlsd->{err};
-	$tlsd->{warn_cb} = sub { print $err @_ }; # for local $SIG{__WARN__}
+	$tlsd->{warn_cb} = sub {
+		print $err @_ unless PublicInbox::Eml::warn_ignore(@_)
+	};
 	$opt->{'multi-accept'} and
 		$xn{'multi-accept'} = $opt->{'multi-accept'}->[-1];
 	\%xn;
