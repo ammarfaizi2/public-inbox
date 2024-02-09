@@ -57,7 +57,8 @@ sub ver_check { # git->check_async callback
 		my $qsp = PublicInbox::Qspawn->new(['git', @cfg,
 				"--git-dir=$ctx->{git}->{git_dir}", 'archive',
 				"--prefix=$ctx->{snap_pfx}/",
-				"--format=$ctx->{snap_fmt}", $treeish]);
+				"--format=$ctx->{snap_fmt}", $treeish], undef,
+				{ quiet => 1 });
 		$qsp->psgi_yield($ctx->{env}, undef, \&archive_hdr, $ctx);
 	}
 }
