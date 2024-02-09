@@ -744,7 +744,11 @@ href="d/">diff</a>)</pre><pre>];
 	}
 	my @irt = $eml->header_raw('In-Reply-To');
 	my $refs;
-	if (!@irt) {
+	if (@irt) { # ("so-and-so's message of $DATE") added by some MUAs
+		for (grep(/=\?/, @irt)) {
+			s/(=\?.*)\z/PublicInbox::Eml::mhdr_decode $1/se;
+		}
+	} else {
 		$refs = references($eml);
 		$irt[0] = pop(@$refs) if scalar @$refs;
 	}
