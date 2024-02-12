@@ -274,7 +274,7 @@ EOM
 	undef $bdy; # free memory
 	my $fh = delete $ctx->{patch_fh};
 	if (-s $fh > $MAX_SIZE) {
-		print $zfh "---\n patch is too large to show\n";
+		print $zfh '</pre><hr><pre>patch is too large to show</pre>';
 	} else { # prepare flush_diff:
 		seek $fh, 0, SEEK_SET;
 		PublicInbox::IO::read_all $fh, -s _, \$x;
@@ -312,7 +312,7 @@ EOM
 				$alt = '';
 			}
 			print $zfh <<EOM;
-<hr><form action="$ibx_url"
+</pre><hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
 <textarea name=q cols=${\PublicInbox::View::COLS} rows=$rows>$q</textarea>
 <input type=submit value="search$alt"
