@@ -101,7 +101,6 @@ sub qparse_new ($) {
 }
 
 sub generate_cxx () { # generates snippet for xap_helper.h
-	my ($line, $file) = (__LINE__ + 2, __FILE__);
 	my $ret = <<EOM;
 # line ${\__LINE__} "${\__FILE__}"
 static NRP *code_nrp[${\scalar(@CODE_VMAP)}];
