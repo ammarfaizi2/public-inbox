@@ -28,7 +28,8 @@ use PublicInbox::Eml;
 use Text::Wrap qw(wrap);
 use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe);
 use POSIX qw(strftime);
-use autodie qw(open);
+use autodie qw(open seek truncate);
+use Fcntl qw(SEEK_SET);
 my $hl = eval {
 	require PublicInbox::HlMod;
 	PublicInbox::HlMod->new;
@@ -59,7 +60,7 @@ sub html_page ($$;@) {
 sub dbg_log ($) {
 	my ($ctx) = @_;
 	my $log = delete $ctx->{lh} // die 'BUG: already captured debug log';
-	if (!seek($log, 0, 0)) {
+	if (!CORE::seek($log, 0, SEEK_SET)) {
 		warn "seek(log): $!";
 		return '<pre>debug log seek error</pre>';
 	}
@@ -119,17 +120,18 @@ sub show_other_result ($$) { # future-proofing
 }
 
 sub cmt_title { # git->cat_async callback
-	my ($bref, $oid, $type, $size, $ctx) = @_;
+	my ($bref, $oid, $type, $size, $ctx_cb) = @_;
 	utf8_maybe($$bref);
 	my $title = $$bref =~ /\r?\n\r?\n([^\r\n]+)\r?\n?/ ? $1 : '';
-	push(@{$ctx->{-cmt_pt}} , ascii_html($title)) == @{$ctx->{-cmt_P}} and
-		cmt_finalize($ctx);
+	# $ctx_cb is [ $ctx, $cmt_fin ]
+	push @{$ctx_cb->[0]->{-cmt_pt}}, ascii_html($title);
 }
 
 sub do_cat_async {
-	my ($ctx, $cb, @req) = @_;
+	my ($arg, $cb, @req) = @_;
 	# favor git(1) over Gcf2 (libgit2) for SHA-256 support
-	$ctx->{git}->cat_async($_, $cb, $ctx) for @req;
+	my $ctx = ref $arg eq 'ARRAY' ? $arg->[0] : $arg;
+	$ctx->{git}->cat_async($_, $cb, $arg) for @req;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
 		$ctx->{git}->watch_async;
 	} else { # synchronous, generic PSGI
@@ -147,24 +149,44 @@ sub do_check_async {
 	}
 }
 
-sub show_commit_start { # ->psgi_qx callback
-	my ($bref, $ctx) = @_;
-	if (my $qsp_err = delete $ctx->{-qsp_err}) {
-		return html_page($ctx, 500, dbg_log($ctx) .
-				"git show/patch-id error:$qsp_err");
-	}
-	my $patchid = (split(/ /, $$bref))[0]; # ignore commit
-	$ctx->{-q_value_html} = "patchid:$patchid" if defined $patchid;
-	open my $fh, '<', "$ctx->{-tmp}/h";
-	chop(my $buf = do { local $/ = "\0"; <$fh> });
+sub cmt_hdr_prep { # psgi_qx cb
+	my ($fh, $ctx, $cmt_fin) = @_;
+	return if $ctx->{-qsp_err_h}; # let cmt_fin handle it
+	seek $fh, 0, SEEK_SET;
+	my $buf = do { local $/ = "\0"; <$fh> } // die "readline: $!";
+	chop($buf) eq "\0" or die 'no NUL in git show -z output';
 	utf8_maybe($buf); # non-UTF-8 commits exist
 	chomp $buf;
-	my ($P, $p);
-	($P, $p, @{$ctx->{cmt_info}}) = split(/\n/, $buf, 9);
-	return cmt_finalize($ctx) if !$P;
-	@{$ctx->{-cmt_P}} = split(/ /, $P);
-	@{$ctx->{-cmt_p}} = split(/ /, $p); # abbreviated
-	do_cat_async($ctx, \&cmt_title, @{$ctx->{-cmt_P}});
+	(my $P, my $p, @{$ctx->{cmt_info}}) = split(/\n/, $buf, 9);
+	truncate $fh, 0;
+	return unless $P;
+	seek $fh, 0, SEEK_SET;
+	my $qsp_p = PublicInbox::Qspawn->new($ctx->{git}->cmd(qw(show
+		--encoding=UTF-8 --pretty=format:%n -M --stat -p), $ctx->{oid}),
+		undef, { 1 => $fh });
+	$qsp_p->{qsp_err} = \($ctx->{-qsp_err_p} = '');
+	$qsp_p->psgi_qx($ctx->{env}, undef, \&cmt_patch_prep, $ctx, $cmt_fin);
+	@{$ctx->{-cmt_P}} = split / /, $P;
+	@{$ctx->{-cmt_p}} = split / /, $p; # abbreviated
+	do_cat_async([$ctx, $cmt_fin], \&cmt_title, @{$ctx->{-cmt_P}});
+}
+
+sub read_patchid { # psgi_qx cb
+	my ($bref, $ctx, $cmt_fin) = @_;
+	my ($patchid) = split(/ /, $$bref); # ignore commit
+	$ctx->{-q_value_html} = "patchid:$patchid" if defined $patchid;
+}
+
+sub cmt_patch_prep { # psgi_qx cb
+	my ($fh, $ctx, $cmt_fin) = @_;
+	return if $ctx->{-qsp_err_p}; # let cmt_fin handle error
+	return if -s $fh > $MAX_SIZE; # too big to show, too big to patch-id
+	seek $fh, 0, SEEK_SET;
+	my $qsp = PublicInbox::Qspawn->new(
+				$ctx->{git}->cmd(qw(patch-id --stable)),
+				undef, { 0 => $fh });
+	$qsp->{qsp_err} = \$ctx->{-qsp_err_p};
+	$qsp->psgi_qx($ctx->{env}, undef, \&read_patchid, $ctx, $cmt_fin);
 }
 
 sub ibx_url_for {
@@ -194,8 +216,14 @@ sub ibx_url_for {
 	wantarray ? (@ret) : $ret[0];
 }
 
-sub cmt_finalize {
+sub cmt_fin { # OnDestroy cb
 	my ($ctx) = @_;
+	my ($eh, $ep) = delete @$ctx{qw(-qsp_err_h -qsp_err_p)};
+	if ($eh || $ep) {
+		my $e = join(' - ', grep defined, $eh, $ep);
+		return html_page($ctx, 500, dbg_log($ctx) .
+				"git show/patch-id error:$e");
+	}
 	$ctx->{-linkify} //= PublicInbox::Linkify->new;
 	my $upfx = $ctx->{-upfx} = '../../'; # from "/$INBOX/$OID/s/"
 	my ($H, $T, $s, $f, $au, $co, $bdy) = @{delete $ctx->{cmt_info}};
@@ -243,11 +271,12 @@ committer $co
 <b>$s</b>
 EOM
 	print $zfh "\n", $ctx->{-linkify}->to_html($bdy) if length($bdy);
-	$bdy = '';
-	open my $fh, '<', "$ctx->{-tmp}/p";
+	undef $bdy; # free memory
+	my $fh = delete $ctx->{patch_fh};
 	if (-s $fh > $MAX_SIZE) {
 		print $zfh "---\n patch is too large to show\n";
 	} else { # prepare flush_diff:
+		seek $fh, 0, SEEK_SET;
 		PublicInbox::IO::read_all $fh, -s _, \$x;
 		utf8_maybe($x);
 		$ctx->{-apfx} = $ctx->{-spfx} = $upfx;
@@ -350,18 +379,15 @@ sub show_commit ($$) {
 	# patch-id needs two passes, and we use the initial show to ensure
 	# a patch embedded inside the commit message body doesn't get fed
 	# to patch-id:
-	my $cmd = [ '/bin/sh', '-c',
-		"git show --encoding=UTF-8 '$SHOW_FMT'".
-		" -z --no-notes --no-patch $oid >h && ".
-		'git show --encoding=UTF-8 --pretty=format:%n -M'.
-		" --stat -p $oid >p && ".
-		"git patch-id --stable <p" ];
-	my $e = { GIT_DIR => $git->{git_dir} };
-	my $qsp = PublicInbox::Qspawn->new($cmd, $e, { -C => "$ctx->{-tmp}" });
-	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
-	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
+	open $ctx->{patch_fh}, '+>', "$ctx->{-tmp}/show";
+	my $qsp_h = PublicInbox::Qspawn->new($git->cmd('show', $SHOW_FMT,
+			qw(--encoding=UTF-8 -z --no-notes --no-patch), $oid),
+			undef, { 1 => $ctx->{patch_fh} });
+	$qsp_h->{qsp_err} = \($ctx->{-qsp_err_h} = '');
+	my $cmt_fin = PublicInbox::OnDestroy->new($$, \&cmt_fin, $ctx);
 	$ctx->{git} = $git;
-	$qsp->psgi_qx($ctx->{env}, undef, \&show_commit_start, $ctx);
+	$ctx->{oid} = $oid;
+	$qsp_h->psgi_qx($ctx->{env}, undef, \&cmt_hdr_prep, $ctx, $cmt_fin);
 }
 
 sub show_other ($$) { # just in case...
