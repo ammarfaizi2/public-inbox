@@ -30,6 +30,7 @@ my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -pipe') . ' ' .
 	' -DXH_SPEC="'.join('',
 		map { s/=.*/:/; $_ } @PublicInbox::Search::XH_SPEC) . '" ' .
 	($ENV{LDFLAGS} // $ldflags);
+substr($xflags, 0, 0, '-O2 ') if !defined($ENV{CXXFLAGS}) && !-w __FILE__;
 my $xap_modversion;
 
 sub xap_cfg (@) {
