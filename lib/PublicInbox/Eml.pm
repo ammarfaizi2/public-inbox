@@ -475,10 +475,10 @@ sub body_str {
 			join("\n\t", header_raw($self, 'Content-Type')));
 	};
 	my $enc = find_encoding($cs) or croak "unknown encoding `$cs'";
-	my $tmp = body($self);
+	my $ret = body($self);
 	local @enc_warn;
 	local $SIG{__WARN__} = $enc_warn;
-	my $ret = $enc->decode($tmp, Encode::FB_WARN);
+	$ret = $enc->decode($ret, Encode::FB_WARN);
 	croak(@enc_warn) if @enc_warn;
 	$ret;
 }
