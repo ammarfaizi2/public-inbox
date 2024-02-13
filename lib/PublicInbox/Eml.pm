@@ -334,6 +334,11 @@ sub body_set {
 	undef;
 }
 
+# workaround https://rt.cpan.org/Public/Bug/Display.html?id=139622
+# Encode 2.87..3.12 leaks on croak, so we defer and croak ourselves
+our @enc_warn;
+my $enc_warn = sub { push @enc_warn, @_ };
+
 sub body_str_set {
 	my ($self, $str) = @_;
 	my $cs = ct($self)->{attributes}->{charset} //
@@ -341,10 +346,10 @@ sub body_str_set {
 	my $enc = find_encoding($cs) // croak "unknown encoding `$cs'";
 	my $tmp;
 	{
-		my @w;
-		local $SIG{__WARN__} = sub { push @w, @_ };
+		local @enc_warn;
+		local $SIG{__WARN__} = $enc_warn;
 		$tmp = $enc->encode($str, Encode::FB_WARN);
-		croak(@w) if @w;
+		croak(@enc_warn) if @enc_warn;
 	};
 	body_set($self, \$tmp);
 }
@@ -471,11 +476,10 @@ sub body_str {
 	};
 	my $enc = find_encoding($cs) or croak "unknown encoding `$cs'";
 	my $tmp = body($self);
-	# workaround https://rt.cpan.org/Public/Bug/Display.html?id=139622
-	my @w;
-	local $SIG{__WARN__} = sub { push @w, @_ };
+	local @enc_warn;
+	local $SIG{__WARN__} = $enc_warn;
 	my $ret = $enc->decode($tmp, Encode::FB_WARN);
-	croak(@w) if @w;
+	croak(@enc_warn) if @enc_warn;
 	$ret;
 }
 
