@@ -234,6 +234,7 @@ Whether to wrap L<git(1)> and L<curl(1)> commands with L<torsocks(1)>.
 Default: C<auto>
 
 =item -j JOBS
+
 =item --jobs=JOBS
 
 The number of parallel processes to spawn at once for various network

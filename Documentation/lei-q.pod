@@ -130,9 +130,11 @@ Caveat: C<-tt> only works on locally-indexed messages at the
 moment, and not on remote (HTTP(S)) endpoints.
 
 =item --jobs=QUERY_WORKERS[,WRITE_WORKERS]
+
 =item --jobs=,WRITE_WORKERS
 
 =item -j QUERY_WORKERS[,WRITE_WORKERS]
+
 =item -j ,WRITE_WORKERS
 
 Set the number of query and write worker processes for parallelism.

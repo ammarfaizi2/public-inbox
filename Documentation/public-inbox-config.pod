@@ -356,7 +356,9 @@ is set and the C<cgit> binary exists).
 See L<public-inbox-edit(1)>
 
 =item publicinbox.indexMaxSize
+
 =item publicinbox.indexBatchSize
+
 =item publicinbox.indexSequentialShard
 
 See L<public-inbox-index(1)>
