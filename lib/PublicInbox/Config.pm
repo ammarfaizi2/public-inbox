@@ -305,7 +305,8 @@ sub apply_cgit_scan_path {
 
 sub parse_cgitrc {
 	my ($self, $cgitrc, $nesting) = @_;
-	$cgitrc //= $self->{'publicinbox.cgitrc'} // return;
+	$cgitrc //= $self->{'publicinbox.cgitrc'} //
+			$ENV{CGIT_CONFIG} // return;
 	if ($nesting == 0) {
 		# defaults:
 		my %s = map { $_ => 1 } qw(/cgit.css /cgit.png

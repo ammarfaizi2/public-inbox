@@ -58,6 +58,7 @@ sub new {
 		cmd => [ $cgit_bin ],
 		cgit_data => $cgit_data,
 		pi_cfg => $pi_cfg,
+		cgitrc => $pi_cfg->{'publicinbox.cgitrc'} // $ENV{CGIT_CONFIG},
 	}, $class;
 
 	# some cgit repos may not be mapped to inboxes, so ensure those exist:
@@ -100,15 +101,12 @@ sub call {
 		return PublicInbox::WwwStatic::response($env, [], $f);
 	}
 
-	my $cgi_env = { PATH_INFO => $path_info };
-	foreach (@PASS_ENV) {
-		my $v = $env->{$_} // next;
-		$cgi_env->{$_} = $v;
-	}
-	$cgi_env->{'HTTPS'} = 'on' if $env->{'psgi.url_scheme'} eq 'https';
+	my %cgi_env = (CGIT_CONFIG => $self->{cgitrc}, PATH_INFO => $path_info);
+	@cgi_env{@PASS_ENV} = @$env{@PASS_ENV}; # spawn ignores undef vals
+	$cgi_env{HTTPS} = 'on' if $env->{'psgi.url_scheme'} eq 'https';
 
 	my $rdr = input_prepare($env) or return r(500);
-	my $qsp = PublicInbox::Qspawn->new($self->{cmd}, $cgi_env, $rdr);
+	my $qsp = PublicInbox::Qspawn->new($self->{cmd}, \%cgi_env, $rdr);
 	my $limiter = $self->{pi_cfg}->limiter('-cgit');
 	$qsp->psgi_yield($env, $limiter, $parse_cgi_headers, $ctx);
 }
