@@ -337,10 +337,14 @@ Try using C<cgit> as the first choice, this is the default.
 Fall back to using C<cgit> only if our native, inbox-aware
 git code repository viewer doesn't recognize the URL.
 
+=begin comment
+=for comment rewrite is not yet implemented
 =item * rewrite
 
 Rewrite C<cgit> URLs for our native, inbox-aware code repository viewer.
 This implies C<fallback> for URLs the native viewer does not recognize.
+
+=end comment
 
 =back
 
