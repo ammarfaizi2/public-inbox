@@ -379,7 +379,8 @@ sub fill_coderepo {
 		$git->{cgit_url} = $cgits = _array($cgits);
 		$self->{"$pfx.cgiturl"} = $cgits;
 	}
-	$git->{nick} = $nick;
+	my %dedupe = ($nick => undef);
+	($git->{nick}) = keys %dedupe;
 	$git;
 }
 
@@ -486,7 +487,8 @@ sub _fill_ibx {
 	}
 
 	return unless valid_foo_name($name, 'publicinbox');
-	$ibx->{name} = $name;
+	my %dedupe = ($name => undef);
+	($ibx->{name}) = keys %dedupe; # used as a key everywhere
 	$ibx->{-pi_cfg} = $self;
 	$ibx = PublicInbox::Inbox->new($ibx);
 	foreach (@{$ibx->{address}}) {

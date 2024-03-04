@@ -96,7 +96,8 @@ sub new {
 	$git_dir =~ tr!/!/!s;
 	chop $git_dir;
 	# may contain {-tmp} field for File::Temp::Dir
-	bless { git_dir => $git_dir }, $class
+	my %dedupe = ($git_dir => undef);
+	bless { git_dir => (keys %dedupe)[0] }, $class
 }
 
 sub git_path ($$) {
