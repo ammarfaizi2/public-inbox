@@ -85,7 +85,7 @@ sub gfi_start {
 	$self->{io};
 }
 
-sub wfail () { die "write to fast-import failed: $!" }
+sub wfail () { croak "write to fast-import failed: $!" }
 
 sub now_raw () { time . ' +0000' }
 
