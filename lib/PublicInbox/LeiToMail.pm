@@ -149,6 +149,7 @@ sub git_to_mail { # git->cat_async callback
 						"W: $oid is $type (!= blob)");
 		$size or return $self->{lei}->child_error(0,"E: $oid is empty");
 		$smsg->{blob} eq $oid or die "BUG: expected=$smsg->{blob}";
+		$smsg->{bytes} ||= $size;
 		$self->{wcb}->($bref, $smsg);
 	};
 	$self->{lei}->fail("$@ (oid=$oid)") if $@;

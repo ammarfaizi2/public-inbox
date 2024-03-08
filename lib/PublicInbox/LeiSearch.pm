@@ -103,6 +103,8 @@ sub xoids_for {
 		for my $o (@overs) {
 			my ($id, $prev);
 			while (my $cur = $o->next_by_mid($mid, \$id, \$prev)) {
+				# {bytes} may be '' from old bug
+				$cur->{bytes} = 1 if $cur->{bytes} eq '';
 				next if $cur->{bytes} == 0 ||
 					$xoids->{$cur->{blob}};
 				$git->cat_async($cur->{blob}, \&_cmp_1st,

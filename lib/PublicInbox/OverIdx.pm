@@ -17,6 +17,7 @@ use PublicInbox::MID qw/id_compress mids_for_index references/;
 use PublicInbox::Smsg qw(subject_normalized);
 use Compress::Zlib qw(compress);
 use Carp qw(croak);
+use bytes (); # length
 
 sub dbh_new {
 	my ($self) = @_;
@@ -263,7 +264,10 @@ sub ddd_for ($) {
 
 sub add_overview {
 	my ($self, $eml, $smsg) = @_;
-	$smsg->{lines} = $eml->body_raw =~ tr!\n!\n!;
+	my $raw = $eml->body_raw;
+	$smsg->{lines} = $raw =~ tr!\n!\n!;
+	$smsg->{bytes} //= bytes::length $raw;
+	undef $raw;
 	my $mids = mids_for_index($eml);
 	my $refs = $smsg->parse_references($eml, $mids);
 	$mids->[0] //= do {
