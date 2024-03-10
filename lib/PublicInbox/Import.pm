@@ -26,6 +26,7 @@ sub default_branch () {
 	state $default_branch = do {
 		my $h = run_qx([qw(git config --global init.defaultBranch)],
 				 { GIT_CONFIG => undef });
+		chomp $h;
 		$h eq '' ? 'refs/heads/master' : "refs/heads/$h";
 	}
 }

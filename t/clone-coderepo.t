@@ -7,6 +7,7 @@ use PublicInbox::Import;
 use File::Temp;
 use File::Path qw(remove_tree);
 use PublicInbox::SHA qw(sha1_hex);
+use PublicInbox::IO;
 require_mods(qw(json Plack::Builder HTTP::Date HTTP::Status));
 require_git_http_backend;
 require_git '1.8.5';
@@ -38,9 +39,10 @@ my $t0 = time - 1;
 my $m; # manifest hashref
 
 {
-	my $rdr = {};
-	my $fi_data = './t/git.fast-import-data';
-	open $rdr->{0}, '<', $fi_data or xbail "open($fi_data): $!";
+	my $fi_data = PublicInbox::IO::try_cat './t/git.fast-import-data';
+	my $db = PublicInbox::Import::default_branch;
+	$fi_data =~ s!\brefs/heads/master\b!$db!gs;
+	my $rdr = { 0 => \$fi_data };
 	my @git = ('git', "--git-dir=$pa");
 	xsys_e([@git, qw(fast-import --quiet)], undef, $rdr);
 	xsys_e([qw(/bin/cp -Rp a.git b.git)], undef, { -C => "$tmpdir/src" });
