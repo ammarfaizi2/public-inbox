@@ -41,9 +41,9 @@ sub event_step {
 			# ECONNABORTED is common with bad connections
 			return;
 		} elsif (my $sym = $ERR_WARN{int($!)}) {
-			warn "W: accept(): $! ($sym)\n";
+			return warn "W: accept(): $! ($sym)\n";
 		} else {
-			warn "BUG?: accept(): $!\n";
+			return warn "BUG?: accept(): $!\n";
 		}
 	} while ($n--);
 }
