@@ -256,6 +256,12 @@ sub update_index_result ($$) {
 	next_step($self); # onto do_git_apply
 }
 
+sub qsp_qx ($$$) {
+	my ($self, $qsp, $cb) = @_;
+	$qsp->{qsp_err} = \($self->{-qsp_err} = '');
+	$qsp->psgi_qx($self->{psgi_env}, $self->{limiter}, $cb, $self);
+}
+
 sub prepare_index ($) {
 	my ($self) = @_;
 	my $patches = $self->{patches};
@@ -284,9 +290,8 @@ sub prepare_index ($) {
 	my $cmd = [ qw(git update-index -z --index-info) ];
 	my $qsp = PublicInbox::Qspawn->new($cmd, $self->{git_env}, $rdr);
 	$path_a = git_quote($path_a);
-	$qsp->{qsp_err} = \($self->{-qsp_err} = '');
 	$self->{-msg} = "index prepared:\n$mode_a $oid_full\t$path_a";
-	$qsp->psgi_qx($self->{psgi_env}, undef, \&update_index_result, $self);
+	qsp_qx $self, $qsp, \&update_index_result;
 }
 
 # pure Perl "git init"
@@ -465,8 +470,7 @@ sub apply_result ($$) { # qx_cb
 	my @cmd = qw(git ls-files -s -z);
 	my $qsp = PublicInbox::Qspawn->new(\@cmd, $self->{git_env});
 	$self->{-cur_di} = $di;
-	$qsp->{qsp_err} = \($self->{-qsp_err} = '');
-	$qsp->psgi_qx($self->{psgi_env}, undef, \&ls_files_result, $self);
+	qsp_qx $self, $qsp, \&ls_files_result;
 }
 
 sub do_git_apply ($) {
@@ -495,8 +499,7 @@ sub do_git_apply ($) {
 	my $opt = { 2 => 1, -C => _tmp($self)->dirname, quiet => 1 };
 	my $qsp = PublicInbox::Qspawn->new(\@cmd, $self->{git_env}, $opt);
 	$self->{-cur_di} = $di;
-	$qsp->{qsp_err} = \($self->{-qsp_err} = '');
-	$qsp->psgi_qx($self->{psgi_env}, undef, \&apply_result, $self);
+	qsp_qx $self, $qsp, \&apply_result;
 }
 
 sub di_url ($$) {

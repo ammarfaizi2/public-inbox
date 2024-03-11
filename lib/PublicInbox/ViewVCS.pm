@@ -49,6 +49,10 @@ my %GIT_MODE = (
 	'160000' => 'g', # commit (gitlink)
 );
 
+# TODO: not fork safe, but we don't fork w/o exec in PublicInbox::WWW
+my (@solver_q, $solver_lim);
+my $solver_nr = 0;
+
 sub html_page ($$;@) {
 	my ($ctx, $code) = @_[0, 1];
 	my $wcb = delete $ctx->{-wcb};
@@ -614,26 +618,52 @@ sub show_blob { # git->cat_async callback
 		'</code></pre></td></tr></table>'.dbg_log($ctx), @def);
 }
 
+sub start_solver ($) {
+	my ($ctx) = @_;
+	while (my ($from, $to) = each %QP_MAP) {
+		my $v = $ctx->{qp}->{$from} // next;
+		$ctx->{hints}->{$to} = $v if $v ne '';
+	}
+	$ctx->{-next_solver} = PublicInbox::OnDestroy->new($$, \&next_solver);
+	++$solver_nr;
+	$ctx->{-tmp} = File::Temp->newdir("solver.$ctx->{oid_b}-XXXX",
+						TMPDIR => 1);
+	$ctx->{lh} or open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log";
+	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
+						\&solve_result, $ctx);
+	$solver->{limiter} = $solver_lim;
+	$solver->{gits} //= [ $ctx->{git} ];
+	$solver->{tmp} = $ctx->{-tmp}; # share tmpdir
+	# PSGI server will call this immediately and give us a callback (-wcb)
+	$solver->solve(@$ctx{qw(env lh oid_b hints)});
+}
+
+# run the next solver job when done and DESTROY-ed
+sub next_solver {
+	--$solver_nr;
+	# XXX FIXME: client may've disconnected if it waited a long while
+	start_solver(shift(@solver_q) // return);
+}
+
+sub may_start_solver ($) {
+	my ($ctx) = @_;
+	$solver_lim //= $ctx->{www}->{pi_cfg}->limiter('codeblob');
+	if ($solver_nr >= $solver_lim->{max}) {
+		@solver_q > 128 ? html_page($ctx, 503, 'too busy')
+				: push(@solver_q, $ctx);
+	} else {
+		start_solver($ctx);
+	}
+}
+
 # GET /$INBOX/$GIT_OBJECT_ID/s/
 # GET /$INBOX/$GIT_OBJECT_ID/s/$FILENAME
 sub show ($$;$) {
 	my ($ctx, $oid_b, $fn) = @_;
-	my $hints = $ctx->{hints} = {};
-	while (my ($from, $to) = each %QP_MAP) {
-		my $v = $ctx->{qp}->{$from} // next;
-		$hints->{$to} = $v if $v ne '';
-	}
-	$ctx->{fn} = $fn;
-	$ctx->{-tmp} = File::Temp->newdir("solver.$oid_b-XXXX", TMPDIR => 1);
-	$ctx->{lh} or open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log";
-	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
-						\&solve_result, $ctx);
-	$solver->{gits} //= [ $ctx->{git} ];
-	$solver->{tmp} = $ctx->{-tmp}; # share tmpdir
-	# PSGI server will call this immediately and give us a callback (-wcb)
+	@$ctx{qw(oid_b fn)} = ($oid_b, $fn);
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP write callback
-		$solver->solve($ctx->{env}, $ctx->{lh}, $oid_b, $hints);
+		may_start_solver $ctx;
 	};
 }
 
