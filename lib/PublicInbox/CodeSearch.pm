@@ -292,6 +292,7 @@ W: cindex.$name.topdir=$self->{topdir} has no usable join data for $cfg_f
 EOM
 	my ($ekeys, $roots, $ibx2root) = @$jd{qw(ekeys roots ibx2root)};
 	my $roots2paths = roots2paths($self);
+	my %dedupe; # 50x alloc reduction w/ lore + gko mirror (Mar 2024)
 	for my $root_offs (@$ibx2root) {
 		my $ekey = shift(@$ekeys) // die 'BUG: {ekeys} empty';
 		scalar(@$root_offs) or next;
@@ -320,9 +321,15 @@ EOM
 				if (my $git = $dir2cr{$_}) {
 					$ibx_p2g{$_} = $git;
 					$ibx2self = 1;
-					$ibx->{-hide_www} or
-						push @{$git->{ibx_score}},
+					if (!$ibx->{-hide_www}) {
+						# don't stringify $nr directly
+						# to avoid long-lived PV
+						my $k = ($nr + 0)."\0".
+							($ibx + 0);
+						my $s = $dedupe{$k} //=
 							[ $nr, $ibx->{name} ];
+						push @{$git->{ibx_score}}, $s;
+					}
 					push @$gits, $git;
 				} else {
 					warn <<EOM;
