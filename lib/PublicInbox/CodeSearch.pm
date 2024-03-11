@@ -283,7 +283,8 @@ EOM
 		$nick =~ s!$lre!$nick_pfx!s or next;
 		$dir2cr{$p} = $coderepos->{$nick} //= do {
 			my $git = PublicInbox::Git->new($p);
-			$git->{nick} = $nick; # for git->pub_urls
+			my %dedupe = ($nick => undef);
+			($git->{nick}) = keys %dedupe; # for git->pub_urls
 			$git;
 		};
 	}
