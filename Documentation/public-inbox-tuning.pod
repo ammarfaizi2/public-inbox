@@ -163,6 +163,11 @@ Transport Layer Security (IMAPS, NNTPS, or via STARTTLS) significantly
 increases memory use of client sockets, be sure to account for that in
 capacity planning.
 
+Bursts of small object allocations late in process life contribute to
+fragmentation of the heap due to arenas (slabs) used internally by Perl.
+jemalloc (tested as an LD_PRELOAD on GNU/Linux) appears to reduce
+overall fragmentation compared to glibc malloc in long-lived processes.
+
 =head2 Other OS tuning knobs
 
 Linux users: the C<sys.vm.max_map_count> sysctl may need to be increased if
