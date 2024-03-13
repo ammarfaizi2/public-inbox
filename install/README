@@ -1,7 +1,11 @@
 tooling for mass package installation
 -------------------------------------
 
-TL;DR:	sudo ./install/deps.perl all
+TL;DR (as root or with sudo):
+
+	./install/deps.perl all		# install everything
+	./install/deps.perl lei		# only what's needed for lei
+	./install/deps.perl www-search	# for hosting WWW search
 
 Files in this directory are designed for:
 

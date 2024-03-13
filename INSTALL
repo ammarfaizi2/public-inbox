@@ -1,11 +1,15 @@
-public-inbox (server-side) installation
----------------------------------------
+public-inbox / lei installation
+-------------------------------
 
-This is for folks who want to set up their own public-inbox instance.
-Clients should use normal git-clone/git-fetch, IMAP or NNTP clients
-if they want to import mail into their personal inboxes.
+This is for people who want to run public-inbox on their server or
+lei as a command-line tool.  Any HTTP, IMAP, NNTP, or POP3 client can
+access public-inbox servers, as can git-{clone,fetch} on the HTTP(S)
+endpoint.
 
-As of 2023, public-inbox is packaged by several OS distributions,
+Since our marketing sucks, ease-of-installation is an important goal
+for this project and we only depend on distro-provided packages.
+
+As of 2024, public-inbox is packaged by several OS distributions,
 listed in alphabetical order: Debian, GNU Guix, NixOS, and Void Linux.
 
 public-inbox is developed on Debian GNU/Linux systems and will
@@ -14,12 +18,18 @@ the "oldstable" distribution, currently Debian 11.x ("bullseye"),
 but older versions of Debian remain supported (as are newer ones).
 
 Most packages are available in other GNU/Linux distributions,
-FreeBSD, NetBSD, and OpenBSD.  CentOS 7.x users will likely want
-newer git and Xapian for better performance and v2 inbox support:
+Alpine Linux, FreeBSD, NetBSD, OpenBSD, and DragonflyBSD.
+CentOS 7.x users will likely want newer git and Xapian for
+better performance and v2 inbox support:
 https://public-inbox.org/meta/20210421151308.yz5hzkgm75klunpe@nitro.local/
 
-TODO: this still needs to be documented better,
-also see the scripts/ and sa_config/ directories in the source tree
+As of 2.0, install/deps.perl makes it easier to install target
+dependencies needed for certain features.  See install/README in
+the source tree for more info.
+
+Also see sa_config/ directories in the source tree for recommended
+SpamAssassin configuration examples if using public-inbox-mda or
+public-inbox-watch.
 
 Requirements
 ------------
@@ -43,22 +53,10 @@ Beyond that, there is one non-standard Perl package required:
                                    rpm: perl-URI
                                    (for HTML/Atom generation)
 
-Plack and Date::Parse are optional as of public-inbox v1.3.0,
-but required for older releases:
-
-* Plack                            deb: libplack-perl
-                                   pkg: p5-Plack
-                                   rpm: perl-Plack, perl-Plack-Test,
-                                   (for HTML/Atom generation)
-
-- Date::Parse                      deb: libtimedate-perl
-                                   pkg: p5-TimeDate
-                                   rpm: perl-TimeDate
-                                   (for broken, mostly historical emails)
-
 Where "deb" indicates package names for Debian-derived distributions,
-"pkg" is for the FreeBSD package (and some other common BSDs, too), and
-"rpm" is for RPM-based distributions (only known to work on Fedora).
+"pkg" is for the FreeBSD package (and some other common BSDs, too),
+"pkgin" for NetBSD, "apk" for Alpine Linux and "rpm" is for RPM-based
+distributions (only known to work on Fedora).
 
 Numerous optional modules are likely to be useful as well:
 
@@ -71,7 +69,14 @@ Numerous optional modules are likely to be useful as well:
                                    pkg: p5-Xapian (FreeBSD, NetBSD)
                                         xapian-bindings-perl (OpenBSD)
                                    rpm: perl-Search-Xapian
-                                   (lei; HTTP and IMAP search)
+                                   (required for lei; HTTP and IMAP search)
+
+Every effort has been to make everything else optional:
+
+- Plack                            deb: libplack-perl
+                                   pkg: p5-Plack
+                                   rpm: perl-Plack, perl-Plack-Test,
+                                   (for WWW interface, public-inbox-httpd(1))
 
 - Inline::C                        deb: libinline-c-perl
                                    pkg: p5-Inline-C
@@ -88,7 +93,7 @@ Numerous optional modules are likely to be useful as well:
 - Parse::RecDescent                deb: libparse-recdescent-perl
                                    pkg: p5-Parse-RecDescent
                                    rpm: perl-ParseRecDescent
-                                   (only for public-inbox-imapd(1))
+                                   (for public-inbox-imapd(1))
 
 - Mail::IMAPClient                 deb: libmail-imapclient-perl
                                    pkg: p5-Mail-IMAPClient
@@ -113,9 +118,18 @@ Numerous optional modules are likely to be useful as well:
 
 * xapian-tools                     deb: xapian-tools
                                    pkg: xapian-core
+                                   pkgin: xapian
                                    rpm: xapian-core
                                    (for public-inbox-compact(1) and
                                     public-inbox-cindex(1))
+
+* Xapian development files         deb: libxapian-dev
+                                   pkg: xapian-core
+                                   pkgin: xapian
+                                   apk: xapian-core-dev
+                                   rpm: xapian-core-devel / xapian14-core-libs
+                                   (for public-inbox-cindex(1) and future
+                                    performance enhancements)
 
 * curl (tool)                      deb, pkg, rpm: curl
                                    (for lei HTTP(S) externals with curl and
@@ -124,11 +138,11 @@ Numerous optional modules are likely to be useful as well:
 - Linux::Inotify2                  deb: liblinux-inotify2-perl
                                    rpm: perl-Linux-Inotify2
                                    (for lei, public-inbox-watch and -imapd
-                                    on Linux)
+                                    on Linux; not required as of 2.0))
 
 - IO::KQueue                       pkg: p5-IO-KQueue
                                    (for lei, public-inbox-watch and -imapd
-                                    on *BSDs)
+                                    on *BSDs only)
 
 - Net::Server                      deb: libnet-server-perl
                                    pkg: p5-Net-Server
@@ -158,6 +172,11 @@ Uncommonly needed modules (see HACKING for development-only modules):
 - Crypt::CBC                       deb: libcrypt-cbc-perl
                                    pkg: p5-Crypt-CBC
                                    (for PublicInbox::Unsubscribe (rarely used))
+
+- Date::Parse                      deb: libtimedate-perl
+                                   pkg: p5-TimeDate
+                                   rpm: perl-TimeDate
+                                   (for broken, mostly historical emails)
 
 standard MakeMaker installation (Perl)
 --------------------------------------

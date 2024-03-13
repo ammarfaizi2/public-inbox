@@ -3,7 +3,9 @@ marketing guide for public-inbox
 TL; DR: Don't market this.
 
 If you must: don't be pushy and annoying about it.  Slow down.
-Please no superlatives, hype or BS.
+Please no superlatives, hype or BS.  Please keep all marketing
+materials text-only to be accessible to those on slow networks
+and ancient hardware.
 
 It's online and public, so it already markets itself.
 Being informative is not a bad thing, being insistent is.
@@ -25,3 +27,12 @@ than the adoption of any software.
 
 Every time somebody recognizes and rejects various forms of
 lock-in and centralization is already a victory for us.
+
+Please keep in mind:
+
+* Perl 5 is not a well-liked language
+* AGPL is not a well-liked license
+* maintainer is a shy introvert
+
+Be sure to mention these things in any marketing materials
+to avoid wasting time of people who hate Perl and/or AGPL.

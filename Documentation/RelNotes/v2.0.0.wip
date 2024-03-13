@@ -6,7 +6,8 @@ Content-Disposition: inline
 
 This release includes several new features and fixes; mostly
 around improved integration between inboxes and coderepos for
-solver.  Portability and reliability is also improved.
+solver.  Portability and reliability is also improved, especially
+in the internal process management of lei.
 
 public-inbox-cindex is a new command to index coderepos for
 WWW search and perform automatic associations between
@@ -39,13 +40,22 @@ Compatibility:
   entries if `newsgroup' isn't specified) will also generate warnings
   since they break -extindex and the new -cindex (coderepo index).
 
+New users + hackers:
+
+  The install/ directory includes tools to automate installation and
+  removal of dependencies for stripped down or full setups.  See
+  install/README for more details
+
 treewide
 
   * support raw UTF-8 headers from SMTPUTF8 hosts
 
   * standardize on `#' prefix for stderr diagnostics (previously `I:')
 
-  * SHA-256 coderepos are fully-supported (inboxes not yet)
+  * SHA-256 coderepos are fully-supported (but not inboxes, yet)
+
+  * jemalloc (tested as an LD_PRELOAD) is recommended to reduce fragmentation
+    in long-running daemon processes serving unpredictable traffic
 
 PublicInbox::WWW
 
@@ -71,12 +81,18 @@ PublicInbox::WWW
 
   * add topics_(new|active).(html|atom) endpoints
 
+  * linkify peer public-inbox addresses in To/Cc headers
+
+public-inbox-watch:
+
+  * watching MH folders is now supported
+
 lei
 
   * use http.proxy / http.<remote>.proxy from system-wide git-config if
     unconfigured for lei
 
-  * improve IMAP error reporting
+  * improve IMAP and NNTP error reporting
 
   * reduce default IMAP connections to avoid overloading servers
 
@@ -94,9 +110,15 @@ lei
 
   * improved bash completion for labels (see contrib/completion)
 
+  * support for reading (but not writing) MH folders
+
+  * `lei index' accepts `+L:$LABEL' like `lei import' does
+
 solver (used by lei (rediff|blob), and PublicInbox::WWW)
 
   * handle copies in patches properly
+
+  * no longer redundantly parallelized within each WWW process
 
 portability
 
@@ -111,6 +133,12 @@ portability
 
   * support Alpine Linux, Dragonfly, NetBSD and OpenBSD.  This resulted
     not only in bugfixes to our code, but also to Dragonfly and OpenBSD.
+
+  * Inline::C||Socket::MsgHdr no longer required for SCM_RIGHTS
+    with sendmsg/recvmsg on supported *BSDs.
+
+  * inotify support no longer requires Linux::Inotify2 XS package
+    for most architectures
 
 public-inbox-pop3d
 
@@ -144,9 +172,19 @@ Search improvements (lei and PublicInbox::WWW)
 
   * quoted text inside base-85 binary patches is no longer indexed
 
+  * `public-inbox-cindex --join' prefers using Xapian's C++ API
+    directly to avoid Perl method dispatch overhead to get usable
+    performance assocating ~300 inboxes with over 1K coderepos
+    (and vice-versa).  Users needing this performance will need
+    a C++ compiler, pkg-config, and the Xapian development files
+    (see INSTALL).
+
+    This C++ helper will be used more heavily in the future
+    to enable query parser customizations and other functionality
+    unavailable from the Xapian SWIG or XS bindings.
 
 Thanks to all the bug reporters and users who made this release
-possible.
+possible, and thanks for bearing with my anxiety over making releases.
 
 Please report bugs via plain-text mail to: meta@public-inbox.org
 
