@@ -43,8 +43,8 @@ Compatibility:
 New users + hackers:
 
   The install/ directory includes tools to automate installation and
-  removal of dependencies for stripped down or full setups.  See
-  install/README for more details
+  removal of dependencies for stripped-down or full setups.  See
+  install/README for more details.
 
 treewide
 
@@ -52,7 +52,7 @@ treewide
 
   * standardize on `#' prefix for stderr diagnostics (previously `I:')
 
-  * SHA-256 coderepos are fully-supported (but not inboxes, yet)
+  * SHA-256 coderepos are fully supported (but not inboxes, yet)
 
   * jemalloc (tested as an LD_PRELOAD) is recommended to reduce fragmentation
     in long-running daemon processes serving unpredictable traffic
@@ -174,8 +174,8 @@ Search improvements (lei and PublicInbox::WWW)
 
   * `public-inbox-cindex --join' prefers using Xapian's C++ API
     directly to avoid Perl method dispatch overhead to get usable
-    performance assocating ~300 inboxes with over 1K coderepos
-    (and vice-versa).  Users needing this performance will need
+    performance associating ~300 inboxes with over 1K coderepos
+    (and vice versa).  Users requiring such performance will need
     a C++ compiler, pkg-config, and the Xapian development files
     (see INSTALL).
 

@@ -6,7 +6,7 @@ lei as a command-line tool.  Any HTTP, IMAP, NNTP, or POP3 client can
 access public-inbox servers, as can git-{clone,fetch} on the HTTP(S)
 endpoint.
 
-Since our marketing sucks, ease-of-installation is an important goal
+Since our marketing sucks, ease of installation is an important goal
 for this project and we only depend on distro-provided packages.
 
 As of 2024, public-inbox is packaged by several OS distributions,

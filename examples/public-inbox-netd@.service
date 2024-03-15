@@ -13,7 +13,7 @@ After = public-inbox-netd.socket
 
 [Service]
 # An LD_PRELOAD for libjemalloc can be added here.  It currently seems
-# more resistant to fragmentation to glibc in long-lived daemons.
+# more resistant to fragmentation in long-lived daemons than glibc.
 Environment = PI_CONFIG=/home/pi/.public-inbox/config \
 PATH=/usr/local/bin:/usr/bin:/bin \
 TZ=UTC \
