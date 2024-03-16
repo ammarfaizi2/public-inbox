@@ -58,7 +58,7 @@ Where "deb" indicates package names for Debian-derived distributions,
 "pkgin" for NetBSD, "apk" for Alpine Linux and "rpm" is for RPM-based
 distributions (only known to work on Fedora).
 
-Numerous optional modules are likely to be useful as well:
+Most users will likely also want the following:
 
 - DBD::SQLite                      deb: libdbd-sqlite3-perl
                                    pkg: p5-DBD-SQLite
@@ -71,7 +71,8 @@ Numerous optional modules are likely to be useful as well:
                                    rpm: perl-Search-Xapian
                                    (required for lei; HTTP and IMAP search)
 
-Every effort has been to make everything else optional:
+Other modules might be useful as well, depending on your use case and
+preferences:
 
 - Plack                            deb: libplack-perl
                                    pkg: p5-Plack
