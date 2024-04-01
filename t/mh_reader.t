@@ -5,7 +5,6 @@ use PublicInbox::TestCommon;
 require_ok 'PublicInbox::MHreader';
 use PublicInbox::IO qw(write_file);
 use PublicInbox::Lock;
-use PublicInbox::OnDestroy;
 use PublicInbox::Eml;
 use File::Path qw(remove_tree);
 use autodie;

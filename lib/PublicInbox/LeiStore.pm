@@ -28,6 +28,7 @@ use PublicInbox::Spawn qw(spawn);
 use PublicInbox::MdirReader;
 use PublicInbox::LeiToMail;
 use PublicInbox::Compat qw(uniqstr);
+use PublicInbox::OnDestroy;
 use File::Temp qw(tmpnam);
 use POSIX ();
 use IO::Handle (); # ->autoflush
@@ -135,7 +136,7 @@ sub eidx_init {
 	my ($self) = @_;
 	my $eidx = $self->{priv_eidx};
 	my $tl = wantarray && $self->{-err_wr} ?
-			PublicInbox::OnDestroy->new($$, \&_tail_err, $self) :
+			on_destroy(\&_tail_err, $self) :
 			undef;
 	$eidx->idx_init({-private => 1}); # acquires lock
 	wantarray ? ($eidx, $tl) : $eidx;

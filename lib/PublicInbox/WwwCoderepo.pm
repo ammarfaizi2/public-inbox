@@ -253,7 +253,7 @@ sub summary ($$) {
 	push(@log, $tip) if defined $tip;
 
 	# limit scope for MockHTTP test (t/solver_git.t)
-	my $END = PublicInbox::OnDestroy->new($$, \&summary_END, $ctx);
+	my $END = on_destroy \&summary_END, $ctx;
 	for (['log', \@log],
 		 [ 'heads', [@EACH_REF, "--count=$nb", 'refs/heads'] ],
 		 [ 'tags', [@EACH_REF, "--count=$nt", 'refs/tags'] ]) {

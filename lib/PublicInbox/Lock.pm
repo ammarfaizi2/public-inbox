@@ -43,7 +43,7 @@ sub lock_release {
 sub lock_for_scope {
 	my ($self) = @_;
 	lock_acquire($self) or return; # lock_path not set
-	PublicInbox::OnDestroy->new(\&lock_release, $self);
+	on_destroy \&lock_release, $self;
 }
 
 sub lock_acquire_fast {
@@ -60,7 +60,7 @@ sub lock_release_fast {
 sub lock_for_scope_fast {
 	my ($self) = @_;
 	lock_acquire_fast($self) or return; # lock_path not set
-	PublicInbox::OnDestroy->new(\&lock_release_fast, $self);
+	on_destroy \&lock_release_fast, $self;
 }
 
 1;

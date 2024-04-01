@@ -26,9 +26,7 @@ SKIP: {
 # https://public-inbox.org/meta/20220227080422.gyqowrxomzu6gyin@sourcephile.fr/
 my $oldSIGPIPE = $SIG{PIPE};
 $SIG{PIPE} = 'DEFAULT';
-my $cleanup = PublicInbox::OnDestroy->new($$, sub {
-	$SIG{PIPE} = $oldSIGPIPE;
-});
+my $cleanup = on_destroy(sub { $SIG{PIPE} = $oldSIGPIPE });
 
 test_lei(sub {
 	my $f = "$ENV{HOME}/big.eml";

@@ -4,7 +4,7 @@
 # Various mbox locking methods
 package PublicInbox::MboxLock;
 use v5.12;
-use PublicInbox::OnDestroy;
+use PublicInbox::OnDestroy ();
 use Fcntl qw(:flock F_SETLK F_SETLKW F_RDLCK F_WRLCK
 			O_CREAT O_EXCL O_WRONLY SEEK_SET);
 use Carp qw(croak);
@@ -122,10 +122,10 @@ sub acq {
 sub DESTROY {
 	my ($self) = @_;
 	my $f = $self->{".lock$$"} or return;
-	my $x;
+	my $od;
 	if (my $dh = delete $self->{dh}) {
 		opendir my $c, '.';
-		$x = PublicInbox::OnDestroy->new(\&chdir, $c);
+		$od = PublicInbox::OnDestroy::all \&chdir, $c;
 		chdir($dh);
 	}
 	CORE::unlink($f) or die "unlink($f): $! (lock stolen?)";

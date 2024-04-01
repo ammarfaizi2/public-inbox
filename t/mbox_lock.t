@@ -2,6 +2,7 @@
 # Copyright (C) 2021 all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
+use autodie qw(chdir);
 use POSIX qw(_exit);
 use PublicInbox::DS qw(now);
 use Errno qw(EAGAIN);
@@ -18,11 +19,11 @@ ok(!-f "$f.lock", 'no dotlock with none');
 undef $mbl;
 {
 	opendir my $cur, '.' or BAIL_OUT $!;
-	my $od = PublicInbox::OnDestroy->new(sub { chdir $cur });
-	chdir $tmpdir or BAIL_OUT;
+	my $od = on_destroy \&chdir, $cur;
+	chdir $tmpdir;
 	my $abs = "$tmpdir/rel.lock";
 	my $rel = PublicInbox::MboxLock->acq('rel', 1, ['dotlock']);
-	chdir '/' or BAIL_OUT;
+	chdir '/';
 	ok(-f $abs, 'lock with abs path created');
 	undef $rel;
 	ok(!-f $abs, 'lock gone despite being in the wrong dir');

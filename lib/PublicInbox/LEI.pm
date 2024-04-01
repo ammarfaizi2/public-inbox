@@ -9,7 +9,7 @@ package PublicInbox::LEI;
 use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
-use autodie qw(bind chdir fork open pipe socket socketpair syswrite unlink);
+use autodie qw(bind chdir open pipe socket socketpair syswrite unlink);
 use Getopt::Long ();
 use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET);
@@ -24,6 +24,7 @@ use PublicInbox::Lock;
 use PublicInbox::Eml;
 use PublicInbox::Import;
 use PublicInbox::ContentHash qw(git_sha);
+use PublicInbox::OnDestroy;
 use PublicInbox::IPC;
 use Time::HiRes qw(stat); # ctime comparisons for config cache
 use File::Path ();
@@ -631,9 +632,8 @@ sub _delete_pkt_op { # OnDestroy callback to prevent leaks on die
 
 sub pkt_op_pair {
 	my ($self) = @_;
-	require PublicInbox::OnDestroy;
 	require PublicInbox::PktOp;
-	my $end = PublicInbox::OnDestroy->new($$, \&_delete_pkt_op, $self);
+	my $end = on_destroy \&_delete_pkt_op, $self;
 	@$self{qw(pkt_op_c pkt_op_p)} = PublicInbox::PktOp->pair;
 	$end;
 }
@@ -1357,7 +1357,7 @@ sub lazy_start {
 	STDIN->autoflush(1);
 	dump_and_clear_log();
 	POSIX::setsid() > 0 or die "setsid: $!";
-	my $pid = fork;
+	my $pid = PublicInbox::OnDestroy::fork_tmp;
 	return if $pid;
 	$0 = "lei-daemon $path";
 	local (%PATH2CFG, $MDIR2CFGPATH);

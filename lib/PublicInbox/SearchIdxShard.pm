@@ -45,7 +45,7 @@ sub ipc_atfork_child { # called automatically before ipc_worker_loop
 	$v2w->{current_info} = "[$self->{shard}]"; # for $SIG{__WARN__}
 	$self->begin_txn_lazy;
 	# caller (ipc_worker_spawn) must capture this:
-	PublicInbox::OnDestroy->new($$, \&_worker_done, $self);
+	on_destroy \&_worker_done, $self;
 }
 
 sub index_eml {

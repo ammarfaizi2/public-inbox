@@ -32,9 +32,9 @@ use PublicInbox::Syscall qw(%SIGNUM
 	EPOLLIN EPOLLOUT EPOLLONESHOT EPOLLEXCLUSIVE);
 use PublicInbox::Tmpfile;
 use PublicInbox::Select;
+use PublicInbox::OnDestroy;
 use Errno qw(EAGAIN EINVAL ECHILD);
 use Carp qw(carp croak);
-use autodie qw(fork);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 
 my $nextq; # queue for next_tick
@@ -679,12 +679,13 @@ sub awaitpid {
 	}
 }
 
-sub do_fork () {
+# for persistent child process
+sub fork_persist () {
 	my $seed = rand(0xffffffff);
-	my $pid = fork;
+	my $pid = PublicInbox::OnDestroy::fork_tmp;
 	if ($pid == 0) {
 		srand($seed);
-		eval { Net::SSLeay::randomize() };
+		eval { Net::SSLeay::randomize() }; # may not be loaded
 		Reset();
 	}
 	$pid;

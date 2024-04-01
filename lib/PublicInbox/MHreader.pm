@@ -52,7 +52,7 @@ EOM
 sub mh_each_file {
 	my ($self, $efcb, @arg) = @_;
 	opendir(my $dh, my $dir = $self->{dir});
-	my $restore = PublicInbox::OnDestroy->new($$, \&chdir, $self->{cwdfh});
+	my $restore = on_destroy \&chdir, $self->{cwdfh};
 	chdir($dh);
 	my $sort = $self->{sort};
 	if (defined $sort && "@$sort" ne 'none') {
@@ -96,7 +96,7 @@ sub mh_each_eml {
 
 sub mh_read_one {
 	my ($self, $n, $ucb, @arg) = @_;
-	my $restore = PublicInbox::OnDestroy->new($$, \&chdir, $self->{cwdfh});
+	my $restore = on_destroy \&chdir, $self->{cwdfh};
 	chdir(my $dir = $self->{dir});
 	_file2eml($dir, $n, $self, $ucb, @arg);
 }

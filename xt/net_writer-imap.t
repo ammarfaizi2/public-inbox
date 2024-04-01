@@ -82,7 +82,7 @@ my $mics = do {
 	$nwr->imap_common_init;
 };
 my $mic = (values %$mics)[0];
-my $cleanup = PublicInbox::OnDestroy->new($$, sub {
+my $cleanup = on_destroy sub {
 	if (defined($folder)) {
 		my $mic = $nwr->mic_get($uri);
 		$mic->delete($folder) or
@@ -92,7 +92,7 @@ my $cleanup = PublicInbox::OnDestroy->new($$, sub {
 		local $ENV{HOME} = $tmpdir;
 		system(qw(git credential-cache exit));
 	}
-});
+};
 my $imap_append = $nwr->can('imap_append');
 my $smsg = bless { kw => [ 'seen' ] }, 'PublicInbox::Smsg';
 $imap_append->($mic, $folder, undef, $smsg, eml_load('t/plack-qp.eml'));

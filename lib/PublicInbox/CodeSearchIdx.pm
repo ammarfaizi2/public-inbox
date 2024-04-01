@@ -368,7 +368,7 @@ sub repo_stored {
 	$did > 0 or die "BUG: $repo_ctx->{repo}->{git_dir}: docid=$did";
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx,
-		PublicInbox::OnDestroy->new(\&next_repos, $repo_ctx, $drs)];
+				on_destroy(\&next_repos, $repo_ctx, $drs)];
 	# shard_done fires when all shards are committed
 	my @active = keys %{$repo_ctx->{active}};
 	$IDX_SHARDS[$_]->wq_io_do('shard_commit', [ $p->{op_p} ]) for @active;
@@ -425,7 +425,7 @@ sub fp_start ($$) {
 	open my $refs, '+>', undef;
 	$git->{-repo}->{refs} = $refs;
 	my ($c, $p) = PublicInbox::PktOp->pair;
-	my $next_on_err = PublicInbox::OnDestroy->new(\&index_next, $self);
+	my $next_on_err = on_destroy \&index_next, $self;
 	$c->{ops}->{fp_done} = [ $self, $git, $next_on_err ];
 	$IDX_SHARDS[++$ANY_SHARD % scalar(@IDX_SHARDS)]->wq_io_do('fp_async',
 					[ $p->{op_p}, $refs ], $git->{git_dir})
@@ -664,8 +664,7 @@ sub index_repo {
 	my $repo_ctx = $REPO_CTX = { self => $self, repo => $repo };
 	delete $git->{-cidx_gits_fini}; # may fire gits_fini
 	my $drs = delete $git->{-cidx_dump_roots_start};
-	my $index_done = PublicInbox::OnDestroy->new(\&index_done,
-							$repo_ctx, $drs);
+	my $index_done = on_destroy \&index_done, $repo_ctx, $drs;
 	my ($c, $p) = PublicInbox::PktOp->pair;
 	$c->{ops}->{shard_done} = [ $self, $repo_ctx, $index_done ];
 	for my $n (0..$#shard_in) {
@@ -690,7 +689,7 @@ sub ct_fini { # run_git cb
 sub prep_repo ($$) {
 	my ($self, $git) = @_;
 	return if $DO_QUIT;
-	my $index_repo = PublicInbox::OnDestroy->new(\&index_repo, $self, $git);
+	my $index_repo = on_destroy \&index_repo, $self, $git;
 	my $refs = $git->{-repo}->{refs} // die 'BUG: no {-repo}->{refs}';
 	sysseek($refs, 0, SEEK_SET);
 	open my $roots_fh, '+>', undef;
@@ -787,7 +786,7 @@ sub scan_git_dirs ($) {
 	my ($self) = @_;
 	@$SCANQ = () unless $self->{-opt}->{scan};
 	$GITS_NR = @$SCANQ or return;
-	my $gits_fini = PublicInbox::OnDestroy->new(\&gits_fini);
+	my $gits_fini = on_destroy \&gits_fini;
 	$_->{-cidx_gits_fini} = $gits_fini for @$SCANQ;
 	if (my $drs = $TODO{dump_roots_start}) {
 		$_->{-cidx_dump_roots_start} = $drs for @$SCANQ;
@@ -859,7 +858,7 @@ sub prep_umask ($) {
 		umask == $um or progress($self, 'using umask from ',
 						$self->{cidx_dir}, ': ',
 						sprintf('0%03o', $um));
-		PublicInbox::OnDestroy->new(\&CORE::umask, umask($um));
+		on_destroy \&CORE::umask, umask($um);
 	} else {
 		$self->{umask} = umask; # for SearchIdx->with_umask
 		undef;
@@ -1083,12 +1082,12 @@ EOM
 	($JOIN_DT[1]) = ($QRY_STR =~ /\.\.([0-9]{14})\z/); # YYYYmmddHHMMSS
 	($JOIN_DT[0]) = ($QRY_STR =~ /\Adt:([0-9]{14})/); # YYYYmmddHHMMSS
 	$JOIN_DT[0] //= '19700101'.'000000'; # git uses unsigned times
-	$TODO{do_join} = PublicInbox::OnDestroy->new(\&do_join, $self);
+	$TODO{do_join} = on_destroy \&do_join, $self;
 	$TODO{joining} = 1; # keep shards_active() happy
-	$TODO{dump_ibx_start} = PublicInbox::OnDestroy->new(\&dump_ibx_start,
-							$self, $TODO{do_join});
-	$TODO{dump_roots_start} = PublicInbox::OnDestroy->new(
-				\&dump_roots_start, $self, $TODO{do_join});
+	$TODO{dump_ibx_start} = on_destroy \&dump_ibx_start,
+					$self, $TODO{do_join};
+	$TODO{dump_roots_start} = on_destroy \&dump_roots_start,
+					$self, $TODO{do_join};
 	progress($self, "will join in $QRY_STR date range...");
 	my $id = -1;
 	@IBXQ = map { ++$id } @IBX;
@@ -1110,8 +1109,7 @@ sub init_prune ($) {
 	require_progs('prune', 'xapian-delve' => \@delve, sed => \@sed,
 			comm => \@COMM, awk => \@AWK);
 	for (0..$#IDX_SHARDS) { push @delve, "$self->{xpfx}/$_" }
-	my $run_prune = PublicInbox::OnDestroy->new(\&run_prune, $self,
-						$TODO{dump_roots_start});
+	my $run_prune = on_destroy \&run_prune, $self, $TODO{dump_roots_start};
 	my ($sort_opt, $sed_opt, $delve_opt);
 	pipe(local $sed_opt->{0}, local $delve_opt->{1});
 	pipe(local $sort_opt->{0}, local $sed_opt->{1});
@@ -1279,8 +1277,7 @@ sub cidx_run { # main entry point
 	my $restore_umask = prep_umask($self);
 	local $SIGSET = PublicInbox::DS::block_signals(
 					POSIX::SIGTSTP, POSIX::SIGCONT);
-	my $restore = PublicInbox::OnDestroy->new($$,
-		\&PublicInbox::DS::sig_setmask, $SIGSET);
+	my $restore = on_destroy \&PublicInbox::DS::sig_setmask, $SIGSET;
 	local $PRUNE_DONE = [];
 	local $IDXQ = [];
 	local $SCANQ = [];

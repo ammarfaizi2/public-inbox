@@ -445,7 +445,7 @@ sub imap_idle_reap { # awaitpid callback
 sub imap_idle_fork {
 	my ($self, $uri, $intvl) = @_;
 	return if $self->{quit};
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		watch_atfork_child($self);
 		watch_imap_idle_1($self, $uri, $intvl);
@@ -506,7 +506,7 @@ sub poll_fetch_fork { # DS::add_timer callback
 	my @imap = grep { # push() always returns > 0
 		$_->scheme =~ m!\Aimaps?!i ? 1 : (push(@nntp, $_) < 0)
 	} @$uris;
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		watch_atfork_child($self);
 		watch_imap_fetch_all($self, \@imap) if @imap;

@@ -7,7 +7,8 @@
 package PublicInbox::SpawnPP;
 use v5.12;
 use POSIX qw(dup2 _exit setpgid :signal_h);
-use autodie qw(chdir close fork pipe);
+use autodie qw(chdir close pipe);
+use PublicInbox::OnDestroy;
 # this is loaded by PublicInbox::Spawn, so we can't use/require it, here
 
 # Pure Perl implementation for folks that do not use Inline::C
@@ -22,7 +23,7 @@ sub pi_fork_exec ($$$$$$$) {
 	}
 	sigprocmask(SIG_SETMASK, $set, $old) or die "SIG_SETMASK(set): $!";
 	pipe(my $r, my $w);
-	my $pid = fork;
+	my $pid = PublicInbox::OnDestroy::fork_tmp;
 	if ($pid == 0) {
 		close $r;
 		$SIG{__DIE__} = sub {

@@ -58,7 +58,7 @@ sub _umask_for {
 sub with_umask {
 	my ($self, $cb, @arg) = @_;
 	my $old = umask($self->{umask} //= umask_prepare($self));
-	my $restore = PublicInbox::OnDestroy->new($$, \&CORE::umask, $old);
+	my $restore = on_destroy \&CORE::umask, $old;
 	$cb ? $cb->(@arg) : $restore;
 }
 

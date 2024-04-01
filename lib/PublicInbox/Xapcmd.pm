@@ -103,7 +103,7 @@ sub commit_changes ($$$$) {
 
 sub cb_spawn {
 	my ($cb, $args, $opt) = @_; # $cb = cpdb() or compact()
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	return $pid if $pid > 0;
 	$SIG{__DIE__} = sub { warn @_; _exit(1) }; # don't jump up stack
 	$cb->($args, $opt);

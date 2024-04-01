@@ -588,9 +588,9 @@ sub start_script {
 	require PublicInbox::DS;
 	my $oset = PublicInbox::DS::block_signals();
 	require PublicInbox::OnDestroy;
-	my $tmp_mask = PublicInbox::OnDestroy->new(
+	my $tmp_mask = PublicInbox::OnDestroy::all(
 					\&PublicInbox::DS::sig_setmask, $oset);
-	my $pid = PublicInbox::DS::do_fork();
+	my $pid = PublicInbox::DS::fork_persist();
 	if ($pid == 0) {
 		close($_) for (@{delete($opt->{-CLOFORK}) // []});
 		# pretend to be systemd (cf. sd_listen_fds(3))

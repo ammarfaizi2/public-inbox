@@ -11,7 +11,7 @@ use v5.12;
 use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
-use autodie qw(fork pipe socketpair);
+use autodie qw(pipe socketpair);
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;

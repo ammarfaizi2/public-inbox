@@ -293,7 +293,7 @@ sub start_update_ref {
 	pipe(my $r, my $w);
 	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
-	my $pack = PublicInbox::OnDestroy->new($$, \&satellite_done, $fgrp);
+	my $pack = on_destroy \&satellite_done, $fgrp;
 	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $fgrp->{lei}->{2} }, $pack);
 	close $r;
 	$fgrp->{dry_run} ? undef : $w;
@@ -373,10 +373,7 @@ sub fgrpv_done {
 	for my $fgrp (@$fgrpv) {
 		my $rn = $fgrp->{-remote};
 		my %opt = ( 2 => $fgrp->{lei}->{2} );
-
-		my $update_ref = PublicInbox::OnDestroy->new($$,
-							\&fgrp_update, $fgrp);
-
+		my $update_ref = on_destroy \&fgrp_update, $fgrp;
 		my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
 			"--format=refs/%(refname:lstrip=3)%00%(objectname)",
 			"refs/remotes/$rn/" ];
@@ -467,7 +464,7 @@ sub fgrp_fetch_all {
 		}
 		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
 		push @$old, @$new;
-		my $end = PublicInbox::OnDestroy->new($$, \&fgrpv_done, $old);
+		my $end = on_destroy \&fgrpv_done, $old;
 		start_cmd($self, $cmd, $opt, $end);
 	}
 }
@@ -567,7 +564,7 @@ sub resume_fetch {
 	my $cmd = [ @{$self->{-torsocks}}, @git,
 			fetch_args($self->{lei}, $opt), $rn ];
 	push @$cmd, '-P' if $self->{lei}->{prune}; # --prune-tags implied
-	my $run_puh = PublicInbox::OnDestroy->new($$, \&run_puh, $self, $fini);
+	my $run_puh = on_destroy \&run_puh, $self, $fini;
 	++$self->{chg}->{nr_chg};
 	start_cmd($self, $cmd, $opt, $run_puh);
 }
@@ -599,7 +596,7 @@ sub clone_v1 {
 			return;
 		}
 	}
-	my $fini = PublicInbox::OnDestroy->new($$, \&v1_done, $self);
+	my $fini = on_destroy \&v1_done, $self;
 	if (my $fgrp = forkgroup_prep($self, $uri)) {
 		$fgrp->{-fini} = $fini;
 		if ($resume) {
@@ -621,8 +618,8 @@ sub clone_v1 {
 			}
 		}
 		++$self->{chg}->{nr_chg};
-		start_cmd($self, $cmd, $opt, PublicInbox::OnDestroy->new($$,
-						\&run_puh, $self, $fini));
+		start_cmd($self, $cmd, $opt,
+			on_destroy(\&run_puh, $self, $fini));
 	}
 	if (!$self->{-is_epoch} && $lei->{opt}->{'inbox-config'} =~
 				/\A(?:always|v1)\z/s &&
@@ -737,7 +734,7 @@ sub atomic_write ($$$) {
 sub run_next_puh {
 	my ($self) = @_;
 	my $puh = shift @{$self->{-puh_todo}} // return delete($self->{-fini});
-	my $fini = PublicInbox::OnDestroy->new($$, \&run_next_puh, $self);
+	my $fini = on_destroy \&run_next_puh, $self;
 	my $cmd = [ @$puh, ($self->{cur_dst} // $self->{dst}) ];
 	my $opt = +{ map { $_ => $self->{lei}->{$_} } (0..2) };
 	start_cmd($self, $cmd, undef, $opt, $fini);
@@ -762,7 +759,7 @@ sub update_ent {
 		my $opt = { 2 => $self->{lei}->{2} };
 		open($opt->{1}, '+>', undef);
 		$self->{-show_ref_up} = $opt->{1};
-		my $done = PublicInbox::OnDestroy->new($$, \&up_fp_done, $self);
+		my $done = on_destroy \&up_fp_done, $self;
 		start_cmd($self, $cmd, $opt, $done);
 	}
 	$new = $self->{-ent}->{head};
@@ -883,7 +880,7 @@ sub clone_v2_prep ($$;$) {
 	my $want = parse_epochs($lei->{opt}->{epoch}, $v2_epochs);
 	my $task = $m ? bless { %$self }, __PACKAGE__ : $self;
 	my (@skip, $desc);
-	my $fini = PublicInbox::OnDestroy->new($$, \&v2_done, $task);
+	my $fini = on_destroy \&v2_done, $task;
 	for my $nr (sort { $a <=> $b } keys %$v2_epochs) {
 		my ($uri, $key) = @{$v2_epochs->{$nr}};
 		my $src = $uri->as_string;
@@ -1018,7 +1015,7 @@ sub clone_all {
 	my ($self, $m) = @_;
 	my $todo = $TODO;
 	$TODO = \'BUG on further use';
-	my $end = PublicInbox::OnDestroy->new($$, \&fgrp_fetch_all, $self);
+	my $end = on_destroy \&fgrp_fetch_all, $self;
 	{
 		my $nodep = delete $todo->{''};
 

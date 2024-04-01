@@ -122,7 +122,7 @@ sysopen($lockfh, $lockfile, O_RDWR|O_CREAT|O_EXCL) or do {
 	exit(255);
 };
 require PublicInbox::OnDestroy;
-my $auto_unlink = PublicInbox::OnDestroy->new($$, sub { unlink $lockfile });
+my $auto_unlink = PublicInbox::OnDestroy::on_destroy(sub { unlink $lockfile });
 my $perm = 0644 & ~umask;
 my %seen;
 if (-e $pi_config) {

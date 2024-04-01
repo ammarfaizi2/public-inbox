@@ -21,6 +21,7 @@ use PublicInbox::Git;
 use PublicInbox::GitAsyncCat;
 use PublicInbox::Eml;
 use PublicInbox::Config;
+use PublicInbox::OnDestroy;
 our $SO_ACCEPTFILTER = 0x1000;
 my @CMD;
 my ($set_user, $oldset);
@@ -338,15 +339,14 @@ EOF
 	};
 
 	if ($daemonize) {
-		my $pid = fork // die "fork: $!";
+		my $pid = PublicInbox::OnDestroy::fork_tmp;
 		exit if $pid;
-
 		open(STDIN, '+<', '/dev/null') or
 					die "redirect stdin failed: $!\n";
 		open STDOUT, '>&STDIN' or die "redirect stdout failed: $!\n";
 		open STDERR, '>&STDIN' or die "redirect stderr failed: $!\n";
 		POSIX::setsid();
-		$pid = fork // die "fork: $!";
+		$pid = PublicInbox::OnDestroy::fork_tmp;
 		exit if $pid;
 	}
 	return unless defined $pid_file;
@@ -480,9 +480,9 @@ sub upgrade { # $_[0] = signal name or number (unused)
 		$pid_file .= '.oldbin';
 		write_pid($pid_file);
 	}
-	my $pid = fork;
+	my $pid = eval { PublicInbox::OnDestroy::fork_tmp };
 	if (!defined($pid)) {
-		warn "fork failed: $!\n";
+		warn "fork failed: $! $@\n";
 	} elsif ($pid == 0) {
 		$ENV{LISTEN_FDS} = scalar @listeners;
 		$ENV{LISTEN_PID} = $$;
@@ -545,7 +545,7 @@ sub reap_worker { # awaitpid CB
 sub start_worker ($) {
 	my ($nr) = @_;
 	return unless @listeners;
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		undef %WORKERS;
 		local $PublicInbox::DS::Poller; # allow epoll/kqueue

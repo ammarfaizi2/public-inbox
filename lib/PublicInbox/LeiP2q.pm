@@ -189,7 +189,7 @@ sub lei_p2q { # the "lei patch-to-query" entry point
 sub ipc_atfork_child {
 	my ($self) = @_;
 	PublicInbox::LeiInput::input_only_atfork_child($self);
-	PublicInbox::OnDestroy->new($$, \&emit_query, $self);
+	on_destroy \&emit_query, $self;
 }
 
 no warnings 'once';

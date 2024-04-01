@@ -10,7 +10,7 @@
 package PublicInbox::IPC;
 use v5.12;
 use parent qw(Exporter);
-use autodie qw(close fork pipe read socketpair sysread);
+use autodie qw(close pipe read socketpair sysread);
 use Carp qw(croak);
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
@@ -93,6 +93,8 @@ sub ipc_worker_loop ($$$) {
 	}
 }
 
+sub exit_exception { exit(!!$@) }
+
 # starts a worker if Sereal or Storable is installed
 sub ipc_worker_spawn {
 	my ($self, $ident, $oldset, $fields, @cb_args) = @_;
@@ -102,7 +104,7 @@ sub ipc_worker_spawn {
 	pipe(my $r_res, my $w_res);
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
 	$self->ipc_atfork_prepare;
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		delete @$self{qw(-wq_s1 -wq_s2 -wq_workers -wq_ppid)};
 		$w_req = $r_res = undef;
@@ -110,7 +112,7 @@ sub ipc_worker_spawn {
 		$SIG{$_} = 'IGNORE' for (qw(TERM INT QUIT));
 		local $0 = $ident;
 		# ensure we properly exit even if warn() dies:
-		my $end = PublicInbox::OnDestroy->new($$, sub { exit(!!$@) });
+		my $end = on_destroy \&exit_exception;
 		eval {
 			$fields //= {};
 			local @$self{keys %$fields} = values(%$fields);
@@ -330,7 +332,7 @@ sub _wq_worker_start {
 	my ($self, $oldset, $fields, $one, @cb_args) = @_;
 	my ($bcast1, $bcast2);
 	$one or socketpair($bcast1, $bcast2, AF_UNIX, SOCK_SEQPACKET, 0);
-	my $pid = PublicInbox::DS::do_fork;
+	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		undef $bcast1;
 		delete @$self{qw(-wq_s1 -wq_ppid)};
@@ -340,7 +342,7 @@ sub _wq_worker_start {
 		local $0 = $one ? $self->{-wq_ident} :
 			"$self->{-wq_ident} $self->{-wq_worker_nr}";
 		# ensure we properly exit even if warn() dies:
-		my $end = PublicInbox::OnDestroy->new($$, sub { exit(!!$@) });
+		my $end = on_destroy \&exit_exception;
 		eval {
 			$fields //= {};
 			local @$self{keys %$fields} = values(%$fields);

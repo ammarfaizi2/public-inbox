@@ -1,12 +1,12 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # handles "lei tag" command
 package PublicInbox::LeiTag;
-use strict;
-use v5.10.1;
+use v5.12;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
 use PublicInbox::InboxWritable qw(eml_from_path);
+use PublicInbox::OnDestroy;
 
 sub input_eml_cb { # used by PublicInbox::LeiInput::input_fh
 	my ($self, $eml) = @_;
@@ -49,7 +49,7 @@ sub ipc_atfork_child {
 	PublicInbox::LeiInput::input_only_atfork_child($self);
 	$self->{lse} = $self->{lei}->{sto}->search;
 	# this goes out-of-scope at worker process exit:
-	PublicInbox::OnDestroy->new($$, \&note_unimported, $self);
+	on_destroy \&note_unimported, $self;
 }
 
 # Workaround bash word-splitting s to ['kw', ':', 'keyword' ...]

@@ -244,7 +244,7 @@ sub reap_worker { # awaitpid CB
 
 sub start_worker ($) {
 	my ($nr) = @_;
-	my $pid = eval { PublicInbox::DS::do_fork } // return(warn($@));
+	my $pid = eval { PublicInbox::DS::fork_persist } // return(warn($@));
 	if ($pid == 0) {
 		undef %WORKERS;
 		$SIG{TTIN} = $SIG{TTOU} = 'IGNORE';

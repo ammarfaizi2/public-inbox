@@ -25,6 +25,7 @@ use PublicInbox::Tmpfile;
 use PublicInbox::ViewDiff qw(flush_diff uri_escape_path);
 use PublicInbox::View;
 use PublicInbox::Eml;
+use PublicInbox::OnDestroy;
 use Text::Wrap qw(wrap);
 use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe);
 use POSIX qw(strftime);
@@ -388,7 +389,7 @@ sub show_commit ($$) {
 			qw(--encoding=UTF-8 -z --no-notes --no-patch), $oid),
 			undef, { 1 => $ctx->{patch_fh} });
 	$qsp_h->{qsp_err} = \($ctx->{-qsp_err_h} = '');
-	my $cmt_fin = PublicInbox::OnDestroy->new($$, \&cmt_fin, $ctx);
+	my $cmt_fin = on_destroy \&cmt_fin, $ctx;
 	$ctx->{git} = $git;
 	$ctx->{oid} = $oid;
 	$qsp_h->psgi_qx($ctx->{env}, undef, \&cmt_hdr_prep, $ctx, $cmt_fin);
@@ -624,7 +625,7 @@ sub start_solver ($) {
 		my $v = $ctx->{qp}->{$from} // next;
 		$ctx->{hints}->{$to} = $v if $v ne '';
 	}
-	$ctx->{-next_solver} = PublicInbox::OnDestroy->new($$, \&next_solver);
+	$ctx->{-next_solver} = on_destroy \&next_solver;
 	++$solver_nr;
 	$ctx->{-tmp} = File::Temp->newdir("solver.$ctx->{oid_b}-XXXX",
 						TMPDIR => 1);
