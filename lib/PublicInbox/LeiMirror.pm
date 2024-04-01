@@ -856,7 +856,7 @@ sub v2_done { # called via OnDestroy
 	my $dst = $self->{cur_dst} // $self->{dst};
 	require PublicInbox::Lock;
 	my $lk = PublicInbox::Lock->new("$dst/inbox.lock");
-	my $lck = $lk->lock_for_scope($$);
+	my $lck = $lk->lock_for_scope;
 	_write_inbox_config($self);
 	require PublicInbox::MultiGit;
 	my $mg = PublicInbox::MultiGit->new($dst, 'all.git', 'git');

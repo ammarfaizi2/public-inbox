@@ -41,9 +41,9 @@ sub lock_release {
 
 # caller must use return value
 sub lock_for_scope {
-	my ($self, @single_pid) = @_;
+	my ($self) = @_;
 	lock_acquire($self) or return; # lock_path not set
-	PublicInbox::OnDestroy->new(@single_pid, \&lock_release, $self);
+	PublicInbox::OnDestroy->new(\&lock_release, $self);
 }
 
 sub lock_acquire_fast {
@@ -58,9 +58,9 @@ sub lock_release_fast {
 
 # caller must use return value
 sub lock_for_scope_fast {
-	my ($self, @single_pid) = @_;
+	my ($self) = @_;
 	lock_acquire_fast($self) or return; # lock_path not set
-	PublicInbox::OnDestroy->new(@single_pid, \&lock_release_fast, $self);
+	PublicInbox::OnDestroy->new(\&lock_release_fast, $self);
 }
 
 1;
