@@ -352,8 +352,7 @@ EOF
 	return unless defined $pid_file;
 
 	write_pid($pid_file);
-	# for ->DESTROY:
-	bless { pid => $$, pid_file => \$pid_file }, __PACKAGE__;
+	on_destroy \&unlink_pid_file_safe_ish, \$pid_file;
 }
 
 sub has_busy_clients { # post_loop_do CB
@@ -476,7 +475,7 @@ sub upgrade { # $_[0] = signal name or number (unused)
 			warn "BUG: .oldbin suffix exists: $pid_file\n";
 			return;
 		}
-		unlink_pid_file_safe_ish($$, $pid_file);
+		unlink_pid_file_safe_ish(\$pid_file);
 		$pid_file .= '.oldbin';
 		write_pid($pid_file);
 	}
@@ -509,23 +508,20 @@ sub upgrade_aborted {
 
 	my $file = $pid_file;
 	$file =~ s/\.oldbin\z// or die "BUG: no '.oldbin' suffix in $file";
-	unlink_pid_file_safe_ish($$, $pid_file);
+	unlink_pid_file_safe_ish(\$pid_file);
 	$pid_file = $file;
 	eval { write_pid($pid_file) };
 	warn $@, "\n" if $@;
 }
 
-sub unlink_pid_file_safe_ish ($$) {
-	my ($unlink_pid, $file) = @_;
-	return unless defined $unlink_pid && $unlink_pid == $$;
+sub unlink_pid_file_safe_ish ($) {
+	my ($fref) = @_;
 
-	open my $fh, '<', $file or return;
+	open my $fh, '<', $$fref or return;
 	local $/ = "\n";
 	defined(my $read_pid = <$fh>) or return;
 	chomp $read_pid;
-	if ($read_pid == $unlink_pid) {
-		Net::Server::Daemonize::unlink_pid_file($file);
-	}
+	Net::Server::Daemonize::unlink_pid_file($$fref) if $read_pid == $$;
 }
 
 sub master_quit ($) {
@@ -696,7 +692,7 @@ sub run {
 	$nworker = 1;
 	local (%XNETD, %POST_ACCEPT);
 	daemon_prepare($default_listen);
-	my $for_destroy = daemonize();
+	my $unlink_on_leave = daemonize();
 
 	# localize GCF2C for tests:
 	local $PublicInbox::GitAsyncCat::GCF2C;
@@ -706,17 +702,13 @@ sub run {
 	local %POST_ACCEPT;
 
 	daemon_loop();
-	# ->DESTROY runs when $for_destroy goes out-of-scope
+	# $unlink_on_leave runs
 }
 
 sub write_pid ($) {
 	my ($path) = @_;
 	Net::Server::Daemonize::create_pid_file($path);
 	do_chown($path);
-}
-
-sub DESTROY {
-	unlink_pid_file_safe_ish($_[0]->{pid}, ${$_[0]->{pid_file}});
 }
 
 1;

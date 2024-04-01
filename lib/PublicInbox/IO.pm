@@ -10,6 +10,7 @@ our @EXPORT_OK = qw(poll_in read_all try_cat write_file);
 use Carp qw(croak);
 use IO::Poll qw(POLLIN);
 use Errno qw(EINTR EAGAIN);
+use PublicInbox::OnDestroy;
 # don't autodie in top-level for Perl 5.16.3 (and maybe newer versions)
 # we have our own ->close, so we scope autodie into each sub
 
@@ -23,7 +24,8 @@ sub attach_pid {
 	my ($io, $pid, @cb_arg) = @_;
 	bless $io, __PACKAGE__;
 	# we share $err (and not $self) with awaitpid to avoid a ref cycle
-	${*$io}{pi_io_reap} = [ $$, $pid, \(my $err) ];
+	${*$io}{pi_io_reap} = [ $PublicInbox::OnDestroy::fork_gen,
+				$pid, \(my $err) ];
 	awaitpid($pid, \&waitcb, \$err, @cb_arg);
 	$io;
 }
@@ -33,9 +35,9 @@ sub attached_pid {
 	${${*$io}{pi_io_reap} // []}[1];
 }
 
-sub owner_pid {
+sub can_reap {
 	my ($io) = @_;
-	${${*$io}{pi_io_reap} // [-1]}[0];
+	${${*$io}{pi_io_reap} // [-1]}[0] == $PublicInbox::OnDestroy::fork_gen;
 }
 
 # caller cares about error result if they call close explicitly
@@ -44,7 +46,7 @@ sub close {
 	my ($io) = @_;
 	my $ret = $io->SUPER::close;
 	my $reap = delete ${*$io}{pi_io_reap};
-	return $ret unless $reap && $reap->[0] == $$;
+	return $ret if ($reap->[0] // -1) != $PublicInbox::OnDestroy::fork_gen;
 	if (defined ${$reap->[2]}) { # reap_pids already reaped asynchronously
 		$? = ${$reap->[2]};
 	} else { # wait synchronously
@@ -56,7 +58,7 @@ sub close {
 sub DESTROY {
 	my ($io) = @_;
 	my $reap = delete ${*$io}{pi_io_reap};
-	if ($reap && $reap->[0] == $$) {
+	if (($reap->[0] // -1) == $PublicInbox::OnDestroy::fork_gen) {
 		$io->SUPER::close;
 		awaitpid($reap->[1]);
 	}

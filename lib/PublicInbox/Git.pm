@@ -210,14 +210,14 @@ sub cat_async_retry ($$) {
 sub gcf_inflight ($) {
 	my ($self) = @_;
 	# FIXME: the first {sock} check can succeed but Perl can complain
-	# about calling ->owner_pid on an undefined value.  Not sure why or
-	# how this happens but t/imapd.t can complain about it, sometimes.
+	# about an undefined value.  Not sure why or how this happens but
+	# t/imapd.t can complain about it, sometimes.
 	if ($self->{sock}) {
-		if (eval { $self->{sock}->owner_pid == $$ }) {
+		if (eval { $self->{sock}->can_reap }) {
 			return $self->{inflight};
 		} elsif ($@) {
 			no warnings 'uninitialized';
-			warn "E: $self sock=$self->{sock}: owner_pid failed: ".
+			warn "E: $self sock=$self->{sock}: can_reap failed: ".
 				"$@ (continuing...)";
 		}
 		delete @$self{qw(sock inflight)};

@@ -15,6 +15,7 @@ use v5.12;
 use Symbol qw(gensym);
 use IO::KQueue;
 use Errno qw(EAGAIN);
+use PublicInbox::OnDestroy;
 use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET);
 
 sub EV_DISPATCH () { 0x0080 }
@@ -37,7 +38,8 @@ sub kq_flag ($$) {
 
 sub new {
 	my ($class) = @_;
-	bless { kq => IO::KQueue->new, owner_pid => $$ }, $class;
+	my $fgen = $PublicInbox::OnDestroy::fork_gen;
+	bless { kq => IO::KQueue->new, fgen => $fgen }, $class;
 }
 
 # returns a new instance which behaves like signalfd on Linux.
@@ -137,9 +139,8 @@ sub ep_wait {
 sub DESTROY {
 	my ($self) = @_;
 	my $kq = delete $self->{kq} or return;
-	if (delete($self->{owner_pid}) == $$) {
+	delete($self->{fgen}) == $PublicInbox::OnDestroy::fork_gen and
 		POSIX::close($$kq);
-	}
 }
 
 1;

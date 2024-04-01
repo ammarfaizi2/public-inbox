@@ -11,6 +11,7 @@ use parent qw(PublicInbox::LeiSearch PublicInbox::Lock);
 use PublicInbox::Git;
 use autodie qw(close open rename seek truncate);
 use PublicInbox::Import;
+use PublicInbox::OnDestroy;
 use PublicInbox::LeiXSearch;
 use Fcntl qw(SEEK_SET);
 
@@ -41,11 +42,11 @@ sub over {} # undef for xoids_for
 
 sub overs_all { # for xoids_for (called only in lei workers?)
 	my ($self) = @_;
-	my $pid = $$;
-	if (($self->{owner_pid} // $pid) != $pid) {
+	my $fgen = $PublicInbox::OnDestroy::fork_gen ;
+	if (($self->{fgen} // $fgen) != $fgen) {
 		delete($_->{over}) for @{$self->{ibxish}};
 	}
-	$self->{owner_pid} = $pid;
+	$self->{fgen} = $fgen;
 	grep(defined, map { $_->over } @{$self->{ibxish}});
 }
 

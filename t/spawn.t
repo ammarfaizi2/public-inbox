@@ -6,6 +6,7 @@ use Test::More;
 use PublicInbox::Spawn qw(which spawn popen_rd run_qx);
 require PublicInbox::Sigfd;
 require PublicInbox::DS;
+use PublicInbox::OnDestroy;
 my $rlimit_map = PublicInbox::Spawn->can('rlimit_map');
 {
 	my $true = which('true');
@@ -171,7 +172,7 @@ EOF
 	my @arg;
 	my $fh = popen_rd(['cat'], undef, { 0 => $r },
 			sub { @arg = @_; warn "x=$$\n" }, 'hi');
-	my $pid = fork // BAIL_OUT $!;
+	my $pid = PublicInbox::OnDestroy::fork_tmp;
 	local $SIG{__WARN__} = sub { _exit(1) };
 	if ($pid == 0) {
 		local $SIG{__DIE__} = sub { _exit(2) };
