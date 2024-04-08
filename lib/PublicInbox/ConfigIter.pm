@@ -1,12 +1,11 @@
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Intended for PublicInbox::DS::event_loop in read-only daemons
 # to avoid each_inbox() monopolizing the event loop when hundreds/thousands
 # of inboxes are in play.
 package PublicInbox::ConfigIter;
-use strict;
-use v5.10.1;
+use v5.12;
 
 sub new {
 	my ($class, $pi_cfg, $cb, @args) = @_;
@@ -25,7 +24,7 @@ sub event_step {
 	PublicInbox::DS::requeue($self) if defined($section);
 }
 
-# for generic PSGI servers
+# for generic PSGI servers, but also ManifestJsGz w/ ALL extindex
 sub each_section {
 	my $self = shift;
 	my ($pi_cfg, $i, $cb, @arg) = @$self;

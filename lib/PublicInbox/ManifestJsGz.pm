@@ -82,8 +82,9 @@ sub response {
 					$ctx->can('list_match_i'), $re, $ctx);
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server callback
-		$ctx->{env}->{'pi-httpd.async'} ?
-				$iter->event_step : $iter->each_section;
+		($ctx->{www}->{pi_cfg}->ALL ||
+					!$ctx->{env}->{'pi-httpd.async'}) ?
+				$iter->each_section : $iter->event_step;
 	}
 }
 
