@@ -317,6 +317,10 @@ BEGIN {
 		)
 	}
 	$PACK{CMSG_ALIGN_size} = SIZEOF_size_t;
+	$PACK{SIZEOF_cmsghdr} //= 0;
+	$PACK{TMPL_cmsg_len} //= undef;
+	$PACK{CMSG_DATA_off} //= undef;
+	$PACK{TMPL_msghdr} //= undef;
 }
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
