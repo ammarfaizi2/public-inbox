@@ -119,14 +119,17 @@ sub lei_blob {
 		} else {
 			open $rdr->{2}, '>', '/dev/null' or die "open: $!";
 		}
-		my $cmd = [ 'git', '--git-dir='.$lei->ale->git->{git_dir},
-				'cat-file', 'blob', $blob ];
+		my $cmd = $lei->ale->git->cmd('cat-file', 'blob', $blob);
+		my $cerr;
 		if (defined $lei->{-attach_idx}) {
 			my $buf = run_qx($cmd, $lei->{env}, $rdr);
 			return extract_attach($lei, $blob, \$buf) unless $?;
+			$cerr = $?;
+		} else {
+			$rdr->{1} = $lei->{1}; # write directly to client
+			$cerr = run_wait($cmd, $lei->{env}, $rdr) or return;
 		}
-		$rdr->{1} = $lei->{1};
-		my $cerr = run_wait($cmd, $lei->{env}, $rdr) or return;
+		# fall back to unimported ('lei index') and inflight blobs
 		my $lms = $lei->lms;
 		my $bref = ($lms ? $lms->local_blob($blob, 1) : undef) // do {
 			my $sto = $lei->{sto} // $lei->_lei_store;
