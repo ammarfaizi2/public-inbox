@@ -47,6 +47,10 @@ if ($dst eq 'NEWS') {
 		-upfx => "$base_url/",
 		-hr => 1,
 		zfh => $out,
+		env => {
+			HTTP_HOST => 'public-inbox.org',
+			'psgi.url_scheme' => 'https',
+		},
 	};
 	if ($dst eq 'NEWS.html') {
 		html_start($out, $ctx);
