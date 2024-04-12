@@ -101,6 +101,19 @@ EOM
 	}
 };
 
+my $test_lei_q_threadid = sub {
+	my ($u) = @_;
+	test_lei(sub {
+		lei_ok qw(q -f text --only), $u, qw(-T t@1 s:unrelated);
+		is $lei_out, '', 'no results on unrelated thread';
+		lei_ok qw(q -f text --only), $u, qw(-T t@1 dt:19931002000300..);
+		my @m = ($lei_out =~ m!^Message-ID: <([^>]+)>\n!gms);
+		is_deeply \@m, ['t@3'], 'got expected result from -T MSGID';
+	});
+};
+
+$test_lei_q_threadid->($m2t->{inboxdir});
+
 my $cfgpath = "$ibx->{inboxdir}/pi_config";
 {
 	open my $fh, '>', $cfgpath or BAIL_OUT $!;
@@ -374,6 +387,9 @@ my $client3 = sub {
 
 	$res = $cb->(POST("/m2t/t\@1/?q=s:unrelated&x=m"));
 	is($res->code, 404, '404 on cross-thread search');
+
+	my $rmt = $ENV{PLACK_TEST_EXTERNALSERVER_URI};
+	$rmt and $test_lei_q_threadid->("$rmt/m2t/");
 };
 test_psgi(sub { $www->call(@_) }, $client3);
 test_httpd($env, $client3, 4);

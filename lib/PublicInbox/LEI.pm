@@ -177,6 +177,7 @@ our %CMD = ( # sorted in order of importance/use:
 	'stdin|', # /|\z/ must be first for lone dash
 	@lxs_opt, @net_opt,
 	qw(save! output|mfolder|o=s format|f=s dedupe|d=s threads|t+
+	thread-id|T=s
 	sort|s=s reverse|r offset=i pretty jobs|j=s globoff|g augment|a
 	import-before! lock=s@ rsyncable alert=s@ mua=s verbose|v+
 	shared color! mail-sync!), @c_opt, opt_dash('limit|n=i', '[0-9]+') ],

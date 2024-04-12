@@ -13,7 +13,7 @@ use File::Temp 0.19 (); # 0.19 for ->newdir
 use File::Spec ();
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::Spawn qw(popen_rd popen_wr which);
-use PublicInbox::MID qw(mids);
+use PublicInbox::MID qw(mids mid_escape);
 use PublicInbox::Smsg;
 use PublicInbox::Eml;
 use PublicInbox::LEI;
@@ -160,6 +160,8 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	my $can_kw = !!$ibxish->can('msg_keywords');
 	my $threads = $lei->{opt}->{threads} // 0;
 	my $fl = $threads > 1 ? 1 : undef;
+	my $mid = $lei->{opt}->{'thread-id'};
+	$mo->{threadid} = $over->mid2tid($mid) if defined $mid;
 	my $lss = $lei->{lss};
 	my $maxk = "external.$dir.maxuid"; # max of previous, so our min
 	my $min = $lss ? ($lss->{-cfg}->{$maxk} // 0) : 0;
@@ -339,6 +341,12 @@ print STDERR $_;
 	push @$curl, '-s', '-d', '';
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
 	$self->{import_sto} = $lei->{sto} if $lei->{opt}->{'import-remote'};
+	if (defined(my $mid = $opt->{'thread-id'})) {
+		$mid = mid_escape($mid);
+		for my $uri (@$uris) {
+			$uri->path($uri->path.$mid.'/');
+		}
+	}
 	for my $uri (@$uris) {
 		$lei->{-current_url} = $uri->as_string;
 		my $start = time;
@@ -459,7 +467,9 @@ sub concurrency {
 sub start_query ($$) { # always runs in main (lei-daemon) process
 	my ($self, $lei) = @_;
 	local $PublicInbox::LEI::current_lei = $lei;
-	if ($self->{opt_threads} || ($lei->{l2m} && !$self->{opt_sort})) {
+	if ($lei->{opt}->{threads} ||
+			defined($lei->{opt}->{'thread-id'}) ||
+			($lei->{l2m} && !$lei->{opt}->{'sort'})) {
 		for my $ibxish (locals($self)) {
 			$self->wq_io_do('query_one_mset', [], $ibxish);
 		}
@@ -546,8 +556,6 @@ sub do_query {
 	my $op_c = delete $lei->{pkt_op_c};
 	delete $lei->{pkt_op_p};
 	@$end = ();
-	$self->{opt_threads} = $lei->{opt}->{threads};
-	$self->{opt_sort} = $lei->{opt}->{'sort'};
 	$self->{-do_lcat} = !!(delete $lei->{lcat_todo});
 	if ($l2m) {
 		$l2m->net_merge_all_done($lei) unless $lei->{auth};

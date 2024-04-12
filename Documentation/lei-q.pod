@@ -129,6 +129,15 @@ lei/store unless an MUA unflags it!  (Behavior undecided)
 Caveat: C<-tt> only works on locally-indexed messages at the
 moment, and not on remote (HTTP(S)) endpoints.
 
+=item --thread-id=MSGID
+
+=item -T MSGID
+
+Only search messages in the same thread as the given Message-ID.
+
+For HTTP(S) externals, this only works on instances running
+public-inbox 2.0+ (UNRELEASED).
+
 =item --jobs=QUERY_WORKERS[,WRITE_WORKERS]
 
 =item --jobs=,WRITE_WORKERS
