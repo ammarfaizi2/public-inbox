@@ -728,8 +728,6 @@ sub optparse ($$$) {
 		require PublicInbox::LeiInput;
 		my @err = PublicInbox::LeiInput::vmd_mod_extract($self, $argv);
 		return $self->fail(join("\n", @err)) if @err;
-	} else {
-		warn "proto $proto\n" if $cmd =~ /(add-watch|tag|index)/;
 	}
 
 	my $i = 0;
