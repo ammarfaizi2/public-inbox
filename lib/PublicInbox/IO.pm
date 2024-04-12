@@ -16,7 +16,7 @@ use PublicInbox::OnDestroy;
 
 sub waitcb { # awaitpid callback
 	my ($pid, $errref, $cb, @args) = @_;
-	$$errref = $? if $errref; # sets .cerr for _close
+	$$errref = $?; # sets .cerr for _close
 	$cb->($pid, @args) if $cb; # may clobber $?
 }
 
@@ -24,9 +24,9 @@ sub attach_pid {
 	my ($io, $pid, @cb_arg) = @_;
 	bless $io, __PACKAGE__;
 	# we share $err (and not $self) with awaitpid to avoid a ref cycle
-	${*$io}{pi_io_reap} = [ $PublicInbox::OnDestroy::fork_gen,
-				$pid, \(my $err) ];
-	awaitpid($pid, \&waitcb, \$err, @cb_arg);
+	my $e = \(my $err);
+	${*$io}{pi_io_reap} = [ $PublicInbox::OnDestroy::fork_gen, $pid, $e ];
+	awaitpid($pid, \&waitcb, $e, @cb_arg);
 	$io;
 }
 
@@ -60,7 +60,7 @@ sub DESTROY {
 	my $reap = delete ${*$io}{pi_io_reap};
 	if (($reap->[0] // -1) == $PublicInbox::OnDestroy::fork_gen) {
 		$io->SUPER::close;
-		awaitpid($reap->[1]);
+		${$reap->[2]} // awaitpid($reap->[1]);
 	}
 	$io->SUPER::DESTROY;
 }
