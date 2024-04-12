@@ -67,9 +67,16 @@ sub base_url { "$_[0]->{uri}" }
 
 sub smsg_eml {
 	my ($self, $smsg) = @_;
-	if (my $bref = $self->{lei}->ale->git->cat_file($smsg->{blob})) {
-		return PublicInbox::Eml->new($bref);
-	}
+	my $bref = $self->{lei}->ale->git->cat_file($smsg->{blob}) // do {
+		my $lms = $self->{lei}->lms;
+		($lms ? $lms->local_blob($smsg->{blob}, 1) : undef) // do {
+			my $sto = $self->{lei}->{sto} //
+					$self->{lei}->_lei_store;
+			$sto && $sto->{-wq_s1} ?
+				$sto->wq_do('cat_blob', $smsg->{blob}) : undef;
+		}
+	};
+	return PublicInbox::Eml->new($bref) if $bref;
 	warn("E: $self->{uri} $smsg->{blob} gone <$smsg->{mid}>\n");
 	undef;
 }
