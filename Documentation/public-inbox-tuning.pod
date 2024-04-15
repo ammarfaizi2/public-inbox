@@ -165,8 +165,11 @@ capacity planning.
 
 Bursts of small object allocations late in process life contribute to
 fragmentation of the heap due to arenas (slabs) used internally by Perl.
-jemalloc (tested as an LD_PRELOAD on GNU/Linux) appears to reduce
+jemalloc (tested as an LD_PRELOAD on GNU/Linux) reduces
 overall fragmentation compared to glibc malloc in long-lived processes.
+glibc malloc users may try setting C<MALLOC_MMAP_THRESHOLD_> to a lower
+value (e.g. 131072) but that may require increasing the
+C<sys.vm.max_map_count> sysctl.
 
 =head2 Other OS tuning knobs
 
