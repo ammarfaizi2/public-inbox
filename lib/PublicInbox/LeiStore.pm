@@ -571,21 +571,11 @@ sub set_xvmd {
 	sto_export_kw($self, $smsg->{num}, $vmd);
 }
 
-sub barrier {
+sub check_done {
 	my ($self) = @_;
-	my ($errfh, $lei_sock) = @$self{0, 1}; # via sto_barrier_request
-	my @err;
-	if ($self->{im}) {
-		eval { $self->{im}->barrier };
-		push(@err, "E: import barrier: $@\n") if $@;
-	}
-	delete $self->{lms};
-	eval { $self->{priv_eidx}->barrier };
-	push(@err, "E: priv_eidx barrier: $@\n") if $@;
-	print { $errfh // \*STDERR } @err;
-	send($lei_sock, 'child_error 256', 0) if @err && $lei_sock;
-	xchg_stderr($self);
-	die @err if @err;
+	$self->git->_active ?
+		add_uniq_timer("$self-check_done", 5, \&check_done, $self) :
+		done($self);
 }
 
 sub xchg_stderr {
@@ -602,22 +592,32 @@ sub xchg_stderr {
 	undef;
 }
 
-sub done {
-	my ($self) = @_;
-	my ($errfh, $lei_sock) = @$self{0, 1};
+sub _commit ($$) {
+	my ($self, $cmd) = @_; # cmd is 'done' or 'barrier'
+	my ($errfh, $lei_sock) = @$self{0, 1}; # via sto_barrier_request
 	my @err;
-	if (my $im = delete($self->{im})) {
-		eval { $im->done };
-		push(@err, "E: import done: $@\n") if $@;
+	if ($self->{im}) {
+		eval { $self->{im}->$cmd };
+		push(@err, "E: import $cmd: $@\n") if $@;
 	}
 	delete $self->{lms};
-	eval { $self->{priv_eidx}->done }; # V2Writable::done
-	push(@err, "E: priv_eidx done: $@\n") if $@;
-	print { $errfh // *STDERR{GLOB} } @err;
+	eval { $self->{priv_eidx}->$cmd };
+	push(@err, "E: priv_eidx $cmd: $@\n") if $@;
+	print { $errfh // \*STDERR } @err;
 	send($lei_sock, 'child_error 256', 0) if @err && $lei_sock;
 	xchg_stderr($self);
 	die @err if @err;
+	# $lei_sock goes out-of-scope and script/lei can terminate
 }
+
+sub barrier {
+	my ($self) = @_;
+	_commit $self, 'barrier';
+	add_uniq_timer("$self-check_done", 5, \&check_done, $self);
+	undef;
+}
+
+sub done { _commit $_[0], 'done' }
 
 sub ipc_atfork_child {
 	my ($self) = @_;
