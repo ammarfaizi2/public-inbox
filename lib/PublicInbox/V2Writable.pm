@@ -507,13 +507,7 @@ sub set_last_commits ($) { # this is NOT for ExtSearchIdx
 sub checkpoint ($;$) {
 	my ($self, $wait) = @_;
 
-	if (my $im = $self->{im}) {
-		if ($wait) {
-			$im->barrier;
-		} else {
-			$im->checkpoint;
-		}
-	}
+	$self->{im}->barrier if $self->{im};
 	my $shards = $self->{idx_shards};
 	if ($shards) {
 		my $dbh = $self->{mm}->{dbh} if $self->{mm};

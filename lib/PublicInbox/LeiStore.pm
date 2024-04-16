@@ -573,9 +573,7 @@ sub set_xvmd {
 
 sub checkpoint {
 	my ($self, $wait) = @_;
-	if (my $im = $self->{im}) {
-		$wait ? $im->barrier : $im->checkpoint;
-	}
+	$self->{im}->barrier if $self->{im};
 	delete $self->{lms};
 	$self->{priv_eidx}->checkpoint($wait);
 }
