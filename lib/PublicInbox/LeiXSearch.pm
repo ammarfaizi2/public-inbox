@@ -22,6 +22,7 @@ use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
 use autodie qw(close open read seek truncate);
 use PublicInbox::Syscall qw($F_SETPIPE_SZ);
+use PublicInbox::OnDestroy;
 
 sub new {
 	my ($class) = @_;
@@ -428,11 +429,9 @@ sub query_done { # EOF callback for main daemon
 	$lei->dclose;
 }
 
-sub do_post_augment {
+sub post_augment_done { # via on_destroy in top-level lei-daemon
 	my ($lei) = @_;
-	my $l2m = $lei->{l2m} or return; # client disconnected
-	eval { $l2m->post_augment($lei) };
-	my $err = $@;
+	my $err = delete $lei->{post_augment_err};
 	if ($err) {
 		if (my $lxs = delete $lei->{lxs}) {
 			$lxs->wq_kill(-POSIX::SIGTERM());
@@ -445,6 +444,12 @@ sub do_post_augment {
 		$lei->fail($@) if $@;
 	}
 	close(delete $lei->{au_done}); # trigger wait_startq if start_mua didn't
+}
+
+sub do_post_augment {
+	my ($lei) = @_;
+	my $l2m = $lei->{l2m} or return; # client disconnected
+	$l2m->post_augment($lei, on_destroy(\&post_augment_done, $lei));
 }
 
 sub incr_post_augment { # called whenever an l2m shard finishes augment
