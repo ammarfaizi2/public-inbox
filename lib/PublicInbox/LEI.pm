@@ -1443,7 +1443,7 @@ sub wq_eof { # EOF callback for main daemon
 	my ($lei, $wq_fld) = @_;
 	local $current_lei = $lei;
 	my $wq = delete $lei->{$wq_fld // 'wq1'};
-	$lei->sto_done_request($wq);
+	$lei->sto_barrier_request($wq);
 	$wq // $lei->fail; # already failed
 }
 
@@ -1548,7 +1548,7 @@ sub lms {
 	(-f $f || $creat) ? PublicInbox::LeiMailSync->new($f) : undef;
 }
 
-sub sto_done_request {
+sub sto_barrier_request {
 	my ($lei, $wq) = @_;
 	return unless $lei->{sto} && $lei->{sto}->{-wq_s1};
 	local $current_lei = $lei;
@@ -1558,7 +1558,7 @@ sub sto_done_request {
 		my $s = ($wq ? $wq->{lei_sock} : undef) // $lei->{sock};
 		my $errfh = $lei->{2} // *STDERR{GLOB};
 		my @io = $s ? ($errfh, $s) : ($errfh);
-		eval { $lei->{sto}->wq_io_do('done', \@io) };
+		eval { $lei->{sto}->wq_io_do('barrier', \@io, 1) };
 	}
 	warn($@) if $@;
 }

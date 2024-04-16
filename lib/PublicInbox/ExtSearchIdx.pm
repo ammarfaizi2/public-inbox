@@ -1424,5 +1424,6 @@ no warnings 'once';
 *idx_shard = \&PublicInbox::V2Writable::idx_shard;
 *reindex_checkpoint = \&PublicInbox::V2Writable::reindex_checkpoint;
 *checkpoint = \&PublicInbox::V2Writable::checkpoint;
+*barrier = \&PublicInbox::V2Writable::barrier;
 
 1;

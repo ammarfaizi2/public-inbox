@@ -81,7 +81,7 @@ sub importer {
 		delete $self->{im};
 		$im->done;
 		undef $im;
-		$self->checkpoint;
+		$self->barrier;
 		$max = $self->{priv_eidx}->{mg}->git_epochs + 1;
 	}
 	my (undef, $tl) = eidx_init($self); # acquire lock
@@ -118,7 +118,7 @@ sub cat_blob {
 
 sub schedule_commit {
 	my ($self, $sec) = @_;
-	add_uniq_timer($self->{priv_eidx}->{topdir}, $sec, \&done, $self);
+	add_uniq_timer($self->{priv_eidx}->{topdir}, $sec, \&barrier, $self);
 }
 
 # follows the stderr file
@@ -391,7 +391,7 @@ sub reindex_done {
 	my ($self) = @_;
 	my ($eidx, $tl) = eidx_init($self);
 	$eidx->git->async_wait_all;
-	# ->done to be called via sto_done_request
+	# ->done to be called via sto_barrier_request
 }
 
 sub add_eml {
@@ -571,11 +571,21 @@ sub set_xvmd {
 	sto_export_kw($self, $smsg->{num}, $vmd);
 }
 
-sub checkpoint {
-	my ($self, $wait) = @_;
-	$self->{im}->barrier if $self->{im};
+sub barrier {
+	my ($self) = @_;
+	my ($errfh, $lei_sock) = @$self{0, 1}; # via sto_barrier_request
+	my @err;
+	if ($self->{im}) {
+		eval { $self->{im}->barrier };
+		push(@err, "E: import barrier: $@\n") if $@;
+	}
 	delete $self->{lms};
-	$self->{priv_eidx}->checkpoint($wait);
+	eval { $self->{priv_eidx}->barrier };
+	push(@err, "E: priv_eidx barrier: $@\n") if $@;
+	print { $errfh // \*STDERR } @err;
+	send($lei_sock, 'child_error 256', 0) if @err && $lei_sock;
+	xchg_stderr($self);
+	die @err if @err;
 }
 
 sub xchg_stderr {
@@ -594,7 +604,7 @@ sub xchg_stderr {
 
 sub done {
 	my ($self) = @_;
-	my ($errfh, $lei_sock) = @$self{0, 1}; # via sto_done_request
+	my ($errfh, $lei_sock) = @$self{0, 1};
 	my @err;
 	if (my $im = delete($self->{im})) {
 		eval { $im->done };

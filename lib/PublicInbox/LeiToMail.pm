@@ -724,8 +724,9 @@ sub post_augment {
 	my ($self, $lei, @args) = @_;
 	$self->{-au_noted}++ and $lei->qerr("# writing to $self->{dst} ...");
 
+	# FIXME: this synchronous wait can be slow w/ parallel callers
 	my $wait = $lei->{opt}->{'import-before'} ?
-			$lei->{sto}->wq_do('checkpoint', 1) : 0;
+			$lei->{sto}->wq_do('barrier') : 0;
 	# _post_augment_mbox
 	my $m = $self->can("_post_augment_$self->{base_type}") or return;
 	$m->($self, $lei, @args);

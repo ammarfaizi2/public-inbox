@@ -499,7 +499,7 @@ sub process_inputs {
 	}
 	# always commit first, even on error partial work is acceptable for
 	# lei <import|tag|convert>
-	$self->{lei}->sto_done_request;
+	$self->{lei}->sto_barrier_request;
 	$self->{lei}->fail($err) if $err;
 }
 

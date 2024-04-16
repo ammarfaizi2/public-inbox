@@ -60,7 +60,7 @@ sub input_path_url { # overrides PublicInbox::LeiInput::input_path_url
 			$self->folder_missing($$uri);
 		}
 	} else { die "BUG: $input not supported" }
-	$self->{lei}->sto_done_request;
+	$self->{lei}->sto_barrier_request;
 }
 
 sub lei_refresh_mail_sync {

@@ -39,7 +39,7 @@ EOM
 	lei_ok qw(q m:testmessage@example.com);
 	is($lei_out, "[null]\n", 'delayed commit is unindexed');
 
-	# make immediate ->sto_done_request fail from mboxrd import:
+	# make immediate ->sto_barrier_request fail from mboxrd import:
 	remove_tree("$ENV{HOME}/.local/share/lei/store");
 	# subsequent lei commands are undefined behavior,
 	# but we need to make sure the current lei command fails:

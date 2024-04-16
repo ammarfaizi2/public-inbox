@@ -363,7 +363,7 @@ print STDERR $_;
 						$self, $lei, $each_smsg);
 		};
 		my ($exc, $code) = ($@, $?);
-		$lei->sto_done_request if delete($self->{-sto_imported});
+		$lei->sto_barrier_request if delete($self->{-sto_imported});
 		die "E: $exc" if $exc && !$code;
 		my $nr = delete $lei->{-nr_remote_eml} // 0;
 		if (!$code) { # don't update if no results, maybe MTA is down
@@ -399,7 +399,7 @@ sub query_done { # EOF callback for main daemon
 	delete $lei->{lxs};
 	($lei->{opt}->{'mail-sync'} && !$lei->{sto}) and
 		warn "BUG: {sto} missing with --mail-sync";
-	$lei->sto_done_request;
+	$lei->sto_barrier_request;
 	$lei->{ovv}->ovv_end($lei);
 	if ($l2m) { # close() calls LeiToMail reap_compress
 		$l2m->finish_output($lei);

@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Make remote externals HTTP(S) inboxes behave like
@@ -51,7 +51,7 @@ sub mset {
 	$fh = IO::Uncompress::Gunzip->new($fh, MultiStream=>1, AutoClose=>1);
 	eval { PublicInbox::MboxReader->mboxrd($fh, \&each_mboxrd_eml, $self) };
 	my $err = $@ ? ": $@" : '';
-	my $wait = $self->{lei}->{sto}->wq_do('done');
+	my $wait = $self->{lei}->{sto}->wq_do('barrier');
 	$lei->child_error($?, "@$cmd failed$err") if $err || $?;
 	$self; # we are the mset (and $ibx, and $self)
 }
