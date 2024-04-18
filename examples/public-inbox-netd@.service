@@ -12,14 +12,15 @@ Wants = public-inbox-netd.socket
 After = public-inbox-netd.socket
 
 [Service]
-# An LD_PRELOAD for libjemalloc can be added here.  It is
-# more resistant to fragmentation in long-lived daemons than glibc.
-# If you're unable to use jemalloc, setting MALLOC_MMAP_THRESHOLD_
-# to a lower value (e.g. 131072) but that may also require increasing
-# the sys.vm.max_map_count sysctl.
+
+# Setting MALLOC_MMAP_THRESHOLD_=131072 reduces fragmentation by
+# disabling the sliding mmap window in glibc malloc.  An LD_PRELOAD for
+# libjemalloc may be added here, instead.  jemalloc is more resistant to
+# fragmentation in long-lived daemons than unconfigured glibc malloc.
 Environment = PI_CONFIG=/home/pi/.public-inbox/config \
 PATH=/usr/local/bin:/usr/bin:/bin \
 TZ=UTC \
+MALLOC_MMAP_THRESHOLD_=131072 \
 PERL_INLINE_DIRECTORY=/tmp/.netd-inline
 
 LimitNOFILE = 30000

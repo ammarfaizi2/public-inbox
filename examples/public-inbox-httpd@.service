@@ -19,6 +19,7 @@ After = public-inbox-httpd.socket
 Environment = PI_CONFIG=/home/pi/.public-inbox/config \
 PATH=/usr/local/bin:/usr/bin:/bin \
 TZ=UTC \
+MALLOC_MMAP_THRESHOLD_=131072 \
 PERL_INLINE_DIRECTORY=/tmp/.pub-inline
 
 LimitNOFILE = 30000

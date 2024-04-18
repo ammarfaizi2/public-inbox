@@ -54,8 +54,9 @@ treewide
 
   * SHA-256 coderepos are fully supported (but not inboxes, yet)
 
-  * jemalloc (tested as an LD_PRELOAD) is recommended to reduce fragmentation
-    in long-running daemon processes serving unpredictable traffic
+  * for daemons serving public traffic, MALLOC_MMAP_THRESHOLD_=131072 is
+    recommended to reduce fragmentation in glibc malloc, while jemalloc
+    (tested as an LD_PRELOAD) is another option.
 
 PublicInbox::WWW
 
