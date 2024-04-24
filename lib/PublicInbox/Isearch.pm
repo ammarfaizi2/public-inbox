@@ -26,34 +26,44 @@ SELECT ibx_id FROM inboxes WHERE eidx_key = ? LIMIT 1
 
 sub query_approxidate { $_[0]->{es}->query_approxidate($_[1], $_[2]) }
 
-sub mset {
-	my ($self, $str, $opt) = @_;
+sub eidx_mset_prep ($$) {
+	my ($self, $opt) = @_;
 	my %opt = $opt ? %$opt : ();
 	$opt{eidx_key} = $self->{eidx_key};
-	if (my $uid_range = $opt{uid_range}) {
-		my ($beg, $end) = @$uid_range;
-		my $ibx_id = $self->{-ibx_id} //= _ibx_id($self);
-		my $dbh = $self->{es}->over->dbh;
-		my $sth = $dbh->prepare_cached(<<'', undef, 1);
+	my $uid_range = $opt{uid_range} or return \%opt;
+	my ($beg, $end) = @$uid_range;
+	my $ibx_id = $self->{-ibx_id} //= _ibx_id($self);
+	my $dbh = $self->{es}->over->dbh;
+	my $sth = $dbh->prepare_cached(<<'', undef, 1);
 SELECT MIN(docid) FROM xref3 WHERE ibx_id = ? AND xnum >= ? AND xnum <= ?
 
-		$sth->execute($ibx_id, $beg, $end);
-		my @r = ($sth->fetchrow_array);
+	$sth->execute($ibx_id, $beg, $end);
+	my @r = ($sth->fetchrow_array);
 
-		$sth = $dbh->prepare_cached(<<'', undef, 1);
+	$sth = $dbh->prepare_cached(<<'', undef, 1);
 SELECT MAX(docid) FROM xref3 WHERE ibx_id = ? AND xnum >= ? AND xnum <= ?
 
-		$sth->execute($ibx_id, $beg, $end);
-		$r[1] = $sth->fetchrow_array;
-		if (defined($r[1]) && defined($r[0])) {
-			$opt{limit} = $r[1] - $r[0] + 1;
-		} else {
-			$r[1] //= $self->{es}->xdb->get_lastdocid;
-			$r[0] //= 0;
-		}
-		$opt{uid_range} = \@r; # these are fed to Xapian and SQLite
+	$sth->execute($ibx_id, $beg, $end);
+	$r[1] = $sth->fetchrow_array;
+	if (defined($r[1]) && defined($r[0])) {
+		$opt{limit} = $r[1] - $r[0] + 1;
+	} else {
+		$r[1] //= $self->{es}->xdb->get_lastdocid;
+		$r[0] //= 0;
 	}
-	$self->{es}->mset($str, \%opt);
+	$opt{uid_range} = \@r; # these are fed to Xapian and SQLite
+	\%opt;
+}
+
+sub mset {
+	my ($self, $str, $opt) = @_;
+	$self->{es}->mset($str, eidx_mset_prep $self, $opt);
+}
+
+sub async_mset {
+	my ($self, $str, $opt, $cb, @args) = @_;
+	$opt = eidx_mset_prep $self, $opt;
+	$self->{es}->async_mset($str, $opt, $cb, @args);
 }
 
 sub mset_to_artnums {

@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(retry_reopen int_val get_pct xap_terms);
 use List::Util qw(max);
 use POSIX qw(strftime);
 use Carp ();
+our $XHC;
 
 # values for searching, changing the numeric value breaks
 # compatibility with old indices (so don't change them it)
@@ -85,7 +86,6 @@ our @XH_SPEC = (
 	'k=i', # sort column (like sort(1))
 	'm=i', # maximum number of results
 	'o=i', # offset
-	'p', # show percent
 	'r', # 1=relevance then column
 	't', # collapse threads
 	'A=s@', # prefixes
@@ -426,6 +426,56 @@ sub mset {
 			$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
 	}
 	do_enquire($self, $qry, $opt, TS);
+}
+
+sub xhc_start_maybe () {
+	require PublicInbox::XapClient;
+	my $xhc = PublicInbox::XapClient::start_helper();
+	require PublicInbox::XhcMset if $xhc;
+	$xhc;
+}
+
+sub xh_opt ($) {
+	my ($opt) = @_;
+	my $lim = $opt->{limit} || 50;
+	my @ret;
+	push @ret, '-o', $opt->{offset} if $opt->{offset};
+	push @ret, '-m', $lim;
+	my $rel = $opt->{relevance} // 0;
+	if ($rel == -2) { # ORDER BY docid/UID (highest first)
+		push @ret, '-k', '-1';
+	} elsif ($rel == -1) { # ORDER BY docid/UID (lowest first)
+		push @ret, '-k', '-1';
+		push @ret, '-a';
+	} elsif ($rel == 0) {
+		push @ret, '-k', $opt->{sort_col} // TS;
+		push @ret, '-a' if $opt->{asc};
+	} else { # rel > 0
+		push @ret, '-r';
+		push @ret, '-k', $opt->{sort_col} // TS;
+		push @ret, '-a' if $opt->{asc};
+	}
+	push @ret, '-t' if $opt->{threads};
+	push @ret, '-T', $opt->{threadid} if defined $opt->{threadid};
+	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
+	@ret;
+}
+
+# returns a true value if actually handled asynchronously,
+# and a falsy value if handled synchronously
+sub async_mset {
+	my ($self, $qry_str, $opt, $cb, @args) = @_;
+	$XHC //= xhc_start_maybe;
+	if ($XHC) { # unconditionally retrieving pct + rank for now
+		xdb($self); # populate {nshards}
+		my @margs = ($self->xh_args, xh_opt($opt));
+		my $rd = $XHC->mkreq(undef, 'mset', @margs, $qry_str);
+		PublicInbox::XhcMset->maybe_new($rd, $self, $cb, @args);
+	} else { # synchronous
+		my $mset = $self->mset($qry_str, $opt);
+		$cb->(@args, $mset);
+		undef;
+	}
 }
 
 sub do_enquire { # shared with CodeSearch

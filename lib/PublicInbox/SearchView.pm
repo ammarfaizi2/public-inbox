@@ -30,10 +30,9 @@ sub mbox_results {
 
 sub sres_top_html {
 	my ($ctx) = @_;
-	my $srch = $ctx->{ibx}->isrch or
+	my $srch = $ctx->{srch} = $ctx->{ibx}->isrch or
 		return PublicInbox::WWW::need($ctx, 'Search');
 	my $q = PublicInbox::SearchQuery->new($ctx->{qp});
-	my $x = $q->{x};
 	my $o = $q->{o} // 0;
 	my $asc;
 	if ($o < 0) {
@@ -41,48 +40,57 @@ sub sres_top_html {
 		$o = -($o + 1); # so [-1] is the last element, like Perl lists
 	}
 
-	my $code = 200;
 	# double the limit for expanded views:
-	my $opts = {
+	my $opt = {
 		limit => $q->{l},
 		offset => $o,
 		relevance => $q->{r},
 		threads => $q->{t},
 		asc => $asc,
 	};
-	my ($mset, $total, $err, $html);
-retry:
-	eval {
-		my $query = $q->{'q'};
-		$srch->query_approxidate($ctx->{ibx}->git, $query);
-		$mset = $srch->mset($query, $opts);
-		$total = $mset->get_matches_estimated;
-	};
-	$err = $@;
+	my $qs = $q->{'q'};
+	$srch->query_approxidate($ctx->{ibx}->git, $qs);
+	sub {
+		$ctx->{wcb} = $_[0]; # PSGI server supplied write cb
+		$srch->async_mset($qs, $opt, \&sres_html_cb, $ctx, $opt, $q);
+	}
+}
+
+sub sres_html_cb { # async_mset cb
+	my ($ctx, $opt, $q, $mset, $err) = @_;
+	my $code = 200;
+	my $total = $mset ? $mset->get_matches_estimated : undef;
 	ctx_prepare($q, $ctx);
+	my ($res, $html);
 	if ($err) {
 		$code = 400;
 		$html = '<pre>'.err_txt($ctx, $err).'</pre><hr>';
 	} elsif ($total == 0) {
-		if (defined($ctx->{-uxs_retried})) {
-			# undo retry damage:
+		if (defined($ctx->{-uxs_retried})) { # undo retry damage:
 			$q->{'q'} = $ctx->{-uxs_retried};
-		} elsif (index($q->{'q'}, '%') >= 0) {
+		} elsif (index($q->{'q'}, '%') >= 0) { # retry unescaped
 			$ctx->{-uxs_retried} = $q->{'q'};
-			$q->{'q'} = uri_unescape($q->{'q'});
-			goto retry;
+			my $qs = $q->{'q'} = uri_unescape($q->{'q'});
+			$ctx->{srch}->query_approxidate($ctx->{ibx}->git, $qs);
+			return $ctx->{srch}->async_mset($qs, $opt,
+						\&sres_html_cb, $ctx, $opt, $q);
 		}
 		$code = 404;
 		$html = "<pre>\n[No results found]</pre><hr>";
+	} elsif ($q->{x} eq 'A') {
+		$res = adump($mset, $q, $ctx);
 	} else {
-		return adump($mset, $q, $ctx) if $x eq 'A';
-
 		$ctx->{-html_tip} = search_nav_top($mset, $q, $ctx);
-		return mset_thread($ctx, $mset, $q) if $x eq 't';
-		mset_summary($ctx, $mset, $q); # appends to {-html_tip}
-		$html = '';
+		if ($q->{x} eq 't') {
+			$res = mset_thread($ctx, $mset, $q);
+		} else {
+			mset_summary($ctx, $mset, $q); # appends to {-html_tip}
+			$html = '';
+		}
 	}
-	html_oneshot($ctx, $code, $html);
+	$res //= html_oneshot($ctx, $code, $html);
+	my $wcb = delete $ctx->{wcb};
+	ref($res) eq 'CODE' ? $res->($wcb) : $wcb->($res);
 }
 
 # display non-nested search results similar to what users expect from

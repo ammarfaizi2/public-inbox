@@ -141,7 +141,6 @@ struct req { // argv and pfxv point into global rbuf
 	bool collapse_threads;
 	bool code_search;
 	bool relevance; // sort by relevance before column
-	bool emit_percent;
 	bool asc; // ascending sort
 };
 
@@ -224,6 +223,13 @@ static Xapian::MSet mail_mset(struct req *req, const char *qry_str)
 		req->Oeidx_key[0] = 'O'; // modifies static rbuf
 		qry = Xapian::Query(Xapian::Query::OP_FILTER, qry,
 					Xapian::Query(req->Oeidx_key));
+	}
+	// TODO: uid_range
+	if (req->threadid != ULLONG_MAX) {
+		std::string tid = Xapian::sortable_serialise(req->threadid);
+		qry = Xapian::Query(Xapian::Query::OP_FILTER, qry,
+			Xapian::Query(Xapian::Query::OP_VALUE_RANGE, THREADID,
+					tid, tid));
 	}
 	Xapian::Enquire enq = prep_enquire(req);
 	enq.set_query(qry);
@@ -632,7 +638,6 @@ static void dispatch(struct req *req)
 			if (*end || req->off == ULLONG_MAX)
 				ABORT("-o %s", optarg);
 			break;
-		case 'p': req->emit_percent = true; break;
 		case 'r': req->relevance = true; break;
 		case 't': req->collapse_threads = true; break;
 		case 'A':

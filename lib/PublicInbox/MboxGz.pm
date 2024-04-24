@@ -13,8 +13,8 @@ sub async_next ($) {
 	my ($http) = @_; # PublicInbox::HTTP
 	my $ctx = $http->{forward} or return;
 	eval {
-		$ctx->{smsg} = $ctx->{cb}->($ctx) or return $ctx->close;
-		$ctx->smsg_blob($ctx->{smsg});
+		my $smsg = $ctx->{cb}->($ctx, $http) // return $ctx->close;
+		$smsg and $ctx->smsg_blob($ctx->{smsg} = $smsg);
 	};
 	warn "E: $@" if $@;
 }

@@ -204,10 +204,11 @@ for my $n (@NO_CXX) {
 	$err = do { local $/; <$err_r> };
 	is $err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})";
 
-	$r = $xhc->mkreq([], qw(mset -p), @ibx_shard_args,
+	$r = $xhc->mkreq([], qw(mset), @ibx_shard_args,
 				'dfn:lib/PublicInbox/Search.pm');
 	chomp((my $hdr, @res) = readline($r));
-	is $hdr, 'mset.size=1', "got expected header via mset ($xhc->{impl}";
+	like $hdr, qr/\bmset\.size=1\b/,
+		"got expected header via mset ($xhc->{impl}";
 	is scalar(@res), 1, 'got one result';
 	@res = split /\0/, $res[0];
 	{
@@ -217,19 +218,20 @@ for my $n (@NO_CXX) {
 		is_deeply \@q, [ $mid ], 'docid usable';
 	}
 	ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
-	is scalar(@res), 2, 'only 2 columns in result';
+	is scalar(@res), 3, 'only 3 columns in result';
 
-	$r = $xhc->mkreq([], qw(mset -p), @ibx_shard_args,
+	$r = $xhc->mkreq([], qw(mset), @ibx_shard_args,
 				'dt:19700101'.'000000..');
 	chomp(($hdr, @res) = readline($r));
-	is $hdr, 'mset.size=6',
+	like $hdr, qr/\bmset\.size=6\b/,
 		"got expected header via multi-result mset ($xhc->{impl}";
 	is(scalar(@res), 6, 'got 6 rows');
 	for my $r (@res) {
-		my ($docid, $pct, @rest) = split /\0/, $r;
+		my ($docid, $pct, $rank, @rest) = split /\0/, $r;
 		my $doc = $v2->search->xdb->get_document($docid);
 		ok $pct > 0 && $pct <= 100,
 			"pct > 0 && <= 100 #$docid ($xhc->{impl})";
+		like $rank, qr/\A\d+\z/, 'rank is a digit';
 		is scalar(@rest), 0, 'no extra rows returned';
 	}
 	my $nr;

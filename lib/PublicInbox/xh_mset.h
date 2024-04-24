@@ -3,25 +3,6 @@
 // This file is only intended to be included by xap_helper.h
 // it implements pieces used by WWW, IMAP and lei
 
-static enum exc_iter mset_iter(const struct req *req, FILE *fp, off_t off,
-				Xapian::MSetIterator *i)
-{
-	try {
-		fprintf(fp, "%llu", (unsigned long long)(*(*i))); // get_docid
-		if (req->emit_percent)
-			fprintf(fp, "%c%d", 0, i->get_percent());
-		fputc('\n', fp);
-	} catch (const Xapian::DatabaseModifiedError & e) {
-		req->srch->db->reopen();
-		if (fseeko(fp, off, SEEK_SET) < 0) EABORT("fseeko");
-		return ITER_RETRY;
-	} catch (const Xapian::DocNotFoundError & e) { // oh well...
-		warnx("doc not found: %s", e.get_description().c_str());
-		if (fseeko(fp, off, SEEK_SET) < 0) EABORT("fseeko");
-	}
-	return ITER_OK;
-}
-
 #ifndef WBUF_FLUSH_THRESHOLD
 #	define WBUF_FLUSH_THRESHOLD (BUFSIZ - 1000)
 #endif
@@ -39,7 +20,9 @@ static bool cmd_mset(struct req *req)
 	Xapian::MSet mset = req->code_search ? commit_mset(req, qry_str) :
 						mail_mset(req, qry_str);
 	fbuf_init(&wbuf);
-	fprintf(wbuf.fp, "mset.size=%llu\n", (unsigned long long)mset.size());
+	fprintf(wbuf.fp, "mset.size=%llu .get_matches_estimated=%llu\n",
+		(unsigned long long)mset.size(),
+		(unsigned long long)mset.get_matches_estimated());
 	int fd = fileno(req->fp[0]);
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
 		off_t off = ftello(wbuf.fp);
@@ -58,12 +41,10 @@ static bool cmd_mset(struct req *req)
 			if (fseeko(wbuf.fp, 0, SEEK_SET)) EABORT("fseeko");
 			off = 0;
 		}
-		for (int t = 10; t > 0; --t)
-			switch (mset_iter(req, wbuf.fp, off, &i)) {
-			case ITER_OK: t = 0; break; // leave inner loop
-			case ITER_RETRY: break; // continue for-loop
-			case ITER_ABORT: return false; // error
-			}
+		fprintf(wbuf.fp, "%llu" "%c" "%d" "%c" "%llu\n",
+			(unsigned long long)(*i), // get_docid
+			0, i.get_percent(),
+			0, (unsigned long long)i.get_rank());
 	}
 	off_t off = ftello(wbuf.fp);
 	if (off < 0) EABORT("ftello");

@@ -147,12 +147,8 @@ sub cmd_dump_roots {
 
 sub mset_iter ($$) {
 	my ($req, $it) = @_;
-	eval {
-		my $buf = $it->get_docid;
-		$buf .= "\0".$it->get_percent if $req->{p};
-		say { $req->{0} } $buf;
-	};
-	$@ ? iter_retry_check($req) : 0;
+	say { $req->{0} } $it->get_docid, "\0",
+			$it->get_percent, "\0", $it->get_rank;
 }
 
 sub cmd_mset { # to be used by WWW + IMAP
@@ -165,7 +161,8 @@ sub cmd_mset { # to be used by WWW + IMAP
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
 	$opt->{threadid} = $req->{T} if defined $req->{T};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
-	say { $req->{0} } 'mset.size=', $mset->size;
+	say { $req->{0} } 'mset.size=', $mset->size,
+		' .get_matches_estimated=', $mset->get_matches_estimated;
 	for my $it ($mset->items) {
 		for (my $t = 10; $t > 0; --$t) {
 			$t = mset_iter($req, $it) // $t;

@@ -152,10 +152,12 @@ my $test_xhc = sub {
 	my ($r, @l);
 	$r = $xhc->mkreq([], qw(mset -c -g), $zp_git, @xh_args, 'NUL');
 	chomp(@l = <$r>);
-	is(shift(@l), 'mset.size=2', "got expected header $impl");
+	like shift(@l), qr/\bmset\.size=2\b/, "got expected header $impl";
 	my %docid2data;
 	my @got = sort map {
-		my ($docid, @extra) = split /\0/;
+		my ($docid, $pct, $rank, @extra) = split /\0/;
+		ok $pct >= 0 && $pct <= 100, 'pct in range';
+		ok $rank >= 0 && $rank <= 100000, 'rank ok';
 		is scalar(@extra), 0, 'no extra fields';
 		$docid2data{$docid} =
 			$csrch->xdb->get_document($docid)->get_data;
@@ -164,7 +166,7 @@ my $test_xhc = sub {
 
 	$r = $xhc->mkreq([], qw(mset -c -g), "$tmp/wt0/.git", @xh_args, 'NUL');
 	chomp(@l = <$r>);
-	is(shift(@l), 'mset.size=0', "got miss in wrong dir $impl");
+	like shift(@l), qr/\bmset.size=0\b/, "got miss in wrong dir $impl";
 	is_deeply(\@l, [], "no extra lines $impl");
 
 	while (my ($did, $expect) = each %docid2data) {

@@ -26,6 +26,7 @@ sub mkreq {
 }
 
 sub start_helper {
+	$PublicInbox::IPC::send_cmd or return; # can't work w/o SCM_RIGHTS
 	my @argv = @_;
 	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0);
 	my $cls = 'PublicInbox::XapHelperCxx';
