@@ -150,11 +150,6 @@ sub mset_iter ($$) {
 	eval {
 		my $buf = $it->get_docid;
 		$buf .= "\0".$it->get_percent if $req->{p};
-		my $doc = ($req->{A} || $req->{D}) ? $it->get_document : undef;
-		for my $p (@{$req->{A}}) {
-			$buf .= "\0".$p.$_ for xap_terms($p, $doc);
-		}
-		$buf .= "\0".$doc->get_data if $req->{D};
 		say { $req->{0} } $buf;
 	};
 	$@ ? iter_retry_check($req) : 0;

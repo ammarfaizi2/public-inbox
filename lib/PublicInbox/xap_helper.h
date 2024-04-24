@@ -142,7 +142,6 @@ struct req { // argv and pfxv point into global rbuf
 	bool code_search;
 	bool relevance; // sort by relevance before column
 	bool emit_percent;
-	bool emit_docdata;
 	bool asc; // ascending sort
 };
 
@@ -641,7 +640,6 @@ static void dispatch(struct req *req)
 			if (MY_ARG_MAX == req->pfxc)
 				ABORT("too many -A");
 			break;
-		case 'D': req->emit_docdata = true; break;
 		case 'K':
 			req->timeout_sec = strtoul(optarg, &end, 10);
 			if (*end || req->timeout_sec == ULONG_MAX)

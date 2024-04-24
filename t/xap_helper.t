@@ -204,7 +204,7 @@ for my $n (@NO_CXX) {
 	$err = do { local $/; <$err_r> };
 	is $err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})";
 
-	$r = $xhc->mkreq([], qw(mset -p -A XDFID -A Q), @ibx_shard_args,
+	$r = $xhc->mkreq([], qw(mset -p), @ibx_shard_args,
 				'dfn:lib/PublicInbox/Search.pm');
 	chomp((my $hdr, @res) = readline($r));
 	is $hdr, 'mset.size=1', "got expected header via mset ($xhc->{impl}";
@@ -212,15 +212,14 @@ for my $n (@NO_CXX) {
 	@res = split /\0/, $res[0];
 	{
 		my $doc = $v2->search->xdb->get_document($res[0]);
+		ok $doc, 'valid document retrieved';
 		my @q = PublicInbox::Search::xap_terms('Q', $doc);
 		is_deeply \@q, [ $mid ], 'docid usable';
 	}
 	ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
-	is $res[2], 'XDFID'.$dfid, 'XDFID result matches';
-	is $res[3], 'Q'.$mid, 'Q (msgid) mset result matches';
-	is scalar(@res), 4, 'only 4 columns in result';
+	is scalar(@res), 2, 'only 2 columns in result';
 
-	$r = $xhc->mkreq([], qw(mset -p -A XDFID -A Q), @ibx_shard_args,
+	$r = $xhc->mkreq([], qw(mset -p), @ibx_shard_args,
 				'dt:19700101'.'000000..');
 	chomp(($hdr, @res) = readline($r));
 	is $hdr, 'mset.size=6',
@@ -231,17 +230,7 @@ for my $n (@NO_CXX) {
 		my $doc = $v2->search->xdb->get_document($docid);
 		ok $pct > 0 && $pct <= 100,
 			"pct > 0 && <= 100 #$docid ($xhc->{impl})";
-		my %terms;
-		for (@rest) {
-			s/\A([A-Z]+)// or xbail 'no prefix=', \@rest;
-			push @{$terms{$1}}, $_;
-		}
-		while (my ($pfx, $vals) = each %terms) {
-			@$vals = sort @$vals;
-			my @q = PublicInbox::Search::xap_terms($pfx, $doc);
-			is_deeply $vals, \@q,
-				"#$docid $pfx as expected ($xhc->{impl})";
-		}
+		is scalar(@rest), 0, 'no extra rows returned';
 	}
 	my $nr;
 	for my $i (7, 8, 39, 40) {

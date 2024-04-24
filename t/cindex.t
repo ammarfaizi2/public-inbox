@@ -147,17 +147,18 @@ if ('multi-repo search') {
 
 my $test_xhc = sub {
 	my ($xhc) = @_;
+	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	my $impl = $xhc->{impl};
 	my ($r, @l);
-	$r = $xhc->mkreq([], qw(mset -D -c -g), $zp_git, @xh_args, 'NUL');
+	$r = $xhc->mkreq([], qw(mset -c -g), $zp_git, @xh_args, 'NUL');
 	chomp(@l = <$r>);
 	is(shift(@l), 'mset.size=2', "got expected header $impl");
 	my %docid2data;
 	my @got = sort map {
-		my @f = split /\0/;
-		is scalar(@f), 2, 'got 2 entries';
-		$docid2data{$f[0]} = $f[1];
-		$f[1];
+		my ($docid, @extra) = split /\0/;
+		is scalar(@extra), 0, 'no extra fields';
+		$docid2data{$docid} =
+			$csrch->xdb->get_document($docid)->get_data;
 	} @l;
 	is_deeply(\@got, $exp, "expected doc_data $impl");
 
@@ -166,7 +167,6 @@ my $test_xhc = sub {
 	is(shift(@l), 'mset.size=0', "got miss in wrong dir $impl");
 	is_deeply(\@l, [], "no extra lines $impl");
 
-	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	while (my ($did, $expect) = each %docid2data) {
 		is_deeply($csrch->xdb->get_document($did)->get_data,
 			$expect, "docid=$did data matches");
@@ -179,14 +179,15 @@ SKIP: {
 	require_mods('+SCM_RIGHTS', 1);
 	require PublicInbox::XapClient;
 	my $xhc = PublicInbox::XapClient::start_helper('-j0');
-	$test_xhc->($xhc);
+	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
+	$test_xhc->($xhc, $csrch);
 	skip 'PI_NO_CXX set', 1 if $ENV{PI_NO_CXX};
 	$xhc->{impl} =~ /Cxx/ or
 		skip 'C++ compiler or xapian development libs missing', 1;
 	skip 'TEST_XH_CXX_ONLY set', 1 if $ENV{TEST_XH_CXX_ONLY};
 	local $ENV{PI_NO_CXX} = 1; # force XS or SWIG binding test
 	$xhc = PublicInbox::XapClient::start_helper('-j0');
-	$test_xhc->($xhc);
+	$test_xhc->($xhc, $csrch);
 }
 
 if ('--update') {

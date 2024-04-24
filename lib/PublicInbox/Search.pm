@@ -89,7 +89,6 @@ our @XH_SPEC = (
 	'r', # 1=relevance then column
 	't', # collapse threads
 	'A=s@', # prefixes
-	'D', # emit docdata
 	'K=i', # timeout kill after i seconds
 	'O=s', # eidx_key
 	'T=i', # threadid

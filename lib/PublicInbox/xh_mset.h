@@ -3,20 +3,6 @@
 // This file is only intended to be included by xap_helper.h
 // it implements pieces used by WWW, IMAP and lei
 
-static void emit_doc_term(FILE *fp, const char *pfx, Xapian::Document *doc)
-{
-	Xapian::TermIterator cur = doc->termlist_begin();
-	Xapian::TermIterator end = doc->termlist_end();
-	size_t pfx_len = strlen(pfx);
-
-	for (cur.skip_to(pfx); cur != end; cur++) {
-		std::string tn = *cur;
-		if (!starts_with(&tn, pfx, pfx_len)) break;
-		fputc(0, fp);
-		fwrite(tn.data(), tn.size(), 1, fp);
-	}
-}
-
 static enum exc_iter mset_iter(const struct req *req, FILE *fp, off_t off,
 				Xapian::MSetIterator *i)
 {
@@ -24,16 +10,6 @@ static enum exc_iter mset_iter(const struct req *req, FILE *fp, off_t off,
 		fprintf(fp, "%llu", (unsigned long long)(*(*i))); // get_docid
 		if (req->emit_percent)
 			fprintf(fp, "%c%d", 0, i->get_percent());
-		if (req->pfxc || req->emit_docdata) {
-			Xapian::Document doc = i->get_document();
-			for (int p = 0; p < req->pfxc; p++)
-				emit_doc_term(fp, req->pfxv[p], &doc);
-			if (req->emit_docdata) {
-				std::string d = doc.get_data();
-				fputc(0, fp);
-				fwrite(d.data(), d.size(), 1, fp);
-			}
-		}
 		fputc('\n', fp);
 	} catch (const Xapian::DatabaseModifiedError & e) {
 		req->srch->db->reopen();
