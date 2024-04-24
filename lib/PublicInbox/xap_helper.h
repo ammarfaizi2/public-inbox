@@ -945,12 +945,6 @@ int main(int argc, char *argv[])
 	}
 
 	nworker = 1;
-#ifdef _SC_NPROCESSORS_ONLN
-	long j = sysconf(_SC_NPROCESSORS_ONLN);
-	if (j > 0)
-		nworker = j > WORKER_MAX ? WORKER_MAX : j;
-#endif // _SC_NPROCESSORS_ONLN
-
 	// make warn/warnx/err multi-process friendly:
 	if (my_setlinebuf(stderr))
 		err(EXIT_FAILURE, "setlinebuf(stderr)");
