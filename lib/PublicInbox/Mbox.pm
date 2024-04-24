@@ -175,6 +175,17 @@ sub mbox_all_ids {
 	PublicInbox::MboxGz::mbox_gz($ctx, \&all_ids_cb, 'all');
 }
 
+sub refill_result_ids ($) {
+	my ($ctx) = @_;
+	# refill result set, deprioritize since there's many results
+	my $srch = $ctx->{ibx}->isrch or return $ctx->gone('search');
+	my $mset = $srch->mset($ctx->{query}, $ctx->{qopts});
+	my $size = $mset->size or return;
+	$ctx->{qopts}->{offset} += $size;
+	$ctx->{ids} = $srch->mset_to_artnums($mset, $ctx->{qopts});
+	$ctx->{-low_prio} = 1; # true
+}
+
 sub results_cb {
 	my ($ctx) = @_;
 	my $over = $ctx->{ibx}->over or return $ctx->gone('over');
@@ -183,13 +194,7 @@ sub results_cb {
 			my $smsg = $over->get_art($num) or next;
 			return $smsg;
 		}
-		# refill result set, deprioritize since there's many results
-		my $srch = $ctx->{ibx}->isrch or return $ctx->gone('search');
-		my $mset = $srch->mset($ctx->{query}, $ctx->{qopts});
-		my $size = $mset->size or return;
-		$ctx->{qopts}->{offset} += $size;
-		$ctx->{ids} = $srch->mset_to_artnums($mset, $ctx->{qopts});
-		$ctx->{-low_prio} = 1;
+		refill_result_ids($ctx) or return; # refill ctx->{ids}
 	}
 }
 
@@ -202,19 +207,10 @@ sub results_thread_cb {
 			my $smsg = $over->get_art($num) or next;
 			return $smsg;
 		}
+		next if $over->expand_thread($ctx); # refills ctx->{xids}
 
-		# refills ctx->{xids}
-		next if $over->expand_thread($ctx);
-
-		# refill result set, deprioritize since there's many results
-		my $srch = $ctx->{ibx}->isrch or return $ctx->gone('search');
-		my $mset = $srch->mset($ctx->{query}, $ctx->{qopts});
-		my $size = $mset->size or return;
-		$ctx->{qopts}->{offset} += $size;
-		$ctx->{ids} = $srch->mset_to_artnums($mset, $ctx->{qopts});
-		$ctx->{-low_prio} = 1;
+		refill_result_ids($ctx) or return; # refill ctx->{ids}
 	}
-
 }
 
 sub mbox_all {
