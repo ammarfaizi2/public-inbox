@@ -16,8 +16,15 @@ use autodie;
 my $cxx = which($ENV{CXX} // 'c++') // which('clang') // die 'no C++ compiler';
 my $dir = substr("$cxx-$Config{archname}", 1); # drop leading '/'
 $dir =~ tr!/!-!;
-my $idir = ($ENV{XDG_CACHE_HOME} //
-	(($ENV{HOME} // die('HOME unset')).'/.cache')).'/public-inbox/jaot';
+my $idir;
+if ((defined($ENV{XDG_CACHE_HOME}) && -d $ENV{XDG_CACHE_HOME}) ||
+			(defined($ENV{HOME}) && -d $ENV{HOME})) {
+	$idir = ($ENV{XDG_CACHE_HOME} //
+			(($ENV{HOME} // die('HOME unset')).'/.cache')
+		).'/public-inbox/jaot';
+}
+$idir //= $ENV{PERL_INLINE_DIRECTORY} //
+	die 'HOME and PERL_INLINE_DIRECTORY unset';
 substr($dir, 0, 0) = "$idir/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
@@ -58,7 +65,11 @@ sub needs_rebuild () {
 sub build () {
 	if (!-d $dir) {
 		require File::Path;
-		File::Path::make_path($dir);
+		eval { File::Path::make_path($dir) };
+		if (!-d $dir && defined($ENV{PERL_INLINE_DIRECTORY})) {
+			$dir = $ENV{PERL_INLINE_DIRECTORY};
+			File::Path::make_path($dir);
+		}
 	}
 	require PublicInbox::CodeSearch;
 	require PublicInbox::Lock;
