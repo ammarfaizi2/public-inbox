@@ -75,7 +75,7 @@ retry:
 		$code = 404;
 		$html = "<pre>\n[No results found]</pre><hr>";
 	} else {
-		return adump($_[0], $mset, $q, $ctx) if $x eq 'A';
+		return adump($mset, $q, $ctx) if $x eq 'A';
 
 		$ctx->{-html_tip} = search_nav_top($mset, $q, $ctx);
 		return mset_thread($ctx, $mset, $q) if $x eq 't';
@@ -357,7 +357,7 @@ sub ctx_prepare {
 }
 
 sub adump {
-	my ($cb, $mset, $q, $ctx) = @_;
+	my ($mset, $q, $ctx) = @_;
 	$ctx->{ids} = $ctx->{ibx}->isrch->mset_to_artnums($mset);
 	$ctx->{search_query} = $q; # used by WwwAtomStream::atom_header
 	PublicInbox::WwwAtomStream->response($ctx, \&adump_i);
