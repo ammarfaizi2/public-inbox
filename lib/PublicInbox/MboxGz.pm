@@ -1,7 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::MboxGz;
-use strict;
+use v5.12;
 use parent 'PublicInbox::GzipFilter';
 use PublicInbox::Eml;
 use PublicInbox::Hval qw/to_filename/;

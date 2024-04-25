@@ -4,7 +4,7 @@
 # Streaming interface for mboxrd HTTP responses
 # See PublicInbox::GzipFilter for details.
 package PublicInbox::Mbox;
-use strict;
+use v5.12;
 use parent 'PublicInbox::GzipFilter';
 use PublicInbox::MID qw/mid_escape/;
 use PublicInbox::Hval qw/to_filename/;
