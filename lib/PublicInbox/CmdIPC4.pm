@@ -11,8 +11,8 @@ use Socket qw(SOL_SOCKET SCM_RIGHTS);
 sub sendmsg_retry ($) {
 	return 1 if $!{EINTR};
 	return unless ($!{ENOMEM} || $!{ENOBUFS} || $!{ETOOMANYREFS});
-	return if ++$_[0] >= 50;
-	warn "# sleeping on sendmsg: $! (#$_[0])\n";
+	return if --$_[0] < 0;
+	warn "# sleeping on sendmsg: $! ($_[0] tries left)\n";
 	select(undef, undef, undef, 0.1);
 	1;
 }
@@ -22,15 +22,15 @@ require Socket::MsgHdr; # XS
 no warnings 'once';
 
 # any number of FDs per-sendmsg(2) + buffer
-*send_cmd4 = sub ($$$$) { # (sock, fds, buf, flags) = @_;
-	my ($sock, $fds, undef, $flags) = @_;
+*send_cmd4 = sub ($$$$;$) { # (sock, fds, buf, flags) = @_;
+	my ($sock, $fds, undef, $flags, $tries) = @_;
+	$tries //= 50;
 	my $mh = Socket::MsgHdr->new(buf => $_[2]);
 	$mh->cmsghdr(SOL_SOCKET, SCM_RIGHTS, pack('i' x scalar(@$fds), @$fds));
 	my $s;
-	my $try = 0;
 	do {
 		$s = Socket::MsgHdr::sendmsg($sock, $mh, $flags);
-	} while (!defined($s) && sendmsg_retry($try));
+	} while (!defined($s) && sendmsg_retry($tries));
 	$s;
 };
 

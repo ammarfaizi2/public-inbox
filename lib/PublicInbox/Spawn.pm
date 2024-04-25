@@ -176,15 +176,15 @@ out:
 	return (int)pid;
 }
 
-static int sendmsg_retry(unsigned *tries)
+static int sendmsg_retry(int *tries)
 {
 	const struct timespec req = { 0, 100000000 }; /* 100ms */
 	int err = errno;
 	switch (err) {
 	case EINTR: PERL_ASYNC_CHECK(); return 1;
 	case ENOBUFS: case ENOMEM: case ETOOMANYREFS:
-		if (++*tries >= 50) return 0;
-		fprintf(stderr, "# sleeping on sendmsg: %s (#%u)\n",
+		if (--*tries < 0) return 0;
+		fprintf(stderr, "# sleeping on sendmsg: %s (%d tries left)\n",
 			strerror(err), *tries);
 		nanosleep(&req, NULL);
 		PERL_ASYNC_CHECK();
@@ -201,7 +201,7 @@ union my_cmsg {
 	char pad[sizeof(struct cmsghdr) + 16 + SEND_FD_SPACE];
 };
 
-SV *send_cmd4(PerlIO *s, SV *svfds, SV *data, int flags)
+SV *send_cmd4_(PerlIO *s, SV *svfds, SV *data, int flags, int tries)
 {
 	struct msghdr msg = { 0 };
 	union my_cmsg cmsg = { 0 };
@@ -211,7 +211,6 @@ SV *send_cmd4(PerlIO *s, SV *svfds, SV *data, int flags)
 	AV *fds = (AV *)SvRV(svfds);
 	I32 i, nfds = av_len(fds) + 1;
 	int *fdp;
-	unsigned tries = 0;
 
 	if (SvOK(data)) {
 		iov.iov_base = SvPV(data, dlen);
@@ -332,6 +331,9 @@ EOM
 	if (defined $all_libc) { # set for Gcf2
 		$ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		%RLIMITS = rlimit_map();
+		*send_cmd4 = sub ($$$$;$) {
+			send_cmd4_($_[0], $_[1], $_[2], $_[3], 50);
+		}
 	} else {
 		require PublicInbox::SpawnPP;
 		*pi_fork_exec = \&PublicInbox::SpawnPP::pi_fork_exec

@@ -467,8 +467,8 @@ if (defined($SYS_sendmsg) && defined($SYS_recvmsg)) {
 no warnings 'once';
 require PublicInbox::CmdIPC4;
 
-*send_cmd4 = sub ($$$$) {
-	my ($sock, $fds, undef, $flags) = @_;
+*send_cmd4 = sub ($$$$;$) {
+	my ($sock, $fds, undef, $flags, $tries) = @_;
 	my $iov = pack('P'.TMPL_size_t,
 			$_[2] // NUL, length($_[2] // NUL) || 1);
 	my $fd_space = scalar(@$fds) * SIZEOF_int;
@@ -487,10 +487,10 @@ require PublicInbox::CmdIPC4;
 			$msg_controllen,
 			0); # msg_flags
 	my $s;
-	my $try = 0;
+	$tries //= 50;
 	do {
 		$s = syscall($SYS_sendmsg, fileno($sock), $mh, $flags);
-	} while ($s < 0 && PublicInbox::CmdIPC4::sendmsg_retry($try));
+	} while ($s < 0 && PublicInbox::CmdIPC4::sendmsg_retry($tries));
 	$s >= 0 ? $s : undef;
 };
 
