@@ -6,7 +6,7 @@ use PublicInbox::TestCommon;
 use Cwd qw(getcwd);
 use List::Util qw(sum);
 use autodie qw(close mkdir open rename);
-require_mods(qw(json Xapian +SCM_RIGHTS));
+require_mods(qw(json Xapian +SCM_RIGHTS DBD::SQLite));
 use_ok 'PublicInbox::CodeSearchIdx';
 use PublicInbox::Import;
 my ($tmp, $for_destroy) = tmpdir();
