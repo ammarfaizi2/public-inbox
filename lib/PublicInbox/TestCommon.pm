@@ -17,6 +17,7 @@ my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 our $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err);
 use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
+$ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
 
@@ -565,6 +566,9 @@ sub start_script {
 	my $run_mode = $ENV{TEST_RUN_MODE} // $opt->{run_mode} // 2;
 	my $sub = $run_mode == 0 ? undef : key2sub($key);
 	my $tail;
+	my $xh = $ENV{TEST_DAEMON_XH};
+	$xh && $key =~ /-(?:imapd|netd|httpd|pop3d|nntpd)\z/ and
+		push @argv, split(/\s+/, $xh);
 	if ($tail_cmd) {
 		my @paths;
 		for (@argv) {
@@ -720,7 +724,10 @@ SKIP: {
 	require PublicInbox::Spawn;
 	require PublicInbox::Config;
 	require File::Path;
-
+	eval { # use XDG_CACHE_HOME, first:
+		require PublicInbox::XapHelperCxx;
+		PublicInbox::XapHelperCxx::build();
+	};
 	local %ENV = %ENV;
 	delete $ENV{XDG_DATA_HOME};
 	delete $ENV{XDG_CONFIG_HOME};

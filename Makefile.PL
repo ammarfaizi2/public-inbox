@@ -255,6 +255,12 @@ check-run : check-man
 # GNU and *BSD both allow it.
 check-run_T_ARGS = -j\$(N)
 
+check-xh0 :
+	\$(MAKE) check-run TEST_DAEMON_XH='-X0'
+
+check-xh1 :
+	\$(MAKE) check-run TEST_DAEMON_XH='-X1'
+
 check-debris check-run : pure_all
 	\$(EATMYDATA) \$(PROVE) -bvw xt/\$@.t :: \$(\$\@_T_ARGS)
 	-@\$(check_manifest)

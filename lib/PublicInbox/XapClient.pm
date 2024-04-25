@@ -12,6 +12,7 @@ use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
 use autodie qw(pipe socketpair);
+our $tries = 50;
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;
@@ -19,13 +20,13 @@ sub mkreq {
 	pipe($r, $ios->[0]) if !defined($ios->[0]);
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
-	$n = $PublicInbox::IPC::send_cmd->($self->{io}, \@fds, $buf, 0) //
-		die "send_cmd: $!";
+	$n = $PublicInbox::IPC::send_cmd->($self->{io}, \@fds, $buf, 0, $tries)
+		// die "send_cmd: $!";
 	$n == length($buf) or die "send_cmd: $n != ".length($buf);
 	$r;
 }
 
-sub start_helper {
+sub start_helper (@) {
 	$PublicInbox::IPC::send_cmd or return; # can't work w/o SCM_RIGHTS
 	my @argv = @_;
 	socketpair(my $sock, my $in, AF_UNIX, SOCK_SEQPACKET, 0);

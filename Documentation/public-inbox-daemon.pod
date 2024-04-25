@@ -79,9 +79,9 @@ C<err=> may also be specified on a per-listener basis.
 
 Default: /dev/null with C<--daemonize>, inherited otherwise
 
-=item -W
+=item -W INTEGER
 
-=item --worker-processes
+=item --worker-processes INTEGER
 
 Set the number of worker processes.
 
@@ -95,6 +95,40 @@ to increase worker processes or have the worker restarted by
 the master on crashes.
 
 Default: 1
+
+=item -X INTEGER
+
+=item --xapian-helpers INTEGER
+
+Enables the use of Xapian helper processes to handle expensive,
+non-deterministic Xapian search queries asynchronously without
+blocking simple requests.
+
+With positive values, there is an additional manager process
+that can be signaled to control the number of Xapian helper workers.
+
+* C<-X0> one worker, no manager process
+* C<-X1> one worker, one manager process
+...
+* C<-X8> eight workers, one manager process
+
+As with the public-facing public-inbox-* daemons, sending C<SIGTTIN>
+or C<SIGTTOU> to the Xapian helper manager process will increment or
+decrement the number of workers.
+
+Both Xapian helper workers and managers automatically respawn if they
+crash or are explicitly killed, even with C<-X0>.
+
+A C++ compiler, L<pkg-config(1)>, and Xapian development files (e.g.
+C<libxapian-dev> or C<xapian*-core-dev*>) are required to gain access to
+some expensive queries and significant memory savings.
+
+Xapian helper workers are shared by all C<--worker-processes> of the
+Perl daemon for additional memory savings.
+
+New in public-inbox 2.0.0.
+
+Default: undefined, search queries are handled synchronously
 
 =item --cert /path/to/cert
 

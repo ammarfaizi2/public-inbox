@@ -11,7 +11,7 @@ our @EXPORT_OK = qw(retry_reopen int_val get_pct xap_terms);
 use List::Util qw(max);
 use POSIX qw(strftime);
 use Carp ();
-our $XHC;
+our $XHC = 0; # defined but false
 
 # values for searching, changing the numeric value breaks
 # compatibility with old indices (so don't change them it)
@@ -57,7 +57,7 @@ use constant {
 };
 
 use PublicInbox::Smsg;
-use PublicInbox::Over;
+eval { require PublicInbox::Over };
 our $QP_FLAGS;
 our %X = map { $_ => 0 } qw(BoolWeight Database Enquire QueryParser Stem Query);
 our $Xap; # 'Xapian' or 'Search::Xapian'
@@ -428,9 +428,9 @@ sub mset {
 	do_enquire($self, $qry, $opt, TS);
 }
 
-sub xhc_start_maybe () {
+sub xhc_start_maybe (@) {
 	require PublicInbox::XapClient;
-	my $xhc = PublicInbox::XapClient::start_helper();
+	my $xhc = PublicInbox::XapClient::start_helper(@_);
 	require PublicInbox::XhcMset if $xhc;
 	$xhc;
 }

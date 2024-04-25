@@ -22,9 +22,11 @@ use PublicInbox::GitAsyncCat;
 use PublicInbox::Eml;
 use PublicInbox::Config;
 use PublicInbox::OnDestroy;
+use PublicInbox::Search;
+use PublicInbox::XapClient;
 our $SO_ACCEPTFILTER = 0x1000;
 my @CMD;
-my ($set_user, $oldset);
+my ($set_user, $oldset, $xh_workers);
 my (@cfg_listen, $stdout, $stderr, $group, $user, $pid_file, $daemonize);
 my ($nworker, @listeners, %WORKERS, %logs);
 my %tls_opt; # scheme://sockname => args for IO::Socket::SSL::SSL_Context->new
@@ -170,6 +172,7 @@ options:
   --cert=FILE   default SSL/TLS certificate
   --key=FILE    default SSL/TLS certificate key
   -W WORKERS    number of worker processes to spawn (default: 1)
+  -X XWORKERS   number of Xapian helper processes (default: undefined)
 
 See public-inbox-daemon(8) and $prog(1) man pages for more.
 EOF
@@ -185,6 +188,7 @@ EOF
 		'multi-accept=i' => \$PublicInbox::Listener::MULTI_ACCEPT,
 		'cert=s' => \$default_cert,
 		'key=s' => \$default_key,
+		'X|xapian-helpers=i' => \$xh_workers,
 		'help|h' => \(my $show_help),
 	);
 	GetOptions(%opt) or die $help;
@@ -687,6 +691,14 @@ sub worker_loop {
 	PublicInbox::DS::event_loop(\%WORKER_SIG, $oldset);
 }
 
+sub respawn_xh { # awaitpid cb
+	my ($pid) = @_;
+	return unless @listeners;
+	warn "W: xap_helper PID:$pid died: \$?=$?, respawning...\n";
+	$PublicInbox::Search::XHC =
+		PublicInbox::XapClient::start_helper('-j', $xh_workers);
+}
+
 sub run {
 	my ($default_listen) = @_;
 	$nworker = 1;
@@ -699,7 +711,15 @@ sub run {
 	local $PublicInbox::Git::async_warn = 1;
 	local $SIG{__WARN__} = PublicInbox::Eml::warn_ignore_cb();
 	local %WORKER_SIG = %WORKER_SIG;
-	local %POST_ACCEPT;
+	local $PublicInbox::XapClient::tries = 0;
+
+	local $PublicInbox::Search::XHC = PublicInbox::XapClient::start_helper(
+			'-j', $xh_workers) if defined($xh_workers);
+	if ($PublicInbox::Search::XHC) {
+		require PublicInbox::XhcMset;
+		awaitpid($PublicInbox::Search::XHC->{io}->attached_pid,
+			\&respawn_xh);
+	}
 
 	daemon_loop();
 	# $unlink_on_leave runs
