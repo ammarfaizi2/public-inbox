@@ -465,7 +465,6 @@ sub xh_opt ($) {
 # and a falsy value if handled synchronously
 sub async_mset {
 	my ($self, $qry_str, $opt, $cb, @args) = @_;
-	$XHC //= xhc_start_maybe;
 	if ($XHC) { # unconditionally retrieving pct + rank for now
 		xdb($self); # populate {nshards}
 		my @margs = ($self->xh_args, xh_opt($opt));
