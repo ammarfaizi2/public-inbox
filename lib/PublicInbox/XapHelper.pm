@@ -27,6 +27,8 @@ sub cmd_test_inspect {
 		($req->{srch}->has_threadid ? 1 : 0)
 }
 
+sub cmd_test_sleep { select(undef, undef, undef, 0.01) while 1 }
+
 sub iter_retry_check ($) {
 	if (ref($@) =~ /\bDatabaseModifiedError\b/) {
 		$_[0]->{srch}->reopen;
@@ -193,7 +195,10 @@ sub dispatch {
 		$new->{qp} = $new->qparse_new;
 		$new;
 	};
+	my $timeo = $req->{K};
+	alarm($timeo) if $timeo;
 	$fn->($req, @argv);
+	alarm(0) if $timeo;
 }
 
 sub recv_loop {
@@ -212,7 +217,7 @@ sub recv_loop {
 		}
 		scalar(@fds) or exit(66); # EX_NOINPUT
 		die "recvmsg: $!" if !defined($fds[0]);
-		PublicInbox::DS::block_signals();
+		PublicInbox::DS::block_signals(POSIX::SIGALRM);
 		my $req = bless {}, __PACKAGE__;
 		my $i = 0;
 		open($req->{$i++}, '+<&=', $_) for @fds;

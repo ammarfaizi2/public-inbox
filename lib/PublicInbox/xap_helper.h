@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
+#include <poll.h>
 
 #include <assert.h>
 #include <err.h> // BSD, glibc, and musl all have this
@@ -413,6 +414,11 @@ static bool cmd_test_inspect(struct req *req)
 	return false;
 }
 
+static bool cmd_test_sleep(struct req *req)
+{
+	for (;;) poll(NULL, 0, 10);
+	return false;
+}
 #include "xh_mset.h" // read-only (WWW, IMAP, lei) stuff
 #include "xh_cidx.h" // CodeSearchIdx.pm stuff
 
@@ -427,6 +433,7 @@ static const struct cmd_entry {
 	CMD(dump_ibx), // many inboxes
 	CMD(dump_roots), // per-cidx shard
 	CMD(test_inspect), // least common commands last
+	CMD(test_sleep), // least common commands last
 };
 
 #define MY_ARRAY_SIZE(x)	(sizeof(x)/sizeof((x)[0]))
@@ -680,6 +687,9 @@ static void dispatch(struct req *req)
 		free_srch(kbuf.srch);
 		goto cmd_err; // srch_init already warned
 	}
+	if (req->timeout_sec)
+		alarm(req->timeout_sec > UINT_MAX ?
+			UINT_MAX : (unsigned)req->timeout_sec);
 	try {
 		if (!req->fn(req))
 			warnx("`%s' failed", req->argv[0]);
@@ -688,6 +698,8 @@ static void dispatch(struct req *req)
 	} catch (...) {
 		warn("unhandled exception");
 	}
+	if (req->timeout_sec)
+		alarm(0);
 cmd_err:
 	return; // just be silent on errors, for now
 }
@@ -1025,6 +1037,7 @@ int main(int argc, char *argv[])
 	DELSET(SIGXFSZ);
 #undef DELSET
 	CHECK(int, 0, sigdelset(&workerset, SIGUSR1));
+	CHECK(int, 0, sigdelset(&fullset, SIGALRM));
 
 	if (nworker == 0) { // no SIGTERM handling w/o workers
 		recv_loop();

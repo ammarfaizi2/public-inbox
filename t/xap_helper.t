@@ -9,6 +9,7 @@ use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM);
 require PublicInbox::AutoReap;
 use PublicInbox::IPC;
 require PublicInbox::XapClient;
+use PublicInbox::DS qw(now);
 use autodie;
 my ($tmp, $for_destroy) = tmpdir();
 
@@ -267,6 +268,20 @@ for my $n (@NO_CXX) {
 	my @oids = (join('', @res) =~ /^([a-f0-9]{7}) /gms);
 	is $nr_out, scalar(@oids), "output count matches $xhc->{impl}" or
 		diag explain(\@res, \@err);
+
+	if ($ENV{TEST_XH_TIMEOUT}) {
+		diag 'testing timeouts...';
+		for my $j (qw(0 1)) {
+			my $t0 = now;
+			$r = $xhc->mkreq(undef, qw(test_sleep -K 1 -d),
+					$ibx_idx[0]);
+			is readline($r), undef, 'got EOF';
+			my $diff = now - $t0;
+			ok $diff < 3, "timeout didn't take too long -j$j";
+			ok $diff >= 0.9, "timeout didn't fire prematurely -j$j";
+			$xhc = PublicInbox::XapClient::start_helper('-j1');
+		}
+	}
 }
 
 done_testing;
