@@ -726,7 +726,7 @@ SKIP: {
 	require File::Path;
 	eval { # use XDG_CACHE_HOME, first:
 		require PublicInbox::XapHelperCxx;
-		PublicInbox::XapHelperCxx::build();
+		PublicInbox::XapHelperCxx::check_build();
 	};
 	local %ENV = %ENV;
 	delete $ENV{XDG_DATA_HOME};
