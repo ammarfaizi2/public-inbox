@@ -95,6 +95,8 @@ static pid_t *worker_pids; // nr => pid
 #define WORKER_MAX USHRT_MAX
 static unsigned long nworker, nworker_hwm;
 static int pipefds[2];
+static const char *stdout_path, *stderr_path; // for SIGUSR1
+static sig_atomic_t worker_needs_reopen;
 
 // PublicInbox::Search and PublicInbox::CodeSearch generate these:
 static void mail_nrp_init(void);
@@ -726,9 +728,12 @@ static void stderr_restore(FILE *tmp_err)
 	clearerr(stderr);
 }
 
-static void sigw(int sig) // SIGTERM handler for worker
+static void sigw(int sig) // SIGTERM+SIGUSR1 handler for worker
 {
-	sock_fd = -1; // break out of recv_loop
+	switch (sig) {
+	case SIGUSR1: worker_needs_reopen = 1; break;
+	default: sock_fd = -1; // break out of recv_loop
+	}
 }
 
 #define CLEANUP_REQ __attribute__((__cleanup__(req_cleanup)))
@@ -738,6 +743,18 @@ static void req_cleanup(void *ptr)
 	free(req->lenv);
 }
 
+static void reopen_logs(void)
+{
+	if (stdout_path && *stdout_path && !freopen(stdout_path, "a", stdout))
+		err(EXIT_FAILURE, "freopen %s", stdout_path);
+	if (stderr_path && *stderr_path) {
+		if (!freopen(stderr_path, "a", stderr))
+			err(EXIT_FAILURE, "freopen %s", stderr_path);
+		if (my_setlinebuf(stderr))
+			err(EXIT_FAILURE, "setlinebuf(stderr)");
+	}
+}
+
 static void recv_loop(void) // worker process loop
 {
 	static char rbuf[4096 * 33]; // per-process
@@ -745,6 +762,7 @@ static void recv_loop(void) // worker process loop
 	sa.sa_handler = sigw;
 
 	CHECK(int, 0, sigaction(SIGTERM, &sa, NULL));
+	CHECK(int, 0, sigaction(SIGUSR1, &sa, NULL));
 
 	while (sock_fd == 0) {
 		size_t len = sizeof(rbuf);
@@ -760,6 +778,10 @@ static void recv_loop(void) // worker process loop
 		if (req.fp[1]) {
 			stderr_restore(req.fp[1]);
 			ERR_CLOSE(req.fp[1], 0);
+		}
+		if (worker_needs_reopen) {
+			worker_needs_reopen = 0;
+			reopen_logs();
 		}
 	}
 }
@@ -813,6 +835,16 @@ static void cleanup_all(void)
 #endif
 }
 
+static void parent_reopen_logs(void)
+{
+	reopen_logs();
+	for (unsigned long nr = nworker; nr < nworker_hwm; nr++) {
+		pid_t pid = worker_pids[nr];
+		if (pid != 0 && kill(pid, SIGUSR1))
+			warn("BUG?: kill(%d, SIGUSR1)", (int)pid);
+	}
+}
+
 static void sigp(int sig) // parent signal handler
 {
 	static const char eagain[] = "signals coming in too fast";
@@ -825,6 +857,7 @@ static void sigp(int sig) // parent signal handler
 	case SIGCHLD: c = '.'; break;
 	case SIGTTOU: c = '-'; break;
 	case SIGTTIN: c = '+'; break;
+	case SIGUSR1: c = '#'; break;
 	default:
 		write(STDERR_FILENO, bad_sig, sizeof(bad_sig) - 1);
 		_exit(EXIT_FAILURE);
@@ -931,6 +964,8 @@ int main(int argc, char *argv[])
 {
 	int c;
 	socklen_t slen = (socklen_t)sizeof(c);
+	stdout_path = getenv("STDOUT_PATH");
+	stderr_path = getenv("STDERR_PATH");
 
 	if (getsockopt(sock_fd, SOL_SOCKET, SO_TYPE, &c, &slen))
 		err(EXIT_FAILURE, "getsockopt");
@@ -989,6 +1024,7 @@ int main(int argc, char *argv[])
 	DELSET(SIGXCPU);
 	DELSET(SIGXFSZ);
 #undef DELSET
+	CHECK(int, 0, sigdelset(&workerset, SIGUSR1));
 
 	if (nworker == 0) { // no SIGTERM handling w/o workers
 		recv_loop();
@@ -1009,10 +1045,12 @@ int main(int argc, char *argv[])
 	CHECK(int, 0, sigdelset(&pset, SIGCHLD));
 	CHECK(int, 0, sigdelset(&pset, SIGTTIN));
 	CHECK(int, 0, sigdelset(&pset, SIGTTOU));
+	CHECK(int, 0, sigdelset(&pset, SIGUSR1));
 
 	struct sigaction sa = {};
 	sa.sa_handler = sigp;
 
+	CHECK(int, 0, sigaction(SIGUSR1, &sa, NULL));
 	CHECK(int, 0, sigaction(SIGTTIN, &sa, NULL));
 	CHECK(int, 0, sigaction(SIGTTOU, &sa, NULL));
 	sa.sa_flags = SA_NOCLDSTOP;
@@ -1037,6 +1075,7 @@ int main(int argc, char *argv[])
 			case '.': break; // do_sigchld already called
 			case '-': do_sigttou(); break;
 			case '+': do_sigttin(); break;
+			case '#': parent_reopen_logs(); break;
 			default: errx(EXIT_FAILURE, "BUG: c=%c", sbuf[i]);
 			}
 		}

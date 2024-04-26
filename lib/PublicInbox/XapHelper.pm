@@ -200,6 +200,7 @@ sub recv_loop {
 	local $SIG{__WARN__} = sub { print $stderr @_ };
 	my $rbuf;
 	local $SIG{TERM} = sub { undef $in };
+	local $SIG{USR1} = \&reopen_logs;
 	while (defined($in)) {
 		PublicInbox::DS::sig_setmask($workerset);
 		my @fds = eval { # we undef $in in SIG{TERM}
@@ -263,6 +264,18 @@ sub do_sigttou {
 	}
 }
 
+sub reopen_logs {
+	my $p = $ENV{STDOUT_PATH};
+	defined($p) && open(STDOUT, '>>', $p) and STDOUT->autoflush(1);
+	$p = $ENV{STDERR_PATH};
+	defined($p) && open(STDERR, '>>', $p) and STDERR->autoflush(1);
+}
+
+sub parent_reopen_logs {
+	reopen_logs();
+	kill('USR1', values %WORKERS);
+}
+
 sub xh_alive { $in || scalar(keys %WORKERS) }
 
 sub start (@) {
@@ -276,7 +289,7 @@ sub start (@) {
 		die 'bad args';
 	local $workerset = POSIX::SigSet->new;
 	$workerset->fillset or die "fillset: $!";
-	for (@PublicInbox::DS::UNBLOCKABLE) {
+	for (@PublicInbox::DS::UNBLOCKABLE, POSIX::SIGUSR1) {
 		$workerset->delset($_) or die "delset($_): $!";
 	}
 
@@ -295,6 +308,7 @@ sub start (@) {
 		},
 		TTOU => \&do_sigttou,
 		CHLD => \&PublicInbox::DS::enqueue_reap,
+		USR1 => \&parent_reopen_logs,
 	};
 	PublicInbox::DS::block_signals();
 	start_workers();

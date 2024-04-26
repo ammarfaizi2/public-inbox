@@ -9,6 +9,7 @@ require_git(2.6);
 use PublicInbox::Eml;
 use PublicInbox::Config;
 use PublicInbox::MID qw(mids);
+use autodie qw(kill rename);
 require_mods(qw(DBD::SQLite Xapian HTTP::Request::Common Plack::Test
 		URI::Escape Plack::Builder HTTP::Date));
 use_ok($_) for (qw(HTTP::Request::Common Plack::Test));
@@ -393,5 +394,58 @@ my $client3 = sub {
 };
 test_psgi(sub { $www->call(@_) }, $client3);
 test_httpd($env, $client3, 4);
+
+if ($^O eq 'linux' && -r "/proc/$$/stat") {
+	my $args;
+	my $search_xh_pid = sub {
+		my ($pid) = @_;
+		for my $f (glob('/proc/*/stat')) {
+			open my $fh, '<', $f or next;
+			my @s = split /\s+/, readline($fh) // next;
+			next if $s[3] ne $pid; # look for matching PPID
+			open $fh, '<', "/proc/$s[0]/cmdline" or next;
+			my $cmdline = readline($fh) // next;
+			if ($cmdline =~ /\0-MPublicInbox::XapHelper\0-e\0/ ||
+					$cmdline =~ m!/xap_helper\0!) {
+				return $s[0];
+			}
+		}
+		undef;
+	};
+	my $usr1_test = sub {
+		my ($cb) = @_;
+		my $td = $PublicInbox::TestCommon::CURRENT_DAEMON;
+		my $pid = $td->{pid};
+		my $res = $cb->(GET('/v2test/?q=m:a-mid@b'));
+		is $res->code, 200, '-httpd is running w/ search';
+
+		$search_xh_pid->($pid);
+		my $xh_pid = $search_xh_pid->($pid) or
+			BAIL_OUT "can't find XH pid with $args";
+		my $xh_err = readlink "/proc/$xh_pid/fd/2";
+		is $xh_err, "$env->{TMPDIR}/stderr.log",
+			"initial stderr expected ($args)";
+		rename "$env->{TMPDIR}/stderr.log",
+			"$env->{TMPDIR}/stderr.old";
+		$xh_err = readlink "/proc/$xh_pid/fd/2";
+		is $xh_err, "$env->{TMPDIR}/stderr.old",
+			"stderr followed rename ($args)";
+		kill 'USR1', $pid;
+		tick;
+		$res = $cb->(GET('/v2test/?q=m:a-mid@b'));
+		is $res->code, 200, '-httpd still running w/ search';
+		my $new_xh_pid = $search_xh_pid->($pid) or
+			BAIL_OUT "can't find new XH pid with $args";
+		is $new_xh_pid, $xh_pid, "XH pid unchanged ($args)";
+		$xh_err = readlink "/proc/$new_xh_pid/fd/2";
+		is $xh_err, "$env->{TMPDIR}/stderr.log",
+			"stderr updated ($args)";
+	};
+	for my $x ('-X0', '-X1', '-X0 -W1', '-X1 -W1') {
+		$args = $x;
+		local $ENV{TEST_DAEMON_XH} = $args;
+		test_httpd($env, $usr1_test);
+	}
+}
 
 done_testing;

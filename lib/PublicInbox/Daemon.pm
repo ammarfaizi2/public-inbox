@@ -388,10 +388,30 @@ sub worker_quit { # $_[0] = signal name or number (unused)
 	@PublicInbox::DS::post_loop_do = (\&has_busy_clients, { -w => 0 })
 }
 
+sub spawn_xh () {
+	$xh_workers // return;
+	require PublicInbox::XhcMset;
+	local $) = $gid if defined $gid;
+	local $( = $gid if defined $gid;
+	local $> = $uid if defined $uid;
+	local $< = $uid if defined $uid;
+	$PublicInbox::Search::XHC = eval {
+		local $ENV{STDERR_PATH} = $stderr;
+		local $ENV{STDOUT_PATH} = $stdout;
+		PublicInbox::XapClient::start_helper('-j', $xh_workers)
+	};
+	warn "E: $@" if $@;
+	awaitpid($PublicInbox::Search::XHC->{io}->attached_pid, \&respawn_xh)
+		if $PublicInbox::Search::XHC;
+}
+
 sub reopen_logs {
+	my ($sig) = @_;
 	$logs{$stdout} //= \*STDOUT if defined $stdout;
 	$logs{$stderr} //= \*STDERR if defined $stderr;
 	while (my ($p, $fh) = each %logs) { open_log_path($fh, $p) }
+	($sig && defined($xh_workers) && $PublicInbox::Search::XHC) and
+		kill('USR1', $PublicInbox::Search::XHC->{io}->attached_pid);
 }
 
 sub sockname ($) {
@@ -548,6 +568,7 @@ sub start_worker ($) {
 	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		undef %WORKERS;
+		undef $xh_workers;
 		local $PublicInbox::DS::Poller; # allow epoll/kqueue
 		$set_user->() if $set_user;
 		PublicInbox::EOFpipe->new($parent_pipe, \&worker_quit);
@@ -575,8 +596,9 @@ sub master_loop {
 	pipe($parent_pipe, my $p1) or die "failed to create parent-pipe: $!";
 	my $set_workers = $nworker; # for SIGWINCH
 	reopen_logs();
+	spawn_xh;
 	my $msig = {
-		USR1 => sub { reopen_logs(); kill_workers($_[0]); },
+		USR1 => sub { reopen_logs($_[0]); kill_workers($_[0]); },
 		USR2 => \&upgrade,
 		QUIT => \&master_quit,
 		INT => \&master_quit,
@@ -675,6 +697,7 @@ sub daemon_loop () {
 sub worker_loop {
 	$uid = $gid = undef;
 	reopen_logs();
+	spawn_xh; # only for -W0
 	@listeners = map {;
 		my $l = sockname($_);
 		my $tls_cb = $POST_ACCEPT{$l};
@@ -695,8 +718,7 @@ sub respawn_xh { # awaitpid cb
 	my ($pid) = @_;
 	return unless @listeners;
 	warn "W: xap_helper PID:$pid died: \$?=$?, respawning...\n";
-	$PublicInbox::Search::XHC =
-		PublicInbox::XapClient::start_helper('-j', $xh_workers);
+	spawn_xh;
 }
 
 sub run {
@@ -712,14 +734,7 @@ sub run {
 	local $SIG{__WARN__} = PublicInbox::Eml::warn_ignore_cb();
 	local %WORKER_SIG = %WORKER_SIG;
 	local $PublicInbox::XapClient::tries = 0;
-
-	local $PublicInbox::Search::XHC = PublicInbox::XapClient::start_helper(
-			'-j', $xh_workers) if defined($xh_workers);
-	if ($PublicInbox::Search::XHC) {
-		require PublicInbox::XhcMset;
-		awaitpid($PublicInbox::Search::XHC->{io}->attached_pid,
-			\&respawn_xh);
-	}
+	local $PublicInbox::Search::XHC if defined($xh_workers);
 
 	daemon_loop();
 	# $unlink_on_leave runs

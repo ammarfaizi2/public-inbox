@@ -20,7 +20,7 @@ use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
 $ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
-
+our $CURRENT_DAEMON;
 BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
@@ -566,9 +566,9 @@ sub start_script {
 	my $run_mode = $ENV{TEST_RUN_MODE} // $opt->{run_mode} // 2;
 	my $sub = $run_mode == 0 ? undef : key2sub($key);
 	my $tail;
-	my $xh = $ENV{TEST_DAEMON_XH};
-	$xh && $key =~ /-(?:imapd|netd|httpd|pop3d|nntpd)\z/ and
-		push @argv, split(/\s+/, $xh);
+	my @xh = split(/\s+/, $ENV{TEST_DAEMON_XH} // '');
+	@xh = () if $key !~ /-(?:imapd|netd|httpd|pop3d|nntpd)\z/;
+	push @argv, @xh;
 	if ($tail_cmd) {
 		my @paths;
 		for (@argv) {
@@ -616,7 +616,7 @@ sub start_script {
 			$ENV{LISTEN_FDS} = $fds;
 		}
 		if ($opt->{-C}) { chdir($opt->{-C}) }
-		$0 = join(' ', @$cmd);
+		$0 = join(' ', @$cmd, @xh);
 		local @SIG{keys %SIG} = map { undef } values %SIG;
 		local $SIG{FPE} = 'IGNORE'; # Perl default
 		undef $tmp_mask;
@@ -952,6 +952,7 @@ sub test_httpd ($$;$$) {
 		local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = "http://$h:$p";
 		my $ua = LWP::UserAgent->new;
 		$ua->max_redirect(0);
+		local $CURRENT_DAEMON = $td;
 		Plack::Test::ExternalServer::test_psgi(client => $client,
 							ua => $ua);
 		$cb->() if $cb;
