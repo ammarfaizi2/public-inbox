@@ -3,6 +3,8 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
+use autodie qw(open seek read);
+use Fcntl qw(SEEK_SET);
 use Time::Local qw(timegm);
 use PublicInbox::TestCommon;
 require_mods(qw(-imapd));
@@ -29,12 +31,15 @@ is($q->{xap}, 'f:"b"', 'charset handled');
 $q = $parse->(qq{CHARSET WTF-8 From b});
 like($q, qr/\ANO \[/, 'bad charset rejected');
 
-for my $x ('', ' (try #2)') {
-	open my $fh, '>:scalar', \(my $buf = '') or die;
-	local *STDERR = $fh;
+{
+	open my $tmperr, '+>', undef;
+	open my $olderr, '>&', \*STDERR;
+	open STDERR, '>&', $tmperr;
 	$q = $parse->(qq{CHARSET});
-	last if is($buf, '', "nothing spewed to STDERR on bad query$x");
-	diag 'FIXME: above fails mysteriously sometimes, so we try again...';
+	open STDERR, '>&', $olderr;
+	seek $tmperr, 0, SEEK_SET;
+	read($tmperr, my $buf, -s $tmperr);
+	is($buf, '', 'nothing spewed to STDERR on bad query');
 }
 
 like($q, qr/\ABAD /, 'bad charset rejected');
