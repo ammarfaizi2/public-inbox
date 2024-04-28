@@ -80,6 +80,19 @@ doubles the size of the already-large Xapian database.
 Used with C<--reindex>, it will only look for new and stale
 entries and not touch already-indexed messages.
 
+=item --no-multi-pack-index
+
+Disable writing a L<git-multi-pack-index(1)> file to save memory.
+Normally, enabling multi-pack-index speeds up startup time of
+subsequent L<git-cat-file(1)> processes by 3-4%, but generating
+this file requires several GB of memory with large repos.
+
+Unlike the C<core.multiPackIndex> directive in git, it's still
+possible to read existing multi-pack-index files if they are
+created elsewhere.
+
+Available in public-inbox 2.0.0+
+
 =back
 
 =head1 FILES

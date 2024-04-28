@@ -44,6 +44,7 @@ GetOptions($opt, qw(verbose|v+ reindex rethread compact|c+ jobs|j=i prune
 		batch_size|batch-size=s
 		since|after=s until|before=s
 		sequential-shard|seq-shard
+		multi-pack-index!
 		no-update-extindex update-extindex|E=s@
 		fast-noop|F skip-docdata all C=s@ help|h))
 	or die $help;

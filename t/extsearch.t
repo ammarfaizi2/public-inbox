@@ -559,6 +559,15 @@ EOM
 	for (@xdb) {
 		ok(!$_->get_metadata('indexlevel'), 'no indexlevel in >0 shard')
 	}
+	my $mpi = "$d/ALL.git/objects/pack/multi-pack-index";
+	SKIP: {
+		skip 'git too old for for multi-pack-index', 2 if !-f $mpi;
+		unlink glob("$d/ALL.git/objects/pack/*");
+		ok run_script([qw(-extindex --all -L medium -j3
+				--no-multi-pack-index), $d]),
+				'test --no-multi-pack-index';
+		ok !-f $mpi, '--no-multi-pack-index respected';
+	}
 }
 
 test_lei(sub {

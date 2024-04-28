@@ -192,6 +192,13 @@ external indices are configured.
 Do not update the C<all> external index by default.  This negates
 all uses of C<-E> / C<--update-extindex=> on the command-line.
 
+=item --no-multi-pack-index
+
+Disables writing the multi-pack-index when using L</--update-extindex>.
+See L<public-inbox-extindex(1)/--no-multi-pack-index> for details.
+
+Available in public-inbox 2.0.0+
+
 =item --since=DATESTRING
 
 =item --after=DATESTRING
