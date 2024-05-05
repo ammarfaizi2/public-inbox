@@ -114,6 +114,7 @@ enum exc_iter {
 struct srch {
 	int paths_len; // int for comparisons
 	unsigned qp_flags;
+	bool qp_extra_done;
 	Xapian::Database *db;
 	Xapian::QueryParser *qp;
 	char paths[]; // $shard_path0\0$shard_path1\0...
@@ -126,6 +127,7 @@ typedef bool (*cmd)(struct req *);
 struct req { // argv and pfxv point into global rbuf
 	char *argv[MY_ARG_MAX];
 	char *pfxv[MY_ARG_MAX]; // -A <prefix>
+	char *qpfxv[MY_ARG_MAX]; // -Q <user_prefix>[:=]<INTERNAL_PREFIX>
 	size_t *lenv; // -A <prefix>LENGTH
 	struct srch *srch;
 	char *Pgit_dir;
@@ -139,6 +141,7 @@ struct req { // argv and pfxv point into global rbuf
 	long sort_col; // value column, negative means BoolWeight
 	int argc;
 	int pfxc;
+	int qpfxc;
 	FILE *fp[2]; // [0] response pipe or sock, [1] status/errors (optional)
 	bool has_input; // fp[0] is bidirectional
 	bool collapse_threads;
@@ -584,6 +587,31 @@ static bool srch_init(struct req *req)
 	return true;
 }
 
+// setup query parser for altid and arbitrary headers
+static void srch_init_extra(struct req *req)
+{
+	const char *XPFX;
+	for (int i = 0; i < req->qpfxc; i++) {
+		size_t len = strlen(req->qpfxv[i]);
+		char *c = (char *)memchr(req->qpfxv[i], '=', len);
+
+		if (c) { // it's boolean "gmane=XGMANE"
+			XPFX = c + 1;
+			*c = 0;
+			req->srch->qp->add_boolean_prefix(req->qpfxv[i], XPFX);
+			continue;
+		}
+		// maybe it's a non-boolean prefix "blob:XBLOBID"
+		c = (char *)memchr(req->qpfxv[i], ':', len);
+		if (!c)
+			errx(EXIT_FAILURE, "bad -Q %s", req->qpfxv[i]);
+		XPFX = c + 1;
+		*c = 0;
+		req->srch->qp->add_prefix(req->qpfxv[i], XPFX);
+	}
+	req->srch->qp_extra_done = true;
+}
+
 static void free_srch(void *p) // tdestroy
 {
 	struct srch *srch = (struct srch *)p;
@@ -665,12 +693,17 @@ static void dispatch(struct req *req)
 			if (*end || req->threadid == ULLONG_MAX)
 				ABORT("-T %s", optarg);
 			break;
+		case 'Q':
+			req->qpfxv[req->qpfxc++] = optarg;
+			if (MY_ARG_MAX == req->qpfxc) ABORT("too many -Q");
+			break;
 		default: ABORT("bad switch `-%c'", c);
 		}
 	}
 	ERR_CLOSE(kfp, EXIT_FAILURE); // may ENOMEM, sets kbuf.srch
 	kbuf.srch->db = NULL;
 	kbuf.srch->qp = NULL;
+	kbuf.srch->qp_extra_done = false;
 	kbuf.srch->paths_len = size - offsetof(struct srch, paths);
 	if (kbuf.srch->paths_len <= 0)
 		ABORT("no -d args");
@@ -687,6 +720,8 @@ static void dispatch(struct req *req)
 		free_srch(kbuf.srch);
 		goto cmd_err; // srch_init already warned
 	}
+	if (req->qpfxc && !req->srch->qp_extra_done)
+		srch_init_extra(req);
 	if (req->timeout_sec)
 		alarm(req->timeout_sec > UINT_MAX ?
 			UINT_MAX : (unsigned)req->timeout_sec);

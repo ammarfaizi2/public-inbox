@@ -172,6 +172,18 @@ sub cmd_mset { # to be used by WWW + IMAP
 	}
 }
 
+sub srch_init_extra ($) {
+	my ($req) = @_;
+	my $qp = $req->{srch}->{qp};
+	for (@{$req->{Q}}) {
+		my ($upfx, $m, $xpfx) = split /([:=])/;
+		$xpfx // die "E: bad -Q $_";
+		$m = $m eq '=' ? 'add_boolean_prefix' : 'add_prefix';
+		$qp->$m($upfx, $xpfx);
+	}
+	$req->{srch}->{qp_extra_done} = 1;
+}
+
 sub dispatch {
 	my ($req, $cmd, @argv) = @_;
 	my $fn = $req->can("cmd_$cmd") or return;
@@ -195,6 +207,8 @@ sub dispatch {
 		$new->{qp} = $new->qparse_new;
 		$new;
 	};
+	$req->{Q} && !$req->{srch}->{qp_extra_done} and
+		srch_init_extra $req;
 	my $timeo = $req->{K};
 	alarm($timeo) if $timeo;
 	$fn->($req, @argv);

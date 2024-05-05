@@ -6,7 +6,7 @@ use PublicInbox::Config;
 use PublicInbox::Spawn qw(spawn);
 require_cmd('sqlite3');
 require_mods(qw(DBD::SQLite HTTP::Request::Common Plack::Test URI::Escape
-	Plack::Builder IO::Uncompress::Gunzip));
+	Plack::Builder IO::Uncompress::Gunzip Xapian));
 use_ok($_) for qw(Plack::Test HTTP::Request::Common);
 require_ok 'PublicInbox::Msgmap';
 require_ok 'PublicInbox::AltId';
@@ -14,17 +14,13 @@ require_ok 'PublicInbox::WWW';
 my ($tmpdir, $for_destroy) = tmpdir();
 my $aid = 'xyz';
 my $cfgpath;
-my $ibx = create_inbox 'test', indexlevel => 'basic', sub {
+my $spec = "serial:$aid:file=blah.sqlite3";
+my $ibx = create_inbox 'test-altid', indexlevel => 'medium',
+		altid => [ $spec ], sub {
 	my ($im, $ibx) = @_;
-	$im->add(PublicInbox::Eml->new(<<'EOF')) or BAIL_OUT;
-From: a@example.com
-Message-Id: <a@example.com>
-
-EOF
-	# $im->done;
-	my $spec = "serial:$aid:file=blah.sqlite3";
 	my $altid = PublicInbox::AltId->new($ibx, $spec, 1);
 	$altid->mm_alt->mid_set(1, 'a@example.com');
+	undef $altid;
 	$cfgpath = "$ibx->{inboxdir}/cfg";
 	open my $fh, '>', $cfgpath or BAIL_OUT "open $cfgpath: $!";
 	print $fh <<EOF or BAIL_OUT $!;
@@ -35,6 +31,11 @@ EOF
 	url = http://example.com/test
 EOF
 	close $fh or BAIL_OUT $!;
+	$im->add(PublicInbox::Eml->new(<<'EOF')) or BAIL_OUT;
+From: a@example.com
+Message-Id: <a@example.com>
+
+EOF
 };
 $cfgpath //= "$ibx->{inboxdir}/cfg";
 my $cfg = PublicInbox::Config->new($cfgpath);
@@ -56,6 +57,11 @@ my $client = sub {
 	is($mm_cmp->mid_for(1), 'a@example.com', 'sqlite3 dump valid');
 	$mm_cmp = undef;
 	unlink $cmpfile or die;
+
+	$res = $cb->(GET('/test/?q=xyz:1'));
+	is $res->code, 200, 'altid search hit';
+	$res = $cb->(GET('/test/?q=xyz:10'));
+	is $res->code, 404, 'altid search miss';
 };
 test_psgi(sub { $www->call(@_) }, $client);
 SKIP: {

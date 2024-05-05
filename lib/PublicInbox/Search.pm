@@ -92,6 +92,7 @@ our @XH_SPEC = (
 	'K=i', # timeout kill after i seconds
 	'O=s', # eidx_key
 	'T=i', # threadid
+	'Q=s@', # query prefixes "$user_prefix[:=]$XPREFIX"
 );
 
 sub load_xapian () {
@@ -435,8 +436,8 @@ sub xhc_start_maybe (@) {
 	$xhc;
 }
 
-sub xh_opt ($) {
-	my ($opt) = @_;
+sub xh_opt ($$) {
+	my ($self, $opt) = @_;
 	my $lim = $opt->{limit} || 50;
 	my @ret;
 	push @ret, '-o', $opt->{offset} if $opt->{offset};
@@ -458,7 +459,16 @@ sub xh_opt ($) {
 	push @ret, '-t' if $opt->{threads};
 	push @ret, '-T', $opt->{threadid} if defined $opt->{threadid};
 	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
-	@ret;
+	my $apfx = $self->{-alt_pfx} //= do {
+		my @tmp;
+		for (grep /\Aserial:/, @{$self->{altid} // []}) {
+			my (undef, $pfx) = split /:/, $_;
+			push @tmp, '-Q', "$pfx=X\U$pfx";
+		}
+		# TODO: arbitrary header indexing goes here
+		\@tmp;
+	};
+	(@ret, @$apfx);
 }
 
 # returns a true value if actually handled asynchronously,
@@ -467,7 +477,7 @@ sub async_mset {
 	my ($self, $qry_str, $opt, $cb, @args) = @_;
 	if ($XHC) { # unconditionally retrieving pct + rank for now
 		xdb($self); # populate {nshards}
-		my @margs = ($self->xh_args, xh_opt($opt));
+		my @margs = ($self->xh_args, xh_opt($self, $opt));
 		my $ret = eval {
 			my $rd = $XHC->mkreq(undef, 'mset', @margs, $qry_str);
 			PublicInbox::XhcMset->maybe_new($rd, $self, $cb, @args);
@@ -630,7 +640,7 @@ EOM
 			$ret .= qq{\tqp->add_boolean_prefix("$name", "$_");\n}
 		}
 	}
-	# TODO: altid support
+	# altid support is handled in xh_opt and srch_init_extra in XH
 	for my $name (sort keys %prob_prefix) {
 		for (split(/ /, $prob_prefix{$name})) {
 			$ret .= qq{\tqp->add_prefix("$name", "$_");\n}
