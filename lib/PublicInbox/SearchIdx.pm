@@ -119,7 +119,7 @@ sub load_xapian_writable () {
 	my $ver = eval 'v'.join('.', eval($xap.'::major_version()'),
 				eval($xap.'::minor_version()'),
 				eval($xap.'::revision()'));
-	if ($ver ge 1.4) { # new flags in Xapian 1.4
+	if ($ver ge v1.4) { # new flags in Xapian 1.4
 		$DB_NO_SYNC = 0x4;
 		$DB_DANGEROUS = 0x10;
 	}
