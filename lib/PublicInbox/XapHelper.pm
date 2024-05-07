@@ -191,8 +191,9 @@ sub dispatch {
 		or return;
 	my $dirs = delete $req->{d} or die 'no -d args';
 	my $key = join("\0", @$dirs);
+	my $new;
 	$req->{srch} = $SRCH{$key} //= do {
-		my $new = { qp_flags => $PublicInbox::Search::QP_FLAGS };
+		$new = { qp_flags => $PublicInbox::Search::QP_FLAGS };
 		my $first = shift @$dirs;
 		my $slow_phrase = -f "$first/iamchert";
 		$new->{xdb} = $X->{Database}->new($first);
@@ -207,6 +208,7 @@ sub dispatch {
 		$new->{qp} = $new->qparse_new;
 		$new;
 	};
+	$req->{srch}->{xdb}->reopen unless $new;
 	$req->{Q} && !$req->{srch}->{qp_extra_done} and
 		srch_init_extra $req;
 	my $timeo = $req->{K};

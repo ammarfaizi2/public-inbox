@@ -712,6 +712,7 @@ static void dispatch(struct req *req)
 	req->srch = *s;
 	if (req->srch != kbuf.srch) { // reuse existing
 		free_srch(kbuf.srch);
+		req->srch->db->reopen();
 	} else if (!srch_init(req)) {
 		assert(kbuf.srch == *((struct srch **)tfind(
 					kbuf.srch, &srch_tree, srch_cmp)));
