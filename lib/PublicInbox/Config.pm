@@ -13,6 +13,7 @@ use v5.10.1;
 use parent qw(Exporter);
 our @EXPORT_OK = qw(glob2re rel2abs_collapsed);
 use PublicInbox::Inbox;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(popen_rd run_qx);
 our $LD_PRELOAD = $ENV{LD_PRELOAD}; # only valid at startup
 our $DEDUPE; # set to {} to dedupe or clear cache
@@ -188,7 +189,7 @@ sub git_config_dump {
 		unshift(@opt_c, '-c', "include.path=$file") if defined($file);
 		tmp_cmd_opt(\%env, $opt);
 	}
-	my @cmd = ('git', @opt_c, qw(config -z -l --includes));
+	my @cmd = (git_exe, @opt_c, qw(config -z -l --includes));
 	push(@cmd, '-f', $file) if !@opt_c && defined($file);
 	my $fh = popen_rd(\@cmd, \%env, $opt);
 	my $rv = config_fh_parse($fh, "\0", "\n");
@@ -608,7 +609,7 @@ sub config_cmd {
 	my ($self, $env, $opt) = @_;
 	my $f = $self->{-f} // default_file();
 	my @opt_c = @{$self->{-opt_c} // []};
-	my @cmd = ('git', @opt_c, 'config');
+	my @cmd = (git_exe, @opt_c, 'config');
 	@opt_c ? tmp_cmd_opt($env, $opt) : push(@cmd, '-f', $f);
 	\@cmd;
 }

@@ -168,7 +168,7 @@ sub require_git_http_backend (;$) {
 	my ($nr) = @_;
 	state $ok = do {
 		require PublicInbox::Git;
-		my $git = PublicInbox::Git::check_git_exe() or plan
+		my $git = PublicInbox::Git::git_exe() or plan
 			skip_all => 'nothing in public-inbox works w/o git';
 		my $rdr = { 1 => \my $out, 2 => \my $err };
 		xsys([$git, qw(http-backend)], undef, $rdr);

@@ -119,17 +119,16 @@ EOM
 			map { $_->git_path('objects')."\n" } @{$self->{gits}};
 		$rw = PublicInbox::Git->new($d);
 	}
-	my $w = popen_wr(['git', "--git-dir=$rw->{git_dir}",
-			qw(fast-import --quiet --done --date-format=raw)],
+	my $w = popen_wr($rw->cmd(qw(fast-import
+				--quiet --done --date-format=raw)),
 			$lei->{env}, { 2 => $lei->{2} });
 	print $w $ta, "\n", $tb, "\ndone\n" or die "print fast-import: $!";
 	$w->close or die "close w fast-import: \$?=$? \$!=$!";
 
-	my $cmd = [ 'diff' ];
+	my $cmd = $rw->cmd('diff');
 	_lei_diff_prepare($lei, $cmd);
-	$lei->qerr("# git @$cmd");
+	$lei->qerr("# git @$cmd[2..$#$cmd]");
 	push @$cmd, qw(A B);
-	unshift @$cmd, 'git', "--git-dir=$rw->{git_dir}";
 	run_wait($cmd, $lei->{env}, { 2 => $lei->{2}, 1 => $lei->{1} }) and
 		$lei->child_error($?); # for git diff --exit-code
 	undef;

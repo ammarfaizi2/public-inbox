@@ -106,7 +106,7 @@ sub stream_large_blob ($$) {
 	my ($ctx, $res) = @_;
 	$ctx->{-res} = $res;
 	my ($git, $oid, $type, $size, $di) = @$res;
-	my $cmd = ['git', "--git-dir=$git->{git_dir}", 'cat-file', $type, $oid];
+	my $cmd = $git->cmd('cat-file', $type, $oid);
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
 	$qsp->psgi_yield($ctx->{env}, undef, \&stream_blob_parse_hdr, $ctx);
@@ -368,10 +368,9 @@ sub stream_patch_parse_hdr { # {parse_hdr} for Qspawn
 sub show_patch ($$) {
 	my ($ctx, $res) = @_;
 	my ($git, $oid) = @$res;
-	my @cmd = ('git', "--git-dir=$git->{git_dir}",
-		qw(format-patch -1 --stdout -C),
+	my $cmd = $git->cmd(qw(format-patch -1 --stdout -C),
 		"--signature=git format-patch -1 --stdout -C $oid", $oid);
-	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$ctx->{env}->{'qspawn.wcb'} = $ctx->{-wcb};
 	$ctx->{patch_oid} = $oid;
 	$qsp->psgi_yield($ctx->{env}, undef, \&stream_patch_parse_hdr, $ctx);
@@ -400,8 +399,8 @@ sub show_other ($$) { # just in case...
 	my ($git, $oid, $type, $size) = @$res;
 	$size > $MAX_SIZE and return html_page($ctx, 200,
 		ascii_html($type)." $oid is too big to show\n". dbg_log($ctx));
-	my $cmd = ['git', "--git-dir=$git->{git_dir}",
-		qw(show --encoding=UTF-8 --no-color --no-abbrev), $oid ];
+	my $cmd = $git->cmd(qw(show --encoding=UTF-8
+			--no-color --no-abbrev), $oid);
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');
 	$qsp->psgi_qx($ctx->{env}, undef, \&show_other_result, $ctx);
@@ -487,8 +486,7 @@ sub show_tree ($$) { # also used by RepoTree
 	my ($git, $oid, undef, $size) = @$res;
 	$size > $MAX_SIZE and return html_page($ctx, 200,
 			"tree $oid is too big to show\n". dbg_log($ctx));
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
-		qw(ls-tree -z -l --no-abbrev), $oid ];
+	my $cmd = $git->cmd(qw(ls-tree -z -l --no-abbrev), $oid);
 	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$ctx->{tree_oid} = $oid;
 	$qsp->{qsp_err} = \($ctx->{-qsp_err} = '');

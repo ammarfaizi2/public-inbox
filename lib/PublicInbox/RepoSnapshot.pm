@@ -50,15 +50,13 @@ sub ver_check { # git->check_async callback
 			delete($ctx->{env}->{'qspawn.wcb'})->(r(404));
 	} else { # found, done:
 		$ctx->{etag} = $oid;
-		my @cfg;
+		my $cmd = $ctx->{git}->cmd;
 		if (my $cmd = $FMT_CFG{$ctx->{snap_fmt}}) {
-			@cfg = ('-c', "tar.$ctx->{snap_fmt}.command=$cmd");
+			push @$cmd, '-c', "tar.$ctx->{snap_fmt}.command=$cmd";
 		}
-		my $qsp = PublicInbox::Qspawn->new(['git', @cfg,
-				"--git-dir=$ctx->{git}->{git_dir}", 'archive',
-				"--prefix=$ctx->{snap_pfx}/",
-				"--format=$ctx->{snap_fmt}", $treeish], undef,
-				{ quiet => 1 });
+		push @$cmd, 'archive', "--prefix=$ctx->{snap_pfx}/",
+				"--format=$ctx->{snap_fmt}", $treeish;
+		my $qsp = PublicInbox::Qspawn->new($cmd, undef, { quiet => 1 });
 		$qsp->psgi_yield($ctx->{env}, undef, \&archive_hdr, $ctx);
 	}
 }

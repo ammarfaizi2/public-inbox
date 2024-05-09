@@ -94,11 +94,10 @@ xmlns="http://www.w3.org/1999/xhtml"><pre style="white-space:pre-wrap">
 sub srv_tags_atom {
 	my ($ctx) = @_;
 	my $max = 50; # TODO configurable
-	my @cmd = ('git', "--git-dir=$ctx->{git}->{git_dir}",
-			qw(for-each-ref --sort=-creatordate), "--count=$max",
-			'--perl', $EACH_REF_FMT, 'refs/tags');
+	my $cmd = $ctx->{git}->cmd(qw(for-each-ref --sort=-creatordate),
+			"--count=$max", '--perl', $EACH_REF_FMT, 'refs/tags');
 	$ctx->{-feed_title} = "$ctx->{git}->{nick} tags";
-	my $qsp = PublicInbox::Qspawn->new(\@cmd);
+	my $qsp = PublicInbox::Qspawn->new($cmd);
 	$ctx->{-is_tag} = 1;
 	$qsp->psgi_yield($ctx->{env}, undef, \&atom_ok, $ctx);
 }
@@ -107,20 +106,19 @@ sub srv_atom {
 	my ($ctx, $path) = @_;
 	return if index($path, '//') >= 0 || index($path, '/') == 0;
 	my $max = 50; # TODO configurable
-	my @cmd = ('git', "--git-dir=$ctx->{git}->{git_dir}",
-			qw(log --no-notes --no-color --no-abbrev),
-			$ATOM_FMT, "-$max");
+	my $cmd = $ctx->{git}->cmd(qw(log --no-notes --no-color --no-abbrev),
+				$ATOM_FMT, "-$max");
 	my $tip = $ctx->{qp}->{h}; # same as cgit
 	$ctx->{-feed_title} = $ctx->{git}->{nick};
 	$ctx->{-feed_title} .= " $path" if $path ne '';
 	if (defined($tip)) {
-		push @cmd, $tip;
+		push @$cmd, $tip;
 		$ctx->{-feed_title} .= ", $tip";
 	}
 	# else: let git decide based on HEAD if $tip isn't defined
-	push @cmd, '--';
-	push @cmd, $path if $path ne '';
-	my $qsp = PublicInbox::Qspawn->new(\@cmd, undef,
+	push @$cmd, '--';
+	push @$cmd, $path if $path ne '';
+	my $qsp = PublicInbox::Qspawn->new($cmd, undef,
 					{ quiet => 1, 2 => $ctx->{lh} });
 	$qsp->psgi_yield($ctx->{env}, undef, \&atom_ok, $ctx);
 }

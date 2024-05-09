@@ -12,6 +12,7 @@ use PublicInbox::LeiCurl;
 use PublicInbox::LeiMirror;
 use PublicInbox::SHA qw(sha_all);
 use File::Temp ();
+use PublicInbox::Git qw(git_exe);
 
 sub new { bless {}, __PACKAGE__ }
 
@@ -19,7 +20,7 @@ sub remote_url ($$) {
 	my ($lei, $dir) = @_;
 	my $rn = $lei->{opt}->{'try-remote'} // [ 'origin', '_grokmirror' ];
 	for my $r (@$rn) {
-		my $cmd = [ qw(git config), "remote.$r.url" ];
+		my $cmd = [ git_exe, 'config', "remote.$r.url" ];
 		my $url = run_qx($cmd, undef, { -C => $dir, 2 => $lei->{2} });
 		next if $?;
 		$url =~ s!/*\n!!s;
@@ -92,7 +93,7 @@ sub do_manifest ($$$) {
 
 sub get_fingerprint2 {
 	my ($git_dir) = @_;
-	my $rd = popen_rd([qw(git show-ref)], undef, { -C => $git_dir });
+	my $rd = popen_rd([git_exe, 'show-ref'], undef, { -C => $git_dir });
 	sha_all(256, $rd)->digest; # ignore show-ref errors
 }
 
@@ -132,8 +133,8 @@ sub do_fetch { # main entry point
 				warn "W: $edir missing remote.*.url\n";
 				my $o = { -C => $edir };
 				$o->{1} = $o->{2} = $lei->{2};
-				run_wait([qw(git config -l)], undef, $o) and
-					$lei->child_error($?);
+				run_wait([git_exe, qw(config -l)], undef, $o)
+					and $lei->child_error($?);
 			}
 		}
 		@epochs = grep { !$skip->{$_} } @epochs if $skip;
@@ -188,7 +189,7 @@ EOM
 		my $opt = {}; # for spawn
 		if (-d $d) {
 			$fp2->[0] = get_fingerprint2($d) if $fp2;
-			$cmd = [ @$torsocks, 'git', "--git-dir=$d",
+			$cmd = [ @$torsocks, git_exe, "--git-dir=$d",
 			       PublicInbox::LeiMirror::fetch_args($lei, $opt)];
 		} else {
 			my $e_uri = $ibx_uri->clone;

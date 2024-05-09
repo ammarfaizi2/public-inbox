@@ -1003,8 +1003,7 @@ sub prepare_stack ($$) {
 sub is_ancestor ($$$) {
 	my ($git, $cur, $tip) = @_;
 	return 0 unless $git->check($cur);
-	my $cmd = [ 'git', "--git-dir=$git->{git_dir}",
-		qw(merge-base --is-ancestor), $cur, $tip ];
+	my $cmd = $git->cmd(qw(merge-base --is-ancestor), $cur, $tip);
 	run_wait($cmd) == 0;
 }
 

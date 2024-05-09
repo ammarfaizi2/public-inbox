@@ -51,8 +51,8 @@ sub find_missing {
 		$res->[0] = 404;
 		return delete($ctx->{-wcb})->($res);
 	}
-	my $cmd = ['git', "--git-dir=$ctx->{git}->{git_dir}",
-		qw(log --no-color -1), '--pretty=%H %h %s (%as)' ];
+	my $cmd = $ctx->{git}->cmd(qw(log --no-color -1),
+				'--pretty=%H %h %s (%as)');
 	push @$cmd, $ctx->{qp}->{h} if defined($ctx->{qp}->{h});
 	push @$cmd, '--';
 	push @$cmd, $ctx->{-path};

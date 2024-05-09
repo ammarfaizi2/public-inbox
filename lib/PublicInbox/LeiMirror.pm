@@ -24,6 +24,7 @@ use POSIX qw(strftime);
 use PublicInbox::Admin qw(fmt_localtime);
 use autodie qw(chdir chmod close open pipe readlink
 		seek symlink sysopen sysseek truncate unlink);
+use PublicInbox::Git qw(git_exe);
 
 our $LIVE; # pid => callback
 our $FGRP_TODO; # objstore -> [[ to resume ], [ to clone ]]
@@ -105,7 +106,7 @@ E: confused by scraping <$uri>, got ambiguous results:
 
 sub clone_cmd {
 	my ($lei, $opt) = @_;
-	my @cmd = qw(git);
+	my @cmd = (git_exe);
 	$opt->{$_} = $lei->{$_} for (0..2);
 	# we support "-c $key=$val" for arbitrary git config options
 	# e.g.: git -c http.proxy=socks5h://127.0.0.1:9050
@@ -291,7 +292,7 @@ sub upr { # feed `git update-ref --stdin -z' verbosely
 sub start_update_ref {
 	my ($fgrp) = @_;
 	pipe(my $r, my $w);
-	my $cmd = [ 'git', "--git-dir=$fgrp->{cur_dst}",
+	my $cmd = [ git_exe, "--git-dir=$fgrp->{cur_dst}",
 		qw(update-ref --stdin -z) ];
 	my $pack = on_destroy \&satellite_done, $fgrp;
 	start_cmd($fgrp, $cmd, { 0 => $r, 2 => $fgrp->{lei}->{2} }, $pack);
@@ -353,7 +354,7 @@ sub satellite_done {
 
 sub pack_refs {
 	my ($self, $git_dir) = @_;
-	my $cmd = [ 'git', "--git-dir=$git_dir", qw(pack-refs --all --prune) ];
+	my $cmd = [git_exe, "--git-dir=$git_dir", qw(pack-refs --all --prune)];
 	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
 }
 
@@ -374,14 +375,15 @@ sub fgrpv_done {
 		my $rn = $fgrp->{-remote};
 		my %opt = ( 2 => $fgrp->{lei}->{2} );
 		my $update_ref = on_destroy \&fgrp_update, $fgrp;
-		my $src = [ 'git', "--git-dir=$fgrp->{-osdir}", 'for-each-ref',
+		my $src = [ git_exe, "--git-dir=$fgrp->{-osdir}",
+			'for-each-ref',
 			"--format=refs/%(refname:lstrip=3)%00%(objectname)",
 			"refs/remotes/$rn/" ];
 		open(my $sfh, '+>', undef);
 		$fgrp->{srcfh} = $sfh;
 		start_cmd($fgrp, $src, { %opt, 1 => $sfh }, $update_ref);
-		my $dst = [ 'git', "--git-dir=$fgrp->{cur_dst}", 'for-each-ref',
-			'--format=%(refname)%00%(objectname)' ];
+		my $dst = [ git_exe, "--git-dir=$fgrp->{cur_dst}",
+			'for-each-ref', '--format=%(refname)%00%(objectname)' ];
 		open(my $dfh, '+>', undef);
 		$fgrp->{dstfh} = $dfh;
 		start_cmd($fgrp, $dst, { %opt, 1 => $dfh }, $update_ref);
@@ -399,7 +401,7 @@ sub fgrp_fetch_all {
 	# system argv limits:
 	my $grp = 'fgrptmp';
 
-	my @git = (@{$self->{-torsocks}}, 'git');
+	my @git = (@{$self->{-torsocks}}, git_exe);
 	my $j = $self->{lei}->{opt}->{jobs};
 	my $opt = {};
 	my @fetch = do {
@@ -413,7 +415,7 @@ sub fgrp_fetch_all {
 		my ($old, $new) = @$fgrp_old_new;
 		@$old = sort { $b->{-sort} <=> $a->{-sort} } @$old;
 		# $new is ordered by {references}
-		my $cmd = ['git', "--git-dir=$osdir", qw(config -f), $f ];
+		my $cmd = [ git_exe, "--git-dir=$osdir", qw(config -f), $f ];
 
 		# clobber settings from previous run atomically
 		for ("remotes.$grp", 'fetch.hideRefs') {
@@ -541,7 +543,7 @@ sub cmp_fp_do {
 		return if $cur_ent->{fingerprint} eq $new;
 	}
 	my $dst = $self->{cur_dst} // $self->{dst};
-	my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
+	my $cmd = [git_exe, "--git-dir=$dst", 'show-ref'];
 	my $opt = { 2 => $self->{lei}->{2} };
 	open($opt->{1}, '+>', undef);
 	$self->{-show_ref} = $opt->{1};
@@ -555,7 +557,7 @@ sub resume_fetch {
 	my ($self, $uri, $fini) = @_;
 	return if !keep_going($self);
 	my $dst = $self->{cur_dst} // $self->{dst};
-	my @git = ('git', "--git-dir=$dst");
+	my @git = (git_exe, "--git-dir=$dst");
 	my $opt = { 2 => $self->{lei}->{2} };
 	my $rn = 'random'.int(rand(1 << 30));
 	for ("url=$uri", "fetch=+refs/*:refs/*", 'mirror=true') {
@@ -755,7 +757,7 @@ sub update_ent {
 	my $cur = $self->{-local_manifest}->{$key}->{fingerprint} // "\0";
 	my $dst = $self->{cur_dst} // $self->{dst};
 	if (defined($new) && $new ne $cur) {
-		my $cmd = ['git', "--git-dir=$dst", 'show-ref'];
+		my $cmd = [git_exe, "--git-dir=$dst", 'show-ref'];
 		my $opt = { 2 => $self->{lei}->{2} };
 		open($opt->{1}, '+>', undef);
 		$self->{-show_ref_up} = $opt->{1};
@@ -766,7 +768,7 @@ sub update_ent {
 	$cur = $self->{-local_manifest}->{$key}->{head} // "\0";
 	if (defined($new) && $new ne $cur) {
 		# n.b. grokmirror writes raw contents to $dst/HEAD w/o locking
-		my $cmd = [ 'git', "--git-dir=$dst" ];
+		my $cmd = [ git_exe, "--git-dir=$dst" ];
 		if ($new =~ s/\Aref: //) {
 			push @$cmd, qw(symbolic-ref HEAD), $new;
 		} elsif ($new =~ /\A[a-f0-9]{40,}\z/) {
@@ -811,7 +813,8 @@ sub update_ent {
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
 	utf8::encode($new); # to octets
-	my $cmd = [ qw(git config -f), "$dst/config", 'gitweb.owner', $new ];
+	my $cmd = [ git_exe, qw(config -f), "$dst/config",
+			'gitweb.owner', $new ];
 	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
 }
 

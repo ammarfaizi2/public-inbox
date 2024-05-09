@@ -73,8 +73,8 @@ sub gfi_start {
 			die "fatal: ls-tree -r -z --name-only $ref: \$?=$?" if $?;
 			$self->{-tree} = { map { $_ => 1 } split(/\0/, $t) };
 		}
-		my $gfi = [ 'git', "--git-dir=$git->{git_dir}", qw(fast-import
-				--quiet --done --date-format=raw) ];
+		my $gfi = $git->cmd(qw(fast-import
+					--quiet --done --date-format=raw));
 		my $pid = spawn($gfi, undef, { 0 => $s2, 1 => $s2 });
 		$self->{nchg} = 0;
 		$self->{io} = PublicInbox::IO::attach_pid($io, $pid);
@@ -161,7 +161,7 @@ sub _update_git_info ($$) {
 	# for compatibility with existing ssoma installations
 	# we can probably remove this entirely by 2020
 	my $git_dir = $self->{git}->{git_dir};
-	my @cmd = ('git', "--git-dir=$git_dir");
+	my @cmd = @{$self->{git}->cmd};
 	my $index = "$git_dir/ssoma.index";
 	if (-e $index && !$ENV{FAST}) {
 		my $env = { GIT_INDEX_FILE => $index };
@@ -631,7 +631,7 @@ sub replace_oids {
 	chomp(my $cmt = $self->get_mark(":$mark")) if $nreplace;
 	$self->{nchg} = 0; # prevent _update_git_info until update-ref:
 	$self->done;
-	my @git = ('git', "--git-dir=$git->{git_dir}");
+	my @git = @{$git->cmd};
 
 	run_die([@git, qw(update-ref), $old, $tmp]) if $nreplace;
 

@@ -10,6 +10,7 @@ package PublicInbox::Git;
 use strict;
 use v5.10.1;
 use parent qw(Exporter PublicInbox::DS);
+use PublicInbox::DS qw(now);
 use autodie qw(socketpair read);
 use POSIX ();
 use Socket qw(AF_UNIX SOCK_STREAM);
@@ -25,7 +26,7 @@ use PublicInbox::SHA qw(sha_all);
 our %HEXLEN2SHA = (40 => 1, 64 => 256);
 our %OFMT2HEXLEN = (sha1 => 40, sha256 => 64);
 our @EXPORT_OK = qw(git_unquote git_quote %HEXLEN2SHA %OFMT2HEXLEN
-			$ck_unlinked_packs);
+			$ck_unlinked_packs git_exe);
 our $in_cleanup;
 our $async_warn; # true in read-only daemons
 
@@ -54,7 +55,11 @@ my %ESC_GIT = map { $GIT_ESC{$_} => $_ } keys %GIT_ESC;
 my $EXE_ST = ''; # pack('dd', st_dev, st_ino); # no `q' in some 32-bit builds
 my ($GIT_EXE, $GIT_VER);
 
-sub check_git_exe () {
+sub git_exe () {
+	my $now = now;
+	state $next_check = $now - 10;
+	return $GIT_EXE if $now < $next_check;
+	$next_check = $now + 10;
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
 	my @st = stat(_) or die "stat($GIT_EXE): $!"; # can't do HiRes w/ _
 	my $st = pack('dd', $st[0], $st[1]);
@@ -69,8 +74,8 @@ sub check_git_exe () {
 	$GIT_EXE;
 }
 
-sub git_version {
-	check_git_exe();
+sub git_version () {
+	git_exe;
 	$GIT_VER;
 }
 
@@ -174,7 +179,7 @@ sub _sock_cmd {
 
 	# git 2.31.0+ supports -c core.abbrev=no, don't bother with
 	# core.abbrev=64 since not many releases had SHA-256 prior to 2.31
-	my $abbr = $GIT_VER lt v2.31.0 ? 40 : 'no';
+	my $abbr = git_version lt v2.31.0 ? 40 : 'no';
 	my @cmd = ($GIT_EXE, "--git-dir=$gd", '-c', "core.abbrev=$abbr",
 			'cat-file', "--$batch");
 	if ($err_c) {
@@ -287,8 +292,7 @@ sub cat_async_wait ($) {
 
 sub batch_prepare ($) {
 	my ($self) = @_;
-	check_git_exe();
-	if ($GIT_VER ge BATCH_CMD_VER) {
+	if (git_version ge BATCH_CMD_VER) {
 		$self->{-bc} = 1;
 		_sock_cmd($self, 'batch-command', 1);
 	} else {
@@ -344,8 +348,7 @@ sub ck {
 sub check_async_begin ($) {
 	my ($self) = @_;
 	cleanup($self) if alternates_changed($self);
-	check_git_exe();
-	if ($GIT_VER ge BATCH_CMD_VER) {
+	if (git_version ge BATCH_CMD_VER) {
 		$self->{-bc} = 1;
 		_sock_cmd($self, 'batch-command', 1);
 	} else {
@@ -421,15 +424,15 @@ sub async_err ($$$$$) {
 
 sub cmd {
 	my $self = shift;
-	[ $GIT_EXE // check_git_exe(), "--git-dir=$self->{git_dir}", @_ ]
+	[ git_exe(), "--git-dir=$self->{git_dir}", @_ ]
 }
 
 # $git->popen(qw(show f00)); # or
 # $git->popen(qw(show f00), { GIT_CONFIG => ... }, { 2 => ... });
 sub popen {
 	my ($self, $cmd) = splice(@_, 0, 2);
-	$cmd = [ 'git', "--git-dir=$self->{git_dir}",
-		ref($cmd) ? @$cmd : ($cmd, grep { defined && !ref } @_) ];
+	$cmd = $self->cmd(ref($cmd) ? @$cmd :
+			($cmd, grep { defined && !ref } @_));
 	popen_rd($cmd, grep { !defined || ref } @_); # env and opt
 }
 
@@ -577,9 +580,8 @@ sub cloneurl {
 # templates/this--description in git.git
 sub manifest_entry {
 	my ($self, $epoch, $default_desc) = @_;
-	check_git_exe();
 	my $gd = $self->{git_dir};
-	my @git = ($GIT_EXE, "--git-dir=$gd");
+	my @git = (git_exe, "--git-dir=$gd");
 	my $sr = popen_rd([@git, 'show-ref']);
 	my $own = popen_rd([@git, qw(config gitweb.owner)]);
 	my $mod = popen_rd([@git, @MODIFIED_DATE]);

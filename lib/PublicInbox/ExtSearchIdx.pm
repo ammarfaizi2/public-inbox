@@ -1288,10 +1288,10 @@ sub idx_init { # similar to V2Writable
 		$self->{mg}->write_alternates($mode, $alt, $new);
 	my $restore = $self->with_umask;
 	if ($git_midx && ($opt->{'multi-pack-index'} // 1)) {
-		my @cmd = ('multi-pack-index');
-		push @cmd, '--no-progress' if ($opt->{quiet}//0) > 1;
+		my $cmd = $self->git->cmd('multi-pack-index');
+		push @$cmd, '--no-progress' if ($opt->{quiet}//0) > 1;
 		my $lk = $self->lock_for_scope;
-		system('git', "--git-dir=$ALL", @cmd, 'write');
+		system(@$cmd, 'write');
 		# ignore errors, fairly new command, may not exist
 	}
 	$self->parallel_init($self->{indexlevel});

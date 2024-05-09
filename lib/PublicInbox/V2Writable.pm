@@ -1071,8 +1071,8 @@ sub unindex_todo ($$$) {
 	return if $before == $after;
 
 	# ensure any blob can not longer be accessed via dumb HTTP
-	run_die(['git', "--git-dir=$unit->{git}->{git_dir}",
-		qw(-c gc.reflogExpire=now gc --prune=all --quiet)]);
+	run_die($unit->{git}->cmd(qw(-c gc.reflogExpire=now gc
+				--prune=all --quiet)));
 }
 
 sub sync_ranges ($$) {

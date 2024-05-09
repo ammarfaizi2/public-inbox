@@ -36,14 +36,13 @@ sub solver_user_cb { # called by solver when done
 	ref($res) eq 'ARRAY' or return $lei->child_error(0, $$log_buf);
 	$lei->qerr($$log_buf);
 	my ($git, $oid, $type, $size, $di) = @$res;
-	my $gd = $git->{git_dir};
 
 	# don't try to support all the git-show(1) options for non-blob,
 	# this is just a convenience:
-	$type ne 'blob' and
-		warn "# $oid is a $type of $size bytes in:\n#\t$gd\n";
-
-	my $cmd = [ 'git', "--git-dir=$gd", 'show', $oid ];
+	$type ne 'blob' and warn <<EOM;
+# $oid is a $type of $size bytes in:\n#\t$git->{git_dir}
+EOM
+	my $cmd = $git->cmd('show', $oid);
 	my $rdr = { 1 => $lei->{1}, 2 => $lei->{2} };
 	run_wait($cmd, $lei->{env}, $rdr) and $lei->child_error($?);
 }
