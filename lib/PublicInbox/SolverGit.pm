@@ -13,7 +13,7 @@ use v5.10.1;
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use autodie qw(mkdir);
 use Fcntl qw(SEEK_SET);
-use PublicInbox::Git qw(git_unquote git_quote);
+use PublicInbox::Git qw(git_unquote git_quote git_exe);
 use PublicInbox::IO qw(write_file);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::Qspawn;
@@ -293,7 +293,7 @@ sub prepare_index ($) {
 
 	dbg($self, 'preparing index');
 	my $rdr = { 0 => $in };
-	my $cmd = [ qw(git update-index -z --index-info) ];
+	my $cmd = [ git_exe, qw(update-index -z --index-info) ];
 	my $qsp = PublicInbox::Qspawn->new($cmd, $self->{git_env}, $rdr);
 	$path_a = git_quote($path_a);
 	$self->{-msg} = "index prepared:\n$mode_a $oid_full\t$path_a";
@@ -473,7 +473,7 @@ sub apply_result ($$) { # qx_cb
 		skip_identical($self, $patches, $di->{oid_b});
 	}
 
-	my @cmd = qw(git ls-files -s -z);
+	my @cmd = (git_exe, qw(ls-files -s -z));
 	my $qsp = PublicInbox::Qspawn->new(\@cmd, $self->{git_env});
 	$self->{-cur_di} = $di;
 	qsp_qx $self, $qsp, \&ls_files_result;
@@ -484,7 +484,7 @@ sub do_git_apply ($) {
 	my $patches = $self->{patches};
 
 	# we need --ignore-whitespace because some patches are CRLF
-	my @cmd = (qw(git apply --cached --ignore-whitespace
+	my @cmd = (git_exe, qw(apply --cached --ignore-whitespace
 			--unidiff-zero --whitespace=warn --verbose));
 	my $len = length(join(' ', @cmd));
 	my $di; # keep track of the last one for "git ls-files"
