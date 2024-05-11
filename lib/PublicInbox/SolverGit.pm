@@ -136,6 +136,12 @@ sub extract_diff ($$) {
 	if ($cte =~ /\bquoted-printable\b/i && $part->crlf eq "\n") {
 		$s =~ s/\r\n/\n/sg;
 	}
+
+	# Quiet "Complex regular subexpression recursion limit" warning.
+	# Not much we can do about it, but it's no longer relevant to
+	# Perl 5.3x (the warning was removed in 5.37.1, and actual
+	# recursino sometime before then).
+	no warnings 'regexp';
 	$s =~ m!( # $1 start header lines we save for debugging:
 
 		# everything before ^index is optional, but we don't
