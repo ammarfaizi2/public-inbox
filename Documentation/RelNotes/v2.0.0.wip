@@ -56,7 +56,7 @@ treewide
 
   * for daemons serving public traffic, MALLOC_MMAP_THRESHOLD_=131072 is
     recommended to reduce fragmentation in glibc malloc, while jemalloc
-    (tested as an LD_PRELOAD) is another option.
+    (tested as an LD_PRELOAD) is another option (at least for 64-bit).
 
 PublicInbox::WWW
 

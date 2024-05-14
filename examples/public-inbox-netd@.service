@@ -14,9 +14,11 @@ After = public-inbox-netd.socket
 [Service]
 
 # Setting MALLOC_MMAP_THRESHOLD_=131072 reduces fragmentation by
-# disabling the sliding mmap window in glibc malloc.  An LD_PRELOAD for
-# libjemalloc may be added here, instead.  jemalloc is more resistant to
-# fragmentation in long-lived daemons than unconfigured glibc malloc.
+# disabling the sliding mmap window in glibc malloc.  For 64-bit systems,
+# LD_PRELOAD for libjemalloc may be added here, instead.  jemalloc is more
+# resistant to fragmentation in long-lived daemons than unconfigured glibc
+# malloc on systems with large VM space.  32-bit systems may be better
+# off sticking with glibc and MALLOC_MMAP_THRESHOLD_.
 Environment = PI_CONFIG=/home/pi/.public-inbox/config \
 PATH=/usr/local/bin:/usr/bin:/bin \
 TZ=UTC \

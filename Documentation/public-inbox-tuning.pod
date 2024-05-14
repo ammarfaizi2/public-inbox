@@ -166,9 +166,10 @@ capacity planning.
 Bursts of small object allocations late in process life contribute to
 fragmentation of the heap due to arenas (slabs) used internally by Perl.
 glibc malloc users should use C<MALLOC_MMAP_THRESHOLD_=131072> to reduce
-fragmentation from the sliding mmap window.  jemalloc (tested as an
-LD_PRELOAD on GNU/Linux) also reduces fragmentation compared to an
-unconfigured glibc malloc in long-lived processes.
+fragmentation from the sliding mmap window.  On 64-bit systems, jemalloc
+(tested as an LD_PRELOAD on GNU/Linux) reduces fragmentation at the
+expense of VM space.  32-bit systems may be better off sticking with
+glibc and MALLOC_MMAP_THRESHOLD_.
 
 =head2 Other OS tuning knobs
 
