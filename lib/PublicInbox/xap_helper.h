@@ -37,7 +37,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <search.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -116,6 +115,31 @@ static void *xreallocarray(void *ptr, size_t nmemb, size_t size)
 	return ret;
 }
 
+#include "khashl.h"
+
+struct srch {
+	int ckey_len; // int for comparisons
+	unsigned qp_flags;
+	bool qp_extra_done;
+	Xapian::Database *db;
+	Xapian::QueryParser *qp;
+	unsigned char ckey[]; // $shard_path0\0$shard_path1\0...
+};
+
+static khint_t srch_hash(const struct srch *srch)
+{
+	return kh_hash_bytes(srch->ckey_len, srch->ckey);
+}
+
+static int srch_eq(const struct srch *a, const struct srch *b)
+{
+	return a->ckey_len == b->ckey_len ?
+		!memcmp(a->ckey, b->ckey, (size_t)a->ckey_len) : 0;
+}
+
+KHASHL_CSET_INIT(KH_LOCAL, srch_set, srch_set, struct srch *,
+		srch_hash, srch_eq)
+static srch_set *srch_cache;
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
 static sigset_t fullset, workerset;
@@ -124,7 +148,6 @@ static bool alive = true;
 static FILE *orig_err = stderr;
 #endif
 static int orig_err_fd = -1;
-static void *srch_tree; // tsearch + tdelete + twalk
 static pid_t *worker_pids; // nr => pid
 #define WORKER_MAX USHRT_MAX
 static unsigned long nworker, nworker_hwm;
@@ -142,15 +165,6 @@ enum exc_iter {
 	ITER_OK = 0,
 	ITER_RETRY,
 	ITER_ABORT
-};
-
-struct srch {
-	int ckey_len; // int for comparisons
-	unsigned qp_flags;
-	bool qp_extra_done;
-	Xapian::Database *db;
-	Xapian::QueryParser *qp;
-	char ckey[]; // $shard_path0\0$shard_path1\0...
 };
 
 #define MY_ARG_MAX 256
@@ -435,7 +449,6 @@ static bool cmd_test_sleep(struct req *req)
 	for (;;) poll(NULL, 0, 10);
 	return false;
 }
-#include "khashl.h"
 #include "xh_mset.h" // read-only (WWW, IMAP, lei) stuff
 #include "xh_cidx.h" // CodeSearchIdx.pm stuff
 
@@ -524,15 +537,6 @@ again:
 	}
 	errx(EXIT_FAILURE, "no FD received in %zd-byte request", r);
 	return false;
-}
-
-static int srch_cmp(const void *pa, const void *pb) // for tfind|tsearch
-{
-	const struct srch *a = (const struct srch *)pa;
-	const struct srch *b = (const struct srch *)pb;
-	int diff = a->ckey_len - b->ckey_len;
-
-	return diff ? diff : memcmp(a->ckey, b->ckey, (size_t)a->ckey_len);
 }
 
 static bool is_chert(const char *dir)
@@ -625,9 +629,8 @@ static void srch_init_extra(struct req *req)
 	req->srch->qp_extra_done = true;
 }
 
-static void free_srch(void *p) // tdestroy
+static void srch_free(struct srch *srch)
 {
-	struct srch *srch = (struct srch *)p;
 	delete srch->qp;
 	delete srch->db;
 	free(srch);
@@ -643,7 +646,6 @@ static void dispatch(struct req *req)
 	} kbuf;
 	char *end;
 	FILE *kfp;
-	struct srch **s;
 	req->threadid = ULLONG_MAX;
 	for (c = 0; c < (int)MY_ARRAY_SIZE(cmds); c++) {
 		if (cmds[c].fn_len == size &&
@@ -725,18 +727,19 @@ static void dispatch(struct req *req)
 	kbuf.srch->ckey_len = size - offsetof(struct srch, ckey);
 	if (kbuf.srch->ckey_len <= 0 || !req->dirc)
 		ABORT("no -d args (or too many)");
-	s = (struct srch **)tsearch(kbuf.srch, &srch_tree, srch_cmp);
-	if (!s) err(EXIT_FAILURE, "tsearch"); // likely ENOMEM
-	req->srch = *s;
-	if (req->srch != kbuf.srch) { // reuse existing
-		free_srch(kbuf.srch);
+
+	int absent;
+	khint_t ki = srch_set_put(srch_cache, kbuf.srch, &absent);
+	assert(ki < kh_end(srch_cache));
+	req->srch = kh_key(srch_cache, ki);
+	if (!absent) { // reuse existing
+		assert(req->srch != kbuf.srch);
+		srch_free(kbuf.srch);
 		req->srch->db->reopen();
 	} else if (!srch_init(req)) {
-		assert(kbuf.srch == *((struct srch **)tfind(
-					kbuf.srch, &srch_tree, srch_cmp)));
-		void *del = tdelete(kbuf.srch, &srch_tree, srch_cmp);
-		assert(del);
-		free_srch(kbuf.srch);
+		int gone = srch_set_del(srch_cache, ki);
+		assert(gone);
+		srch_free(kbuf.srch);
 		goto cmd_err; // srch_init already warned
 	}
 	if (req->qpfxc && !req->srch->qp_extra_done)
@@ -895,10 +898,16 @@ static void start_workers(void)
 static void cleanup_all(void)
 {
 	cleanup_pids();
-#ifdef __GLIBC__
-	tdestroy(srch_tree, free_srch);
-	srch_tree = NULL;
-#endif
+	if (!srch_cache)
+		return;
+
+	khint_t k;
+	for (k = kh_begin(srch_cache); k != kh_end(srch_cache); k++) {
+		if (kh_exist(srch_cache, k))
+			srch_free(kh_key(srch_cache, k));
+	}
+	srch_set_destroy(srch_cache);
+	srch_cache = NULL;
 }
 
 static void parent_reopen_logs(void)
@@ -1040,6 +1049,7 @@ int main(int argc, char *argv[])
 
 	mail_nrp_init();
 	code_nrp_init();
+	srch_cache = srch_set_init();
 	atexit(cleanup_all);
 
 	if (!STDERR_ASSIGNABLE) {
