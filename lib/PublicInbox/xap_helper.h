@@ -7,13 +7,16 @@
  * this is not linked to Perl in any way.
  * C (not C++) is used as much as possible to lower the contribution
  * barrier for hackers who mainly know C (this includes the maintainer).
- * Yes, that means we use C stdlib stuff like hsearch and open_memstream
+ * Yes, that means we use C stdlib stuff like open_memstream
  * instead their equivalents in the C++ stdlib :P
  * Everything here is an unstable internal API of public-inbox and
  * NOT intended for ordinary users; only public-inbox hackers
  */
 #ifndef _ALL_SOURCE
 #	define _ALL_SOURCE
+#endif
+#ifndef _GNU_SOURCE
+#	define _GNU_SOURCE
 #endif
 #if defined(__NetBSD__) && !defined(_OPENBSD_SOURCE) // for reallocarray(3)
 #	define _OPENBSD_SOURCE
@@ -82,6 +85,36 @@
 // coredump on most usage errors since our only users are internal
 #define ABORT(...) do { warnx(__VA_ARGS__); abort(); } while (0)
 #define EABORT(...) do { warn(__VA_ARGS__); abort(); } while (0)
+
+static void *xcalloc(size_t nmemb, size_t size)
+{
+	void *ret = calloc(nmemb, size);
+	if (!ret) EABORT("calloc(%zu, %zu)", nmemb, size);
+	return ret;
+}
+
+#if defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
+		MY_VER(__GLIBC__, __GLIBC_MINOR__, 0) >= MY_VER(2, 28, 0)
+#	define HAVE_REALLOCARRAY 1
+#elif (defined(__OpenBSD__) || defined(__DragonFly__) || \
+		defined(__FreeBSD__) || defined(__NetBSD__)
+#	define HAVE_REALLOCARRAY 1
+#endif
+
+static void *xreallocarray(void *ptr, size_t nmemb, size_t size)
+{
+#ifdef HAVE_REALLOCARRAY
+	void *ret = reallocarray(ptr, nmemb, size);
+#else // can't rely on __builtin_mul_overflow in gcc 4.x :<
+	void *ret = NULL;
+	if (nmemb && size > SIZE_MAX / nmemb)
+		errno = ENOMEM;
+	else
+		ret = realloc(ptr, nmemb * size);
+#endif
+	if (!ret) EABORT("reallocarray(..., %zu, %zu)", nmemb, size);
+	return ret;
+}
 
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
@@ -374,25 +407,6 @@ static size_t off2size(off_t n)
 	return (size_t)n;
 }
 
-static char *hsearch_enter_key(char *s)
-{
-#if defined(__OpenBSD__) || defined(__DragonFly__)
-	// hdestroy frees each key on some platforms,
-	// so give it something to free:
-	char *ret = strdup(s);
-	if (!ret) err(EXIT_FAILURE, "strdup");
-	return ret;
-// AFAIK there's no way to detect musl, assume non-glibc Linux is musl:
-#elif defined(__GLIBC__) || defined(__linux__) || \
-	defined(__FreeBSD__) || defined(__NetBSD__)
-	// do nothing on these platforms
-#else
-#warning untested platform detected, unsure if hdestroy(3) frees keys
-#warning contact us at meta@public-inbox.org if you get segfaults
-#endif
-	return s;
-}
-
 // for test usage only, we need to ensure the compiler supports
 // __cleanup__ when exceptions are thrown
 struct inspect { struct req *req; };
@@ -421,6 +435,7 @@ static bool cmd_test_sleep(struct req *req)
 	for (;;) poll(NULL, 0, 10);
 	return false;
 }
+#include "khashl.h"
 #include "xh_mset.h" // read-only (WWW, IMAP, lei) stuff
 #include "xh_cidx.h" // CodeSearchIdx.pm stuff
 

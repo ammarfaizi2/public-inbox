@@ -3,11 +3,38 @@
 // This file is only intended to be included by xap_helper.h
 // it implements pieces used by CodeSearchIdx.pm
 
+// TODO: consider making PublicInbox::CodeSearchIdx emit binary
+// (20 or 32-bit) OIDs instead of ASCII hex.  It would require
+// more code in both Perl and C++, though...
+
+// assumes trusted data from same host
+static inline unsigned int hex2uint(char c)
+{
+	switch (c) {
+	case '0' ... '9': return c - '0';
+	case 'a' ... 'f': return c - 'a' + 10;
+	default: return 0xff; // oh well...
+	}
+}
+
+// assumes trusted data from same host
+static kh_inline khint_t sha_hex_hash(const char *hex)
+{
+	khint_t ret = 0;
+
+	for (size_t shift = 32; shift; )
+		ret |= hex2uint(*hex++) << (shift -= 4);
+
+	return ret;
+}
+
+KHASHL_CMAP_INIT(KH_LOCAL, root2id_map, root2id,
+		const char *, const char *,
+		sha_hex_hash, kh_eq_str)
+
 static void term_length_extract(struct req *req)
 {
-	req->lenv = (size_t *)calloc(req->pfxc, sizeof(size_t));
-	if (!req->lenv)
-		EABORT("lenv = calloc(%d %zu)", req->pfxc, sizeof(size_t));
+	req->lenv = (size_t *)xcalloc(req->pfxc, sizeof(size_t));
 	for (int i = 0; i < req->pfxc; i++) {
 		char *pfx = req->pfxv[i];
 		// extract trailing digits as length:
@@ -101,6 +128,7 @@ struct dump_roots_tmp {
 	void *mm_ptr;
 	char **entries;
 	struct fbuf wbuf;
+	root2id_map *root2id;
 	int root2off_fd;
 };
 
@@ -110,7 +138,8 @@ static void dump_roots_ensure(void *ptr)
 	struct dump_roots_tmp *drt = (struct dump_roots_tmp *)ptr;
 	if (drt->root2off_fd >= 0)
 		xclose(drt->root2off_fd);
-	hdestroy(); // idempotent
+	if (drt->root2id)
+		root2id_cm_destroy(drt->root2id);
 	size_t size = off2size(drt->sb.st_size);
 	if (drt->mm_ptr && munmap(drt->mm_ptr, size))
 		EABORT("BUG: munmap(%p, %zu)", drt->mm_ptr, size);
@@ -118,23 +147,21 @@ static void dump_roots_ensure(void *ptr)
 	fbuf_ensure(&drt->wbuf);
 }
 
-static bool root2offs_str(struct fbuf *root_offs, Xapian::Document *doc)
+static bool root2offs_str(struct dump_roots_tmp *drt,
+			struct fbuf *root_offs, Xapian::Document *doc)
 {
 	Xapian::TermIterator cur = doc->termlist_begin();
 	Xapian::TermIterator end = doc->termlist_end();
-	ENTRY e, *ep;
 	fbuf_init(root_offs);
 	for (cur.skip_to("G"); cur != end; cur++) {
 		std::string tn = *cur;
 		if (!starts_with(&tn, "G", 1)) break;
-		union { const char *in; char *out; } u;
-		u.in = tn.c_str() + 1;
-		e.key = u.out;
-		ep = hsearch(e, FIND);
-		if (!ep) ABORT("hsearch miss `%s'", e.key);
-		// ep->data is a NUL-terminated string matching /[0-9]+/
+		khint_t i = root2id_get(drt->root2id, tn.c_str() + 1);
+		if (i >= kh_end(drt->root2id))
+			ABORT("kh get miss `%s'", tn.c_str() + 1);
 		fputc(' ', root_offs->fp);
-		fputs((const char *)ep->data, root_offs->fp);
+		// kh_val(...) is a NUL-terminated string matching /[0-9]+/
+		fputs(kh_val(drt->root2id, i), root_offs->fp);
 	}
 	fputc('\n', root_offs->fp);
 	ERR_CLOSE(root_offs->fp, EXIT_FAILURE); // ENOMEM
@@ -198,7 +225,7 @@ static enum exc_iter dump_roots_iter(struct req *req,
 	CLEANUP_FBUF struct fbuf root_offs = {}; // " $ID0 $ID1 $IDx..\n"
 	try {
 		Xapian::Document doc = i->get_document();
-		if (!root2offs_str(&root_offs, &doc))
+		if (!root2offs_str(drt, &root_offs, &doc))
 			return ITER_ABORT; // bad request, abort
 		for (int p = 0; p < req->pfxc; p++)
 			dump_roots_term(req, p, drt, &root_offs, &doc);
@@ -226,8 +253,7 @@ static bool cmd_dump_roots(struct req *req)
 	if (fstat(drt.root2off_fd, &drt.sb)) // ENOMEM?
 		err(EXIT_FAILURE, "fstat(%s)", root2off_file);
 	// each entry is at least 43 bytes ({OIDHEX}\0{INT}\0),
-	// so /32 overestimates the number of expected entries by
-	// ~%25 (as recommended by Linux hcreate(3) manpage)
+	// so /32 overestimates the number of expected entries
 	size_t size = off2size(drt.sb.st_size);
 	size_t est = (size / 32) + 1; //+1 for "\0" termination
 	drt.mm_ptr = mmap(NULL, size, PROT_READ,
@@ -236,20 +262,19 @@ static bool cmd_dump_roots(struct req *req)
 		err(EXIT_FAILURE, "mmap(%zu, %s)", size, root2off_file);
 	size_t asize = est * 2;
 	if (asize < est) ABORT("too many entries: %zu", est);
-	drt.entries = (char **)calloc(asize, sizeof(char *));
-	if (!drt.entries)
-		err(EXIT_FAILURE, "calloc(%zu * 2, %zu)", est, sizeof(char *));
+	drt.entries = (char **)xcalloc(asize, sizeof(char *));
 	size_t tot = split2argv(drt.entries, (char *)drt.mm_ptr, size, asize);
 	if (tot <= 0) return false; // split2argv already warned on error
-	if (!hcreate(est))
-		err(EXIT_FAILURE, "hcreate(%zu)", est);
+	drt.root2id = root2id_init();
+	root2id_cm_resize(drt.root2id, est);
 	for (size_t i = 0; i < tot; ) {
-		ENTRY e;
-		e.key = hsearch_enter_key(drt.entries[i++]); // dies on ENOMEM
-		e.data = drt.entries[i++];
-		if (!hsearch(e, ENTER))
-			err(EXIT_FAILURE, "hsearch(%s => %s, ENTER)", e.key,
-					(const char *)e.data);
+		int absent;
+		const char *key = drt.entries[i++];
+		khint_t k = root2id_put(drt.root2id, key, &absent);
+		if (!absent)
+			err(EXIT_FAILURE, "put(%s => %s, ENTER)",
+				key, drt.entries[i]);
+		kh_val(drt.root2id, k) = drt.entries[i++];
 	}
 	req->asc = true;
 	req->sort_col = -1;

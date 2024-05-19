@@ -385,6 +385,7 @@ lib/PublicInbox/Xapcmd.pm
 lib/PublicInbox/XhcMset.pm
 lib/PublicInbox/XhcMsetIterator.pm
 lib/PublicInbox/gcf2_libgit2.h
+lib/PublicInbox/khashl.h
 lib/PublicInbox/xap_helper.h
 lib/PublicInbox/xh_cidx.h
 lib/PublicInbox/xh_mset.h
