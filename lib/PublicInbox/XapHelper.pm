@@ -18,7 +18,7 @@ use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
 use Carp qw(croak);
 my $X = \%PublicInbox::Search::X;
-our (%SRCH, %WORKERS, $nworker, $workerset, $in);
+our (%SRCH, %WORKERS, $nworker, $workerset, $in, $SHARD_NFD, $MY_FD_MAX);
 our $stderr = \*STDERR;
 
 sub cmd_test_inspect {
@@ -193,8 +193,14 @@ sub dispatch {
 	my $key = "-d\0".join("\0-d\0", @$dirs);
 	$key .= "\0".join("\0", map { ('-Q', $_) } @{$req->{Q}}) if $req->{Q};
 	my $new;
-	$req->{srch} = $SRCH{$key} //= do {
+	$req->{srch} = $SRCH{$key} // do {
 		$new = { qp_flags => $PublicInbox::Search::QP_FLAGS };
+		my $nfd = scalar(@$dirs) * PublicInbox::Search::SHARD_COST;
+		$SHARD_NFD += $nfd;
+		if ($SHARD_NFD > $MY_FD_MAX) {
+			$SHARD_NFD = $nfd;
+			%SRCH = ();
+		}
 		my $first = shift @$dirs;
 		my $slow_phrase = -f "$first/iamchert";
 		$new->{xdb} = $X->{Database}->new($first);
@@ -207,7 +213,7 @@ sub dispatch {
 		bless $new, $req->{c} ? 'PublicInbox::CodeSearch' :
 					'PublicInbox::Search';
 		$new->{qp} = $new->qparse_new;
-		$new;
+		$SRCH{$key} = $new;
 	};
 	$req->{srch}->{xdb}->reopen unless $new;
 	$req->{Q} && !$req->{srch}->{qp_extra_done} and
@@ -305,7 +311,7 @@ sub start (@) {
 	my $c = getsockopt(local $in = \*STDIN, SOL_SOCKET, SO_TYPE);
 	unpack('i', $c) == SOCK_SEQPACKET or die 'stdin is not SOCK_SEQPACKET';
 
-	local (%SRCH, %WORKERS);
+	local (%SRCH, %WORKERS, $SHARD_NFD, $MY_FD_MAX);
 	PublicInbox::Search::load_xapian();
 	$GLP->getoptionsfromarray(\@argv, my $opt = { j => 1 }, 'j=i') or
 		die 'bad args';
@@ -314,6 +320,10 @@ sub start (@) {
 	for (@PublicInbox::DS::UNBLOCKABLE, POSIX::SIGUSR1) {
 		$workerset->delset($_) or die "delset($_): $!";
 	}
+	$MY_FD_MAX = PublicInbox::Search::ulimit_n //
+		die "E: unable to get RLIMIT_NOFILE: $!";
+	warn "W: RLIMIT_NOFILE=$MY_FD_MAX too low\n" if $MY_FD_MAX < 72;
+	$MY_FD_MAX -= 64;
 
 	local $nworker = $opt->{j};
 	return recv_loop() if $nworker == 0;

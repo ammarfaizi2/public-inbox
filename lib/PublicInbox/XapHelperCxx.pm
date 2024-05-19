@@ -34,6 +34,7 @@ my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';
 my $xflags = ($ENV{CXXFLAGS} // '-Wall -ggdb3 -pipe') . ' ' .
 	' -DTHREADID=' . PublicInbox::Search::THREADID .
+	' -DSHARD_COST=' . PublicInbox::Search::SHARD_COST .
 	' -DXH_SPEC="'.join('',
 		map { s/=.*/:/; $_ } @PublicInbox::Search::XH_SPEC) . '" ' .
 	($ENV{LDFLAGS} // $ldflags);

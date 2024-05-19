@@ -284,4 +284,27 @@ for my $n (@NO_CXX) {
 	}
 }
 
+SKIP: {
+	my $nr = $ENV{TEST_XH_FDMAX} or
+		skip 'TEST_XH_FDMAX unset', 1;
+	my @xhc = map {
+		local $ENV{PI_NO_CXX} = $_;
+		PublicInbox::XapClient::start_helper('-j0');
+	} @NO_CXX;
+	my $n = 1;
+	my $exp;
+	for (0..(PublicInbox::Search::ulimit_n() * $nr)) {
+		for my $xhc (@xhc) {
+			my $r = $xhc->mkreq([], qw(mset -Q), "tst$n=XTST$n",
+					@ibx_shard_args, qw(rt:0..));
+			chomp(my @res = readline($r));
+			$exp //= $res[0];
+			$exp eq $res[0] or
+				is $exp, $res[0], "mset mismatch on n=$n";
+			++$n;
+		}
+	}
+	ok $exp, "got expected entries ($n)";
+}
+
 done_testing;

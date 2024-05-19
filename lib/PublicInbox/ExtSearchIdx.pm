@@ -543,13 +543,7 @@ sub _ibx_for ($$$) {
 sub _fd_constrained ($) {
 	my ($self) = @_;
 	$self->{-fd_constrained} //= do {
-		my $soft;
-		if (eval { require BSD::Resource; 1 }) {
-			my $NOFILE = BSD::Resource::RLIMIT_NOFILE();
-			($soft, undef) = BSD::Resource::getrlimit($NOFILE);
-		} else {
-			chomp($soft = `sh -c 'ulimit -n'`);
-		}
+		my $soft = PublicInbox::Search::ulimit_n;
 		if (defined($soft)) {
 			# $want is an estimate
 			my $want = scalar(@{$self->{ibx_active}}) + 64;

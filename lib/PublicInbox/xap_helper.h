@@ -140,6 +140,7 @@ static int srch_eq(const struct srch *a, const struct srch *b)
 KHASHL_CSET_INIT(KH_LOCAL, srch_set, srch_set, struct srch *,
 		srch_hash, srch_eq)
 static srch_set *srch_cache;
+static long my_fd_max, shard_nfd;
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
 static sigset_t fullset, workerset;
@@ -552,6 +553,34 @@ static bool is_chert(const char *dir)
 	return false;
 }
 
+static void srch_free(struct srch *srch)
+{
+	delete srch->qp;
+	delete srch->db;
+	free(srch);
+}
+
+static void srch_cache_renew(struct srch *keep)
+{
+	khint_t k;
+
+	// can't delete while iterating, so just free each + clear
+	for (k = kh_begin(srch_cache); k != kh_end(srch_cache); k++) {
+		if (!kh_exist(srch_cache, k)) continue;
+		struct srch *cur = kh_key(srch_cache, k);
+
+		if (cur != keep)
+			srch_free(cur);
+	}
+	srch_set_cs_clear(srch_cache);
+	if (keep) {
+		int absent;
+		k = srch_set_put(srch_cache, keep, &absent);
+		assert(absent);
+		assert(k < kh_end(srch_cache));
+	}
+}
+
 static bool srch_init(struct req *req)
 {
 	int i;
@@ -563,6 +592,13 @@ static bool srch_init(struct req *req)
 			Xapian::QueryParser::FLAG_WILDCARD;
 	if (is_chert(req->dirv[0]))
 		srch->qp_flags &= ~FLAG_PHRASE;
+	long nfd = req->dirc * SHARD_COST;
+
+	shard_nfd += nfd;
+	if (shard_nfd > my_fd_max) {
+		srch_cache_renew(srch);
+		shard_nfd = nfd;
+	}
 	try {
 		srch->db = new Xapian::Database(req->dirv[0]);
 	} catch (...) {
@@ -627,13 +663,6 @@ static void srch_init_extra(struct req *req)
 		req->srch->qp->add_prefix(req->qpfxv[i], XPFX);
 	}
 	req->srch->qp_extra_done = true;
-}
-
-static void srch_free(struct srch *srch)
-{
-	delete srch->qp;
-	delete srch->db;
-	free(srch);
 }
 
 static void dispatch(struct req *req)
@@ -900,12 +929,7 @@ static void cleanup_all(void)
 	cleanup_pids();
 	if (!srch_cache)
 		return;
-
-	khint_t k;
-	for (k = kh_begin(srch_cache); k != kh_end(srch_cache); k++) {
-		if (kh_exist(srch_cache, k))
-			srch_free(kh_key(srch_cache, k));
-	}
+	srch_cache_renew(NULL);
 	srch_set_destroy(srch_cache);
 	srch_cache = NULL;
 }
@@ -1041,11 +1065,19 @@ int main(int argc, char *argv[])
 	socklen_t slen = (socklen_t)sizeof(c);
 	stdout_path = getenv("STDOUT_PATH");
 	stderr_path = getenv("STDERR_PATH");
+	struct rlimit rl;
 
 	if (getsockopt(sock_fd, SOL_SOCKET, SO_TYPE, &c, &slen))
 		err(EXIT_FAILURE, "getsockopt");
 	if (c != SOCK_SEQPACKET)
 		errx(EXIT_FAILURE, "stdin is not SOCK_SEQPACKET");
+
+	if (getrlimit(RLIMIT_NOFILE, &rl))
+		err(EXIT_FAILURE, "getrlimit");
+	my_fd_max = rl.rlim_cur;
+	if (my_fd_max < 72)
+		warnx("W: RLIMIT_NOFILE=%ld too low\n", my_fd_max);
+	my_fd_max -= 64;
 
 	mail_nrp_init();
 	code_nrp_init();

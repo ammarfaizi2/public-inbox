@@ -54,6 +54,9 @@ use constant {
 	#
 	#      v1.6.0 adds BYTES, UID and THREADID values
 	SCHEMA_VERSION => 15,
+
+	# we may have up to 8 FDs per shard (depends on Xapian *shrug*)
+	SHARD_COST => 8,
 };
 
 use PublicInbox::Smsg;
@@ -727,6 +730,19 @@ sub get_doc ($$) {
 		die $@ if $@ && ref($@) !~ /\bDocNotFoundError\b/;
 		undef;
 	}
+}
+
+# not sure where best to put this...
+sub ulimit_n () {
+	my $n;
+	if (eval { require BSD::Resource; 1 }) {
+		my $NOFILE = BSD::Resource::RLIMIT_NOFILE();
+		($n, undef) = BSD::Resource::getrlimit($NOFILE);
+	} else {
+		require PublicInbox::Spawn;
+		$n = PublicInbox::Spawn::run_qx([qw(/bin/sh -c), 'ulimit -n']);
+	}
+	$n;
 }
 
 1;
