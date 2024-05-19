@@ -517,7 +517,9 @@ sub _fill_ibx {
 			delete $ibx->{newsgroup};
 			warn "newsgroup name invalid: `$ngname'\n";
 		} else {
-			my $lc = $ibx->{newsgroup} = lc $ngname;
+			%dedupe = (lc($ngname) => undef);
+			my ($lc) = keys %dedupe;
+			$ibx->{newsgroup} = $lc;
 			warn <<EOM if $lc ne $ngname;
 W: newsgroup=`$ngname' lowercased to `$lc'
 EOM
