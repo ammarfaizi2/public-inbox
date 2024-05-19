@@ -1100,8 +1100,7 @@ int main(int argc, char *argv[])
 	CHECK(int, 0, sigdelset(&workerset, SIGTERM));
 	CHECK(int, 0, sigdelset(&workerset, SIGCHLD));
 	nworker_hwm = nworker;
-	worker_pids = (pid_t *)calloc(nworker, sizeof(pid_t));
-	if (!worker_pids) err(EXIT_FAILURE, "calloc");
+	worker_pids = (pid_t *)xcalloc(nworker, sizeof(pid_t));
 
 	if (pipe(pipefds)) err(EXIT_FAILURE, "pipe");
 	int fl = fcntl(pipefds[1], F_GETFL);
