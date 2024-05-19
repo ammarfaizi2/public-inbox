@@ -263,8 +263,6 @@ sub reset_dedupe {
 
 sub mm { undef }
 
-sub altid_map { {} }
-
 sub cloneurl { [] }
 
 # find existing directory containing a `lei.saved-search' file based on
