@@ -190,7 +190,8 @@ sub dispatch {
 	$GLP->getoptionsfromarray(\@argv, $req, @PublicInbox::Search::XH_SPEC)
 		or return;
 	my $dirs = delete $req->{d} or die 'no -d args';
-	my $key = join("\0", @$dirs);
+	my $key = "-d\0".join("\0-d\0", @$dirs);
+	$key .= "\0".join("\0", map { ('-Q', $_) } @{$req->{Q}}) if $req->{Q};
 	my $new;
 	$req->{srch} = $SRCH{$key} //= do {
 		$new = { qp_flags => $PublicInbox::Search::QP_FLAGS };

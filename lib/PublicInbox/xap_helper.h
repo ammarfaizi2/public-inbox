@@ -112,12 +112,12 @@ enum exc_iter {
 };
 
 struct srch {
-	int paths_len; // int for comparisons
+	int ckey_len; // int for comparisons
 	unsigned qp_flags;
 	bool qp_extra_done;
 	Xapian::Database *db;
 	Xapian::QueryParser *qp;
-	char paths[]; // $shard_path0\0$shard_path1\0...
+	char ckey[]; // $shard_path0\0$shard_path1\0...
 };
 
 #define MY_ARG_MAX 256
@@ -128,6 +128,7 @@ struct req { // argv and pfxv point into global rbuf
 	char *argv[MY_ARG_MAX];
 	char *pfxv[MY_ARG_MAX]; // -A <prefix>
 	char *qpfxv[MY_ARG_MAX]; // -Q <user_prefix>[:=]<INTERNAL_PREFIX>
+	char *dirv[MY_ARG_MAX]; // -d /path/to/XDB(shard)
 	size_t *lenv; // -A <prefix>LENGTH
 	struct srch *srch;
 	char *Pgit_dir;
@@ -139,9 +140,7 @@ struct req { // argv and pfxv point into global rbuf
 	unsigned long timeout_sec;
 	size_t nr_out;
 	long sort_col; // value column, negative means BoolWeight
-	int argc;
-	int pfxc;
-	int qpfxc;
+	int argc, pfxc, qpfxc, dirc;
 	FILE *fp[2]; // [0] response pipe or sock, [1] status/errors (optional)
 	bool has_input; // fp[0] is bidirectional
 	bool collapse_threads;
@@ -516,9 +515,9 @@ static int srch_cmp(const void *pa, const void *pb) // for tfind|tsearch
 {
 	const struct srch *a = (const struct srch *)pa;
 	const struct srch *b = (const struct srch *)pb;
-	int diff = a->paths_len - b->paths_len;
+	int diff = a->ckey_len - b->ckey_len;
 
-	return diff ? diff : memcmp(a->paths, b->paths, (size_t)a->paths_len);
+	return diff ? diff : memcmp(a->ckey, b->ckey, (size_t)a->ckey_len);
 }
 
 static bool is_chert(const char *dir)
@@ -536,31 +535,30 @@ static bool is_chert(const char *dir)
 
 static bool srch_init(struct req *req)
 {
-	char *dirv[MY_ARG_MAX];
 	int i;
 	struct srch *srch = req->srch;
-	int dirc = (int)SPLIT2ARGV(dirv, srch->paths, (size_t)srch->paths_len);
 	const unsigned FLAG_PHRASE = Xapian::QueryParser::FLAG_PHRASE;
 	srch->qp_flags = FLAG_PHRASE |
 			Xapian::QueryParser::FLAG_BOOLEAN |
 			Xapian::QueryParser::FLAG_LOVEHATE |
 			Xapian::QueryParser::FLAG_WILDCARD;
-	if (is_chert(dirv[0]))
+	if (is_chert(req->dirv[0]))
 		srch->qp_flags &= ~FLAG_PHRASE;
 	try {
-		srch->db = new Xapian::Database(dirv[0]);
+		srch->db = new Xapian::Database(req->dirv[0]);
 	} catch (...) {
-		warn("E: Xapian::Database(%s)", dirv[0]);
+		warn("E: Xapian::Database(%s)", req->dirv[0]);
 		return false;
 	}
 	try {
-		for (i = 1; i < dirc; i++) {
-			if (srch->qp_flags & FLAG_PHRASE && is_chert(dirv[i]))
+		for (i = 1; i < req->dirc; i++) {
+			const char *dir = req->dirv[i];
+			if (srch->qp_flags & FLAG_PHRASE && is_chert(dir))
 				srch->qp_flags &= ~FLAG_PHRASE;
-			srch->db->add_database(Xapian::Database(dirv[i]));
+			srch->db->add_database(Xapian::Database(dir));
 		}
 	} catch (...) {
-		warn("E: add_database(%s)", dirv[i]);
+		warn("E: add_database(%s)", req->dirv[i]);
 		return false;
 	}
 	try {
@@ -644,7 +642,7 @@ static void dispatch(struct req *req)
 	kfp = open_memstream(&kbuf.ptr, &size);
 	if (!kfp) err(EXIT_FAILURE, "open_memstream(kbuf)");
 	// write padding, first (contents don't matter)
-	fwrite(&req->argv[0], offsetof(struct srch, paths), 1, kfp);
+	fwrite(&req->argv[0], offsetof(struct srch, ckey), 1, kfp);
 
 	// global getopt variables:
 	optopt = 0;
@@ -656,7 +654,11 @@ static void dispatch(struct req *req)
 		switch (c) {
 		case 'a': req->asc = true; break;
 		case 'c': req->code_search = true; break;
-		case 'd': fwrite(optarg, strlen(optarg) + 1, 1, kfp); break;
+		case 'd':
+			req->dirv[req->dirc++] = optarg;
+			if (MY_ARG_MAX == req->dirc) ABORT("too many -d");
+			fprintf(kfp, "-d%c%s%c", 0, optarg, 0);
+			break;
 		case 'g': req->Pgit_dir = optarg - 1; break; // pad "P" prefix
 		case 'k':
 			req->sort_col = strtol(optarg, &end, 10);
@@ -696,6 +698,7 @@ static void dispatch(struct req *req)
 		case 'Q':
 			req->qpfxv[req->qpfxc++] = optarg;
 			if (MY_ARG_MAX == req->qpfxc) ABORT("too many -Q");
+			fprintf(kfp, "-Q%c%s%c", 0, optarg, 0);
 			break;
 		default: ABORT("bad switch `-%c'", c);
 		}
@@ -704,9 +707,9 @@ static void dispatch(struct req *req)
 	kbuf.srch->db = NULL;
 	kbuf.srch->qp = NULL;
 	kbuf.srch->qp_extra_done = false;
-	kbuf.srch->paths_len = size - offsetof(struct srch, paths);
-	if (kbuf.srch->paths_len <= 0)
-		ABORT("no -d args");
+	kbuf.srch->ckey_len = size - offsetof(struct srch, ckey);
+	if (kbuf.srch->ckey_len <= 0 || !req->dirc)
+		ABORT("no -d args (or too many)");
 	s = (struct srch **)tsearch(kbuf.srch, &srch_tree, srch_cmp);
 	if (!s) err(EXIT_FAILURE, "tsearch"); // likely ENOMEM
 	req->srch = *s;
