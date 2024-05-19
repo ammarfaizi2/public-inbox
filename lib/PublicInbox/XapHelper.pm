@@ -202,14 +202,27 @@ sub dispatch {
 			%SRCH = ();
 		}
 		my $first = shift @$dirs;
-		my $slow_phrase = -f "$first/iamchert";
-		$new->{xdb} = $X->{Database}->new($first);
-		for (@$dirs) {
-			$slow_phrase ||= -f "$_/iamchert";
-			$new->{xdb}->add_database($X->{Database}->new($_));
+		for my $retried (0, 1) {
+			my $slow_phrase = -f "$first/iamchert";
+			eval {
+				$new->{xdb} = $X->{Database}->new($first);
+				for (@$dirs) {
+					$slow_phrase ||= -f "$_/iamchert";
+					$new->{xdb}->add_database(
+							$X->{Database}->new($_))
+				}
+			};
+			last unless $@;
+			if ($retried) {
+				die "E: $@\n";
+			} else { # may be EMFILE/ENFILE/ENOMEM....
+				warn "W: $@, retrying...\n";
+				%SRCH = ();
+				$SHARD_NFD = $nfd;
+			}
+			$slow_phrase or $new->{qp_flags}
+				|= PublicInbox::Search::FLAG_PHRASE();
 		}
-		$slow_phrase or
-			$new->{qp_flags} |= PublicInbox::Search::FLAG_PHRASE();
 		bless $new, $req->{c} ? 'PublicInbox::CodeSearch' :
 					'PublicInbox::Search';
 		$new->{qp} = $new->qparse_new;

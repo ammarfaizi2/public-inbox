@@ -581,17 +581,14 @@ static void srch_cache_renew(struct srch *keep)
 	}
 }
 
-static bool srch_init(struct req *req)
+static void srch_init(struct req *req)
 {
 	int i;
 	struct srch *srch = req->srch;
 	const unsigned FLAG_PHRASE = Xapian::QueryParser::FLAG_PHRASE;
-	srch->qp_flags = FLAG_PHRASE |
-			Xapian::QueryParser::FLAG_BOOLEAN |
+	srch->qp_flags = Xapian::QueryParser::FLAG_BOOLEAN |
 			Xapian::QueryParser::FLAG_LOVEHATE |
 			Xapian::QueryParser::FLAG_WILDCARD;
-	if (is_chert(req->dirv[0]))
-		srch->qp_flags &= ~FLAG_PHRASE;
 	long nfd = req->dirc * SHARD_COST;
 
 	shard_nfd += nfd;
@@ -599,37 +596,42 @@ static bool srch_init(struct req *req)
 		srch_cache_renew(srch);
 		shard_nfd = nfd;
 	}
-	try {
-		srch->db = new Xapian::Database(req->dirv[0]);
-	} catch (...) {
-		warn("E: Xapian::Database(%s)", req->dirv[0]);
-		return false;
-	}
-	try {
-		for (i = 1; i < req->dirc; i++) {
-			const char *dir = req->dirv[i];
-			if (srch->qp_flags & FLAG_PHRASE && is_chert(dir))
+	for (int retried = 0; retried < 2; retried++) {
+		srch->qp_flags |= FLAG_PHRASE;
+		i = 0;
+		try {
+			srch->db = new Xapian::Database(req->dirv[i]);
+			if (is_chert(req->dirv[0]))
 				srch->qp_flags &= ~FLAG_PHRASE;
-			srch->db->add_database(Xapian::Database(dir));
+			for (i = 1; i < req->dirc; i++) {
+				const char *dir = req->dirv[i];
+				if (srch->qp_flags & FLAG_PHRASE &&
+						is_chert(dir))
+					srch->qp_flags &= ~FLAG_PHRASE;
+				srch->db->add_database(Xapian::Database(dir));
+			}
+			break;
+		} catch (const Xapian::Error & e) {
+			warnx("E: Xapian::Error: %s (%s)",
+				e.get_description().c_str(), req->dirv[i]);
+		} catch (...) { // does this happen?
+			warn("E: add_database(%s)", req->dirv[i]);
 		}
-	} catch (...) {
-		warn("E: add_database(%s)", req->dirv[i]);
-		return false;
+		if (retried) {
+			errx(EXIT_FAILURE, "E: can't open %s", req->dirv[i]);
+		} else {
+			warnx("retrying...");
+			if (srch->db)
+				delete srch->db;
+			srch->db = NULL;
+			srch_cache_renew(srch);
+		}
 	}
-	try {
-		srch->qp = new Xapian::QueryParser;
-	} catch (...) {
-		perror("E: Xapian::QueryParser");
-		return false;
-	}
+	// these will raise and die on ENOMEM or other errors
+	srch->qp = new Xapian::QueryParser;
 	srch->qp->set_default_op(Xapian::Query::OP_AND);
 	srch->qp->set_database(*srch->db);
-	try {
-		srch->qp->set_stemmer(Xapian::Stem("english"));
-	} catch (...) {
-		perror("E: Xapian::Stem");
-		return false;
-	}
+	srch->qp->set_stemmer(Xapian::Stem("english"));
 	srch->qp->set_stemming_strategy(Xapian::QueryParser::STEM_SOME);
 	srch->qp->SET_MAX_EXPANSION(100);
 
@@ -637,7 +639,6 @@ static bool srch_init(struct req *req)
 		qp_init_code_search(srch->qp); // CodeSearch.pm
 	else
 		qp_init_mail_search(srch->qp); // Search.pm
-	return true;
 }
 
 // setup query parser for altid and arbitrary headers
@@ -761,15 +762,12 @@ static void dispatch(struct req *req)
 	khint_t ki = srch_set_put(srch_cache, kbuf.srch, &absent);
 	assert(ki < kh_end(srch_cache));
 	req->srch = kh_key(srch_cache, ki);
-	if (!absent) { // reuse existing
+	if (absent) {
+		srch_init(req);
+	} else {
 		assert(req->srch != kbuf.srch);
 		srch_free(kbuf.srch);
 		req->srch->db->reopen();
-	} else if (!srch_init(req)) {
-		int gone = srch_set_del(srch_cache, ki);
-		assert(gone);
-		srch_free(kbuf.srch);
-		goto cmd_err; // srch_init already warned
 	}
 	if (req->qpfxc && !req->srch->qp_extra_done)
 		srch_init_extra(req);
@@ -786,8 +784,6 @@ static void dispatch(struct req *req)
 	}
 	if (req->timeout_sec)
 		alarm(0);
-cmd_err:
-	return; // just be silent on errors, for now
 }
 
 static void cleanup_pids(void)
