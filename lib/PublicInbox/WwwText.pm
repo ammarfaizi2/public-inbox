@@ -37,7 +37,7 @@ sub get_text {
 	}
 	my $env = $ctx->{env};
 	if ($raw) {
-		my $h = delete $ctx->{-res_hdr};
+		my $h = delete $ctx->{-res_hdr} // [];
 		$txt = gzf_maybe($h, $env)->zflush($txt) if $code == 200;
 		push @$h, 'Content-Type', 'text/plain',
 			'Content-Length', length($txt);

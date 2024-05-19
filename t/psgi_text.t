@@ -3,12 +3,12 @@
 use v5.12;
 use PublicInbox::Eml;
 use PublicInbox::TestCommon;
+use IO::Uncompress::Gunzip qw(gunzip);
 my ($tmpdir, $for_destroy) = tmpdir();
 my $maindir = "$tmpdir/main.git";
 my $addr = 'test-public@example.com';
 my $cfgpfx = "publicinbox.test";
 my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape Plack::Builder);
-require_mods(@mods, 'IO::Uncompress::Gunzip');
 use_ok $_ foreach @mods;
 use PublicInbox::Import;
 use_ok 'PublicInbox::WWW';
@@ -33,8 +33,23 @@ test_psgi(sub { $www->call(@_) }, sub {
 	is($res->header('Content-Encoding'), 'gzip', 'got gzip encoding');
 	is($res->header('Content-Type'), 'text/html; charset=UTF-8',
 		'got gzipped HTML');
-	IO::Uncompress::Gunzip::gunzip(\($res->content) => \$gunzipped);
+	gunzip(\($res->content) => \$gunzipped);
 	is($gunzipped, $content, 'gzipped content is correct');
+
+	$req = GET('/test/_/text/help/raw');
+	$res = $cb->($req);
+	like $res->header('Content-Type'), qr!\Atext/plain\b!,
+		'got text/plain Content-Type';
+	$content = $res->content;
+	like $content, qr!public-inbox help!, 'default help';
+
+	$req->header('Accept-Encoding' => 'gzip');
+	$res = $cb->($req);
+	is($res->header('Content-Encoding'), 'gzip', 'got gzip encoding');
+	like $res->header('Content-Type'), qr!\Atext/plain\b!,
+		'got text/plain Content-Type w/ gzip';
+	gunzip(\($res->content) => \$gunzipped);
+	is $gunzipped, $content, 'gzipped content is correct';
 
 	$req = GET('/test/_/text/config/raw');
 	$res = $cb->($req);
@@ -47,7 +62,7 @@ test_psgi(sub { $www->call(@_) }, sub {
 	$res = $cb->($req);
 	is($res->header('Content-Encoding'), 'gzip', 'got gzip encoding');
 	ok($res->header('Content-Length') < $olen, 'gzipped help is smaller');
-	IO::Uncompress::Gunzip::gunzip(\($res->content) => \$gunzipped);
+	gunzip(\($res->content) => \$gunzipped);
 	is($gunzipped, $content);
 });
 
