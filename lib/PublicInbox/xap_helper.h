@@ -95,7 +95,7 @@ static void *xcalloc(size_t nmemb, size_t size)
 #if defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
 		MY_VER(__GLIBC__, __GLIBC_MINOR__, 0) >= MY_VER(2, 28, 0)
 #	define HAVE_REALLOCARRAY 1
-#elif (defined(__OpenBSD__) || defined(__DragonFly__) || \
+#elif defined(__OpenBSD__) || defined(__DragonFly__) || \
 		defined(__FreeBSD__) || defined(__NetBSD__)
 #	define HAVE_REALLOCARRAY 1
 #endif
