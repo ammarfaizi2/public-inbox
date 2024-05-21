@@ -106,12 +106,14 @@ test_lei(sub {
 	like $lei_err, qr/\b1 unimported messages/, 'noted unimported'
 		or diag $lei_err;
 
-	lei_ok qw(tag -F eml --commit-delay=1 t/utf8.eml +L:utf8);
+	my $delay = $ENV{TEST_LEI_COMMIT_DELAY} // 1;
+	lei_ok qw(tag -F eml t/utf8.eml +L:utf8), "--commit-delay=$delay";
 	lei_ok 'ls-label';
-	unlike($lei_out, qr/\butf8\b/, 'commit-delay delays label');
+	unlike $lei_out, qr/\butf8\b/, 'commit-delay delays label' or
+		warn "E: consider increasing TEST_LEI_COMMIT_DELAY=$delay";
 	my $end = now + 10;
 	my $n = 1;
-	diag 'waiting for lei/store commit...';
+	diag "waiting for lei/store commit... (--commit-delay=$delay)";
 	do {
 		tick $n;
 		$n = 0.1;
