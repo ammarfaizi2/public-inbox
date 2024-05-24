@@ -639,7 +639,8 @@ sub event_step {
 	my ($self) = @_;
 	my $inflight = gcf_inflight($self);
 	if ($inflight && @$inflight) {
-		$self->cat_async_step($inflight);
+		eval { $self->cat_async_step($inflight) };
+		warn "E: $self->{git_dir}: $@" if $@;
 		return $self->close unless $self->{sock};
 		# don't loop here to keep things fair, but we must requeue
 		# if there's already-read data in pi_io_rbuf
