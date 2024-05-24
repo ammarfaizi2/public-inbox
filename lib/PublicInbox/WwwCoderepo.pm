@@ -186,7 +186,7 @@ EOM
 	print $zfh "...\n" if $last;
 
 	# README
-	my ($bref, $oid, $ref_path) = @{delete $ctx->{qx_res}->{readme}};
+	my ($bref, $oid, $ref_path) = @{delete $ctx->{qx_res}->{readme} // []};
 	if ($bref) {
 		my $l = PublicInbox::Linkify->new;
 		$$bref =~ s/\s*\z//sm;
