@@ -480,7 +480,7 @@ sub async_mset {
 	my ($self, $qry_str, $opt, $cb, @args) = @_;
 	if ($XHC) { # unconditionally retrieving pct + rank for now
 		xdb($self); # populate {nshards}
-		my @margs = ($self->xh_args, xh_opt($self, $opt));
+		my @margs = ($self->xh_args, xh_opt($self, $opt), '--');
 		my $ret = eval {
 			my $rd = $XHC->mkreq(undef, 'mset', @margs, $qry_str);
 			PublicInbox::XhcMset->maybe_new($rd, $self, $cb, @args);
