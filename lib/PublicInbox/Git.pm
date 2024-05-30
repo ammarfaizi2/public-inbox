@@ -208,7 +208,7 @@ sub cat_async_retry ($$) {
 		$oid = \$oid if !@$new_inflight; # to indicate oid retried
 		push @$new_inflight, $oid, $cb, $arg;
 	}
-	$sock->close if $sock; # only safe once old_inflight is empty
+	undef $sock; # gcf_drain may run from PublicInbox::IO::DESTROY
 	cat_async_step($self, $new_inflight); # take one step
 }
 
@@ -665,10 +665,9 @@ sub watch_async ($) {
 
 sub close {
 	my ($self) = @_;
-	my $sock = $self->{sock};
 	delete @$self{qw(-bc err_c inflight)};
 	delete($self->{epwatch}) ? $self->SUPER::close : delete($self->{sock});
-	$sock->close if $sock; # calls gcf_drain via awaitpid
+	# gcf_drain may run from PublicInbox::IO::DESTROY
 }
 
 package PublicInbox::GitCheck; # only for git <2.36
