@@ -11,7 +11,7 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use IO::Handle; # autoflush
 use PublicInbox::Git qw($ck_unlinked_packs);
 use PublicInbox::Lock;
-use autodie qw(close open seek truncate);
+use autodie qw(open seek truncate);
 
 BEGIN {
 	my (%CFG, $c_src);
