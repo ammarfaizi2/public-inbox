@@ -108,9 +108,10 @@ sub new {
 sub git_path ($$) {
 	my ($self, $path) = @_;
 	$self->{-git_path}->{$path} //= do {
-		my $d = "$self->{git_dir}/$path";
-		if (-e $d) {
-			$d;
+		my $d = $self->{git_dir};
+		my $f = "$d/$path";
+		if (-d "$d/objects") {
+			$f;
 		} else {
 			local $/ = "\n";
 			my $rdr = { 2 => \my $err };
@@ -119,7 +120,7 @@ sub git_path ($$) {
 			chomp $s;
 
 			# git prior to 2.5.0 did not understand --git-path
-			$s eq "--git-path\n$path" ? $d : $s;
+			$s eq "--git-path\n$path" ? $f : $s;
 		}
 	};
 }
