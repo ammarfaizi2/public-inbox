@@ -106,7 +106,9 @@ sub serve_smart {
 	$env{PATH_TRANSLATED} = "$git->{git_dir}/$path";
 	my $rdr = input_prepare($env) or return r(500);
 	$rdr->{quiet} = 1;
-	my $qsp = PublicInbox::Qspawn->new([qw(git http-backend)], \%env, $rdr);
+	my $cmd = $git->cmd('http-backend');
+	splice @$cmd, 1, 0, '-c', 'safe.directory=*';
+	my $qsp = PublicInbox::Qspawn->new($cmd, \%env, $rdr);
 	$qsp->psgi_yield($env, $limiter, \&ghb_parse_hdr, $env, $git, $path);
 }
 
