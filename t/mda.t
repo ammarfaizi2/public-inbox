@@ -396,6 +396,36 @@ EOM
 	@xap = grep(!m!/over\.sqlite3!,
 			glob("$maindir/public-inbox/xapian*/*"));
 	is_deeply(\@xap, [], 'no Xapian files created by -learn');
+
+	$in = <<'EOM';
+From: a@example.com
+To: updated-address@example.com
+Subject: basic message for mda
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+Message-ID: <basic-for-mda@example>
+
+basic
+EOM
+	local $ENV{ORIGINAL_RECIPIENT} = $addr;
+	ok run_script(['-mda'], undef, $rdr), '-mda for basic';
+	@xap = grep(!m!/over\.sqlite3!,
+			glob("$maindir/public-inbox/xapian*/*"));
+	is_deeply \@xap, [], 'no Xapian files created by -mda';
+
+	# try ensure completely unindexed v1 stays unindexed
+	remove_tree "$maindir/public-inbox";
+	$in = <<'EOM';
+From: a@example.com
+To: updated-address@example.com
+Subject: unnidexed message for mda
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+Message-ID: <unindexed-for-mda@example>
+
+unindexed
+EOM
+
+	ok run_script(['-mda'], undef, $rdr), '-mda for unindexed';
+	ok !-e "$maindir/public-inbox", 'no v1 index created by default';
 };
 
 done_testing();

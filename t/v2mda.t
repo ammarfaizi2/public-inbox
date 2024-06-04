@@ -119,6 +119,20 @@ EOM
 	ok($smsg, 'ham message learned w/ indexlevel=basic');
 	@shards = grep(m!/[0-9]+\z!, glob("$ibx->{inboxdir}/xap*/*"));
 	is_deeply(\@shards, [], 'not converted to medium/full after learn');
+
+	$rdr->{0} = \<<'EOM';
+From: a@example.com
+To: test@example.com
+Subject: this is a message for -mda to stay basic
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+Message-ID: <mda-stays-basic@example>
+
+yum
+EOM
+	ok run_script(['-mda'], undef, $rdr), '-learn runs on basic'
+		or diag $err;
+	@shards = grep m!/[0-9]+\z!, glob("$ibx->{inboxdir}/xap*/*");
+	is_deeply \@shards, [], 'not converted to medium/full after -mda';
 }
 
 done_testing();

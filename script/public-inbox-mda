@@ -72,6 +72,7 @@ if (!scalar(@$dests)) {
 my $err;
 @$dests = grep {
 	my $ibx = PublicInbox::InboxWritable->new($_);
+	$ibx->{indexlevel} = $ibx->detect_indexlevel;
 	eval { $ibx->assert_usable_dir };
 	if ($@) {
 		warn $@;
