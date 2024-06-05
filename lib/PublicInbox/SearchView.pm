@@ -154,9 +154,15 @@ sub path2inc ($) {
 	if (my $short = $rmap_inc{$full}) {
 		return $short;
 	} elsif (!scalar(keys %rmap_inc) && -e $full) {
-		%rmap_inc = map {; "$INC{$_}" => $_ } keys %INC;
+		# n.b. $INC{'PublicInbox::Gcf2'} is undef if libgit2-dev
+		# doesn't exist
+		my $f;
+		%rmap_inc = map {;
+			$f = $INC{$_};
+			defined $f ? ($f, $_) : ();
+		} keys %INC;
 		# fall back to basename as last resort
-		$rmap_inc{$full} // (split('/', $full))[-1];
+		$rmap_inc{$full} // (split(m'/', $full))[-1];
 	} else {
 		$full;
 	}
