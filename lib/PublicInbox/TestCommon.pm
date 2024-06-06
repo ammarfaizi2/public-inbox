@@ -167,11 +167,8 @@ sub require_git ($;$) {
 sub require_git_http_backend (;$) {
 	my ($nr) = @_;
 	state $ok = do {
-		require PublicInbox::Git;
-		my $git = PublicInbox::Git::git_exe() or plan
-			skip_all => 'nothing in public-inbox works w/o git';
 		my $rdr = { 1 => \my $out, 2 => \my $err };
-		xsys([$git, qw(http-backend)], undef, $rdr);
+		xsys([qw(git http-backend)], undef, $rdr);
 		$out =~ /^Status:/ism;
 	};
 	if (!$ok) {
@@ -274,7 +271,9 @@ sub require_mods {
 
 sub key2script ($) {
 	my ($key) = @_;
-	return $key if ($key eq 'git' || index($key, '/') >= 0);
+	require PublicInbox::Git;
+	return PublicInbox::Git::git_exe() if $key eq 'git';
+	return $key if index($key, '/') >= 0;
 	# n.b. we may have scripts which don't start with "public-inbox" in
 	# the future:
 	$key =~ s/\A([-\.])/public-inbox$1/;
