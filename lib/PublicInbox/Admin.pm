@@ -317,7 +317,7 @@ sub progress_prepare ($;$) {
 		$opt->{1} = $null; # suitable for spawn() redirect
 	} else {
 		$opt->{verbose} ||= 1;
-		$dst //= *STDERR{GLOB};
+		$dst //= \*STDERR;
 		$opt->{-progress} = sub { print $dst '# ', @_ };
 	}
 }

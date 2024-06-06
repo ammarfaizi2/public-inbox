@@ -33,7 +33,7 @@ $SIG{PIPE} = 'IGNORE';
 
 my $lei = bless {
 	env => \%ENV, opt => $opt, cmd => 'public-inbox-fetch',
-	0 => *STDIN{GLOB}, 1 => *STDOUT{GLOB}, 2 => *STDERR{GLOB},
+	0 => \*STDIN, 1 => \*STDOUT, 2 => \*STDERR,
 }, 'PublicInbox::LEI';
 PublicInbox::Fetch->do_fetch($lei, '.');
 exit(($lei->{child_error} // 0) >> 8);

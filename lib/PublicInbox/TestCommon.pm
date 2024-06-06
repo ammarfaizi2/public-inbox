@@ -281,8 +281,7 @@ sub key2script ($) {
 	'blib/script/'.$key;
 }
 
-my @io_mode = ([ *STDIN{IO}, '+<&' ], [ *STDOUT{IO}, '+>&' ],
-		[ *STDERR{IO}, '+>&' ]);
+my @io_mode = ([ \*STDIN, '+<&' ], [ \*STDOUT, '+>&' ], [ \*STDERR, '+>&' ]);
 
 sub _prepare_redirects ($) {
 	my ($fhref) = @_;

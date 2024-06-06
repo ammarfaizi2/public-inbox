@@ -47,7 +47,7 @@ open(my $null_io, '<', '/dev/null') or die "open /dev/null: $!";
 {
 	my @n = stat($null_io) or die "stat(/dev/null): $!";
 	my @i = stat(STDIN) or die "stat(STDIN): $!";
-	$null_io = *STDIN{IO} if "@n[0, 1]" eq "@i[0, 1]";
+	$null_io = \*STDIN if "@n[0, 1]" eq "@i[0, 1]";
 }
 
 my $http_date;

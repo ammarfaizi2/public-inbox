@@ -506,12 +506,12 @@ sub x_it ($$) {
 
 sub err ($;@) {
 	my $self = shift;
-	my $err = $self->{2} // ($self->{pgr} // [])->[2] // *STDERR{GLOB};
+	my $err = $self->{2} // ($self->{pgr} // [])->[2] // \*STDERR;
 	my @eor = (substr($_[-1]//'', -1, 1) eq "\n" ? () : ("\n"));
 	print $err @_, @eor and return;
 	my $old_err = delete $self->{2};
 	$old_err->close if $! == EPIPE && $old_err;
-	$err = $self->{2} = ($self->{pgr} // [])->[2] // *STDERR{GLOB};
+	$err = $self->{2} = ($self->{pgr} // [])->[2] // \*STDERR;
 	print $err @_, @eor or print STDERR @_, @eor;
 }
 
@@ -1556,7 +1556,7 @@ sub sto_barrier_request {
 		eval { $lei->{sto}->wq_do('schedule_commit', $n) };
 	} else {
 		my $s = ($wq ? $wq->{lei_sock} : undef) // $lei->{sock};
-		my $errfh = $lei->{2} // *STDERR{GLOB};
+		my $errfh = $lei->{2} // \*STDERR;
 		my @io = $s ? ($errfh, $s) : ($errfh);
 		eval { $lei->{sto}->wq_io_do('barrier', \@io, 1) };
 	}

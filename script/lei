@@ -37,7 +37,7 @@ my $exec_cmd = sub {
 	my ($fds, $argc, @argv) = @_;
 	my $parent = $$;
 	require POSIX;
-	my @old = (*STDIN{IO}, *STDOUT{IO}, *STDERR{IO});
+	my @old = (\*STDIN, \*STDOUT, \*STDERR);
 	my @rdr;
 	for my $fd (@$fds) {
 		open(my $newfh, '+<&=', $fd) or die "open +<&=$fd: $!";

@@ -87,7 +87,7 @@ sub new {
 	my @s = stat(STDIN) or die "stat(STDIN): $!";
 	if ("@l[0, 1]" eq "@s[0, 1]") {
 		my $f = fcntl(STDIN, F_GETFL, 0);
-		$self->{log_fh} = *STDIN{IO} if $f & O_RDWR;
+		$self->{log_fh} = \*STDIN if $f & O_RDWR;
 	}
 	$self;
 }
