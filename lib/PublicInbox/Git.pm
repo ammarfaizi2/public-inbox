@@ -61,7 +61,10 @@ sub git_exe () {
 	return $GIT_EXE if $now < $next_check;
 	$next_check = $now + 10;
 	$GIT_EXE = which('git') // die "git not found in $ENV{PATH}";
-	my @st = stat(_) or die "stat($GIT_EXE): $!"; # can't do HiRes w/ _
+}
+
+sub git_version () {
+	my @st = stat(git_exe) or die "stat($GIT_EXE): $!";
 	my $st = pack('dd', $st[0], $st[1]);
 	if ($st ne $EXE_ST) {
 		my $v = run_qx([ $GIT_EXE, '--version' ]);
@@ -71,11 +74,6 @@ sub git_exe () {
 		$GIT_VER = eval("v$1") // die "BUG: bad vstring: $1 ($v)";
 		$EXE_ST = $st;
 	}
-	$GIT_EXE;
-}
-
-sub git_version () {
-	git_exe;
 	$GIT_VER;
 }
 
