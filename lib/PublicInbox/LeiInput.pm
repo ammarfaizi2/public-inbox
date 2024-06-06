@@ -5,6 +5,7 @@
 package PublicInbox::LeiInput;
 use v5.12;
 use PublicInbox::DS;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::InboxWritable qw(eml_from_path);
 
@@ -252,7 +253,8 @@ sub input_path_url {
 		each_ibx_eml($self, $esrch, @args);
 	} elsif ($self->{missing_ok} && !-e $input) { # don't ->fail
 		if ($lei->{cmd} eq 'p2q') {
-			my $fp = [ qw(git format-patch --stdout -1), $input ];
+			my $fp = [ git_exe, qw(format-patch --stdout -1),
+					$input ];
 			my $rdr = { 2 => $lei->{2} };
 			my $fh = popen_rd($fp, undef, $rdr);
 			eval { $self->input_fh('eml', $fh, $input, @args) };

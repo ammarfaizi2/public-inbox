@@ -24,8 +24,9 @@ use PublicInbox::OnDestroy;
 use URI::Escape qw(uri_escape_utf8);
 use File::Spec;
 use autodie qw(fcntl open);
+use PublicInbox::Git qw(git_exe);
 
-my @EACH_REF = (qw(git for-each-ref --sort=-creatordate),
+my @EACH_REF = (git_exe, qw(for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
 		qw(objectname refname:short subject creatordate:short)));
 my $HEADS_CMD = <<'';
@@ -249,7 +250,7 @@ sub summary ($$) {
 	my $qsp_err = \($ctx->{-qsp_err} = '');
 	my %opt = (quiet => 1, 2 => $ctx->{wcr}->{log_fh});
 	my %env = (GIT_DIR => $ctx->{git}->{git_dir});
-	my @log = (qw(git log), "-$nl", '--pretty=format:%d %H %h %cs %s');
+	my @log = (git_exe, 'log', "-$nl", '--pretty=format:%d %H %h %cs %s');
 	push(@log, $tip) if defined $tip;
 
 	# limit scope for MockHTTP test (t/solver_git.t)

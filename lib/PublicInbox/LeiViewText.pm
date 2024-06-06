@@ -12,6 +12,7 @@ use PublicInbox::View;
 use PublicInbox::Hval;
 use PublicInbox::ViewDiff;
 use PublicInbox::Spawn qw(popen_rd);
+use PublicInbox::Git qw(git_exe);
 use Term::ANSIColor;
 use POSIX ();
 use PublicInbox::Address;
@@ -72,7 +73,7 @@ sub new {
 	my $self = bless { %{$lei->{opt}}, -colored => \&uncolored }, $cls;
 	$self->{-quote_reply} = 1 if $fmt eq 'reply';
 	return $self unless $self->{color} //= -t $lei->{1};
-	my @cmd = qw(git config -z --includes -l); # reuse normal git config
+	my @cmd = (git_exe, qw(config -z --includes -l)); # reuse normal git cfg
 	my $r = popen_rd(\@cmd, undef, { 2 => $lei->{2} });
 	my $cfg = PublicInbox::Config::config_fh_parse($r, "\0", "\n");
 	if (!$r->close) {

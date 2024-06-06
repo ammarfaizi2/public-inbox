@@ -7,13 +7,14 @@ package PublicInbox::LeiMailDiff;
 use v5.12;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput PublicInbox::MailDiff);
 use PublicInbox::Spawn qw(run_wait);
+use PublicInbox::Git qw(git_exe);
 require PublicInbox::LeiRediff;
 
 sub diff_a ($$) {
 	my ($self, $eml) = @_;
 	my $dir = "$self->{tmp}/N".(++$self->{nr});
 	$self->dump_eml($dir, $eml);
-	my $cmd = [ qw(git diff --no-index) ];
+	my $cmd = [ git_exe, qw(diff --no-index) ];
 	my $lei = $self->{lei};
 	PublicInbox::LeiRediff::_lei_diff_prepare($lei, $cmd);
 	push @$cmd, qw(-- a), "N$self->{nr}";

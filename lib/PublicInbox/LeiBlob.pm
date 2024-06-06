@@ -10,14 +10,14 @@ use parent qw(PublicInbox::IPC);
 use PublicInbox::Spawn qw(run_wait run_qx which);
 use PublicInbox::DS;
 use PublicInbox::Eml;
-use PublicInbox::Git;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::IO qw(read_all);
 
 sub get_git_dir ($$) {
 	my ($lei, $d) = @_;
 	return $d if -d "$d/objects" && -d "$d/refs" && -e "$d/HEAD";
 
-	my $cmd = [ qw(git rev-parse --git-dir) ];
+	my $cmd = [ git_exe, qw(rev-parse --git-dir) ];
 	my $opt = { '-C' => $d };
 	if (defined($lei->{opt}->{cwd})) { # --cwd used, report errors
 		$opt->{2} = $lei->{2};

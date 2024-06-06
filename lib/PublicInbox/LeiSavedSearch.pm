@@ -5,7 +5,7 @@
 package PublicInbox::LeiSavedSearch;
 use v5.12;
 use parent qw(PublicInbox::Lock);
-use PublicInbox::Git;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::OverIdx;
 use PublicInbox::LeiSearch;
 use PublicInbox::Config;
@@ -176,7 +176,7 @@ sub description { $_[0]->{qstr} } # for WWW
 sub cfg_set { # called by LeiXSearch
 	my ($self, @args) = @_;
 	my $lk = $self->lock_for_scope; # git-config doesn't wait
-	run_die([qw(git config -f), $self->{'-f'}, @args]);
+	run_die([git_exe, qw(config -f), $self->{'-f'}, @args]);
 }
 
 # drop-in for LeiDedupe API

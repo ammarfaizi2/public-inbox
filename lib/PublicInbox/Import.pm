@@ -8,6 +8,7 @@
 package PublicInbox::Import;
 use v5.12;
 use parent qw(PublicInbox::Lock);
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(run_die run_qx spawn);
 use PublicInbox::MID qw(mids mid2path);
 use PublicInbox::Address;
@@ -24,7 +25,7 @@ use PublicInbox::IO qw(read_all);
 
 sub default_branch () {
 	state $default_branch = do {
-		my $h = run_qx([qw(git config --global init.defaultBranch)],
+		my $h = run_qx([git_exe,qw(config --global init.defaultBranch)],
 				 { GIT_CONFIG => undef });
 		chomp $h;
 		$h eq '' ? 'refs/heads/master' : "refs/heads/$h";

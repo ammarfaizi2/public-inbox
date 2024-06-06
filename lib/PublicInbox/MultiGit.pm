@@ -7,6 +7,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::Spawn qw(run_die run_qx);
 use PublicInbox::Import;
+use PublicInbox::Git qw(git_exe);
 use File::Temp 0.19;
 use List::Util qw(max);
 use PublicInbox::IO qw(read_all);
@@ -110,11 +111,12 @@ sub epoch_cfg_set {
 	my ($self, $epoch_nr) = @_;
 	my $f = epoch_dir($self)."/$epoch_nr.git/config";
 	my $v = "../../$self->{all}/config";
+	my @cmd = (git_exe, qw(config -f), $f, 'include.path');
 	if (-r $f) {
-		chomp(my $x = run_qx([qw(git config -f), $f, 'include.path']));
+		chomp(my $x = run_qx(\@cmd));
 		return if $x eq $v;
 	}
-	run_die([qw(git config -f), $f, 'include.path', $v ]);
+	run_die [@cmd, $v];
 }
 
 sub add_epoch {

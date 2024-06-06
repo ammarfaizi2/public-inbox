@@ -4,13 +4,14 @@
 # git-credential wrapper with built-in .netrc fallback
 package PublicInbox::GitCredential;
 use v5.12;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(popen_rd);
 use autodie qw(close pipe);
 
 sub run ($$;$) {
 	my ($self, $op, $lei) = @_;
 	my ($in_r, $in_w, $out_r);
-	my $cmd = [ qw(git credential), $op ];
+	my $cmd = [ git_exe, 'credential', $op ];
 	pipe($in_r, $in_w);
 	if ($lei) { # we'll die if disconnected:
 		pipe($out_r, my $out_w);

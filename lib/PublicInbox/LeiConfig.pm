@@ -3,6 +3,7 @@
 package PublicInbox::LeiConfig; # subclassed by LeiEditSearch
 use v5.12;
 use PublicInbox::PktOp;
+use PublicInbox::Git qw(git_exe);
 use Fcntl qw(SEEK_SET);
 use autodie qw(open seek);
 use PublicInbox::IO qw(read_all);
@@ -11,7 +12,7 @@ sub cfg_do_edit ($;$) {
 	my ($self, $reason) = @_;
 	my $lei = $self->{lei};
 	$lei->pgr_err($reason) if defined $reason;
-	my $cmd = [ qw(git config --edit -f), $self->{-f} ];
+	my $cmd = [ git_exe, qw(config --edit -f), $self->{-f} ];
 	my $env = { GIT_CONFIG => $self->{-f} };
 	$self->cfg_edit_begin if $self->can('cfg_edit_begin');
 	# run in script/lei foreground

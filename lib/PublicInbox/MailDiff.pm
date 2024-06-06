@@ -7,6 +7,7 @@ use PublicInbox::ContentHash qw(content_digest);
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::ViewDiff qw(flush_diff);
 use PublicInbox::GitAsyncCat;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::ContentDigestDbg;
 use PublicInbox::Qspawn;
 use PublicInbox::IO qw(write_file);
@@ -81,7 +82,7 @@ sub do_diff {
 	my $n = 'N'.(++$self->{nr});
 	my $dir = "$self->{tmp}/$n";
 	$self->dump_eml($dir, $eml);
-	my $cmd = [ qw(git diff --no-index --no-color -- a), $n ];
+	my $cmd = [ git_exe, qw(diff --no-index --no-color -- a), $n ];
 	my $opt = { -C => "$self->{tmp}", quiet => 1 };
 	my $qsp = PublicInbox::Qspawn->new($cmd, undef, $opt);
 	$qsp->psgi_qx($self->{ctx}->{env}, undef, \&emit_msg_diff, $self);

@@ -11,6 +11,7 @@ use PublicInbox::Config;
 use PublicInbox::Inbox;
 use PublicInbox::Spawn qw(run_qx);
 use PublicInbox::Eml;
+use PublicInbox::Git qw(git_exe);
 *rel2abs_collapsed = \&PublicInbox::Config::rel2abs_collapsed;
 
 sub setup_signals {
@@ -77,7 +78,7 @@ sub resolve_git_dir {
 	my $env;
 	defined($pwd) && substr($cd // '/', 0, 1) ne '/' and
 		$env->{PWD} = "$pwd/$cd";
-	my $cmd = [ qw(git rev-parse --git-dir) ];
+	my $cmd = [ git_exe, qw(rev-parse --git-dir) ];
 	my $dir = run_qx($cmd, $env, { -C => $cd });
 	die "error in @$cmd (cwd:${\($cd // '.')}): $?\n" if $?;
 	chomp $dir;

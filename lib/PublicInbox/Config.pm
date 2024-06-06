@@ -632,7 +632,7 @@ sub urlmatch {
 		} elsif (($? >> 8) != 1) {
 			$urlmatch_broken = 1;
 		} elsif ($try_git) { # n.b. this takes cwd into account
-			$val = run_qx([qw(git config), @bool,
+			$val = run_qx([$cmd->[0], 'config', @bool,
 					qw(-z --get-urlmatch), $key, $url]);
 			undef $val if $?;
 		}

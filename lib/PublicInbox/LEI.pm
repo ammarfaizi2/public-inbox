@@ -22,6 +22,7 @@ use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::Spawn qw(run_wait popen_rd run_qx);
 use PublicInbox::Lock;
 use PublicInbox::Eml;
+use PublicInbox::Git qw(git_exe);
 use PublicInbox::Import;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::OnDestroy;
@@ -1098,7 +1099,7 @@ sub path_to_fd {
 # caller needs to "-t $self->{1}" to check if tty
 sub start_pager {
 	my ($self, $new_env) = @_;
-	chomp(my $pager = run_qx([qw(git var GIT_PAGER)]));
+	chomp(my $pager = run_qx([git_exe, qw(var GIT_PAGER)]));
 	warn "`git var PAGER' error: \$?=$?" if $?;
 	return if $pager eq 'cat' || $pager eq '';
 	$new_env //= {};
