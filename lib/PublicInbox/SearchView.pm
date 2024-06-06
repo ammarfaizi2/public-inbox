@@ -316,13 +316,12 @@ sub mset_thread {
 	my $rootset = PublicInbox::SearchThread::thread($msgs,
 		$r ? \&sort_relevance : \&PublicInbox::View::sort_ds,
 		$ctx);
-	my $skel = search_nav_bot($ctx, $mset, $q).'<pre>'. <<EOM;
+	$ctx->{skel} = [ search_nav_bot($ctx, $mset, $q).'<pre>'. <<EOM ];
 -- pct% links below jump to the message on this page, permalinks otherwise --
 EOM
 	$ctx->{-upfx} = '';
 	$ctx->{anchor_idx} = 1;
 	$ctx->{cur_level} = 0;
-	$ctx->{skel} = \$skel;
 	$ctx->{mapping} = {};
 	$ctx->{searchview} = 1;
 	$ctx->{prev_attr} = '';
@@ -332,7 +331,7 @@ EOM
 	# reduce hash lookups in skel_dump
 	$ctx->{-obfs_ibx} = $ibx->{obfuscate} ? $ibx : undef;
 	PublicInbox::View::walk_thread($rootset, $ctx,
-		\&PublicInbox::View::pre_thread);
+		\&PublicInbox::View::pre_thread); # pushes to ctx->{skel}
 
 	# link $INBOX_DIR/description text to "recent" view around
 	# the newest message in this result set:
@@ -349,7 +348,7 @@ sub mset_thread_i {
 	print { $ctx->zfh } $ctx->html_top if exists $ctx->{-html_tip};
 	$eml and return PublicInbox::View::eml_entry($ctx, $eml);
 	my $smsg = shift @{$ctx->{msgs}} or
-		print { $ctx->zfh } ${delete($ctx->{skel})};
+		print { $ctx->zfh } @{delete($ctx->{skel})};
 	$smsg;
 }
 

@@ -476,7 +476,7 @@ sub stream_thread_i { # PublicInbox::WwwStream::getline callback
 			print { $ctx->zfh } ghost_index_entry($ctx, $lvl, $smsg)
 		} else { # all done
 			print { $ctx->zfh } thread_adj_level($ctx, 0),
-						${delete($ctx->{skel})};
+						@{delete($ctx->{skel})};
 			return;
 		}
 	}
@@ -513,11 +513,13 @@ href="../../">newest</a>]
 EOF
 	$skel .= "<b\nid=t>Thread overview:</b> ";
 	$skel .= $nr == 1 ? '(only message)' : "$nr+ messages";
-	$skel .= " (download: <a\nhref=\"../t.mbox.gz\">mbox.gz</a>";
-	$skel .= " / follow: <a\nhref=\"../t.atom\">Atom feed</a>)\n";
-	$skel .= "-- links below jump to the message on this page --\n";
+	$skel .= <<EOM;
+ (download: <a\nhref="../t.mbox.gz">mbox.gz</a> follow: <a
+href=\"../t.atom\">Atom feed</a>
+-- links below jump to the message on this page --
+EOM
 	$ctx->{cur_level} = 0;
-	$ctx->{skel} = \$skel;
+	$ctx->{skel} = [ $skel ];
 	$ctx->{prev_attr} = '';
 	$ctx->{prev_level} = 0;
 	$ctx->{root_anchor} = 'm' . id_compress($mid, 1);
@@ -529,9 +531,9 @@ EOF
 
 	# reduce hash lookups in pre_thread->skel_dump
 	$ctx->{-obfs_ibx} = $ibx->{obfuscate} ? $ibx : undef;
-	walk_thread($rootset, $ctx, \&pre_thread);
+	walk_thread($rootset, $ctx, \&pre_thread); # pushes to ctx->{skel}
 
-	$skel .= '</pre>';
+	push @{$ctx->{skel}}, '</pre>';
 	return stream_thread($rootset, $ctx) unless $ctx->{flat};
 
 	# flat display: lazy load the full message from smsg
@@ -553,8 +555,7 @@ sub thread_html_i { # PublicInbox::WwwStream::getline callback
 		while (my $smsg = shift @{$ctx->{msgs}}) {
 			return $smsg if exists($smsg->{blob});
 		}
-		my $skel = delete($ctx->{skel}) or return; # all done
-		print { $ctx->zfh } $$skel;
+		print { $ctx->zfh } @{delete $ctx->{skel} // []};
 		undef;
 	}
 }
@@ -778,13 +779,13 @@ sub thread_skel ($$$) {
 	my $ibx = $ctx->{ibx};
 	my ($nr, $msgs) = $ibx->over->get_thread($mid);
 	my $parent = in_reply_to($hdr);
-	$$skel .= "\n<b>Thread overview: </b>";
+	$skel->[-1] .= "\n<b>Thread overview: </b>";
 	if ($nr <= 1) {
 		if (defined $parent) {
-			$$skel .= SKEL_EXPAND."\n ";
-			$$skel .= ghost_parent('../', $parent) . "\n";
+			$skel->[-1] .= SKEL_EXPAND."\n ";
+			$skel->[-1] .= ghost_parent('../', $parent) . "\n";
 		} else {
-			$$skel .= "<a\nid=r>[no followups]</a> ".
+			$skel->[-1] .= "<a\nid=r>[no followups]</a> ".
 					SKEL_EXPAND."\n";
 		}
 		$ctx->{next_msg} = undef;
@@ -792,8 +793,9 @@ sub thread_skel ($$$) {
 		return;
 	}
 
-	$$skel .= $nr;
-	$$skel .= '+ messages / '.SKEL_EXPAND.qq!  <a\nhref="#b">top</a>\n!;
+	$skel->[-1] .= $nr;
+	$skel->[-1] .= '+ messages / '.SKEL_EXPAND.
+			qq!  <a\nhref="#b">top</a>\n!;
 
 	# nb: mutt only shows the first Subject in the index pane
 	# when multiple Subject: headers are present, so we follow suit:
@@ -815,7 +817,7 @@ sub thread_skel ($$$) {
 sub html_footer {
 	my ($ctx, $hdr) = @_;
 	my $upfx = '../';
-	my (@related, $skel);
+	my (@related, @skel);
 	my $foot = '<pre>';
 	my $qry = delete $ctx->{-qry};
 	if ($qry && $ctx->{ibx}->isrch) {
@@ -847,12 +849,12 @@ EOM
 		my $t = ts2str($ctx->{-t_max});
 		my $t_fmt = fmt_ts($ctx->{-t_max});
 		my $fallback = @related ? "\t" : "<a id=related>\t</a>";
-		$skel = <<EOF;
+		$skel[0] = <<EOF;
 ${fallback}other threads:[<a
 href="$upfx?t=$t">~$t_fmt UTC</a>|<a
 href="$upfx">newest</a>]
 EOF
-		thread_skel(\$skel, $ctx, $hdr);
+		thread_skel(\@skel, $ctx, $hdr);
 		my ($next, $prev);
 		my $parent = '       ';
 		$next = $prev = '    ';
@@ -879,11 +881,11 @@ EOF
 		}
 		$foot .= "$next $prev$parent ";
 	} else { # unindexed inboxes w/o over
-		$skel = qq( <a\nhref="$upfx">latest</a>);
+		$skel[0] = qq( <a\nhref="$upfx">latest</a>);
 	}
-	# $skel may be big for big threads, don't append it to $foot
+	# @skel may be big for big threads, don't push to it
 	print { $ctx->zfh } $foot, qq(<a\nhref="#R">reply</a>),
-				$skel, '</pre>', @related,
+				@skel, '</pre>', @related,
 				msg_reply($ctx, $hdr);
 }
 
@@ -985,7 +987,8 @@ sub skel_dump { # walk_thread callback
 	my $mid = $smsg->{mid};
 
 	if ($level == 0 && $ctx->{skel_dump_roots}++) {
-		$$skel .= delete($ctx->{sl_note}) || '';
+		my $note = delete $ctx->{sl_note};
+		push @$skel, $note if $note;
 	}
 
 	my $f = ascii_html(delete $smsg->{from_name});
@@ -1014,7 +1017,7 @@ sub skel_dump { # walk_thread callback
 	if ($cur) {
 		if ($cur eq $mid) {
 			delete $ctx->{cur};
-			$$skel .= "<b>$d<a\nid=r\nhref=\"#t\">".
+			push @$skel, "<b>$d<a\nid=r\nhref=\"#t\">".
 				 "$attr [this message]</a></b>\n";
 			return 1;
 		} else {
@@ -1054,8 +1057,7 @@ sub skel_dump { # walk_thread callback
 	} else {
 		$m = $ctx->{-upfx}.mid_href($mid).'/';
 	}
-	$$skel .=  $d . "<a\nhref=\"$m\"$id>" . $end;
-	1;
+	push @$skel, qq($d<a\nhref="$m"$id>$end);
 }
 
 sub _skel_ghost {
@@ -1078,8 +1080,7 @@ sub _skel_ghost {
 	} else {
 		$d .= qq{&lt;<a\nhref="$href">$html</a>&gt;\n};
 	}
-	${$ctx->{skel}} .= $d;
-	1;
+	push @{$ctx->{skel}}, $d;
 }
 
 # note: we favor Date: here because git-send-email increments it
