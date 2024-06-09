@@ -11,6 +11,8 @@
 # async_eml callbacks only run when a blob arrives from git.
 #
 # We continue to support getline+close for generic PSGI servers.
+# Note: we favor gzip in Perl (as opposed to nginx || varnish) to
+# reduce IPC memory traffic
 package PublicInbox::GzipFilter;
 use strict;
 use parent qw(Exporter);
@@ -21,7 +23,9 @@ use PublicInbox::GitAsyncCat;
 use Carp qw(carp);
 
 our @EXPORT_OK = qw(gzf_maybe);
-my %OPT = (-WindowBits => 15 + 16, -AppendOutput => 1);
+# Compress::Raw::Zlib uses MAX_MEM_LEVEL (9) while zlib DEF_MEM_LEVEL is 8;
+# choose the zlib default because C:R:Z is excessive.
+my %OPT = (-WindowBits => 15 + 16, -AppendOutput => 1, -MemLevel => 8);
 my @GZIP_HDRS = qw(Vary Accept-Encoding Content-Encoding gzip);
 
 sub new { bless {}, shift } # qspawn filter
