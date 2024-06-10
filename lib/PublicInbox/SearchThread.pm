@@ -33,19 +33,24 @@ sub thread {
 	# can be shakier if somebody used In-Reply-To with multiple, disparate
 	# messages.  So, take the client Date: into account since we can't
 	# always determine ordering when somebody uses multiple In-Reply-To.
+	my (%dedupe, $mid);
 	my @kids = sort { $a->{ds} <=> $b->{ds} } grep {
 		# this delete saves around 4K across 1K messages
 		# TODO: move this to a more appropriate place, breaks tests
 		# if we do it during psgi_cull
 		delete $_->{num};
 		bless $_, 'PublicInbox::SearchThread::Msg';
-		if (exists $id_table{$_->{mid}}) {
+		$mid = $_->{mid};
+		if (exists $id_table{$mid}) {
 			$_->{children} = [];
 			push @imposters, $_; # we'll deal with them later
 			undef;
 		} else {
 			$_->{children} = {}; # will become arrayref later
-			$id_table{$_->{mid}} = $_;
+			%dedupe = ($mid => undef);
+			($mid) = keys %dedupe;
+			$_->{mid} = $mid;
+			$id_table{$mid} = $_;
 			defined($_->{references});
 		}
 	} @$msgs;

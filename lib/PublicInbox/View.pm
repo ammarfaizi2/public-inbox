@@ -432,6 +432,7 @@ sub walk_thread ($$$) {
 
 sub pre_thread  { # walk_thread callback
 	my ($ctx, $level, $node, $idx) = @_;
+	# node->{mid} is deduplicated in PublicInbox::SearchThread::thread
 	$ctx->{mapping}->{$node->{mid}} = [ '', $node, $idx, $level ];
 	skel_dump($ctx, $level, $node);
 }
