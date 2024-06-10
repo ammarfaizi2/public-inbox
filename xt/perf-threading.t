@@ -1,18 +1,16 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # real-world testing of search threading
-use strict;
-use warnings;
+use v5.12;
 use Test::More;
 use Benchmark qw(:all);
 use PublicInbox::Inbox;
 my $inboxdir = $ENV{GIANT_INBOX_DIR} // $ENV{GIANT_PI_DIR};
 plan skip_all => "GIANT_INBOX_DIR not defined for $0" unless $inboxdir;
 my $ibx = PublicInbox::Inbox->new({ inboxdir => $inboxdir });
-eval { require PublicInbox::Search };
-my $srch = $ibx->search;
-plan skip_all => "$inboxdir not configured for search $0 $@" unless $srch;
+$ibx->over or plan skip_all => "$inboxdir not indexed for $0 $@";
 
 require PublicInbox::View;
 
