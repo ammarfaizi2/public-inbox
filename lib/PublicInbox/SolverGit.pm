@@ -176,7 +176,7 @@ sub extract_diff ($$) {
 		(?:^---\x20$FN$LF)
 
 		# "+++ b/foo.c" sets post-filename ($11) in case
-		# $3 is missing
+		# $3 is missing or truncated
 		(?:^\+{3}\x20$FN$LF)
 
 		# the meat of the diff, including "^\\No newline ..."
@@ -193,7 +193,8 @@ sub extract_diff ($$) {
 		mode_a => $5 // $8 // $4, # new (file) // unchanged // old
 	};
 	my $path_a = $2 // $10;
-	my $path_b = $3 // $11;
+	my $path_b = defined $11 && defined $3 && length $11 > length $3 ?
+			$11 // $3 : $3 // $11;
 	my $patch = $9;
 
 	# don't care for leading 'a/' and 'b/'
