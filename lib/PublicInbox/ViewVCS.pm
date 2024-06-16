@@ -251,7 +251,7 @@ href="$ibx_url?t=$t"
 title="list contemporary emails">$2</a>)
 		!e;
 
-	$ctx->{-title_html} = $s = $ctx->{-linkify}->to_html($s);
+	my $title_html = $ctx->{-title_html} = $ctx->{-linkify}->to_html($s);
 	my ($P, $p, $pt) = delete @$ctx{qw(-cmt_P -cmt_p -cmt_pt)};
 	$_ = qq(<a href="$upfx$_/s/">).shift(@$p).'</a> '.shift(@$pt) for @$P;
 	if (@$P == 1) {
@@ -273,7 +273,7 @@ href="$f.patch">patch</a>)\n   <a href=#parent>parent</a> $P->[0]};
    author $au
 committer $co
 
-<b>$s</b>
+<b>$title_html</b>
 EOM
 	print $zfh "\n", $ctx->{-linkify}->to_html($bdy) if length($bdy);
 	undef $bdy; # free memory
@@ -291,7 +291,7 @@ EOM
 		# TODO: should there be another textarea which attempts to
 		# search for the exact email which was applied to make this
 		# commit?
-		my ($rows, $q) = PublicInbox::View::dfqry_text $ctx;
+		my ($rows, $q) = PublicInbox::View::dfqry_text $ctx, $s;
 		if ($rows) {
 			my $ibx_url = ibx_url_for($ctx);
 			my $alt;

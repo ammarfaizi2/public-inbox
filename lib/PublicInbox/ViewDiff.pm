@@ -182,9 +182,10 @@ sub diff_before_or_after ($$) {
 sub flush_diff ($$) {
 	my ($ctx, $cur) = @_;
 
+	my ($subj) = ($$cur =~ /^Subject:\s*\[[^\]]+\]\s*(.+?)$/sm);
 	my @top = split($EXTRACT_DIFFS, $$cur);
 	undef $$cur; # free memory
-
+	$ctx->{-qry_subj} = $subj if $subj;
 	my $lnk = $ctx->{-linkify};
 	my $dctx; # {}, keys: Q, oid_a, oid_b
 	my $zfh = $ctx->zfh;

@@ -705,6 +705,7 @@ href="d/">diff</a>)</pre><pre>];
 		}
 	}
 	my @subj = $eml->header('Subject');
+	$ctx->{subj_raw} = $subj[0];
 	$hbuf .= "Subject: $_\n" for @subj;
 	$title[0] = $subj[0] // '(no subject)';
 	$hbuf .= "Date: $_\n" for $eml->header('Date');
@@ -819,16 +820,25 @@ sub thread_skel ($$$) {
 	$ctx->{parent_msg} = $parent;
 }
 
-sub dfqry_text ($) {
-	my ($ctx) = @_;
+sub dfqry_text ($$) {
+	my ($ctx, $subj) = @_;
 	my $qry_dfblob = delete $ctx->{-qry_dfblob} or return (undef);
-	my $q = join ' ', map {
+	my @bs = split /["\x{201c}\x{201d}]+/, $subj;
+	my $q = join ' ', (@bs ? ('(') : ()), map {
 		chop if length > 7; # include 1 abbrev "older" patches
 		"dfblob:$_";
 	} @$qry_dfblob;
 	local $Text::Wrap::columns = COLS;
 	local $Text::Wrap::huge = 'overflow';
+	$subj //= '';
+	$subj =~ s/\A\s*(?:amend|fixup|squash)\!\s*//; # --autosquash commands
+	# split on double-quotes for phrases
 	$q = wrap('', '', $q);
+	if (@bs) {
+		$q .= " )\n OR (";
+		$q .= qq[\nbs:"$_"] for @bs;
+		$q .= ' )';
+	}
 	my $rows = ($q =~ tr/\n/\n/) + 1;
 	($rows, ascii_html($q));
 }
@@ -839,7 +849,8 @@ sub html_footer {
 	my $upfx = '../';
 	my (@related, @skel);
 	my $foot = '<pre>';
-	my ($rows, $q) = dfqry_text $ctx;
+	my ($rows, $q) = dfqry_text $ctx,
+			delete($ctx->{-qry_subj}) // $ctx->{subj_raw};
 	if ($rows && $ctx->{ibx}->isrch) {
 		$related[0] = <<EOM;
 <form id=related
