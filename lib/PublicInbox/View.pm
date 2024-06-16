@@ -819,25 +819,28 @@ sub thread_skel ($$$) {
 	$ctx->{parent_msg} = $parent;
 }
 
+sub dfqry_text ($) {
+	my ($ctx) = @_;
+	my $qry_dfblob = delete $ctx->{-qry_dfblob} or return (undef);
+	my $q = join ' ', map {
+		chop if length > 7; # include 1 abbrev "older" patches
+		"dfblob:$_";
+	} @$qry_dfblob;
+	local $Text::Wrap::columns = COLS;
+	local $Text::Wrap::huge = 'overflow';
+	$q = wrap('', '', $q);
+	my $rows = ($q =~ tr/\n/\n/) + 1;
+	($rows, ascii_html($q));
+}
+
 # writes to zbuf
 sub html_footer {
 	my ($ctx, $hdr) = @_;
 	my $upfx = '../';
 	my (@related, @skel);
 	my $foot = '<pre>';
-	my $qry_dfblob = delete $ctx->{-qry_dfblob};
-	if ($qry_dfblob && $ctx->{ibx}->isrch) {
-		my $q = ''; # search for either ancestor or descendent patches
-		for (@$qry_dfblob) {
-			chop if length > 7; # include 1 abbrev "older" patches
-			$q .= "dfblob:$_ ";
-		}
-		chop $q; # omit trailing SP
-		local $Text::Wrap::columns = COLS;
-		local $Text::Wrap::huge = 'overflow';
-		$q = wrap('', '', $q);
-		my $rows = ($q =~ tr/\n/\n/) + 1;
-		$q = ascii_html($q);
+	my ($rows, $q) = dfqry_text $ctx;
+	if ($rows && $ctx->{ibx}->isrch) {
 		$related[0] = <<EOM;
 <form id=related
 action=$upfx

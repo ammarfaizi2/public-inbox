@@ -291,20 +291,8 @@ EOM
 		# TODO: should there be another textarea which attempts to
 		# search for the exact email which was applied to make this
 		# commit?
-		if (my $qry_dfblob = delete $ctx->{-qry_dfblob}) {
-			my $q = '';
-			for (@$qry_dfblob) {
-				# keep blobs as short as reasonable, emails
-				# are going to be older than what's in git
-				substr($_, 7, 64, '');
-				$q .= "dfblob:$_ ";
-			}
-			chop $q; # no trailing SP
-			local $Text::Wrap::columns = PublicInbox::View::COLS;
-			local $Text::Wrap::huge = 'overflow';
-			$q = wrap('', '', $q);
-			my $rows = ($q =~ tr/\n/\n/) + 1;
-			$q = ascii_html($q);
+		my ($rows, $q) = PublicInbox::View::dfqry_text $ctx;
+		if ($rows) {
 			my $ibx_url = ibx_url_for($ctx);
 			my $alt;
 			if (defined $ibx_url) {
