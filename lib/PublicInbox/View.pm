@@ -311,7 +311,8 @@ sub eml_entry {
 		" <a\nhref=\"${mhref}raw\">raw</a>" .
 		" <a\nhref=\"${mhref}#R\">reply</a>";
 
-	delete($ctx->{-qry}) and
+	# points to permalink
+	delete($ctx->{-qry_dfblob}) and
 		$rv .= qq[ <a\nhref="${mhref}#related">related</a>];
 
 	my $hr;
@@ -824,10 +825,10 @@ sub html_footer {
 	my $upfx = '../';
 	my (@related, @skel);
 	my $foot = '<pre>';
-	my $qry = delete $ctx->{-qry};
-	if ($qry && $ctx->{ibx}->isrch) {
+	my $qry_dfblob = delete $ctx->{-qry_dfblob};
+	if ($qry_dfblob && $ctx->{ibx}->isrch) {
 		my $q = ''; # search for either ancestor or descendent patches
-		for (@{$qry->{dfpre}}, @{$qry->{dfpost}}) {
+		for (@$qry_dfblob) {
 			chop if length > 7; # include 1 abbrev "older" patches
 			$q .= "dfblob:$_ ";
 		}

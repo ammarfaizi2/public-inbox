@@ -135,15 +135,14 @@ sub diff_header ($$$) {
 	# no need to capture oid_a and oid_b on add/delete,
 	# we just linkify OIDs directly via s///e in conditional
 	if ($$x =~ s/$NULL_TO_BLOB/$1 . oid($dctx, $spfx, $2)/e) {
-		push @{$ctx->{-qry}->{dfpost}}, $2;
+		push @{$ctx->{-qry_dfblob}}, $2;
 	} elsif ($$x =~ s/$BLOB_TO_NULL/'index '.oid($dctx, $spfx, $1).$2/e) {
-		push @{$ctx->{-qry}->{dfpre}}, $1;
+		push @{$ctx->{-qry_dfblob}}, $1;
 	} elsif ($$x =~ $BLOB_TO_BLOB) {
 		# modification-only, not add/delete:
 		# linkify hunk headers later using oid_a and oid_b
 		@$dctx{qw(oid_a oid_b)} = ($1, $2);
-		push @{$ctx->{-qry}->{dfpre}}, $1;
-		push @{$ctx->{-qry}->{dfpost}}, $2;
+		push @{$ctx->{-qry_dfblob}}, $1, $2;
 	} else {
 		warn "BUG? <$$x> had no ^index line";
 	}

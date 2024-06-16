@@ -291,9 +291,9 @@ EOM
 		# TODO: should there be another textarea which attempts to
 		# search for the exact email which was applied to make this
 		# commit?
-		if (my $qry = delete $ctx->{-qry}) {
+		if (my $qry_dfblob = delete $ctx->{-qry_dfblob}) {
 			my $q = '';
-			for (@{$qry->{dfpost}}, @{$qry->{dfpre}}) {
+			for (@$qry_dfblob) {
 				# keep blobs as short as reasonable, emails
 				# are going to be older than what's in git
 				substr($_, 7, 64, '');
