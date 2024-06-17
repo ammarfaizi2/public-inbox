@@ -179,6 +179,17 @@ test_psgi(sub { $www->call(@_) }, sub {
 
 	$res = $cb->(GET(q{/test/?q=%22s'more%22&x=A}));
 	is $res->code, 200, 'single quote inside phrase';
+
+	$res = $cb->(GET("/test/<$mid>/"));
+	is $res->code, 301, "redirect for raw `<' and `>' in msgid";
+	like $res->header('location'), qr!/test/\Q$mid\E/\z!,
+		"redirected to URL without raw `<' and `>'";
+
+	$res = $cb->(GET("/test/%3c$mid%3e/"));
+	is $res->code, 301, "redirect for escaped `<' and `>' in msgid";
+	like $res->header('location'), qr!/test/\Q$mid\E/\z!,
+		"redirected to URL without escaped `<' and `>'";
+
 	# TODO: more tests and odd cases
 });
 

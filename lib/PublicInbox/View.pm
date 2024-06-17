@@ -74,9 +74,13 @@ sub msg_page {
 	my ($id, $prev);
 	my $next_arg = $ctx->{next_arg} = [ $ctx->{mid}, \$id, \$prev ];
 
-	my $smsg = $ctx->{smsg} = $over->next_by_mid(@$next_arg) or
-		return; # undef == 404
-
+	my $smsg = $ctx->{smsg} = $over->next_by_mid(@$next_arg);
+	if (!$smsg && $ctx->{mid} =~ /\A\<(.+)\>\z/ and
+			($next_arg->[0] = $1) and
+			($over->next_by_mid(@$next_arg))) {
+		return PublicInbox::WWW::r301($ctx, undef, $next_arg->[0]);
+	}
+	$smsg or return; # undef=404
 	# allow user to easily browse the range around this message if
 	# they have ->over
 	$ctx->{-t_max} = $smsg->{ts};
