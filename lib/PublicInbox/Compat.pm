@@ -8,7 +8,7 @@ use v5.12;
 use parent qw(Exporter);
 require List::Util;
 
-our @EXPORT_OK = qw(uniqstr);
+our @EXPORT_OK = qw(uniqstr sum0);
 
 # uniqstr is in List::Util 1.45+, which means Perl 5.26+;
 # so maybe 2030 for us since we need to support enterprise distros.
@@ -20,5 +20,7 @@ no warnings 'once';
 	my %seen;
 	grep { !$seen{$_}++ } @_;
 };
+
+*sum0 = List::Util->can('sum0') // sub (@) { List::Util::sum(@_) // 0 };
 
 1;

@@ -21,6 +21,7 @@
 package PublicInbox::HTTP;
 use strict;
 use parent qw(PublicInbox::DS);
+use bytes qw(length);
 use Fcntl qw(:seek);
 use Plack::HTTPParser qw(parse_http_request); # XS or pure Perl
 use Plack::Util;
@@ -36,6 +37,7 @@ use constant {
 	CHUNK_MAX_HDR => 256,
 };
 use Errno qw(EAGAIN);
+use PublicInbox::Compat qw(sum0);
 
 # Use the same configuration parameter as git since this is primarily
 # a slow-client sponge for git-http-backend
@@ -165,7 +167,7 @@ sub app_dispatch {
 	}
 }
 
-sub response_header_write {
+sub response_header_write ($$$) {
 	my ($self, $env, $res) = @_;
 	my $proto = $env->{SERVER_PROTOCOL} or return; # HTTP/0.9 :P
 	my $status = $res->[0];
@@ -189,6 +191,11 @@ sub response_header_write {
 	my $term = defined($len) || $chunked;
 	my $prot_persist = ($proto eq 'HTTP/1.1') && ($conn !~ /\bclose\b/i);
 	my $alive;
+	if (!$term && ref($res->[2]) eq 'ARRAY') {
+		$len = sum0(map length, @{$res->[2]});
+		$h .= "Content-Length: $len\r\n";
+		$term = 1;
+	}
 	if (!$term && $prot_persist) { # auto-chunk
 		$chunked = $alive = 2;
 		$alive = 3 if $env->{REQUEST_METHOD} eq 'HEAD';
@@ -454,7 +461,7 @@ use v5.12;
 sub write {
 	# ([$http], $buf) = @_;
 	PublicInbox::HTTP::chunked_write($_[0]->[0], $_[1]);
-	$_[0]->[0]->{sock} ? length($_[1]) : undef;
+	$_[0]->[0]->{sock} ? bytes::length($_[1]) : undef;
 }
 
 sub close {
@@ -469,7 +476,7 @@ our @ISA = qw(PublicInbox::HTTP::Chunked);
 sub write {
 	# ([$http], $buf) = @_;
 	PublicInbox::HTTP::identity_write($_[0]->[0], $_[1]);
-	$_[0]->[0]->{sock} ? length($_[1]) : undef;
+	$_[0]->[0]->{sock} ? bytes::length($_[1]) : undef;
 }
 
 1;
