@@ -25,7 +25,7 @@ use v5.10.1;
 use parent qw(Exporter);
 use bytes qw(length substr); # FIXME(?): needed for PublicInbox::NNTP
 use POSIX qw(WNOHANG sigprocmask SIG_SETMASK SIG_UNBLOCK);
-use Fcntl qw(SEEK_SET :DEFAULT O_APPEND);
+use Fcntl qw(SEEK_SET :DEFAULT);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use Scalar::Util qw(blessed);
 use PublicInbox::Syscall qw(%SIGNUM
@@ -471,7 +471,7 @@ sub drop {
 
 sub tmpio ($$$) {
 	my ($self, $bref, $off) = @_;
-	my $fh = tmpfile('wbuf', $self->{sock}, O_APPEND) or
+	my $fh = tmpfile 'wbuf', $self->{sock}, 1 or
 		return drop($self, "tmpfile $!");
 	$fh->autoflush(1);
 	my $len = length($$bref) - $off;
