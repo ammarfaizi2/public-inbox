@@ -213,14 +213,9 @@ sub response_header_write {
 
 # middlewares such as Deflater may write empty strings
 sub chunked_write ($$) {
-	my $self = $_[0];
-	return if $_[1] eq '';
-	msg_more($self, sprintf("%x\r\n", length($_[1])));
-	msg_more($self, $_[1]);
-
-	# use $self->write(\"\n\n") if you care about real-time
-	# streaming responses, public-inbox WWW does not.
-	msg_more($self, "\r\n");
+	my ($self, $buf) = @_;
+	$buf eq '' or
+		msg_more $self, sprintf("%x\r\n", length($buf)), $buf, "\r\n";
 }
 
 sub identity_write ($$) {

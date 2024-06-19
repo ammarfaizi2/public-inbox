@@ -22,7 +22,8 @@ use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
 our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
-our ($INOTIFY, %PACK);
+our ($INOTIFY, %CONST);
+use List::Util qw(sum);
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
@@ -290,7 +291,8 @@ EOM
 
 BEGIN {
 	if ($^O eq 'linux') {
-		%PACK = (
+		%CONST = (
+			MSG_MORE => 0x8000,
 			TMPL_cmsg_len => TMPL_size_t,
 			# cmsg_len, cmsg_level, cmsg_type
 			SIZEOF_cmsghdr => SIZEOF_int * 2 + SIZEOF_size_t,
@@ -303,7 +305,7 @@ BEGIN {
 				'i', # msg_flags
 		);
 	} elsif ($^O =~ /\A(?:freebsd|openbsd|netbsd|dragonfly)\z/) {
-		%PACK = (
+		%CONST = (
 			TMPL_cmsg_len => 'L', # socklen_t
 			SIZEOF_cmsghdr => SIZEOF_int * 3,
 			CMSG_DATA_off => SIZEOF_ptr == 8 ? '@16' : '',
@@ -316,11 +318,12 @@ BEGIN {
 
 		)
 	}
-	$PACK{CMSG_ALIGN_size} = SIZEOF_size_t;
-	$PACK{SIZEOF_cmsghdr} //= 0;
-	$PACK{TMPL_cmsg_len} //= undef;
-	$PACK{CMSG_DATA_off} //= undef;
-	$PACK{TMPL_msghdr} //= undef;
+	$CONST{CMSG_ALIGN_size} = SIZEOF_size_t;
+	$CONST{SIZEOF_cmsghdr} //= 0;
+	$CONST{TMPL_cmsg_len} //= undef;
+	$CONST{CMSG_DATA_off} //= undef;
+	$CONST{TMPL_msghdr} //= undef;
+	$CONST{MSG_MORE} //= 0;
 }
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
@@ -455,7 +458,7 @@ sub nodatacow_dir {
 	if (open my $fh, '<', $_[0]) { nodatacow_fh($fh) }
 }
 
-use constant \%PACK;
+use constant \%CONST;
 sub CMSG_ALIGN ($) { ($_[0] + CMSG_ALIGN_size - 1) & ~(CMSG_ALIGN_size - 1) }
 use constant CMSG_ALIGN_SIZEOF_cmsghdr => CMSG_ALIGN(SIZEOF_cmsghdr);
 sub CMSG_SPACE ($) { CMSG_ALIGN($_[0]) + CMSG_ALIGN_SIZEOF_cmsghdr }
@@ -526,6 +529,22 @@ require PublicInbox::CmdIPC4;
 		}
 	}
 	@ret;
+};
+
+*sendmsg_more = sub ($@) {
+	use bytes qw(length substr);
+	my $sock = shift;
+	my $iov = join('', map { pack 'P'.TMPL_size_t, $_, length } @_);
+	my $mh = pack(TMPL_msghdr,
+			undef, 0, # msg_name, msg_namelen (unused)
+			$iov, scalar(@_), # msg_iov, msg_iovlen
+			undef, 0, # msg_control, msg_controllen (unused),
+			0); # msg_flags (unused)
+	my $s;
+	do {
+		$s = syscall($SYS_sendmsg, fileno($sock), $mh, MSG_MORE);
+	} while ($s < 0 && $!{EINTR});
+	$s < 0 ? undef : $s;
 };
 }
 

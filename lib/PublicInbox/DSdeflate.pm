@@ -91,12 +91,15 @@ sub do_read ($$$$) {
 }
 
 # override PublicInbox::DS::msg_more
-sub msg_more ($$) {
-	my $self = $_[0];
+sub msg_more ($@) {
+	my $self = shift;
 
 	# $_[1] may be a reference or not for ->deflate
-	my $err = $zout->deflate($_[1], $zbuf);
-	$err == Z_OK or die "->deflate failed $err";
+	my $err;
+	for (@_) {
+		$err = $zout->deflate($_, $zbuf);
+		$err == Z_OK or die "->deflate failed $err";
+	}
 	1;
 }
 

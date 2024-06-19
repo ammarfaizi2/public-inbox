@@ -35,7 +35,9 @@ use PublicInbox::Select;
 use PublicInbox::OnDestroy;
 use Errno qw(EAGAIN EINVAL ECHILD);
 use Carp qw(carp croak);
+use List::Util qw(sum);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
+my $sendmsg_more = PublicInbox::Syscall->can('sendmsg_more');
 
 my $nextq; # queue for next_tick
 my $reap_armed;
@@ -471,8 +473,8 @@ sub drop ($@) {
 	undef;
 }
 
-sub tmpio ($$$) {
-	my ($self, $bref, $off) = @_;
+sub tmpio ($$$;@) {
+	my ($self, $bref, $off, @rest) = @_;
 	my $fh = tmpfile 'wbuf', $self->{sock}, 1 or
 		return drop $self, "tmpfile $!";
 	$fh->autoflush(1);
@@ -480,6 +482,7 @@ sub tmpio ($$$) {
 	my $n = syswrite($fh, $$bref, $len, $off) //
 		return drop $self, "write ($len): $!";
 	$n == $len or return drop $self, "wrote $n < $len bytes";
+	@rest and (print $fh @rest or return drop $self, "print rest: $!");
 	[ $fh, 0 ] # [1] = offset, [2] = length, not set by us
 }
 
@@ -548,30 +551,43 @@ sub write {
 	}
 }
 
-use constant MSG_MORE => ($^O eq 'linux') ? 0x8000 : 0;
-
-sub msg_more ($$) {
-	my $self = $_[0]; # $_[1] = buf
-	my ($sock, $wbuf, $n, $nlen, $tmpio);
+sub msg_more ($@) {
+	my $self = shift;
+	my ($sock, $wbuf);
 	$sock = $self->{sock} or return 1;
 	$wbuf = $self->{wbuf};
 
-	if (MSG_MORE && (!defined($wbuf) || !scalar(@$wbuf)) &&
+	if ($sendmsg_more && (!defined($wbuf) || !scalar(@$wbuf)) &&
 		!$sock->can('stop_SSL')) {
-		$n = send($sock, $_[1], MSG_MORE);
-		if (defined $n) {
-			$nlen = length($_[1]) - $n;
-			return 1 if $nlen == 0; # all done!
-			# queue up the unwritten substring:
-			$tmpio = tmpio($self, \($_[1]), $n) or return 0;
-			push @{$self->{wbuf}}, $tmpio; # autovivifies
-			epwait $sock, EPOLLOUT|EPOLLONESHOT;
-			return 0;
+		my ($s, $tip, $tmpio);
+		$s = $sendmsg_more->($sock, @_);
+		if (defined $s) {
+			my $exp = sum(map length, @_);
+			return 1 if $s == $exp;
+			while (@_) {
+				$tip = shift;
+				if ($s >= length($tip)) { # fully written
+					$s -= length($tip);
+				} else { # first partial write
+					$tmpio = tmpio $self, \$tip, $s, @_
+						or return 0;
+					last;
+				}
+			}
+			$tmpio // return drop $self, "BUG: tmpio on $s != $exp";
+		} elsif ($! == EAGAIN) {
+			$tip = shift;
+			$tmpio = tmpio $self, \$tip, 0, @_ or return 0;
+		} else { # client disconnected
+			return $self->close;
 		}
+		push @{$self->{wbuf}}, $tmpio; # autovivifies
+		epwait $sock, EPOLLOUT|EPOLLONESHOT;
+		0;
+	} else {
+		# don't redispatch into NNTPdeflate::write
+		PublicInbox::DS::write($self, join('', @_));
 	}
-
-	# don't redispatch into NNTPdeflate::write
-	PublicInbox::DS::write($self, \($_[1]));
 }
 
 # return true if complete, false if incomplete (or failure)

@@ -610,6 +610,7 @@ t/solve/bare.patch
 t/solver_git.t
 t/spamcheck_spamc.t
 t/spawn.t
+t/syscall.t
 t/tail_notify.t
 t/thread-cycle.t
 t/thread-index-gap.t

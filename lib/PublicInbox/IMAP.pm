@@ -605,8 +605,7 @@ sub fetch_blob_cb { # called by git->cat_async via ibx_async_cat
 
 sub emit_rfc822 {
 	my ($self, $k, undef, $bref) = @_;
-	$self->msg_more(" $k {" . length($$bref)."}\r\n");
-	$self->msg_more($$bref);
+	$self->msg_more(" $k {" . length($$bref)."}\r\n", $$bref);
 }
 
 # Mail::IMAPClient::message_string cares about this by default,
@@ -626,20 +625,18 @@ sub emit_flags { $_[0]->msg_more(' FLAGS ()') }
 
 sub emit_envelope {
 	my ($self, undef, undef, undef, $eml) = @_;
-	$self->msg_more(' ENVELOPE '.eml_envelope($eml));
+	$self->msg_more(' ENVELOPE ', eml_envelope($eml));
 }
 
 sub emit_rfc822_header {
 	my ($self, $k, undef, undef, $eml) = @_;
-	$self->msg_more(" $k {".length(${$eml->{hdr}})."}\r\n");
-	$self->msg_more(${$eml->{hdr}});
+	$self->msg_more(" $k {".length(${$eml->{hdr}})."}\r\n", ${$eml->{hdr}});
 }
 
 # n.b. this is sorted to be after any emit_eml_new ops
 sub emit_rfc822_text {
 	my ($self, $k, undef, $bref) = @_;
-	$self->msg_more(" $k {".length($$bref)."}\r\n");
-	$self->msg_more($$bref);
+	$self->msg_more(" $k {".length($$bref)."}\r\n", $$bref);
 }
 
 sub emit_bodystructure {
@@ -970,8 +967,7 @@ sub partial_emit ($$$) {
 		} else {
 			$len = length($str);
 		}
-		$self->msg_more(" $k {$len}\r\n");
-		$self->msg_more($str);
+		$self->msg_more(" $k {$len}\r\n", $str);
 	}
 }
 
