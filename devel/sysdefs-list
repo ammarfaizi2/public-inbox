@@ -152,6 +152,7 @@ int main(void)
 
 	D(SYS_sendmsg);
 	D(SYS_recvmsg);
+	D(SYS_writev);
 
 	STRUCT_BEGIN(struct flock);
 		PR_NUM(l_start);

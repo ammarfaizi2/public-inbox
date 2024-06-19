@@ -38,6 +38,7 @@ use Carp qw(carp croak);
 use List::Util qw(sum);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 my $sendmsg_more = PublicInbox::Syscall->can('sendmsg_more');
+my $writev = PublicInbox::Syscall->can('writev');
 
 my $nextq; # queue for next_tick
 my $reap_armed;
@@ -551,41 +552,54 @@ sub write {
 	}
 }
 
+sub _iov_write ($$@) {
+	my ($self, $cb) = (shift, shift);
+	my ($tip, $tmpio, $s, $exp);
+	$s = $cb->($self->{sock}, @_);
+	if (defined $s) {
+		$exp = sum(map length, @_);
+		return 1 if $s == $exp;
+		while (@_) {
+			$tip = shift;
+			if ($s >= length($tip)) { # fully written
+				$s -= length($tip);
+			} else { # first partial write
+				$tmpio = tmpio $self, \$tip, $s, @_ or return 0;
+				last;
+			}
+		}
+		$tmpio // return drop $self, "BUG: tmpio on $s != $exp";
+	} elsif ($! == EAGAIN) {
+		$tip = shift;
+		$tmpio = tmpio $self, \$tip, 0, @_ or return 0;
+	} else { # client disconnected
+		return $self->close;
+	}
+	push @{$self->{wbuf}}, $tmpio; # autovivifies
+	epwait $self->{sock}, EPOLLOUT|EPOLLONESHOT;
+	0;
+}
+
 sub msg_more ($@) {
 	my $self = shift;
-	my ($sock, $wbuf);
-	$sock = $self->{sock} or return 1;
-	$wbuf = $self->{wbuf};
-
+	my $sock = $self->{sock} or return 1;
+	my $wbuf = $self->{wbuf};
 	if ($sendmsg_more && (!defined($wbuf) || !scalar(@$wbuf)) &&
-		!$sock->can('stop_SSL')) {
-		my ($s, $tip, $tmpio);
-		$s = $sendmsg_more->($sock, @_);
-		if (defined $s) {
-			my $exp = sum(map length, @_);
-			return 1 if $s == $exp;
-			while (@_) {
-				$tip = shift;
-				if ($s >= length($tip)) { # fully written
-					$s -= length($tip);
-				} else { # first partial write
-					$tmpio = tmpio $self, \$tip, $s, @_
-						or return 0;
-					last;
-				}
-			}
-			$tmpio // return drop $self, "BUG: tmpio on $s != $exp";
-		} elsif ($! == EAGAIN) {
-			$tip = shift;
-			$tmpio = tmpio $self, \$tip, 0, @_ or return 0;
-		} else { # client disconnected
-			return $self->close;
-		}
-		push @{$self->{wbuf}}, $tmpio; # autovivifies
-		epwait $sock, EPOLLOUT|EPOLLONESHOT;
-		0;
-	} else {
-		# don't redispatch into NNTPdeflate::write
+			!$sock->can('stop_SSL')) {
+		_iov_write $self, $sendmsg_more, @_;
+	} else { # don't redispatch into NNTPdeflate::write
+		PublicInbox::DS::write($self, join('', @_));
+	}
+}
+
+sub writev ($@) {
+	my $self = shift;
+	my $sock = $self->{sock} or return 1;
+	my $wbuf = $self->{wbuf};
+	if ($writev && (!defined($wbuf) || !scalar(@$wbuf)) &&
+			!$sock->can('stop_SSL')) {
+		_iov_write $self, $writev, @_;
+	} else { # don't redispatch into NNTPdeflate::write
 		PublicInbox::DS::write($self, join('', @_));
 	}
 }

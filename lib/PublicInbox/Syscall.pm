@@ -61,7 +61,7 @@ our ($SYS_epoll_create,
 	$SYS_recvmsg);
 
 my $SYS_fstatfs; # don't need fstatfs64, just statfs.f_type
-my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS);
+my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS, $SYS_writev);
 my $SFD_CLOEXEC = 02000000; # Perl does not expose O_CLOEXEC
 our $no_deprecated = 0;
 
@@ -95,6 +95,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 370;
 		$SYS_recvmsg = 372;
+		$SYS_writev = 146;
 		$INOTIFY = { # usage: `use constant $PublicInbox::Syscall::INOTIFY'
 			SYS_inotify_init1 => 332,
 			SYS_inotify_add_watch => 292,
@@ -111,6 +112,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 138;
 		$SYS_sendmsg = 46;
 		$SYS_recvmsg = 47;
+		$SYS_writev = 20;
 		$INOTIFY = {
 			SYS_inotify_init1 => 294,
 			SYS_inotify_add_watch => 254,
@@ -127,6 +129,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 138;
 		$SYS_sendmsg = 0x40000206;
 		$SYS_recvmsg = 0x40000207;
+		$SYS_writev = 0x40000204;
 		$FS_IOC_GETFLAGS = 0x80046601;
 		$FS_IOC_SETFLAGS = 0x40046602;
 		$INOTIFY = {
@@ -164,6 +167,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 341;
 		$SYS_recvmsg = 342;
+		$SYS_writev = 146;
 		$FS_IOC_GETFLAGS = 0x40086601;
 		$FS_IOC_SETFLAGS = 0x80086602;
 		$INOTIFY = {
@@ -179,6 +183,7 @@ if ($^O eq "linux") {
 		$SYS_signalfd4 = 313;
 		$SYS_renameat2 //= 357;
 		$SYS_fstatfs = 100;
+		$SYS_writev = 146;
 		$FS_IOC_GETFLAGS = 0x40086601;
 		$FS_IOC_SETFLAGS = 0x80086602;
 	} elsif ($machine =~ m/^s390/) { # untested, no machine on cfarm
@@ -191,6 +196,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 370;
 		$SYS_recvmsg = 372;
+		$SYS_writev = 146;
 	} elsif ($machine eq 'ia64') { # untested, no machine on cfarm
 		$SYS_epoll_create = 1243;
 		$SYS_epoll_ctl = 1244;
@@ -216,6 +222,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 44;
 		$SYS_sendmsg = 211;
 		$SYS_recvmsg = 212;
+		$SYS_writev = 66;
 		$INOTIFY = {
 			SYS_inotify_init1 => 26,
 			SYS_inotify_add_watch => 27,
@@ -233,6 +240,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 296;
 		$SYS_recvmsg = 297;
+		$SYS_writev = 146;
 	} elsif ($machine =~ m/^mips64/) { # cfarm only has 32-bit userspace
 		$SYS_epoll_create = 5207;
 		$SYS_epoll_ctl = 5208;
@@ -243,6 +251,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 5135;
 		$SYS_sendmsg = 5045;
 		$SYS_recvmsg = 5046;
+		$SYS_writev = 5019;
 		$FS_IOC_GETFLAGS = 0x40046601;
 		$FS_IOC_SETFLAGS = 0x80046602;
 	} elsif ($machine =~ m/^mips/) { # 32-bit, tested on mips64 cfarm host
@@ -255,6 +264,7 @@ if ($^O eq "linux") {
 		$SYS_fstatfs = 4100;
 		$SYS_sendmsg = 4179;
 		$SYS_recvmsg = 4177;
+		$SYS_writev = 4146;
 		$FS_IOC_GETFLAGS = 0x40046601;
 		$FS_IOC_SETFLAGS = 0x80046602;
 		$SIGNUM{WINCH} = 20;
@@ -287,6 +297,7 @@ EOM
 # (I'm assuming Dragonfly copies FreeBSD, here, too)
 	$SYS_recvmsg = 27;
 	$SYS_sendmsg = 28;
+	$SYS_writev = 121;
 }
 
 BEGIN {
@@ -466,8 +477,9 @@ sub CMSG_LEN ($) { CMSG_ALIGN_SIZEOF_cmsghdr + $_[0] }
 use constant msg_controllen_max =>
 	CMSG_SPACE(10 * SIZEOF_int) + SIZEOF_cmsghdr; # space for 10 FDs
 
-if (defined($SYS_sendmsg) && defined($SYS_recvmsg)) {
 no warnings 'once';
+
+if (defined($SYS_sendmsg) && defined($SYS_recvmsg)) {
 require PublicInbox::CmdIPC4;
 
 *send_cmd4 = sub ($$$$;$) {
@@ -545,6 +557,19 @@ require PublicInbox::CmdIPC4;
 		$s = syscall($SYS_sendmsg, fileno($sock), $mh, MSG_MORE);
 	} while ($s < 0 && $!{EINTR});
 	$s < 0 ? undef : $s;
+};
+}
+
+if (defined($SYS_writev)) {
+*writev = sub {
+	my $fh = shift;
+	use bytes qw(length substr);
+	my $iov = join('', map { pack 'P'.TMPL_size_t, $_, length } @_);
+	my $w;
+	do {
+		$w = syscall($SYS_writev, fileno($fh), $iov, scalar(@_));
+	} while ($w < 0 && $!{EINTR});
+	$w < 0 ? undef : $w;
 };
 }
 

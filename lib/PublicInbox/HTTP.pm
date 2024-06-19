@@ -190,9 +190,10 @@ sub response_header_write ($$$) {
 	my $conn = $env->{HTTP_CONNECTION} || '';
 	my $term = defined($len) || $chunked;
 	my $prot_persist = ($proto eq 'HTTP/1.1') && ($conn !~ /\bclose\b/i);
-	my $alive;
+	my ($alive, $res_body);
 	if (!$term && ref($res->[2]) eq 'ARRAY') {
-		$len = sum0(map length, @{$res->[2]});
+		($res_body, $res->[2]) = ($res->[2], []);
+		$len = sum0(map length, @$res_body);
 		$h .= "Content-Length: $len\r\n";
 		$term = 1;
 	}
@@ -210,7 +211,9 @@ sub response_header_write ($$$) {
 	}
 	$h .= 'Date: ' . http_date() . "\r\n\r\n";
 
-	if (($len || $chunked) && $env->{REQUEST_METHOD} ne 'HEAD') {
+	if ($res_body) {
+		$self->writev($h, @$res_body);
+	} elsif (($len || $chunked) && $env->{REQUEST_METHOD} ne 'HEAD') {
 		msg_more($self, $h);
 	} else {
 		$self->write(\$h);
