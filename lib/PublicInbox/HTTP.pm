@@ -70,8 +70,9 @@ sub new ($$$) {
 		$wbuf = [ \&PublicInbox::DS::accept_tls_step ];
 	}
 	$self->{wbuf} = $wbuf if $wbuf;
-	($self->{remote_addr}, $self->{remote_port}) =
+	($addr, $self->{remote_port}) =
 		PublicInbox::Daemon::host_with_port($addr);
+	$self->{remote_addr} = $addr if $addr ne '127.0.0.1';
 	$self->SUPER::new($sock, $ev | EPOLLONESHOT);
 }
 
@@ -140,7 +141,7 @@ sub app_dispatch {
 	$self->rbuf_idle($rbuf);
 	my $env = $self->{env};
 	$self->{env} = undef; # for exists() check in ->busy
-	$env->{REMOTE_ADDR} = $self->{remote_addr};
+	$env->{REMOTE_ADDR} = $self->{remote_addr} // '127.0.0.1';
 	$env->{REMOTE_PORT} = $self->{remote_port};
 	if (defined(my $host = $env->{HTTP_HOST})) {
 		$host =~ s/:([0-9]+)\z// and $env->{SERVER_PORT} = $1 + 0;
