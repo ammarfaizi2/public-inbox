@@ -158,7 +158,7 @@ sub cmd_logout ($$) {
 sub cmd_authenticate ($$$) {
 	my ($self, $tag) = @_; # $method = $_[2], should be "ANONYMOUS"
 	$self->{-login_tag} = $tag;
-	"+\r\n"; # challenge
+	"+ \r\n"; # challenge
 }
 
 sub cmd_capability ($$) {
