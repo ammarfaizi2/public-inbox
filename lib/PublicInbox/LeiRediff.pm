@@ -158,7 +158,7 @@ sub extract_oids { # Eml each_part callback
 	$self->{dqre} && $s =~ s/$self->{dqre}//g && $lei->{opt}->{drq} and
 		local $lei->{1} = requote($lei, $1);
 
-	my @top = split($PublicInbox::ViewDiff::EXTRACT_DIFFS, $s);
+	my @top = split(/$PublicInbox::ViewDiff::EXTRACT_DIFFS/o, $s);
 	undef $s;
 	my $blobs = $self->{blobs}; # blobs to resolve
 	my $ctxq;

@@ -187,7 +187,7 @@ EOF
 
 sub flush_text_diff ($$) {
 	my ($self, $cur) = @_;
-	my @top = split($PublicInbox::ViewDiff::EXTRACT_DIFFS, $$cur);
+	my @top = split(/$PublicInbox::ViewDiff::EXTRACT_DIFFS/o, $$cur);
 	undef $$cur; # free memory
 	my $dctx;
 	my $obuf = $self->{obuf};

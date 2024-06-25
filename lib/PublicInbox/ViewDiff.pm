@@ -183,7 +183,7 @@ sub flush_diff ($$) {
 	my ($ctx, $cur) = @_;
 
 	my ($subj) = ($$cur =~ /^Subject:\s*\[[^\]]+\]\s*(.+?)$/sm);
-	my @top = split($EXTRACT_DIFFS, $$cur);
+	my @top = split(/$EXTRACT_DIFFS/o, $$cur);
 	undef $$cur; # free memory
 	$ctx->{-qry_subj} = $subj if $subj;
 	my $lnk = $ctx->{-linkify};
