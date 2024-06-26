@@ -179,7 +179,7 @@ sub mset_nav_top {
 		$qh = qq[\nvalue="].ascii_html($qh).'"';
 	}
 	chop(my $rv = <<EOM);
-<form action="./"><pre><input name=q type=text$qh/><input
+<form action="./"><pre><input name=q type=text$qh /><input
 type=submit value="locate inbox"/><input type=submit name=a
 value="search all inboxes"/></pre></form><pre>
 EOM
