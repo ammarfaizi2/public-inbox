@@ -794,7 +794,7 @@ sub update_ent {
 					next if readlink($ln) eq $tgt;
 					unlink($ln);
 				} else {
-					push @{$self->{chg}->{badlink}}, $p;
+					push @{$self->{chg}->{badlink}}, $ln;
 					next;
 				}
 			}
