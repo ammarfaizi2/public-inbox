@@ -189,7 +189,8 @@ sub response_header_write ($$$) {
 	}
 
 	my $conn = $env->{HTTP_CONNECTION} || '';
-	my $term = defined($len) || $chunked;
+	my $term = defined($len) || $chunked ||
+		Plack::Util::status_with_no_entity_body($status);
 	my $prot_persist = ($proto eq 'HTTP/1.1') && ($conn !~ /\bclose\b/i);
 	my ($alive, $res_body);
 	if (!$term && ref($res->[2]) eq 'ARRAY') {
