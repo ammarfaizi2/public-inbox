@@ -795,6 +795,7 @@ sub update_ent {
 					unlink($ln);
 				} else {
 					push @{$self->{chg}->{badlink}}, $p;
+					next;
 				}
 			}
 			symlink($tgt, $ln);
