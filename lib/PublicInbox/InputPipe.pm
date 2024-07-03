@@ -14,7 +14,7 @@ sub consume {
 	if ($@) { # regular file (but not w/ select|IO::Poll backends)
 		$self->{-need_rq} = 1;
 		$self->requeue;
-	} elsif (-p _ || -S _) { # O_NONBLOCK for sockets and pipes
+	} elsif (-p $in || -S _) { # O_NONBLOCK for sockets and pipes
 		$in->blocking(0);
 	}
 	$self;
