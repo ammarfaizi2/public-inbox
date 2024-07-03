@@ -245,7 +245,6 @@ sub _yield_start { # may run later, much later...
 	my ($self) = @_;
 	if ($self->{psgi_env}->{'pi-httpd.async'}) {
 		my $rpipe = $self->{rpipe};
-		$rpipe->blocking(0);
 		PublicInbox::InputPipe::consume($rpipe, \&ipipe_cb, $self);
 	} else {
 		require PublicInbox::GetlineResponse;
