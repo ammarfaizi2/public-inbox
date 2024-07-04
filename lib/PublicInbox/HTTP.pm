@@ -247,7 +247,8 @@ sub response_done {
 	delete $self->{env}; # we're no longer busy
 	# HEAD requests set $alive = 3 so we don't send "0\r\n\r\n";
 	$self->write(\"0\r\n\r\n") if $alive == 2;
-	$self->write($alive ? $self->can('requeue') : \&close);
+	$self->write(\&close) if !$alive;
+	$self->requeue if $alive && !$self->{wbuf};
 }
 
 sub getline_pull {
@@ -280,7 +281,7 @@ sub getline_pull {
 		}
 	} elsif ($@) {
 		warn "response ->getline error: $@";
-		$self->close;
+		return $self->close;
 	}
 	response_done($self, delete $self->{alive});
 }
