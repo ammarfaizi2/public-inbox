@@ -6,7 +6,7 @@ use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use IO::Uncompress::Gunzip qw(gunzip);
 require_mods(qw(json URI::Escape Plack::Builder HTTP::Tiny));
-require_cmd 'curl';
+my $curl = require_cmd 'curl';
 require PublicInbox::WwwListing;
 require PublicInbox::ManifestJsGz;
 use PublicInbox::Config;
@@ -176,6 +176,15 @@ EOM
 	is_deeply([keys %$mf], [ '/alt' ], 'excluded keys skipped in manifest');
 
 	$td = start_script($cmd, $env, { 3 => $sock });
+
+	my $local_mfest = "$tmpdir/local.manifest.js.gz";
+	xsys_e [$curl, '-gsSfR', '-o', $local_mfest,
+		"http://$host:$port/manifest.js.gz" ];
+	xsys_e [$curl, '-vgsSfR', '-o', "$tmpdir/again.js.gz",
+		'-z', $local_mfest, "http://$host:$port/manifest.js.gz" ],
+		undef, { 2 => \(my $curl_err) };
+	like $curl_err, qr! HTTP/1\.[012] 304 !sm,
+		'got 304 response w/ If-Modified-Since';
 
 	# default publicinboxGrokManifest match=domain default
 	tiny_test($json, $host, $port);

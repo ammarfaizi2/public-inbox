@@ -107,8 +107,12 @@ sub psgi_triple {
 	}
 	$manifest = $json->encode($manifest);
 	gzip(\$manifest => \(my $out));
+	my $mtime = time2str($ctx->{-mtime});
+	if (my $ims = $ctx->{env}->{HTTP_IF_MODIFIED_SINCE}) {
+		return [ 304, [], [] ] if $mtime eq $ims;
+	}
 	[ 200, [ qw(Content-Type application/gzip),
-		 'Last-Modified', time2str($ctx->{-mtime}),
+		 'Last-Modified', $mtime,
 		 'Content-Length', length($out) ], [ $out ] ]
 }
 
