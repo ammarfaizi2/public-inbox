@@ -111,8 +111,8 @@ sub mime2html {
 	my ($out, $eml, $ctx) = @_;
 	my $smsg = $ctx->{smsg} = bless {}, 'PublicInbox::Smsg';
 	$smsg->populate($eml);
-	$ctx->{msgs} = [ 1 ]; # for <hr> in eml_entry
-	print $out PublicInbox::View::eml_entry($ctx, $eml) or die;
+	$ctx->{msgs} = [ 1 ]; # for <hr> in emit_eml
+	PublicInbox::View::emit_eml $ctx, $eml;
 }
 
 sub html_start {

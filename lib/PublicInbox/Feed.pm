@@ -45,14 +45,15 @@ sub generate_html_index {
 
 sub new_html_i {
 	my ($ctx, $eml) = @_;
-	print { $ctx->zfh } $ctx->html_top if exists $ctx->{-html_tip};
+	my $zfh = $ctx->zfh;
+	print $zfh $ctx->html_top if exists $ctx->{-html_tip};
 
 	if ($eml) {
 		$ctx->{smsg}->populate($eml) if !$ctx->{ibx}->{over};
-		return PublicInbox::View::eml_entry($ctx, $eml);
+		return PublicInbox::View::emit_eml $ctx, $eml;
 	}
 	my $smsg = shift @{$ctx->{msgs}} or
-		print { $ctx->zfh } PublicInbox::View::pagination_footer(
+		print $zfh PublicInbox::View::pagination_footer(
 						$ctx, './new.html');
 	$smsg;
 }

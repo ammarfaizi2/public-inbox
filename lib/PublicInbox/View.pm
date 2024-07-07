@@ -240,9 +240,9 @@ sub to_cc_html ($$$$) {
 	($html, $len + $line_len);
 }
 
-# Displays the text of of the message for /$INBOX/$MSGID/[Tt]/ endpoint
-# this is already inside a <pre>
-sub eml_entry {
+# Spews the text of of the message for /$INBOX/$MSGID/[Tt]/ endpoint
+# to ctx->{zfh}, this is already inside a <pre>
+sub emit_eml ($$) {
 	my ($ctx, $eml) = @_;
 	my $smsg = delete $ctx->{smsg};
 	my $subj = delete $smsg->{subject};
@@ -252,14 +252,13 @@ sub eml_entry {
 	my $root_anchor = $ctx->{root_anchor} || '';
 	my $irt;
 	my $obfs_ibx = $ctx->{-obfs_ibx};
-
 	$subj = '(no subject)' if $subj eq '';
-	my $rv = "<a\nhref=#e$id\nid=m$id>*</a> ";
 	$subj = '<b>'.ascii_html($subj).'</b>';
 	obfuscate_addrs($obfs_ibx, $subj) if $obfs_ibx;
 	$subj = "<u\nid=u>$subj</u>" if $root_anchor eq $id_m;
-	$rv .= $subj . "\n";
-	$rv .= _th_index_lite($mid_raw, \$irt, $id, $ctx);
+	my $zfh = $ctx->{zfh} // die 'BUG: no {zfh}';
+	print $zfh "<a\nhref=#e", $id, "\nid=m", $id, '>*</a> ',
+		$subj, "\n", _th_index_lite($mid_raw, \$irt, $id, $ctx);
 	my @tocc;
 	my $ds = delete $smsg->{ds}; # for v1 non-Xapian/SQLite users
 
@@ -269,55 +268,53 @@ sub eml_entry {
 
 	my $from = _hdr_names_html($eml, 'From');
 	obfuscate_addrs($obfs_ibx, $from) if $obfs_ibx;
-	$rv .= "From: $from @ ".fmt_ts($ds)." UTC";
 	my $upfx = $ctx->{-upfx};
 	my $mhref = $upfx . mid_href($mid_raw) . '/';
-	$rv .= qq{ (<a\nhref="$mhref">permalink</a> / };
-	$rv .= qq{<a\nhref="${mhref}raw">raw</a>)\n};
-	my ($to, $tlen) = to_cc_html($ctx, $eml, 'To', $t);
-	my ($cc, $clen) = to_cc_html($ctx, $eml, 'Cc', $t);
-	my $to_cc = '';
-	if (($tlen + $clen) > COLS) {
-		$to_cc .= '  To: '.$to."\n" if $tlen;
-		$to_cc .= '  Cc: '.$cc."\n" if $clen;
-	} else {
-		if ($tlen) {
-			$to_cc .= '  To: '.$to;
-			$to_cc .= '; <b>+Cc:</b> '.$cc if $clen;
+	say $zfh 'From: ', $from, ' @ ', fmt_ts($ds), qq[ UTC (<a\nhref="],
+			$mhref, qq[">permalink</a> / <a\nhref="],
+			$mhref, 'raw">raw</a>';
+	{
+		my ($to, $tlen) = to_cc_html($ctx, $eml, 'To', $t);
+		my ($cc, $clen) = to_cc_html($ctx, $eml, 'Cc', $t);
+		my $to_cc = '';
+		if (($tlen + $clen) > COLS) {
+			$to_cc .= '  To: '.$to."\n" if $tlen;
+			$to_cc .= '  Cc: '.$cc."\n" if $clen;
 		} else {
-			$to_cc .= '  Cc: '.$cc if $clen;
+			if ($tlen) {
+				$to_cc .= '  To: '.$to;
+				$to_cc .= '; <b>+Cc:</b> '.$cc if $clen;
+			} else {
+				$to_cc .= '  Cc: '.$cc if $clen;
+			}
+			$to_cc .= "\n";
 		}
-		$to_cc .= "\n";
+		obfuscate_addrs($obfs_ibx, $to_cc) if $obfs_ibx;
+		print $zfh $to_cc;
 	}
-	obfuscate_addrs($obfs_ibx, $to_cc) if $obfs_ibx;
-	$rv .= $to_cc;
-
 	my $mapping = $ctx->{mapping};
 	if (!$mapping && (defined($irt) || defined($irt = in_reply_to($eml)))) {
-		my $href = $upfx . mid_href($irt) . '/';
-		my $html = ascii_html($irt);
-		$rv .= qq(In-Reply-To: &lt;<a\nhref="$href">$html</a>&gt;\n)
+		print $zfh qq(In-Reply-To: &lt;<a\nhref="), $upfx,
+			mid_href($irt), '/">', ascii_html($irt), "</a>&gt;\n";
 	}
-	say { $ctx->zfh } $rv;
-
+	print $zfh "\n";
 	# scan through all parts, looking for displayable text
 	$ctx->{mhref} = $mhref;
 	$ctx->{changed_href} = "#e$id"; # for diffstat "files? changed,"
 	$eml->each_part(\&add_text_body, $ctx, 1); # expensive
 
 	# add the footer
-	$rv = "\n<a\nhref=#$id_m\nid=e$id>^</a> ".
-		"<a\nhref=\"$mhref\">permalink</a>" .
-		" <a\nhref=\"${mhref}raw\">raw</a>" .
-		" <a\nhref=\"${mhref}#R\">reply</a>";
+	print $zfh "\n<a\nhref=#", $id_m, "\nid=e", $id,
+		qq[>^</a> <a\nhref="], $mhref, qq[">permalink</a> <a\nhref="],
+		$mhref, qq[raw">raw</a> <a\nhref="], $mhref, q[#R">reply</a>];
 
 	# points to permalink
 	delete($ctx->{-qry_dfblob}) and
-		$rv .= qq[ <a\nhref="${mhref}#related">related</a>];
+		print $zfh qq[ <a\nhref="], $mhref, q[#related">related</a>];
 
 	my $hr;
 	if (defined(my $pct = $smsg->{pct})) { # used by SearchView.pm
-		$rv .= "\t[relevance $pct%]";
+		print $zfh "\t[relevance $pct%]";
 		$hr = 1;
 	} elsif ($mapping) {
 		my $nested = 'nested';
@@ -328,16 +325,16 @@ sub eml_entry {
 		} else {
 			$nested = "<b>$nested</b>";
 		}
-		$rv .= "\t[<a\nhref=\"${mhref}T/#u\">$flat</a>";
-		$rv .= "|<a\nhref=\"${mhref}t/#u\">$nested</a>]";
-		$rv .= " <a\nhref=#r$id>$ctx->{s_nr}</a>";
+		print $zfh qq(\t[<a\nhref="), $mhref, 'T/#u">', $flat,
+			qq(</a>|<a\nhref="), $mhref, 't/#u">', $nested,
+			qq(</a>] <a\nhref=#r), $id, '>', $ctx->{s_nr}, '</a>';
 	} else {
 		$hr = $ctx->{-hr};
 	}
 
 	# do we have more messages? start a new <pre> if so
-	$rv .= scalar(@{$ctx->{msgs}}) ? '</pre><hr><pre>' : '</pre>' if $hr;
-	$rv;
+	print $zfh (@{$ctx->{msgs}}) ? '</pre><hr><pre>' : '</pre>' if $hr;
+	''; # FIXME: compat
 }
 
 sub pad_link ($$;$) {
@@ -442,12 +439,14 @@ sub pre_thread  { # walk_thread callback
 	skel_dump($ctx, $level, $node);
 }
 
-sub thread_eml_entry {
+sub thread_emit_eml ($$) {
 	my ($ctx, $eml) = @_;
 	my ($beg, $end) = thread_adj_level($ctx, $ctx->{level});
-	print { $ctx->zfh } $beg, '<pre>';
-	print { $ctx->{zfh} } eml_entry($ctx, $eml), '</pre>';
-	$end;
+	my $zfh = $ctx->zfh;
+	print $zfh $beg, '<pre>';
+	emit_eml $ctx, $eml;
+	print $zfh '</pre>', $end;
+	''; # FIXME: compat
 }
 
 sub next_in_queue ($$) {
@@ -463,7 +462,7 @@ sub next_in_queue ($$) {
 
 sub stream_thread_i { # PublicInbox::WwwStream::getline callback
 	my ($ctx, $eml) = @_;
-	return thread_eml_entry($ctx, $eml) if $eml;
+	return thread_emit_eml $ctx, $eml if $eml;
 	return unless exists($ctx->{skel});
 	my $ghost_ok = $ctx->{nr}++;
 	while (1) {
@@ -552,11 +551,12 @@ sub thread_html_i { # PublicInbox::WwwStream::getline callback
 	my ($ctx, $eml) = @_;
 	if ($eml) {
 		my $smsg = $ctx->{smsg};
+		my $zfh = $ctx->zfh;
 		if (exists $ctx->{-html_tip}) {
 			$ctx->{-title_html} = ascii_html($smsg->{subject});
-			print { $ctx->zfh } $ctx->html_top;
+			print $zfh $ctx->html_top;
 		}
-		return eml_entry($ctx, $eml);
+		emit_eml $ctx, $eml;
 	} else {
 		while (my $smsg = shift @{$ctx->{msgs}}) {
 			return $smsg if exists($smsg->{blob});

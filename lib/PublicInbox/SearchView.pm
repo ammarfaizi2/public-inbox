@@ -345,10 +345,11 @@ EOM
 # callback for PublicInbox::WwwStream::getline
 sub mset_thread_i {
 	my ($ctx, $eml) = @_;
-	print { $ctx->zfh } $ctx->html_top if exists $ctx->{-html_tip};
-	$eml and return PublicInbox::View::eml_entry($ctx, $eml);
+	my $zfh = $ctx->zfh;
+	print $zfh $ctx->html_top if exists $ctx->{-html_tip};
+	$eml and return PublicInbox::View::emit_eml $ctx, $eml;
 	my $smsg = shift @{$ctx->{msgs}} or
-		print { $ctx->zfh } @{delete($ctx->{skel})};
+		print $zfh @{delete($ctx->{skel})};
 	$smsg;
 }
 
