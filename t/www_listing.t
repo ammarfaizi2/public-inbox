@@ -9,10 +9,11 @@ require_mods(qw(json URI::Escape Plack::Builder HTTP::Tiny));
 my $curl = require_cmd 'curl';
 require PublicInbox::WwwListing;
 require PublicInbox::ManifestJsGz;
-use PublicInbox::Config;
+require PublicInbox::Git;
+require PublicInbox::Config;
 my $json = PublicInbox::Config::json();
+use autodie qw(open close mkdir);
 
-use_ok 'PublicInbox::Git';
 
 my ($tmpdir, $for_destroy) = tmpdir();
 my $bare = PublicInbox::Git->new("$tmpdir/bare.git");
@@ -20,10 +21,9 @@ PublicInbox::Import::init_bare($bare->{git_dir});
 is($bare->manifest_entry, undef, 'empty repo has no manifest entry');
 {
 	my $fi_data = './t/git.fast-import-data';
-	open my $fh, '<', $fi_data or die "open $fi_data: $!";
+	open my $fh, '<', $fi_data;
 	my $env = { GIT_DIR => $bare->{git_dir} };
-	is(xsys([qw(git fast-import --quiet)], $env, { 0 => $fh }), 0,
-		'fast-import');
+	xsys_e [qw(git fast-import --quiet)], $env, { 0 => $fh };
 }
 
 like($bare->manifest_entry->{fingerprint}, qr/\A[a-f0-9]{40}\z/,
@@ -86,26 +86,24 @@ SKIP: {
 	my $sock = tcp_server();
 	my ($host, $port) = tcp_host_port($sock);
 	my @clone = qw(git clone -q -s --bare);
-	is(xsys(@clone, $bare->{git_dir}, $alt), 0, 'clone shared repo');
+	xsys_e @clone, $bare->{git_dir}, $alt;
 
 	PublicInbox::Import::init_bare("$v2/all.git");
 	for my $i (0..2) {
-		is(xsys(@clone, $alt, "$v2/git/$i.git"), 0, "clone epoch $i")
+		xsys_e @clone, $alt, "$v2/git/$i.git";
 	}
-	ok(open(my $fh, '>', "$v2/inbox.lock"), 'mock a v2 inbox');
-	open($fh, '>', "$v2/description") or xbail "open $v2/description: $!";
-	print $fh "a v2 inbox\n" or xbail "print $!";
-	close $fh or xbail "write: $v2/description $!";
+	open my $fh, '>', "$v2/inbox.lock";
+	open $fh, '>', "$v2/description";
+	print $fh "a v2 inbox\n";
+	close $fh;
 
-	open $fh, '>', "$alt/description" or xbail "open $alt/description $!";
-	print $fh "we're \xc4\x80ll clones\n" or xbail "print $!";
-	close $fh or xbail "write: $alt/description $!";
-	is(xsys('git', "--git-dir=$alt", qw(config gitweb.owner),
-		"lorelei \xc4\x80"), 0,
-		'set gitweb user');
-	open $fh, '>', $cfgfile or xbail "open $cfgfile: $!";
-	$fh->autoflush(1);
-	print $fh <<"" or xbail "print $!";
+	open $fh, '>', "$alt/description";
+	print $fh "we're \xc4\x80ll clones\n";
+	close $fh;
+	xsys_e 'git', "--git-dir=$alt", qw(config gitweb.owner),
+		"lorelei \xc4\x80";
+	open $fh, '>', $cfgfile;
+	print $fh <<"";
 [publicinbox "bare"]
 	inboxdir = $bare->{git_dir}
 	url = http://$host/bare
@@ -119,12 +117,14 @@ SKIP: {
 	url = http://$host/v2
 	address = v2\@example.com
 
+	close $fh;
+
 	my $env = { PI_CONFIG => $cfgfile };
 	my $cmd = [ '-httpd', '-W0', "--stdout=$out", "--stderr=$err" ];
 	my $psgi = "$tmpdir/pfx.psgi";
 	{
-		open my $psgi_fh, '>', $psgi or xbail "open: $!";
-		print $psgi_fh <<'EOM' or xbail "print $!";
+		open my $psgi_fh, '>', $psgi;
+		print $psgi_fh <<'EOM';
 use PublicInbox::WWW;
 use Plack::Builder;
 my $www = PublicInbox::WWW->new;
@@ -133,7 +133,7 @@ builder {
 	mount '/pfx/' => sub { $www->call(@_) }
 }
 EOM
-		close $psgi_fh or xbail "close: $!";
+		close $psgi_fh;
 	}
 
 	# ensure prefixed mount full clones work:
@@ -142,14 +142,14 @@ EOM
 	ok(run_script(['-clone', "http://$host:$port/pfx", "$tmpdir/pfx" ],
 		undef, $opt), 'pfx clone w/pfx') or diag "clone_err=$clone_err";
 
-	open my $mh, '<', "$tmpdir/pfx/manifest.js.gz" or xbail "open: $!";
+	open my $mh, '<', "$tmpdir/pfx/manifest.js.gz";
 	gunzip(\(do { local $/; <$mh> }) => \(my $mjs = ''));
 	my $mf = $json->decode($mjs);
 	is_deeply([sort keys %$mf], [ qw(/alt /bare /v2/git/0.git
 					/v2/git/1.git /v2/git/2.git) ],
 		'manifest saved');
 	for (keys %$mf) { ok(-d "$tmpdir/pfx$_", "pfx/$_ cloned") }
-	open my $desc, '<', "$tmpdir/pfx/v2/description" or xbail "open: $!";
+	open my $desc, '<', "$tmpdir/pfx/v2/description";
 	$desc = <$desc>;
 	is($desc, "a v2 inbox\n", 'v2 description retrieved');
 
@@ -170,7 +170,7 @@ EOM
 
 	undef $td;
 
-	open $mh, '<', "$tmpdir/incl/manifest.js.gz" or xbail "open: $!";
+	open $mh, '<', "$tmpdir/incl/manifest.js.gz";
 	gunzip(\(do { local $/; <$mh> }) => \($mjs = ''));
 	$mf = $json->decode($mjs);
 	is_deeply([keys %$mf], [ '/alt' ], 'excluded keys skipped in manifest');
@@ -197,11 +197,12 @@ EOM
 
 	undef $td;
 
-	print $fh <<"" or xbail "print $!";
+	open $fh, '>>', $cfgfile;
+	print $fh <<"";
 [publicinbox]
 	wwwlisting = all
 
-	close $fh or xbail "close $!";
+	close $fh;
 	$td = start_script($cmd, $env, { 3 => $sock });
 	undef $sock;
 	tiny_test($json, $host, $port, 1);
@@ -217,10 +218,10 @@ EOM
 		skip('grok-pull v2 or later not available', 12);
 	my $grok_loglevel = $ENV{TEST_GROK_LOGLEVEL} // 'info';
 
-	ok(mkdir("$tmpdir/mirror"), 'prepare grok mirror dest');
+	mkdir "$tmpdir/mirror";
 	my $tail = tail_f("$tmpdir/grok.log");
-	open $fh, '>', "$tmpdir/repos.conf" or xbail $!;
-	print $fh <<"" or xbail $!;
+	open $fh, '>', "$tmpdir/repos.conf";
+	print $fh <<"";
 [core]
 toplevel = $tmpdir/mirror
 manifest = $tmpdir/local-manifest.js.gz
@@ -232,7 +233,7 @@ manifest = \${site}/manifest.js.gz
 [pull]
 [fsck]
 
-	close $fh or xbail $!;
+	close $fh;
 	xsys($grok_pull, '-c', "$tmpdir/repos.conf");
 	is($? >> 8, 0, 'grok-pull exit code as expected');
 	for (qw(alt bare v2/git/0.git v2/git/1.git v2/git/2.git)) {
@@ -241,8 +242,8 @@ manifest = \${site}/manifest.js.gz
 
 	# support per-inbox manifests, handy for v2:
 	# /$INBOX/v2/manifest.js.gz
-	open $fh, '>', "$tmpdir/per-inbox.conf" or xbail $!;
-	print $fh <<"" or xbail $!;
+	open $fh, '>', "$tmpdir/per-inbox.conf";
+	print $fh <<"";
 [core]
 toplevel = $tmpdir/per-inbox
 manifest = $tmpdir/per-inbox-manifest.js.gz
@@ -254,8 +255,8 @@ manifest = \${site}/v2/manifest.js.gz
 [pull]
 [fsck]
 
-	close $fh or xbail $!;
-	ok(mkdir("$tmpdir/per-inbox"), 'prepare single-v2-inbox mirror');
+	close $fh;
+	mkdir "$tmpdir/per-inbox";
 	xsys($grok_pull, '-c', "$tmpdir/per-inbox.conf");
 	is($? >> 8, 0, 'grok-pull exit code as expected');
 	for (qw(v2/git/0.git v2/git/1.git v2/git/2.git)) {
@@ -264,7 +265,7 @@ manifest = \${site}/v2/manifest.js.gz
 	$td->kill;
 	$td->join;
 	is($?, 0, 'no error in exited process');
-	open $fh, '<', $err or BAIL_OUT("open $err failed: $!");
+	open $fh, '<', $err;
 	my $eout = do { local $/; <$fh> };
 	unlike($eout, qr/wide/i, 'no Wide character warnings');
 	unlike($eout, qr/uninitialized/i, 'no uninitialized warnings');
