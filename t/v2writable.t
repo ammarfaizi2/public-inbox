@@ -1,15 +1,14 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
-use Test::More;
+use v5.10.1; # FIXME: check 5.12 unicode_strings compat
 use PublicInbox::Eml;
 use PublicInbox::ContentHash qw(content_digest content_hash);
 use PublicInbox::TestCommon;
 use PublicInbox::Spawn qw(popen_rd);
 use Config;
 use Cwd qw(abs_path);
-use autodie qw(kill open read);
+use autodie qw(chmod close kill open read);
 require_git(2.6);
 require_mods(qw(DBD::SQLite Xapian));
 local $ENV{HOME} = abs_path('t');
@@ -157,16 +156,15 @@ SELECT COUNT(*) FROM over WHERE num > 0
 	my $out = "$inboxdir/stdout.log";
 	my $group = 'inbox.comp.test.v2writable';
 	my $pi_config = "$inboxdir/pi_config";
-	open my $fh, '>', $pi_config or die "open: $!\n";
-	print $fh <<EOF
+	open my $fh, '>', $pi_config;
+	print $fh <<EOF;
 [publicinbox "test-v2writable"]
 	inboxdir = $inboxdir
 	version = 2
 	address = test\@example.com
 	newsgroup = $group
 EOF
-	;
-	close $fh or die "close: $!\n";
+	close $fh;
 	my $sock = tcp_server();
 	my $len;
 	my $cmd = [ '-nntpd', '-W0', "--stdout=$out", "--stderr=$err" ];
@@ -320,15 +318,15 @@ ok($@, 'V2Writable fails on non-existent dir');
 	$v2w->{parallel} = 0;
 	$v2w->init_inbox(0);
 	my $alt = "$tmp->{inboxdir}/all.git/objects/info/alternates";
-	open my $fh, '>>', $alt or die $!;
-	print $fh "$inboxdir/all.git/objects\n" or die $!;
-	chmod(0664, $fh) or die "fchmod: $!";
-	close $fh or die $!;
-	open $fh, '<', $alt or die $!;
+	open my $fh, '>>', $alt;
+	print $fh "$inboxdir/all.git/objects\n";
+	chmod 0664, $fh;
+	close $fh;
+	open $fh, '<', $alt;
 	my $before = do { local $/; <$fh> };
 
 	ok($v2w->{mg}->add_epoch(3), 'init a new epoch');
-	open $fh, '<', $alt or die $!;
+	open $fh, '<', $alt;
 	my $after = do { local $/; <$fh> };
 	ok(index($after, $before) > 0,
 		'old contents preserved after adding epoch');
