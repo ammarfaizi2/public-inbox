@@ -6,6 +6,8 @@ use Test::More;
 use PublicInbox::Eml;
 use PublicInbox::ContentHash qw(content_digest content_hash);
 use PublicInbox::TestCommon;
+use PublicInbox::Spawn qw(popen_rd);
+use Config;
 use Cwd qw(abs_path);
 require_git(2.6);
 require_mods(qw(DBD::SQLite Xapian));
@@ -335,4 +337,18 @@ ok($@, 'V2Writable fails on non-existent dir');
 	is($mode, 0664, sprintf('0%03o', $mode).' is 0664');
 }
 
-done_testing();
+SKIP: {
+	my $strace = strace_inject;
+	my $eml = eml_load 't/plack-qp.eml';
+	open my $fh, '>', my $trace = "$inboxdir/trace.out";
+	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
+		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });
+	$rd->poll_in(10) or die 'strace not ready';
+	ok ! eval { $im->add($eml) }, 'v2w->add fails on ENOSPC';
+	like $@, qr/ disk is full/, 'set $@ for ENOSPC';
+	$im->done;
+	kill 'TERM', $rd->attached_pid;
+	$rd->close;
+}
+
+done_testing;

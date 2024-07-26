@@ -12,6 +12,7 @@ use strict;
 use v5.10.1;
 use DBI;
 use DBD::SQLite;
+use DBD::SQLite::Constants qw(SQLITE_CONSTRAINT);
 use PublicInbox::Over;
 use Scalar::Util qw(blessed);
 
@@ -113,7 +114,10 @@ sub mid_insert {
 	my $sth = $self->{dbh}->prepare_cached(<<'');
 INSERT INTO msgmap (mid) VALUES (?)
 
-	return unless eval { $sth->execute($mid) };
+	unless (eval { $sth->execute($mid) }) {
+		return if $self->{dbh}->err == SQLITE_CONSTRAINT;
+		die $@;
+	}
 	my $num = $self->{dbh}->last_insert_id(undef, undef, 'msgmap', 'num');
 	$self->num_highwater($num) if defined($num);
 	$num;

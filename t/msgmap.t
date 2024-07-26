@@ -3,6 +3,9 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
 use PublicInbox::TestCommon;
+use autodie;
+use Config;
+use PublicInbox::Spawn qw(popen_rd);
 require_mods('DBD::SQLite');
 use_ok 'PublicInbox::Msgmap';
 my ($tmpdir, $for_destroy) = tmpdir();
@@ -70,4 +73,17 @@ is(eval {
 	'ok'
 }, 'ok', 'atfork_* work on tmp_clone');
 
-done_testing();
+SKIP: {
+	my $strace = strace_inject;
+	open my $fh, '>', my $trace = "$tmpdir/trace.out";
+	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
+		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });
+	$rd->poll_in(10) or die 'strace not ready';
+	is eval { $d->mid_insert('this-better-trigger-ENOSPC@error') },
+		undef, 'insert fails w/ ENOSPC';
+	like $@, qr/ disk is full/, '$@ reports ENOSPC';
+	kill 'TERM', $rd->attached_pid;
+	$rd->close;
+}
+
+done_testing;
