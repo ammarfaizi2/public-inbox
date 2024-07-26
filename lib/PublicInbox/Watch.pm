@@ -620,7 +620,8 @@ sub fs_scan_step {
 	}
 	_done_for_now($self);
 	# do we have more work to do?
-	PublicInbox::DS::requeue($self) if keys %$opendirs;
+	keys(%$opendirs) ? PublicInbox::DS::requeue($self)
+		: warn("# full scan complete\n");
 }
 
 sub scan {

@@ -40,7 +40,8 @@ my $reload = sub {
 if ($watch) {
 	my $scan = sub {
 		return if !$watch;
-		warn "# scanning\n";
+		my ($s) = @_;
+		warn "# scanning (full) ", ($s ? "on $s" : 'at startup'), "\n";
 		$watch->trigger_scan('full');
 	};
 	my $quit = sub { # may be called in IMAP/NNTP children

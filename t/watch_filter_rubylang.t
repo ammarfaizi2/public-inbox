@@ -103,7 +103,7 @@ EOM
 	$ibx->{-no_fsync} = 1;
 	is($ibx->search->reopen->mset('b:spam')->size, 0, 'spam removed');
 
-	is_deeply([], \@warn, 'no warnings');
+	is_deeply [], [ grep !/^#/, @warn ], 'no warnings';
 }
 
 done_testing();
