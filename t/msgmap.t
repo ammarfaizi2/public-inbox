@@ -1,8 +1,7 @@
-# Copyright (C) 2015-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
-use Test::More;
+use v5.12;
 use PublicInbox::TestCommon;
 require_mods('DBD::SQLite');
 use_ok 'PublicInbox::Msgmap';
