@@ -154,7 +154,7 @@ sub new {
 		imap_order => scalar(@imap) ? \@imap : undef,
 		nntp_order => scalar(@nntp) ? \@nntp: undef,
 		importers => {},
-		opendirs => {}, # dirname => dirhandle (in progress scans)
+		scan_q => [], # [ [dirname,dirhandle] || dirname, ...]
 		ops => [], # 'quit', 'full'
 	}, $class;
 }
@@ -289,7 +289,9 @@ sub quit_done ($) {
 sub quit { # may be called in IMAP/NNTP children
 	my ($self) = @_;
 	$self->{quit} = 1;
-	%{$self->{opendirs}} = ();
+	if (my $scan_q = $self->{scan_q}) {
+		@$scan_q = ();
+	}
 	_done_for_now($self);
 	quit_done($self);
 	if (my $dir_idle = delete $self->{dir_idle}) {
@@ -417,7 +419,7 @@ sub watch_imap_idle_1 ($$$) {
 
 sub watch_atfork_child ($) {
 	my ($self) = @_;
-	delete @$self{qw(dir_idle pids opendirs)};
+	delete @$self{qw(dir_idle pids scan_q)};
 	my $sig = delete $self->{sig};
 	$sig->{CHLD} = $sig->{HUP} = $sig->{USR1} = 'DEFAULT';
 	# TERM/QUIT/INT call ->quit, which works in both parent+child
@@ -578,56 +580,44 @@ sub watch { # main entry point
 	_done_for_now($self);
 }
 
-sub trigger_scan {
-	my ($self, $op) = @_;
-	push @{$self->{ops}}, $op;
-	PublicInbox::DS::requeue($self);
-}
-
 sub fs_scan_step {
 	my ($self) = @_;
 	return if $self->{quit};
-	my $op = shift @{$self->{ops}};
 	local $PublicInbox::DS::in_loop = 0; # waitpid() synchronously
 
 	# continue existing scan
-	my $opendirs = $self->{opendirs};
-	my @dirnames = keys %$opendirs;
-	foreach my $dir (@dirnames) {
-		my $dh = delete $opendirs->{$dir};
+	while (defined(my $dir = shift @{$self->{scan_q}})) {
+		my $dh;
+		if (ref($dir) eq 'ARRAY') { # continue existing
+			($dir, $dh) = @$dir;
+		} elsif (!opendir($dh, $dir)) {
+			warn "W: failed to open $dir: $! (non-fatal)\n";
+			next;
+		}
 		my $n = $self->{max_batch};
 		while (my $fn = readdir($dh)) {
 			_try_path($self, "$dir/$fn");
 			last if --$n < 0;
 		}
-		$opendirs->{$dir} = $dh if $n < 0;
-	}
-	if ($op && $op eq 'full') {
-		foreach my $dir (keys %{$self->{d_map}}) {
-			next if $opendirs->{$dir}; # already in progress
-			my $ok = opendir(my $dh, $dir);
-			unless ($ok) {
-				warn "failed to open $dir: $!\n";
-				next;
-			}
-			my $n = $self->{max_batch};
-			while (my $fn = readdir($dh)) {
-				_try_path($self, "$dir/$fn");
-				last if --$n < 0;
-			}
-			$opendirs->{$dir} = $dh if $n < 0;
+		if ($n < 0) {
+			unshift @{$self->{scan_q}}, [ $dir, $dh ];
+			last;
 		}
 	}
 	_done_for_now($self);
 	# do we have more work to do?
-	keys(%$opendirs) ? PublicInbox::DS::requeue($self)
+	@{$self->{scan_q}} ? PublicInbox::DS::requeue($self)
 		: warn("# full scan complete\n");
 }
 
 sub scan {
 	my ($self, $op) = @_;
-	push @{$self->{ops}}, $op;
-	fs_scan_step($self);
+	if ($op eq 'full') {
+		push @{$self->{scan_q}}, keys %{$self->{d_map}};
+		fs_scan_step($self);
+	} else {
+		warn "BUG? unknown scan op: `$op' (non-fatal)\n";
+	}
 }
 
 sub _importer_for {

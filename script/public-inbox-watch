@@ -42,7 +42,7 @@ if ($watch) {
 		return if !$watch;
 		my ($s) = @_;
 		warn "# scanning (full) ", ($s ? "on $s" : 'at startup'), "\n";
-		$watch->trigger_scan('full');
+		$watch->scan('full');
 	};
 	my $quit = sub { # may be called in IMAP/NNTP children
 		$watch->quit if $watch;
