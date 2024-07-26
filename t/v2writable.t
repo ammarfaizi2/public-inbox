@@ -9,6 +9,7 @@ use PublicInbox::TestCommon;
 use PublicInbox::Spawn qw(popen_rd);
 use Config;
 use Cwd qw(abs_path);
+use autodie qw(kill open read);
 require_git(2.6);
 require_mods(qw(DBD::SQLite Xapian));
 local $ENV{HOME} = abs_path('t');
@@ -340,15 +341,46 @@ ok($@, 'V2Writable fails on non-existent dir');
 SKIP: {
 	my $strace = strace_inject;
 	my $eml = eml_load 't/plack-qp.eml';
+	my $gfi_err = "$inboxdir/gfi.err";
 	open my $fh, '>', my $trace = "$inboxdir/trace.out";
 	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
 		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });
 	$rd->poll_in(10) or die 'strace not ready';
-	ok ! eval { $im->add($eml) }, 'v2w->add fails on ENOSPC';
-	like $@, qr/ disk is full/, 'set $@ for ENOSPC';
+	ok ! eval {
+		open my $olderr, '>&', \*STDERR;
+		open STDERR, '>>', $gfi_err;
+		$im->add($eml);
+		open STDERR, '>&', $olderr;
+	}, 'v2w->add fails on ENOSPC';
+	like $@, qr/ disk is full/, '$@ reports ENOSPC';
 	$im->done;
 	kill 'TERM', $rd->attached_pid;
 	$rd->close;
+
+	$im->add($eml) or xbail 'cannot add message to start fast-import';
+	my $pid = $im->{im}->{io}->attached_pid or xbail 'no import pid';
+	open $fh, '>', $trace;
+
+	$rd = popen_rd([$strace, '-p', $pid, '-o', $trace,
+		'-e', 'inject=write:error=ENOSPC:when=1'],
+		undef, { 2 => 1 });
+	$rd->poll_in(10) or die 'strace not ready';
+	ok !eval { $im->done }, 'done fails with ENOSPC';
+	ok $@, '$@ set on ENOSPC';
+	kill 'TERM', $rd->attached_pid;
+
+	open $fh, '<', $gfi_err;
+	read $fh, my $errbuf, -s $fh;
+	like $errbuf, qr/fatal:/, 'fatal git error noted';
+	open $fh, '>', $gfi_err;
+
+	$rd->close;
+
+	$im->add($eml) or xbail '->add fails after fixing ENOSPC';
+	$im->done;
+	ok !$im->add($eml), '->add detects existing message';
+	$im->done;
+	is -s $fh, 0, 'nothing new in fast-import stderr';
 }
 
 done_testing;
