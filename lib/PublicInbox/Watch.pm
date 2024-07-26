@@ -590,7 +590,9 @@ sub fs_scan_step {
 		my $dh;
 		if (ref($dir) eq 'ARRAY') { # continue existing
 			($dir, $dh) = @$dir;
-		} elsif (!opendir($dh, $dir)) {
+		} elsif (opendir($dh, $dir)) {
+			warn "# scanning $dir ...\n";
+		} else {
 			warn "W: failed to open $dir: $! (non-fatal)\n";
 			next;
 		}
@@ -602,6 +604,8 @@ sub fs_scan_step {
 		if ($n < 0) {
 			unshift @{$self->{scan_q}}, [ $dir, $dh ];
 			last;
+		} else {
+			warn "# done scanning $dir\n";
 		}
 	}
 	_done_for_now($self);
