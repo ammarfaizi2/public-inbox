@@ -413,7 +413,7 @@ sub query_approxidate {
 # read-only, for mail only (codesearch has different rules)
 sub mset {
 	my ($self, $qry_str, $opt) = @_;
-	my $qp = $self->{qp} //= $self->qparse_new;
+	my $qp = $self->{qp} // $self->qparse_new;
 	my $qry = $qp->parse_query($qry_str, $self->{qp_flags});
 	if (defined(my $eidx_key = $opt->{eidx_key})) {
 		$qry = $X{Query}->new(OP_FILTER(), $qry, 'O'.$eidx_key);
@@ -570,7 +570,7 @@ sub stemmer { $X{Stem}->new($LANG) }
 
 sub qp_init_common {
 	my ($self) = @_;
-	my $qp = $X{QueryParser}->new;
+	my $qp = $self->{qp} = $X{QueryParser}->new;
 	$qp->set_default_op(OP_AND());
 	$qp->set_database(xdb($self));
 	$qp->set_stemmer(stemmer($self));
@@ -654,7 +654,7 @@ EOM
 
 sub help {
 	my ($self) = @_;
-	$self->{qp} //= $self->qparse_new; # parse altids
+	$self->{qp} // $self->qparse_new; # parse altids
 	my @ret = @HELP;
 	if (my $user_pfx = $self->{-user_pfx}) {
 		push @ret, @$user_pfx;

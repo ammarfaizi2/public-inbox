@@ -225,7 +225,7 @@ sub dispatch {
 		}
 		bless $new, $req->{c} ? 'PublicInbox::CodeSearch' :
 					'PublicInbox::Search';
-		$new->{qp} = $new->qparse_new;
+		$new->qparse_new;
 		$SRCH{$key} = $new;
 	};
 	$req->{srch}->{xdb}->reopen unless $new;

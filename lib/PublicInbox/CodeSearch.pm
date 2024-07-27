@@ -159,7 +159,7 @@ sub roots_filter { # retry_reopen callback
 
 sub mset {
 	my ($self, $qry_str, $opt) = @_;
-	my $qp = $self->{qp} //= qparse_new($self);
+	my $qp = $self->{qp} // qparse_new($self);
 	my $qry = $qp->parse_query($qry_str, $self->{qp_flags});
 
 	# limit to commits with shared roots

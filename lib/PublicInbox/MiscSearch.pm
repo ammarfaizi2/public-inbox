@@ -38,7 +38,7 @@ sub new {
 sub mi_qp_new ($) {
 	my ($self) = @_;
 	my $xdb = $self->{xdb};
-	my $qp = $PublicInbox::Search::X{QueryParser}->new;
+	my $qp = $self->{qp} = $PublicInbox::Search::X{QueryParser}->new;
 	$qp->set_default_op(PublicInbox::Search::OP_AND());
 	$qp->set_database($xdb);
 	$qp->set_stemmer(PublicInbox::Search::stemmer($self));
@@ -76,7 +76,7 @@ sub mset {
 	my ($self, $qs, $opt) = @_;
 	$opt ||= {};
 	reopen($self);
-	my $qp = $self->{qp} //= mi_qp_new($self);
+	my $qp = $self->{qp} // mi_qp_new($self);
 	$qs = 'type:inbox' if $qs eq '';
 	my $qr = $qp->parse_query($qs, $PublicInbox::Search::QP_FLAGS);
 	$opt->{relevance} = 1 unless exists $opt->{relevance};
