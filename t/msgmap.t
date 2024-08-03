@@ -78,7 +78,7 @@ SKIP: {
 	open my $fh, '>', my $trace = "$tmpdir/trace.out";
 	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
 		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });
-	$rd->poll_in(10) or die 'strace not ready';
+	$rd->poll_in(10_000) or die 'strace not ready';
 	is eval { $d->mid_insert('this-better-trigger-ENOSPC@error') },
 		undef, 'insert fails w/ ENOSPC';
 	like $@, qr/ disk is full/, '$@ reports ENOSPC';
