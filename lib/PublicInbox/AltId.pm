@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Used for giving serial numbers to messages.  This can be tied to
@@ -10,25 +10,20 @@
 # it leads to reliance on centralization.  However, being able
 # to use existing serial numbers is beneficial.
 package PublicInbox::AltId;
-use strict;
-use warnings;
-use URI::Escape qw(uri_unescape);
-use PublicInbox::Msgmap;
+use v5.12;
+use parent qw(PublicInbox::IndexHeader);
 
 # spec: TYPE:PREFIX:param1=value1&param2=value2&...
 # The PREFIX will be a searchable boolean prefix in Xapian
 # Example: serial:gmane:file=/path/to/altmsgmap.sqlite3
 sub new {
 	my ($class, $ibx, $spec, $writable) = @_;
-	my ($type, $prefix, $query) = split(/:/, $spec, 3);
-	$type eq 'serial' or die "non-serial not supported, yet\n";
-	$prefix =~ /\A\w+\z/ or warn "non-word prefix not searchable\n";
-	my %params = map {
-		my ($k, $v) = split(/=/, uri_unescape($_), 2);
-		$v = '' unless defined $v;
-		($k, $v);
-	} split(/[&;]/, $query);
-	my $f = $params{file} or die "file: required for $type spec $spec\n";
+	my ($type, $pfx, $query) = split /:/, $spec, 3;
+	$type eq 'serial' or die "E: non-serial not supported, yet ($spec)\n";
+	my $self = bless {}, $class;
+	my $params = $self->extra_indexer_new_common($spec, $pfx, $query);
+	my $f = delete $params->{file} or
+		die "E: file= required for $type spec $spec\n";
 	unless (index($f, '/') == 0) {
 		if ($ibx->version == 1) {
 			$f = "$ibx->{inboxdir}/public-inbox/$f";
@@ -36,26 +31,37 @@ sub new {
 			$f = "$ibx->{inboxdir}/$f";
 		}
 	}
-	bless {
-		filename => $f,
-		writable => $writable,
-		prefix => $prefix,
-		xprefix => 'X'.uc($prefix),
-	}, $class;
+	my @k = keys %$params;
+	warn "W: unknown params in `$spec': ", join(', ', @k), "\n" if @k;
+	$self->{filename} = $f;
+	$self->{writable} = $writable if $writable;
+	$self;
 }
 
-sub mm_alt {
+sub mm_alt ($) {
 	my ($self) = @_;
 	$self->{mm_alt} ||= eval {
-		my $f = $self->{filename};
-		my $writable = $self->{writable};
-		PublicInbox::Msgmap->new_file($f, $writable);
+		require PublicInbox::Msgmap;
+		PublicInbox::Msgmap->new_file(@$self{qw(filename writable)});
 	};
 }
 
-sub mid2alt {
-	my ($self, $mid) = @_;
-	$self->mm_alt->num_for($mid);
+sub index_extra { # for PublicInbox::SearchIdx
+	my ($self, $sidx, $eml, $mids) = @_;
+	for my $mid (@$mids) {
+		my $id = mm_alt($self)->num_for($mid) // next;
+		$sidx->index_boolean_term($self->{xprefix}, $id);
+	}
 }
+
+sub user_help { # for PublicInbox::Search
+	my ($self) = @_;
+	("$self->{prefix}:", <<EOF);
+alternate serial number  e.g. $self->{prefix}:12345 (boolean)
+EOF
+}
+
+# callback for PublicInbox::Search
+sub query_parser_method { 'add_boolean_prefix' }
 
 1;

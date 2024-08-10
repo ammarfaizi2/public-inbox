@@ -481,7 +481,7 @@ sub _fill_ibx {
 	# more things to encourage decentralization
 	for my $k (qw(address altid nntpmirror imapmirror
 			coderepo hide listid url
-			infourl watchheader
+			infourl watchheader indexheader
 			nntpserver imapserver pop3server)) {
 		my $v = $self->{"$pfx.$k"} // next;
 		$ibx->{$k} = _array($v);

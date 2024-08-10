@@ -52,11 +52,6 @@ sub new {
 	my $inboxdir = $ibx->{inboxdir};
 	my $version = $ibx->version;
 	my $indexlevel = 'full';
-	my $altid = $ibx->{altid};
-	if ($altid) {
-		require PublicInbox::AltId;
-		$altid = [ map { PublicInbox::AltId->new($ibx, $_); } @$altid ];
-	}
 	if ($ibx->{indexlevel}) {
 		if ($ibx->{indexlevel} =~ $INDEXLEVELS) {
 			$indexlevel = $ibx->{indexlevel};
@@ -69,7 +64,7 @@ sub new {
 	my $self = PublicInbox::Search->new($ibx);
 	bless $self, $class;
 	$self->{ibx} = $ibx;
-	$self->{-altid} = $altid;
+	$self->load_extra_indexers($ibx);
 	$self->{indexlevel} = $indexlevel;
 	$self->{-set_indexlevel_once} = 1 if $indexlevel eq 'medium';
 	if ($ibx->{-skip_docdata}) {
@@ -182,6 +177,22 @@ sub index_phrase ($$$$) {
 
 	term_generator($self)->index_text($text, $wdf_inc, $prefix);
 	$self->{term_generator}->increase_termpos;
+}
+
+sub index_phrase1 { # called by various ->index_extra
+	my ($self, $pfx, $text) = @_;
+	index_phrase $self, $text, 1, $pfx;
+}
+
+sub index_text1 { # called by various ->index_extra
+	my ($self, $pfx, $text) = @_;
+	$self->{term_generator}->index_text_without_positions($text, 1, $pfx);
+}
+
+sub index_boolean_term { # called by various ->index_extra
+	my ($self, $pfx, $term) = @_;
+	my $doc = $self->{term_generator}->get_document;
+	$doc->add_boolean_term($pfx.$term);
 }
 
 sub index_text ($$$$) {
@@ -481,15 +492,8 @@ sub eml2doc ($$$;$) {
 		$doc->set_data($data);
 	}
 
-	if (my $altid = $self->{-altid}) {
-		foreach my $alt (@$altid) {
-			my $pfx = $alt->{xprefix};
-			foreach my $mid (@$mids) {
-				my $id = $alt->mid2alt($mid);
-				next unless defined $id;
-				$doc->add_boolean_term($pfx . $id);
-			}
-		}
+	for my $extra (@{$self->{-extra} // []}) {
+		$extra->index_extra($self, $eml, $mids);
 	}
 	$doc;
 }

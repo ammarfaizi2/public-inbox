@@ -292,13 +292,25 @@ sub xdb ($) {
 	};
 }
 
+sub load_extra_indexers ($$) {
+	my ($self, $ibx) = @_;
+	my @extra;
+	for my $f (qw(IndexHeader AltId)) {
+		my $specs = $ibx->{lc $f} // next;
+		my $cls = "PublicInbox::$f";
+		eval "require $cls" or die $@;
+		push @extra, map { $cls->new($ibx, $_) } @$specs;
+	}
+	$self->{-extra} = \@extra if @extra;
+}
+
 sub new {
 	my ($class, $ibx) = @_;
 	ref $ibx or die "BUG: expected PublicInbox::Inbox object: $ibx";
 	my $xap = $ibx->version > 1 ? 'xap' : 'public-inbox/xapian';
 	my $xpfx = "$ibx->{inboxdir}/$xap".SCHEMA_VERSION;
 	my $self = bless { xpfx => $xpfx }, $class;
-	$self->{altid} = $ibx->{altid} if defined($ibx->{altid});
+	$self->load_extra_indexers($ibx);
 	$self;
 }
 
@@ -439,6 +451,8 @@ sub xhc_start_maybe (@) {
 	$xhc;
 }
 
+my %QPMETHOD_2_SYM = (add_prefix => ':', add_boolean_prefix => '=');
+
 sub xh_opt ($$) {
 	my ($self, $opt) = @_;
 	my $lim = $opt->{limit} || 50;
@@ -464,9 +478,9 @@ sub xh_opt ($$) {
 	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
 	my $apfx = $self->{-alt_pfx} //= do {
 		my @tmp;
-		for (grep /\Aserial:/, @{$self->{altid} // []}) {
-			my (undef, $pfx) = split /:/, $_;
-			push @tmp, '-Q', "$pfx=X\U$pfx";
+		for my $x (@{$self->{-extra} // []}) {
+			my $sym = $QPMETHOD_2_SYM{$x->query_parser_method};
+			push @tmp, '-Q', $x->{prefix}.$sym.$x->{xprefix};
 		}
 		# TODO: arbitrary header indexing goes here
 		\@tmp;
@@ -593,21 +607,12 @@ sub qparse_new {
 		$qp->add_boolean_prefix($name, $_) foreach split(/ /, $prefix);
 	}
 
-	# we do not actually create AltId objects,
-	# just parse the spec to avoid the extra DB handles for now.
-	if (my $altid = $self->{altid}) {
+	if (my $extra = $self->{-extra}) {
 		my $user_pfx = $self->{-user_pfx} = [];
-		for (@$altid) {
-			# $_ = 'serial:gmane:/path/to/gmane.msgmap.sqlite3'
-			# note: Xapian supports multibyte UTF-8, /^[0-9]+$/,
-			# and '_' with prefixes matching \w+
-			/\Aserial:(\w+):/ or next;
-			my $pfx = $1;
-			push @$user_pfx, "$pfx:", <<EOF;
-alternate serial number  e.g. $pfx:12345 (boolean)
-EOF
-			# gmane => XGMANE
-			$qp->add_boolean_prefix($pfx, 'X'.uc($pfx));
+		for my $x (@$extra) {
+			push @$user_pfx, $x->user_help;
+			my $m = $x->query_parser_method;
+			$qp->$m(@$x{qw(prefix xprefix)});
 		}
 		chomp @$user_pfx;
 	}
@@ -654,7 +659,7 @@ EOM
 
 sub help {
 	my ($self) = @_;
-	$self->{qp} // $self->qparse_new; # parse altids
+	$self->{qp} // $self->qparse_new; # parse altids + indexheaders
 	my @ret = @HELP;
 	if (my $user_pfx = $self->{-user_pfx}) {
 		push @ret, @$user_pfx;

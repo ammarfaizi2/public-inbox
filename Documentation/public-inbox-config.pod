@@ -172,6 +172,68 @@ link to the line numbers of blobs.
 
 Default: none
 
+=item publicinbox.<name>.altid
+
+Index by an alternative ID mechanism as a Xapian search prefix e.g.
+C<gmane:1234>.  This is useful to allow looking up legacy serial IDs
+(e.g. gmane article numbers).
+
+It must be specified in the form of
+C<serial:$USER_PREFIX:file=$SQLITE_FILENAME> where C<$USER_PREFIX> is a
+lowercase prefix like C<gmane> for search queries, and
+C<$SQLITE_FILENAME> is points to an SQLite DB.  C<$SQLITE_FILENAME> may
+be an absolute path or a path relative to C<INBOXDIR> for v2 inboxes or
+C<INBOXDIR/public-inbox> for v1 inboxes.
+
+The schema of C<$SQLITE_FILENAME> should be the same as a
+C<msgmap.sqlite3>.  See C<scripts/xhdr-num2mid> in the public-inbox
+source tree for an example of how to generate such a mapping from
+via NNTP.
+
+This is a noop with C<indexlevel=basic>
+
+Default: none
+
+=item publicinbox.<name>.indexheader
+
+Supports indexing of arbitrary mail headers in Xapian.
+
+It must be specified in the form of
+C<$TYPE:$USER_PREFIX:$MAIL_HEADER:$PARAMS>
+where C<$TYPE> determines how it's indexed and queried;
+C<$USER_PREFIX> is a lowercase prefix for search queries,
+C<$MAIL_HEADER> is the header to index (e.g. C<X-Label>),
+C<$PARAMS> is a URL-style query string for optional parameters.
+
+Valid C<$TYPE> values (in ascending order of storage cost) are as follows:
+
+* C<boolean_term> - index for simple filtering (not sortable by relevance)
+
+* C<text> - add frequency information to allow sorting by relevance
+
+* C<phrase> - add positional information to match sentences or phrases
+
+In other words: C<phrase> forces indexing of a particular header to
+behave like it used C<indexlevel=full>; while C<text> indexes as if
+that header used C<indexlevel=medium>.
+
+Valid keys in C<$PARAMS> include:
+
+* raw - do not perform RFC2047 decoding of headers
+
+Example:
+
+	[publicinbox "foo"]
+		indexheader = boolean_term:xlabel:X-Label:raw=1
+
+Support for other parameters is not finalized and subject to change.
+
+This is a noop with C<indexlevel=basic>
+
+New in public-inbox 2.0.0 (PENDING)
+
+Default: none
+
 =item publicinbox.<name>.replyto
 
 May be used to control how reply instructions in the PSGI

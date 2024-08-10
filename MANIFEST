@@ -228,6 +228,7 @@ lib/PublicInbox/In3Watch.pm
 lib/PublicInbox/Inbox.pm
 lib/PublicInbox/InboxIdle.pm
 lib/PublicInbox/InboxWritable.pm
+lib/PublicInbox/IndexHeader.pm
 lib/PublicInbox/Inotify.pm
 lib/PublicInbox/Inotify3.pm
 lib/PublicInbox/InputPipe.pm
@@ -630,6 +631,7 @@ t/v2writable.t
 t/view.t
 t/watch_filter_rubylang.t
 t/watch_imap.t
+t/watch_indexheader.t
 t/watch_maildir.t
 t/watch_maildir_v2.t
 t/watch_mh.t
