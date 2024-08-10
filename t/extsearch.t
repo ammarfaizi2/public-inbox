@@ -593,6 +593,7 @@ test_lei(sub {
 		'noted unindexed extindex is unsupported');
 });
 
+require PublicInbox::XhcMset;
 if ('indexheader support') {
 	xsys_e [qw(git config extindex.all.indexheader
 		boolean_term:xarchiveshash:X-Archives-Hash)],
@@ -608,20 +609,97 @@ if ('indexheader support') {
 	$es = PublicInbox::Config->new($cfg_path)->ALL;
 	my $mset = $es->mset('xarchiveshash:deadbeefcafe');
 	is $mset->size, 1, 'extindex.*.indexheader works';
-	local $PublicInbox::Search::XHC = eval {
-		require PublicInbox::XhcMset;
-		PublicInbox::XapClient::start_helper('-j0');
-	} or xbail "no XHC: $@";
+	local $PublicInbox::Search::XHC =
+			PublicInbox::XapClient::start_helper('-j0') or
+			xbail "no XHC: $@";
 	my @args;
 	$es->async_mset('xarchiveshash:deadbeefcafe', {} , sub { @args = @_ });
-	is scalar(@args), 2, 'no extra args on hit';
-	is $args[0]->size, 1, 'async mset hit works';
-	ok !$args[1], 'no error on hit';
+	is scalar(@args), 2, 'no extra args on xarchiveshash hit';
+	is $args[0]->size, 1, 'async mset xarchiveshash hit works';
+	ok !$args[1], 'no error on xarchiveshash hit';
 	@args = ();
 	$es->async_mset('xarchiveshash:cafebeefdead', {} , sub { @args = @_ });
-	is scalar(@args), 2, 'no extra args on miss';
-	is $args[0]->size, 0, 'async mset miss works';
-	ok !$args[1], 'no error on miss';
+	is scalar(@args), 2, 'no extra args on xarchiveshash miss';
+	is $args[0]->size, 0, 'async mset xarchivehash miss works';
+	ok !$args[1], 'no error on xarchiveshash miss';
+}
+
+if ('per-inbox altid w/ extindex') {
+	my $another = 'another-nntp.sqlite3';
+	my $altid = [ "serial:gmane:file=$another" ];
+	my $aibx = create_inbox 'v2', version => 2, indexlevel => 'basic',
+				altid => $altid, sub {
+		my ($im, $ibx) = @_;
+		my $mm = PublicInbox::Msgmap->new_file(
+					"$ibx->{inboxdir}/$another", 2);
+		$mm->mid_set(1234, 'a@example.com') == 1 or xbail 'mid_set';
+		$im->add(PublicInbox::Eml->new(<<'EOF')) or BAIL_OUT;
+From: a@example.com
+To: b@example.com
+Subject: boo!
+Message-ID: <a@example.com>
+X-Archives-Hash: dadfad
+Organization: felonious feline family
+
+hello world gmane:666
+EOF
+	};
+	PublicInbox::IO::write_file '>>', $cfg_path, <<EOF;
+[publicinbox "altid-test"]
+	inboxdir = $aibx->{inboxdir}
+	address = b\@example.com
+	altid = $altid->[0]
+	indexheader = phrase:organization:Organization
+EOF
+	ok run_script([qw(-extindex --all -vvv), $eidxdir]),
+		'extindex update w/ altid';
+	local $PublicInbox::Search::XHC =
+			PublicInbox::XapClient::start_helper('-j0') or
+			xbail "no XHC: $@";
+	my @args;
+	my $pi_cfg = PublicInbox::Config->new($cfg_path);
+	my $ibx = $pi_cfg->lookup('b@example.com');
+	my $mset = $ibx->isrch->mset('gmane:1234');
+
+	is $mset->size, 1, 'isrch->mset altid hit';
+	$ibx->isrch->async_mset('gmane:1234', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on altid hit';
+	is $args[0]->size, 1, 'isrch->async_mset altid hit';
+
+	$mset = $ibx->isrch->mset('organization:felonious');
+	is $mset->size, 1, 'isrch->mset indexheader hit';
+	@args = ();
+	$ibx->isrch->async_mset('organization:felonious', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on indexheader hit';
+	is $args[0]->size, 1, 'isrch->async_mset indexheader hit';
+
+	$mset = $ibx->isrch->mset('organization:world');
+	is $mset->size, 0, 'isrch->mset indexheader miss';
+	@args = ();
+	$ibx->isrch->async_mset('organization:world', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on indexheader miss';
+	is $args[0]->size, 0, 'isrch->async_mset indexheader miss';
+
+	$mset = $ibx->isrch->mset('xarchiveshash:deadbeefcafe');
+	is $mset->size, 0, 'isrch->mset does not cross inbox on indexheader';
+	$mset = $ibx->isrch->mset('xarchiveshash:dadfad');
+	is $mset->size, 1, 'isrch->mset hits global indexheader';
+
+	$es = $pi_cfg->ALL;
+	$mset = $es->mset('xarchiveshash:dadfad');
+	is $mset->size, 1, 'esrch->mset global indexheader hit';
+	$mset = $es->mset('gmane:1234');
+	is $mset->size, 1, '->mset altid hit works globally';
+
+	$mset = $es->mset('gmane:666');
+	is $mset->size, 0, 'global ->mset hits';
+	$mset = $ibx->isrch->mset('gmane:666');
+	is $mset->size, 0, 'isrch->mset altid miss works';
+
+	@args = ();
+	$ibx->isrch->async_mset('gmane:666', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on altid miss';
+	is $args[0]->size, 0, 'isrch->async_mset altid miss works';
 }
 
 done_testing;

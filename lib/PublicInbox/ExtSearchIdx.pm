@@ -21,6 +21,7 @@ use Carp qw(croak carp);
 use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
+use PublicInbox::Isearch;
 use PublicInbox::MultiGit;
 use PublicInbox::Spawn ();
 use PublicInbox::Search;

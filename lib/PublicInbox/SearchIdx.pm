@@ -475,9 +475,8 @@ sub eml2doc ($$$;$) {
 	term_generator($self)->set_document($doc);
 	index_headers($self, $smsg);
 
-	if (defined(my $eidx_key = $smsg->{eidx_key})) {
-		$doc->add_boolean_term('O'.$eidx_key) if $eidx_key ne '.';
-	}
+	my $ekey = $smsg->{eidx_key};
+	$doc->add_boolean_term('O'.$ekey) if ($ekey // '.') ne '.';
 	msg_iter($eml, \&index_xapian, [ $self, $doc ]);
 	index_ids($self, $doc, $eml, $mids);
 
@@ -491,9 +490,10 @@ sub eml2doc ($$$;$) {
 		my $data = $smsg->to_doc_data;
 		$doc->set_data($data);
 	}
-
-	for my $extra (@{$self->{-extra} // []}) {
-		$extra->index_extra($self, $eml, $mids);
+	my $xtra = defined $ekey ? $self->{"-extra\t$ekey"} : undef;
+	$xtra //= $self->{-extra};
+	for my $e (@$xtra) {
+		$e->index_extra($self, $eml, $mids);
 	}
 	$doc;
 }
@@ -1170,6 +1170,14 @@ sub eidx_shard_new {
 	}, $class;
 	$self->{-set_indexlevel_once} = 1 if $self->{indexlevel} eq 'medium';
 	$self->load_extra_indexers($eidx);
+	require PublicInbox::Isearch;
+	my $all = $self->{-extra};
+	for my $ibx (@{$eidx->{ibx_active} // []}) {
+		my $isrch = PublicInbox::Isearch->new($ibx);
+		my $per_ibx = $isrch->{-extra} // next;
+		$self->{"-extra\t$isrch->{eidx_key}"} =
+					$all ? [ @$per_ibx, @$all ] : $per_ibx;
+	}
 	$self;
 }
 

@@ -11,7 +11,11 @@ use PublicInbox::Search;
 
 sub new {
 	my (undef, $ibx, $es) = @_;
-	bless { es => $es, eidx_key => $ibx->eidx_key }, __PACKAGE__;
+	my $self = bless { es => $es, eidx_key => $ibx->eidx_key }, __PACKAGE__;
+	# load publicinbox.*.{altid,indexheader}
+	PublicInbox::Search::load_extra_indexers($self, $ibx);
+	push @{$self->{-extra}}, @{$es->{-extra} // []} if $self->{-extra};
+	$self;
 }
 
 sub _ibx_id ($) {
@@ -55,14 +59,22 @@ SELECT MAX(docid) FROM xref3 WHERE ibx_id = ? AND xnum >= ? AND xnum <= ?
 	\%opt;
 }
 
+sub _isrch_qparse ($) {
+	my ($self) = @_;
+	local $self->{es}->{-extra} = $self->{-extra};
+	$self->{es}->qparse_new; # XXX worth memoizing?
+}
+
 sub mset {
 	my ($self, $str, $opt) = @_;
+	local $self->{es}->{qp} = _isrch_qparse($self) if $self->{-extra};
 	$self->{es}->mset($str, eidx_mset_prep $self, $opt);
 }
 
 sub async_mset {
 	my ($self, $str, $opt, $cb, @args) = @_;
 	$opt = eidx_mset_prep $self, $opt;
+	local $self->{es}->{-extra} = $self->{-extra} if $self->{-extra};
 	$self->{es}->async_mset($str, $opt, $cb, @args);
 }
 

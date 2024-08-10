@@ -571,7 +571,7 @@ sub _fill_ei ($$) {
 	}
 	return unless valid_foo_name($name, 'extindex');
 	$es->{name} = $name;
-	$es->load_extra_indexers($es);
+	$es->load_extra_indexers($es); # extindex.*.{altid,indexheader}
 	$es;
 }
 
