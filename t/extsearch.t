@@ -7,7 +7,7 @@ use PublicInbox::Config;
 use PublicInbox::InboxWritable;
 require_git(2.6);
 require_mods(qw(json DBD::SQLite Xapian));
-use autodie qw(open rename truncate unlink);
+use autodie qw(chmod open rename truncate unlink);
 require PublicInbox::Search;
 use_ok 'PublicInbox::ExtSearch';
 use_ok 'PublicInbox::ExtSearchIdx';
@@ -416,7 +416,6 @@ if ('dedupe + dry-run') {
 		'--dry-run alone fails');
 }
 
-# chmod 0755, $home or xbail "chmod: $!";
 for my $j (1, 3, 6) {
 	my $o = { 2 => \(my $err = '') };
 	my $d = "$home/extindex-j$j";
@@ -437,7 +436,7 @@ SKIP: {
 	is($nshards1, 1, 'correct shard count');
 
 	my @ei_dir = glob("$d/ei*/");
-	chmod 0755, $ei_dir[0] or xbail "chmod: $!";
+	chmod 0755, $ei_dir[0];
 	my $mode = sprintf('%04o', 07777 & (stat($ei_dir[0]))[2]);
 	is($mode, '0755', 'mode set on ei*/ dir');
 	my $o = { 2 => \(my $err = '') };
