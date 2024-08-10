@@ -1169,6 +1169,7 @@ sub eidx_shard_new {
 		creat => 1,
 	}, $class;
 	$self->{-set_indexlevel_once} = 1 if $self->{indexlevel} eq 'medium';
+	$self->load_extra_indexers($eidx);
 	$self;
 }
 

@@ -565,12 +565,13 @@ sub _fill_ei ($$) {
 		my $v = get_1($self, "$pfx.$k") // next;
 		$es->{$k} = $v;
 	}
-	for my $k (qw(coderepo hide url infourl)) {
+	for my $k (qw(coderepo hide url infourl indexheader altid)) {
 		my $v = $self->{"$pfx.$k"} // next;
 		$es->{$k} = _array($v);
 	}
 	return unless valid_foo_name($name, 'extindex');
 	$es->{name} = $name;
+	$es->load_extra_indexers($es);
 	$es;
 }
 

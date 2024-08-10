@@ -35,6 +35,7 @@ use PublicInbox::Eml;
 use PublicInbox::DS qw(now add_timer);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::Admin qw(fmt_localtime);
+use PublicInbox::Config qw(rel2abs_collapsed);
 
 sub new {
 	my (undef, $dir, $opt) = @_;
@@ -86,7 +87,21 @@ sub _ibx_attach { # each_inbox callback
 sub attach_config {
 	my ($self, $cfg, $ibxs) = @_;
 	$self->{cfg} = $cfg;
-	my $types;
+	my ($types, $ro);
+
+	# lookup extindex.$NAME.<indexheader|altid>
+	my $eidx_dir = rel2abs_collapsed($self->{topdir});
+	for my $k (grep(/\Aextindex\.(?:.+)\.topdir\z/, keys %$cfg)) {
+		next if rel2abs_collapsed($cfg->{$k}) ne $eidx_dir;
+		my $n = substr($k, length('extindex.'), -length('.topdir'));
+		$ro = $cfg->lookup_ei($n) and last;
+	}
+
+	# and copy from read-only to our read-write $self
+	for my $f (qw(altid indexheader)) {
+		$self->{$f} = $ro->{$f} if defined $ro->{$f};
+	}
+
 	if ($ibxs) {
 		for my $ibx (@$ibxs) {
 			$self->{ibx_map}->{$ibx->eidx_key} //= do {

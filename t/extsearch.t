@@ -8,7 +8,7 @@ use PublicInbox::InboxWritable;
 require_git(2.6);
 require_mods(qw(json DBD::SQLite Xapian));
 use autodie qw(chmod open rename truncate unlink);
-require PublicInbox::Search;
+use PublicInbox::Search;
 use_ok 'PublicInbox::ExtSearch';
 use_ok 'PublicInbox::ExtSearchIdx';
 use_ok 'PublicInbox::OverIdx';
@@ -26,6 +26,7 @@ ok(run_script([qw(-init -Lbasic -V2 v2test --newsgroup v2.example),
 	"$home/v2test", 'http://example.com/v2test', $v2addr ]), 'v2test init');
 my $env = { ORIGINAL_RECIPIENT => $v2addr };
 my $eml = eml_load('t/utf8.eml');
+my $eidxdir = "$home/extindex";
 
 $eml->header_set('List-Id', '<v2.example.com>');
 
@@ -591,5 +592,36 @@ test_lei(sub {
 	like($lei_err, qr/unindexed .*?not supported/,
 		'noted unindexed extindex is unsupported');
 });
+
+if ('indexheader support') {
+	xsys_e [qw(git config extindex.all.indexheader
+		boolean_term:xarchiveshash:X-Archives-Hash)],
+		{ GIT_CONFIG => $cfg_path };
+	my $eml = eml_load('t/plack-qp.eml');
+	$eml->header_set('X-Archives-Hash', 'deadbeefcafe');
+	$in = \($eml->as_string);
+	$env->{ORIGINAL_RECIPIENT} = $v2addr;
+	run_script([qw(-mda --no-precheck)], $env, { 0 => $in }) or
+		xbail '-mda';
+	ok run_script([qw(-extindex --all -vvv), $eidxdir]),
+		'extindex update';
+	$es = PublicInbox::Config->new($cfg_path)->ALL;
+	my $mset = $es->mset('xarchiveshash:deadbeefcafe');
+	is $mset->size, 1, 'extindex.*.indexheader works';
+	local $PublicInbox::Search::XHC = eval {
+		require PublicInbox::XhcMset;
+		PublicInbox::XapClient::start_helper('-j0');
+	} or xbail "no XHC: $@";
+	my @args;
+	$es->async_mset('xarchiveshash:deadbeefcafe', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on hit';
+	is $args[0]->size, 1, 'async mset hit works';
+	ok !$args[1], 'no error on hit';
+	@args = ();
+	$es->async_mset('xarchiveshash:cafebeefdead', {} , sub { @args = @_ });
+	is scalar(@args), 2, 'no extra args on miss';
+	is $args[0]->size, 0, 'async mset miss works';
+	ok !$args[1], 'no error on miss';
+}
 
 done_testing;
