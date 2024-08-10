@@ -51,7 +51,7 @@ ok(run_script([qw(-extindex --dangerous --all), "$home/extindex"]),
 }
 
 if ('with boost') {
-	xsys([qw(git config publicinbox.v1test.boost), 10],
+	xsys_e([qw(git config publicinbox.v1test.boost), 10],
 		{ GIT_CONFIG => $cfg_path });
 	ok(run_script([qw(-extindex --all), "$home/extindex-b"]),
 		'extindex init with boost');
@@ -66,7 +66,7 @@ if ('with boost') {
 	is(scalar(@$xref3), 2, 'only to entries');
 	undef $es;
 
-	xsys([qw(git config publicinbox.v2test.boost), 20],
+	xsys_e([qw(git config publicinbox.v2test.boost), 20],
 		{ GIT_CONFIG => $cfg_path });
 	ok(run_script([qw(-extindex --all --reindex), "$home/extindex-b"]),
 		'extindex --reindex with altered boost');
@@ -88,9 +88,9 @@ if ('with boost') {
 	like($v2[0], qr/\Av2\.example.*?\b\Q$smsg->{blob}\E\b/,
 		'smsg->{blob} respected boost across 2 index runs');
 
-	xsys([qw(git config --unset publicinbox.v1test.boost)],
+	xsys_e([qw(git config --unset publicinbox.v1test.boost)],
 		{ GIT_CONFIG => $cfg_path });
-	xsys([qw(git config --unset publicinbox.v2test.boost)],
+	xsys_e([qw(git config --unset publicinbox.v2test.boost)],
 		{ GIT_CONFIG => $cfg_path });
 }
 
@@ -392,7 +392,7 @@ SELECT MIN(tid) FROM over WHERE num > 0
 }
 
 if ('remove v1test and test gc') {
-	xsys([qw(git config --unset publicinbox.v1test.inboxdir)],
+	xsys_e([qw(git config --unset publicinbox.v1test.inboxdir)],
 		{ GIT_CONFIG => $cfg_path });
 	my $opt = { 2 => \(my $err = '') };
 	ok(run_script([qw(-extindex --gc), "$home/extindex"], undef, $opt),
