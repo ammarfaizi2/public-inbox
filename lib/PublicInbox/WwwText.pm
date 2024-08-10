@@ -168,8 +168,8 @@ sub inbox_config ($$) {
 	url = https://example.com/$name/
 	url = http://example.onion/$name/
 EOS
-	for my $k (qw(address listid infourl watchheader)) {
-		defined(my $v = $ibx->{$k}) or next;
+	for my $k (qw(address listid infourl watchheader indexheader)) {
+		my $v = $ibx->{$k} // next;
 		$$txt .= "\t$k = $_\n" for @$v;
 	}
 	if (my $altid = $ibx->{altid}) {
