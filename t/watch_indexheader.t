@@ -84,7 +84,7 @@ $cfg->each_inbox(sub {
 	my $eml = $ibx->smsg_eml($ibx->over->get_art($num->[0]));
 	is($eml->header_raw('X-Archives-Hash'), $h1,
 		'stored message with X-Archives-Hash');
-	my @opt = $srch->xh_opt;
+	my @opt = $srch->xh_args;
 	is $opt[-2], '-Q', 'xap_helper -Q switch';
 	is $opt[-1], 'xarchiveshash=XXARCHIVESHASH', 'xap_helper -Q arg';
 });

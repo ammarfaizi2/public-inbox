@@ -476,16 +476,7 @@ sub xh_opt ($$) {
 	push @ret, '-t' if $opt->{threads};
 	push @ret, '-T', $opt->{threadid} if defined $opt->{threadid};
 	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
-	my $apfx = $self->{-alt_pfx} //= do {
-		my @tmp;
-		for my $x (@{$self->{-extra} // []}) {
-			my $sym = $QPMETHOD_2_SYM{$x->query_parser_method};
-			push @tmp, '-Q', $x->{prefix}.$sym.$x->{xprefix};
-		}
-		# TODO: arbitrary header indexing goes here
-		\@tmp;
-	};
-	(@ret, @$apfx);
+	@ret;
 }
 
 # returns a true value if actually handled asynchronously,
@@ -730,7 +721,17 @@ sub all_terms {
 }
 
 sub xh_args { # prep getopt args to feed to xap_helper.h socket
-	map { ('-d', $_) } shard_dirs($_[0]);
+	my ($self) = @_;
+	my $apfx = $self->{-alt_pfx} //= do {
+		my %dedupe;
+		for my $x (@{$self->{-extra} // []}) {
+			my $sym = $QPMETHOD_2_SYM{$x->query_parser_method};
+			$dedupe{$x->{prefix}.$sym.$x->{xprefix}} = undef;
+		}
+		# TODO: arbitrary header indexing goes here
+		[ sort keys %dedupe ];
+	};
+	((map { ('-d', $_) } shard_dirs($self)), map { ('-Q', $_) } @$apfx);
 }
 
 sub docids_by_postlist ($$) {
