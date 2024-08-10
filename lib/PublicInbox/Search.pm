@@ -598,16 +598,10 @@ sub qparse_new {
 		$qp->add_boolean_prefix($name, $_) foreach split(/ /, $prefix);
 	}
 
-	if (my $extra = $self->{-extra}) {
-		my $user_pfx = $self->{-user_pfx} = [];
-		for my $x (@$extra) {
-			push @$user_pfx, $x->user_help;
-			my $m = $x->query_parser_method;
-			$qp->$m(@$x{qw(prefix xprefix)});
-		}
-		chomp @$user_pfx;
+	for my $x (@{$self->{-extra} // []}) {
+		my $m = $x->query_parser_method;
+		$qp->$m(@$x{qw(prefix xprefix)});
 	}
-
 	while (my ($name, $prefix) = each %prob_prefix) {
 		$qp->add_prefix($name, $_) foreach split(/ /, $prefix);
 	}
@@ -666,9 +660,7 @@ sub help2txt (@) { # also used by Documentation/common.perl
 }
 
 sub help_txt {
-	my ($self) = @_;
-	$self->{qp} // $self->qparse_new; # parse altids + indexheaders
-	help2txt(@HELP, @{$self->{-user_pfx} // []});
+	help2txt(@HELP, map { $_->user_help } @{$_[0]->{-extra} // []});
 }
 
 # always returns a scalar value

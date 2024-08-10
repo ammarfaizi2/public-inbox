@@ -62,6 +62,9 @@ my $client = sub {
 	is $res->code, 200, 'altid search hit';
 	$res = $cb->(GET('/test/?q=xyz:10'));
 	is $res->code, 404, 'altid search miss';
+	$res = $cb->(GET('/test/_/text/help/'));
+	is $res->code, 200, 'altid help hit';
+	like $res->content, qr/\b$aid:/, 'altid shown in help';
 };
 test_psgi(sub { $www->call(@_) }, $client);
 SKIP: {
