@@ -49,8 +49,7 @@ sub ipc_atfork_child { # called automatically before ipc_worker_loop
 }
 
 sub index_eml {
-	my ($self, $eml, $smsg, $eidx_key) = @_;
-	$smsg->{eidx_key} = $eidx_key if defined $eidx_key;
+	my ($self, $eml, $smsg) = @_;
 	$self->ipc_do('add_xapian', $eml, $smsg);
 }
 

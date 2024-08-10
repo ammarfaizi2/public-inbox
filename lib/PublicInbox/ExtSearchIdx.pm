@@ -245,7 +245,8 @@ sub index_unseen ($) {
 	my $oid = $new_smsg->{blob};
 	my $ibx = delete $req->{ibx} or die 'BUG: {ibx} unset';
 	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ibx->eidx_key);
-	$idx->index_eml($eml, $new_smsg, $ibx->eidx_key);
+	$new_smsg->{eidx_key} = $ibx->eidx_key;
+	$idx->index_eml($eml, $new_smsg);
 	check_batch_limit($req);
 }
 
@@ -578,7 +579,8 @@ sub _reindex_finalize ($$$) {
 	my $top_smsg = pop @$stable;
 	$top_smsg == $smsg or die 'BUG: top_smsg != smsg';
 	my $ibx = _ibx_for($self, $sync, $smsg);
-	$idx->index_eml($eml, $smsg, $ibx->eidx_key);
+	$smsg->{eidx_key} = $ibx->eidx_key;
+	$idx->index_eml($eml, $smsg);
 	for my $x (reverse @$stable) {
 		$ibx = _ibx_for($self, $sync, $x);
 		my $hdr = delete $x->{hdr} // die 'BUG: no {hdr}';
