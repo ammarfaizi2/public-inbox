@@ -17,7 +17,8 @@ sub extra_indexer_new_common ($$$$) {
 	my ($self, $spec, $pfx, $query) = @_;
 	$pfx =~ /\A[a-z][a-z0-9]*\z/ or
 		warn "W: non-word prefix in `$spec' not searchable\n";
-	$self->{prefix} = $pfx;
+	my %dedupe = ($pfx => undef);
+	($self->{prefix}) = keys %dedupe;
 	my %params = map {
 		my ($k, $v) = split /=/, uri_unescape($_), 2;
 		($k, $v // '');
@@ -25,7 +26,8 @@ sub extra_indexer_new_common ($$$$) {
 	my $xpfx = delete($params{index_prefix}) // "X\U$pfx";
 	$xpfx =~ /\A[A-Z][A-Z0-9]*\z/ or die
 		die "E: `index_prefix' in `$spec' must be ALL CAPS\n";
-	$self->{xprefix} = $xpfx;
+	%dedupe = ($xpfx => undef);
+	($self->{xprefix}) = keys %dedupe;
 	\%params;
 }
 
@@ -34,14 +36,18 @@ sub new {
 	my ($type, $pfx, $header, $query) = split /:/, $spec, 4;
 	$pfx // die "E: `$spec' has no user prefix\n";
 	$header // die "E: `$spec' has no mail header\n";
+	$T2IDX{$type} // die
+		"E: `$type' not supported in $spec, must be one of: ",
+		join(', ', sort keys %T2IDX), "\n";
+	my %dedupe = ($type => undef);
+	($type) = keys %dedupe;
+	%dedupe = ($header => undef);
+	($header) = keys %dedupe;
 	my $self = bless { header => $header, type => $type }, $cls;
 	my $params = extra_indexer_new_common $self, $spec, $pfx, $query;
 	$self->{hdr_method} = delete $params->{raw} ? 'header_raw' : 'header';
 	my @k = keys %$params;
 	warn "W: unknown params in `$spec': ", join(', ', @k), "\n" if @k;
-	$T2IDX{$type} // die
-		"E: `$type' not supported in $spec, must be one of: ",
-		join(', ', sort keys %T2IDX), "\n";
 	$self;
 }
 
