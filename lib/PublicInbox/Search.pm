@@ -190,33 +190,33 @@ my %prob_prefix = (
 # especially since we don't offer boolean searches for To/Cc/From
 # headers, either
 our @HELP = (
-	's:' => 'match within Subject  e.g. s:"a quick brown fox"',
-	'd:' => <<EOF,
+	s => 'match within Subject  e.g. s:"a quick brown fox"',
+	d => <<EOF,
 match date-time range, git "approxidate" formats supported
 Open-ended ranges such as `d:last.week..' and
 `d:..2.days.ago' are supported
 EOF
-	'b:' => 'match within message body, including text attachments',
-	'nq:' => 'match non-quoted text within message body',
-	'q:' => 'match quoted text within message body',
-	'n:' => 'match filename of attachment(s)',
-	't:' => 'match within the To header',
-	'c:' => 'match within the Cc header',
-	'f:' => 'match within the From header',
-	'a:' => 'match within the To, Cc, and From headers',
-	'tc:' => 'match within the To and Cc headers',
-	'l:' => 'match contents of the List-Id header',
-	'bs:' => 'match within the Subject and body',
-	'dfn:' => 'match filename from diff',
-	'dfa:' => 'match diff removed (-) lines',
-	'dfb:' => 'match diff added (+) lines',
-	'dfhh:' => 'match diff hunk header context (usually a function name)',
-	'dfctx:' => 'match diff context lines',
-	'dfpre:' => 'match pre-image git blob ID',
-	'dfpost:' => 'match post-image git blob ID',
-	'dfblob:' => 'match either pre or post-image git blob ID',
-	'patchid:' => "match `git patch-id --stable' output",
-	'rt:' => <<EOF,
+	b => 'match within message body, including text attachments',
+	nq => 'match non-quoted text within message body',
+	q => 'match quoted text within message body',
+	n => 'match filename of attachment(s)',
+	t => 'match within the To header',
+	c => 'match within the Cc header',
+	f => 'match within the From header',
+	a => 'match within the To, Cc, and From headers',
+	tc => 'match within the To and Cc headers',
+	l => 'match contents of the List-Id header',
+	bs => 'match within the Subject and body',
+	dfn => 'match filename from diff',
+	dfa => 'match diff removed (-) lines',
+	dfb => 'match diff added (+) lines',
+	dfhh => 'match diff hunk header context (usually a function name)',
+	dfctx => 'match diff context lines',
+	dfpre => 'match pre-image git blob ID',
+	dfpost => 'match post-image git blob ID',
+	dfblob => 'match either pre or post-image git blob ID',
+	patchid => "match `git patch-id --stable' output",
+	rt => <<EOF,
 match received time, like `d:' if sender's clock was correct
 EOF
 );
@@ -657,14 +657,27 @@ EOM
 	$ret .= "}\n";
 }
 
-sub help {
+sub help2txt (@) { # also used by Documentation/common.perl
+	my @help = @_;
+	my $pad = 0;
+	my $htxt = '';
+	while (defined(my $pfx = shift @help)) {
+		my $n = length($pfx) + 1;
+		$pad = $n if $n > $pad;
+		$htxt .= $pfx . ":\0" . shift(@help) . "\f\n";
+	}
+	$pad += 2;
+	my $padding = ' ' x ($pad + 4);
+	$htxt =~ s/^/$padding/gms;
+	$htxt =~ s/^$padding(\S+)\0/"    $1".(' ' x ($pad - length($1)))/egms;
+	$htxt =~ s/\f\n/\n/gs;
+	$htxt;
+}
+
+sub help_txt {
 	my ($self) = @_;
 	$self->{qp} // $self->qparse_new; # parse altids + indexheaders
-	my @ret = @HELP;
-	if (my $user_pfx = $self->{-user_pfx}) {
-		push @ret, @$user_pfx;
-	}
-	\@ret;
+	help2txt(@HELP, @{$self->{-user_pfx} // []});
 }
 
 # always returns a scalar value

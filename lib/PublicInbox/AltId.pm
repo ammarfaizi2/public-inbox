@@ -56,7 +56,7 @@ sub index_extra { # for PublicInbox::SearchIdx
 
 sub user_help { # for PublicInbox::Search
 	my ($self) = @_;
-	("$self->{prefix}:", <<EOF);
+	($self->{prefix}, <<EOF);
 alternate serial number  e.g. $self->{prefix}:12345 (boolean)
 EOF
 }

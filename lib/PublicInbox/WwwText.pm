@@ -75,29 +75,6 @@ sub get_text {
 	PublicInbox::WwwStream::html_oneshot($ctx, $code, $txt);
 }
 
-sub _srch_prefix ($$) {
-	my ($ibx, $txt) = @_;
-	my $pad = 0;
-	my $htxt = '';
-	my $help = $ibx->isrch->help;
-	my $i;
-	for ($i = 0; $i < @$help; $i += 2) {
-		my $pfx = $help->[$i];
-		my $n = length($pfx);
-		$pad = $n if $n > $pad;
-		$htxt .= $pfx . "\0";
-		$htxt .= $help->[$i + 1];
-		$htxt .= "\f\n";
-	}
-	$pad += 2;
-	my $padding = ' ' x ($pad + 4);
-	$htxt =~ s/^/$padding/gms;
-	$htxt =~ s/^$padding(\S+)\0/"    $1".(' ' x ($pad - length($1)))/egms;
-	$htxt =~ s/\f\n/\n/gs;
-	$$txt .= $htxt;
-	1;
-}
-
 sub _colors_help ($$) {
 	my ($ctx, $txt) = @_;
 	my $ibx = $ctx->{ibx};
@@ -461,7 +438,7 @@ search
   Prefixes supported in this installation include:
 
 EOF
-		_srch_prefix($ibx, $txt);
+		$$txt .= $ibx->isrch->help_txt;
 		$$txt .= <<EOF;
 
   Most prefixes are probabilistic, meaning they support stemming

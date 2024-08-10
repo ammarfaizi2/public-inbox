@@ -62,7 +62,7 @@ sub index_extra { # for PublicInbox::SearchIdx
 
 sub user_help { # for PublicInbox::Search
 	my ($self) = @_;
-	("$self->{prefix}:", <<EOF);
+	($self->{prefix}, <<EOF);
 the `$self->{header}' mail header  e.g. $self->{prefix}:stable
 EOF
 }

@@ -131,7 +131,7 @@ sub mset_to_smsg {
 
 sub has_threadid { 1 }
 
-sub help { $_[0]->{es}->help }
+sub help_txt { $_[0]->{es}->help_txt }
 
 sub xh_args { # prep getopt args to feed to xap_helper.h socket
 	my ($self, $opt) = @_; # TODO uid_range
