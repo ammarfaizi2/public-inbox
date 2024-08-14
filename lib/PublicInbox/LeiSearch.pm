@@ -145,7 +145,15 @@ sub kw_changed {
 	}
 	if (!defined($cur_kw) && $@) {
 		$docids = join(', num:', @$docids);
-		croak "E: num:$docids keyword lookup failure: $@";
+		# this may happen if a previous import was incomplete since
+		# we commit changes to Xapian last
+		if (ref($@) =~ /::DocNotFoundError\b/) {
+			warn <<EOM;
+W: num:$docids keyword lookup failure, assuming no keywords
+EOM
+		} else {
+			croak "E: num:$docids keyword lookup failure: $@";
+		}
 	}
 	# RFC 5550 sec 5.9 on the $Forwarded keyword states:
 	# "Once set, the flag SHOULD NOT be cleared"
