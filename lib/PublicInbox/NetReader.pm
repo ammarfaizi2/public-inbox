@@ -570,7 +570,8 @@ sub each_old_flags ($$$$) {
 		my $r = $mic->fetch_hash("$n:$end", 'FLAGS');
 		if (!$r) {
 			return if $!{EINTR} && $self->{quit};
-			return "E: $uri UID FETCH $n:$end error: $!";
+			return "E: $uri UID FETCH $n:$end error: " .
+				$mic->LastError." \$!=$!"
 		}
 		while (my ($uid, $per_uid) = each %$r) {
 			my $kw = flags2kw($self, $uri, $uid, $per_uid->{FLAGS})
@@ -699,7 +700,8 @@ EOF
 			$uids = [ $single_uid ];
 		} elsif (!($uids = $mic->search("UID $l_uid:*"))) {
 			return if $!{EINTR} && $self->{quit};
-			return "E: $uri UID SEARCH $l_uid:* error: $!";
+			return "E: $uri UID SEARCH $l_uid:* error: ".
+				$mic->LastError." \$!=$!"
 		}
 		return if scalar(@$uids) == 0;
 
