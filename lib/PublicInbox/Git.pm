@@ -457,7 +457,7 @@ sub date_parse {
 	} $self->qx('rev-parse', map { "--since=$_" } @_);
 }
 
-sub _active ($) {
+sub cat_active ($) {
 	scalar(@{gcf_inflight($_[0]) // []}) ||
 		($_[0]->{ck} && scalar(@{gcf_inflight($_[0]->{ck}) // []}))
 }
@@ -466,7 +466,7 @@ sub _active ($) {
 # both completely done by using this:
 sub async_wait_all ($) {
 	my ($self) = @_;
-	while (_active($self)) {
+	while (cat_active($self)) {
 		check_async_wait($self);
 		cat_async_wait($self);
 	}
@@ -475,7 +475,7 @@ sub async_wait_all ($) {
 # returns true if there are pending "git cat-file" processes
 sub cleanup {
 	my ($self, $lazy) = @_;
-	($lazy && _active($self)) and
+	($lazy && cat_active($self)) and
 		return $self->{epwatch} ? watch_async($self) : 1;
 	local $in_cleanup = 1;
 	async_wait_all($self);

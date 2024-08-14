@@ -573,7 +573,7 @@ sub set_xvmd {
 
 sub check_done {
 	my ($self) = @_;
-	$self->git->_active ?
+	$self->git->cat_active ?
 		add_uniq_timer("$self-check_done", 5, \&check_done, $self) :
 		done($self);
 }
