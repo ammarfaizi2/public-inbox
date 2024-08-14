@@ -15,6 +15,7 @@ package PublicInbox::LeiStore;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Lock PublicInbox::IPC);
+use autodie qw(open pipe);
 use PublicInbox::ExtSearchIdx;
 use PublicInbox::Eml;
 use PublicInbox::Import;
@@ -57,7 +58,7 @@ sub rotate_bytes {
 sub git_ident ($) {
 	my ($git) = @_;
 	my $rdr = {};
-	open $rdr->{2}, '>', '/dev/null' or die "open /dev/null: $!";
+	open $rdr->{2}, '>', '/dev/null';
 	chomp(my $i = $git->qx([qw(var GIT_COMMITTER_IDENT)], undef, $rdr));
 	$i =~ /\A(.+) <([^>]+)> [0-9]+ [-\+]?[0-9]+$/ and return ($1, $2);
 	my ($user, undef, undef, undef, undef, undef, $gecos) = getpwuid($<);
@@ -585,8 +586,8 @@ sub xchg_stderr {
 	return unless -e $dir;
 	delete $self->{-tmp_err};
 	my ($err, $name) = tmpnam();
-	open STDERR, '>>', $name or die "dup2: $!";
-	unlink($name);
+	open STDERR, '>>', $name;
+	unlink $name; # ignore errors
 	STDERR->autoflush(1); # shared with shard subprocesses
 	$self->{-tmp_err} = $err; # separate file description for RO access
 	undef;
@@ -648,7 +649,7 @@ sub write_prepare {
 	unless ($self->{-wq_s1}) {
 		my $dir = $lei->store_path;
 		substr($dir, -length('/lei/store'), 10, '');
-		pipe(my ($r, $w)) or die "pipe: $!";
+		pipe(my $r, my $w);
 		$w->autoflush(1);
 		# Mail we import into lei are private, so headers filtered out
 		# by -mda for public mail are not appropriate
