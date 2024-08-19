@@ -2,7 +2,18 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12; use PublicInbox::TestCommon;
+use Config;
+use POSIX qw(uname);
 plan skip_all => 'inotify is Linux-only' if $^O ne 'linux';
+unless (eval { require PublicInbox::Inotify3 }) {
+	my (undef, undef, undef, undef, $machine) = uname();
+	diag '<cppsymbols>';
+	diag "\t$_" for (split /(?<!\\)\s+/, $Config{cppsymbols});
+	diag '</cppsymbols>';
+	diag "$_ => $Config{$_}" for qw(ptrsize sizesize);
+	plan skip_all => "inotify constants not defined on $machine";
+}
+
 use_ok 'PublicInbox::Inotify3';
 my $in = PublicInbox::Inotify3->new;
 my $tmpdir = tmpdir;
