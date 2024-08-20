@@ -150,6 +150,7 @@ sub mset_progress {
 sub query_one_mset { # for --threads and l2m w/o sort
 	my ($self, $ibxish) = @_;
 	my $lei = $self->{lei};
+	my $allow_sigs = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my ($srch, $over) = ($ibxish->search, $ibxish->over);
 	my $dir = $ibxish->{inboxdir} // $ibxish->{topdir};
 	return warn("$dir not indexed by Xapian\n") unless ($srch && $over);
@@ -223,6 +224,7 @@ sub query_one_mset { # for --threads and l2m w/o sort
 sub query_combined_mset { # non-parallel for non-"--threads" users
 	my ($self) = @_;
 	my $lei = $self->{lei};
+	my $allow_sigs = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my $mo = { %{$lei->{mset_opt}} };
 	local $0 = "$0 C $mo->{qstr}";
 	my $mset;
@@ -317,6 +319,7 @@ sub fudge_qstr_time ($$$) {
 sub query_remote_mboxrd {
 	my ($self, $uris) = @_;
 	local $SIG{TERM} = sub { exit(0) }; # for DESTROY (File::Temp, $reap)
+	my $allow_sigs = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my $lei = $self->{lei};
 	my $opt = $lei->{opt};
 	my $qstr = $lei->{mset_opt}->{qstr};
@@ -633,6 +636,7 @@ sub _lcat2smsg { # git->cat_async callback
 sub lcat_dump { # via wq_io_do
 	my ($self) = @_;
 	my $lei = $self->{lei};
+	my $allow_sigs = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
 	my $git = $lei->{ale}->git;
 	if (!$lei->{l2m}) {
