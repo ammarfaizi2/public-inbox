@@ -10,7 +10,8 @@
 package PublicInbox::IPC;
 use v5.12;
 use parent qw(Exporter);
-use autodie qw(close pipe read socketpair sysread);
+use autodie qw(close pipe read socketpair);
+use Errno qw(EAGAIN EINTR);
 use Carp qw(croak);
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::Spawn;
@@ -215,8 +216,17 @@ sub recv_and_run {
 	}
 	while ($full_stream && $n < $len) {
 		my $r = sysread($s2, $buf, $len - $n, $n);
-		croak "read EOF after $n/$len bytes" if $r == 0;
-		$n = length($buf);
+		if ($r) {
+			$n = length($buf); # keep looping
+		} elsif (!defined $r) {
+			if ($! == EAGAIN) {
+				poll_in($s2)
+			} elsif ($! != EINTR) {
+				croak "sysread: $!";
+			} # next on EINTR
+		} else { # ($r == 0)
+			croak "read EOF after $n/$len bytes";
+		}
 	}
 	# Sereal dies on truncated data, Storable returns undef
 	my $args = ipc_thaw($buf) // die "thaw error on buffer of size: $n";

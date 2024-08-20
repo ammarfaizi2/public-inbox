@@ -72,7 +72,8 @@ use PublicInbox::Aspawn qw(run_await);
 use Compress::Zlib qw(compress);
 use Carp qw(croak);
 use Time::Local qw(timegm);
-use autodie qw(close pipe open sysread seek sysseek send);
+use Errno qw(EINTR);
+use autodie qw(close pipe open seek sysseek);
 our $DO_QUIT = 15; # signal number
 our (
 	$LIVE_JOBS, # integer
@@ -225,6 +226,17 @@ sub check_objfmt_status ($$$) {
 	$fmt;
 }
 
+sub xsend ($$) { # move to PerlIO if we need to
+	my ($s, $buf) = @_;
+	my $n;
+	while (1) {
+		$n = send $s, $buf, 0;
+		return $n if defined $n;
+		next if $! == EINTR;
+		croak "send: $!";
+	}
+}
+
 sub store_repo { # wq_io_do, sends docid back
 	my ($self, $repo) = @_;
 	my $op_p = delete($self->{0}) // die 'BUG: no {0} op_p';
@@ -248,7 +260,7 @@ EOM
 	my $did = $repo->{docid};
 	$did ? $self->{xdb}->replace_document($did, $doc)
 		: ($did = $self->{xdb}->add_document($doc));
-	send($op_p, "repo_stored $did", 0);
+	xsend $op_p, "repo_stored $did";
 }
 
 sub cidx_ckpoint ($;$) {
@@ -293,7 +305,7 @@ sub cidx_reap_log { # awaitpid cb
 	my ($pid, $cmd, $self, $op_p) = @_;
 	if (!$? || ($DO_QUIT && (($? & 127) == $DO_QUIT ||
 				($? & 127) == POSIX::SIGPIPE))) {
-		send($op_p, "shard_done $self->{shard}", 0);
+		xsend $op_p, "shard_done $self->{shard}";
 	} else {
 		warn "W: @$cmd (\$?=$?)\n";
 		$self->{xdb}->cancel_transaction;
@@ -444,7 +456,7 @@ sub fp_async_done { # run_git cb from worker
 	my ($opt, $self, $git, $op_p) = @_;
 	my $refs = delete $opt->{1} // 'BUG: no {-repo}->{refs}';
 	sysseek($refs, 0, SEEK_SET);
-	send($op_p, 'fp_done '.sha_all(256, $refs)->hexdigest, 0);
+	xsend $op_p, 'fp_done '.sha_all(256, $refs)->hexdigest;
 }
 
 sub fp_done { # called parent via PktOp by fp_async_done
@@ -523,7 +535,7 @@ sub shard_commit { # via wq_io_do
 	my ($self) = @_;
 	my $op_p = delete($self->{0}) // die 'BUG: no {0} op_p';
 	$self->commit_txn_lazy;
-	send($op_p, "shard_done $self->{shard}", 0);
+	xsend $op_p, "shard_done $self->{shard}";
 }
 
 sub dump_roots_start {
@@ -818,7 +830,7 @@ sub prune_commit { # via wq_io_do in IDX_SHARDS
 	my $prune_op_p = delete $self->{0} // die 'BUG: no {0} op_p';
 	my $nr = delete $self->{nr_prune} // die 'BUG: nr_prune undef';
 	cidx_ckpoint($self, "prune [$self->{shard}] $nr done") if $nr;
-	send($prune_op_p, "prune_done $self->{shard}", 0);
+	xsend $prune_op_p, "prune_done $self->{shard}";
 }
 
 sub shards_active { # post_loop_do

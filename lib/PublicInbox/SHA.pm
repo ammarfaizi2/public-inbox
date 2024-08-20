@@ -12,8 +12,10 @@
 package PublicInbox::SHA;
 use v5.12;
 require Exporter;
+use Errno qw(EAGAIN EINTR);
+use PublicInbox::IO qw(poll_in);
+use Carp qw(croak);
 our @EXPORT_OK = qw(sha1_hex sha256_hex sha256 sha_all);
-use autodie qw(sysread);
 our @ISA;
 
 BEGIN {
@@ -59,9 +61,21 @@ EOM
 
 sub sha_all ($$) {
 	my ($n, $fh) = @_;
-	my ($dig, $buf) = (PublicInbox::SHA->new($n));
-	while (sysread($fh, $buf, 65536)) { $dig->add($buf) }
-	$dig
+	my ($dig, $buf, $r) = (PublicInbox::SHA->new($n));
+	while (1) {
+		$r = sysread($fh, $buf, 65536);
+		if ($r) {
+			$dig->add($buf);
+		} elsif (!defined $r) {
+			if ($! == EAGAIN) {
+				poll_in($fh);
+			} elsif ($! != EINTR) {
+				croak "sysread: $!";
+			} # next on EINTR
+		} else { # EOF:
+			return $dig;
+		}
+	}
 }
 
 1;

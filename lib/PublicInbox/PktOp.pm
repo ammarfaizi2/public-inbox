@@ -8,7 +8,7 @@
 package PublicInbox::PktOp;
 use v5.12;
 use parent qw(PublicInbox::DS);
-use Errno qw(EAGAIN ECONNRESET);
+use Errno qw(EAGAIN ECONNRESET EINTR);
 use PublicInbox::Syscall qw(EPOLLIN);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC qw(ipc_freeze ipc_thaw);
@@ -37,12 +37,15 @@ sub pkt_do { # for the producer to trigger event_step in consumer
 sub event_step {
 	my ($self) = @_;
 	my $c = $self->{sock};
-	my $n = recv($c, my $msg, 4096, 0);
-	unless (defined $n) {
-		return if $! == EAGAIN;
-		die "recv: $!" if $! != ECONNRESET; # we may be bidirectional
-	}
-	my ($cmd, @pargs);
+	my ($msg, $n, $cmd, @pargs);
+	do {
+		$n = recv($c, $msg, 4096, 0);
+		unless (defined $n) {
+			next if $! == EINTR;
+			return if $! == EAGAIN;
+			die "recv: $!" if $! != ECONNRESET; # we may be bidirectional
+		}
+	} until (defined $n);
 	if (index($msg, "\0") > 0) {
 		($cmd, my $pargs) = split(/\0/, $msg, 2);
 		@pargs = @{ipc_thaw($pargs)};
