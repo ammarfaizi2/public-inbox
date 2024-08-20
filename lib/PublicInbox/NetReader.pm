@@ -7,6 +7,7 @@ use v5.12;
 use parent qw(Exporter PublicInbox::IPC);
 use PublicInbox::Eml;
 use PublicInbox::Config;
+use PublicInbox::DS;
 our %IMAPflags2kw = map {; "\\\u$_" => $_ } qw(seen answered flagged draft);
 $IMAPflags2kw{'$Forwarded'} = 'forwarded';  # RFC 5550
 
@@ -61,6 +62,7 @@ sub mic_new ($$$$) {
 	my %mic_arg = (%$mic_arg, Keepalive => 1);
 	my $sa = $self->{cfg_opt}->{$sec}->{-proxy_cfg} || $self->{-proxy_cli};
 	my ($mic, $s, $t);
+	my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	if ($sa) {
 		# this `require' needed for worker[1..Inf], since socks_args
 		# only got called in worker[0]
@@ -226,6 +228,7 @@ sub nn_new ($$$$) {
 		($Net_NNTP, $new) = qw(PublicInbox::NetNNTPSocks new_socks);
 		$nn_arg->{SocksDebug} = 1 if $nn_arg->{Debug};
 	}
+	my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	do {
 		$! = 0;
 		$nn = $Net_NNTP->$new(%$nn_arg);
@@ -567,12 +570,14 @@ sub each_old_flags ($$$$) {
 	for (my $n = 1; $n <= $l_uid; $n += $bs) {
 		my $end = $n + $bs;
 		$end = $l_uid if $end > $l_uid;
+		my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 		my $r = $mic->fetch_hash("$n:$end", 'FLAGS');
 		if (!$r) {
 			return if $!{EINTR} && $self->{quit};
 			return "E: $uri UID FETCH $n:$end error: " .
 				$mic->LastError." \$!=$!"
 		}
+		undef $restore;
 		while (my ($uid, $per_uid) = each %$r) {
 			my $kw = flags2kw($self, $uri, $uid, $per_uid->{FLAGS})
 				// next;
@@ -611,12 +616,14 @@ sub _imap_fetch_bodies ($$$$) {
 		my @batch = splice(@$uids, 0, $bs);
 		my $batch = join(',', @batch);
 		local $0 = "UID:$batch $mbx $sec";
+		my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 		my $r = $mic->fetch_hash($batch, $req, 'FLAGS');
 		unless ($r) { # network error?
 			last if $!{EINTR} && $self->{quit};
 			$err = "E: $uri UID FETCH $batch error: $!";
 			last;
 		}
+		undef $restore;
 		for my $uid (@batch) {
 			# messages get deleted, so holes appear
 			my $per_uid = delete $r->{$uid} // next;
@@ -640,6 +647,7 @@ sub _imap_fetch_all ($$$) {
 	# we need to check for mailbox writability to see if we care about
 	# FLAGS from already-imported messages.
 	my $cmd = $self->folder_select;
+	my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	$mic->$cmd($mbx) or return "E: \U$cmd\E $mbx ($sec) failed: $!";
 
 	my ($r_uidval, $r_uidnext, $perm_fl);
@@ -657,6 +665,7 @@ sub _imap_fetch_all ($$$) {
 E: $orig_uri UIDVALIDITY mismatch (got $r_uidval)
 EOF
 
+	undef $restore;
 	my $uri = $orig_uri->clone;
 	my $single_uid = $uri->uid;
 	my ($itrk, $l_uid, $l_uidval) = itrk_last($self, $uri, $r_uidval, $mic);
@@ -782,6 +791,7 @@ sub nn_get {
 	my $nntp_cfg = $self->{cfg_opt}->{$sec};
 	$nn = nn_new($self, $nn_arg, $nntp_cfg, $uri) or return;
 	if (my $postconn = $nntp_cfg->{-postconn}) {
+		my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 		for my $m_arg (@$postconn) {
 			my ($method, @args) = @$m_arg;
 			$nn->$method(@args) and next;
@@ -796,11 +806,13 @@ sub _nntp_fetch_all ($$$) {
 	my ($self, $nn, $uri) = @_;
 	my ($group, $num_a, $num_b) = $uri->group;
 	my $sec = uri_section($uri);
+	my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my ($nr, $beg, $end) = $nn->group($group);
 	unless (defined($nr)) {
 		my $msg = ndump($nn->message);
 		return "E: GROUP $group <$sec> $msg";
 	}
+	undef $restore;
 	(defined($num_a) && defined($num_b) && $num_a > $num_b) and
 		return "E: $uri: backwards range: $num_a > $num_b";
 	if (defined($num_a)) { # no article numbers in mail_sync.sqlite3
@@ -833,6 +845,7 @@ sub _nntp_fetch_all ($$$) {
 			$itrk->update_last(0, $last_art) if $itrk;
 			$n = $self->{max_batch};
 		}
+		$restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 		my $raw = $nn->article($art);
 		unless (defined($raw)) {
 			my $msg = ndump($nn->message);
@@ -844,6 +857,7 @@ sub _nntp_fetch_all ($$$) {
 				next;
 			}
 		}
+		undef $restore;
 		$raw = join('', @$raw);
 		$raw =~ s/\r\n/\n/sg;
 		my ($eml_cb, @args) = @{$self->{eml_each}};
