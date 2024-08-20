@@ -248,7 +248,7 @@ sub sigset_prep ($$$) {
 	my ($sig, $init, $each) = @_; # $sig: { signame => whatever }
 	my $ret = POSIX::SigSet->new;
 	$ret->$init or die "$init: $!";
-	for my $s (keys %$sig) {
+	for my $s (ref($sig) eq 'HASH' ? keys(%$sig) : @$sig) {
 		my $num = $SIGNUM{$s} // POSIX->can("SIG$s")->();
 		$ret->$each($num) or die "$each ($s => $num): $!";
 	}
@@ -259,6 +259,13 @@ sub sigset_prep ($$$) {
 sub allowset ($) { sigset_prep $_[0], 'fillset', 'delset' }
 sub unblockset ($) { sigset_prep $_[0], 'emptyset', 'addset' }
 
+sub allow_sigs (@) {
+	my @signames = @_;
+	my $tmp = allowset(\@signames);
+	sig_setmask($tmp, my $old = POSIX::SigSet->new);
+	on_destroy \&sig_setmask, $old;
+}
+
 # Start processing IO events. In most daemon programs this never exits. See
 # C<post_loop_do> for how to exit the loop.
 sub event_loop (;$$) {
@@ -266,17 +273,15 @@ sub event_loop (;$$) {
 	$Poller //= _InitPoller();
 	require PublicInbox::Sigfd if $sig;
 	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig) : undef;
-	if ($sigfd && $sigfd->{is_kq}) {
-		my $tmp = allowset($sig);
-		local @SIG{keys %$sig} = values(%$sig);
-		sig_setmask($tmp, my $old = POSIX::SigSet->new);
+	local $SIG{PIPE} = 'IGNORE';
+	local @SIG{keys %$sig} = values(%$sig) if $sig;
+	if ($sigfd && $sigfd->{kq_sigs}) {
 		# Unlike Linux signalfd, EVFILT_SIGNAL can't handle
 		# signals received before the filter is created,
 		# so we peek at signals here.
-		sig_setmask($old);
+		my $restore = allow_sigs keys %$sig;
+		select undef, undef, undef, 0; # check sigs
 	}
-	local @SIG{keys %$sig} = values(%$sig) if $sig && !$sigfd;
-	local $SIG{PIPE} = 'IGNORE';
 	if (!$sigfd && $sig) {
 		# wake up every second to accept signals if we don't
 		# have signalfd or IO::KQueue:

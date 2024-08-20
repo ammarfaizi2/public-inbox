@@ -8,6 +8,7 @@ use Errno qw(ENOSYS);
 require_ok 'PublicInbox::Sigfd';
 use PublicInbox::DS;
 my ($linux_sigfd, $has_sigfd);
+use autodie qw(kill);
 
 SKIP: {
 	if ($^O ne 'linux' && !eval { require IO::KQueue }) {
@@ -23,7 +24,7 @@ SKIP: {
 	local $SIG{INT} = sub { $hit->{INT}->{normal}++ };
 	local $SIG{WINCH} = sub { $hit->{WINCH}->{normal}++ };
 	for my $s (qw(USR2 HUP TERM INT WINCH)) {
-		$sig->{$s} = sub { $hit->{$s}->{sigfd}++ };
+		$sig->{$s} = sub { die "SHOULD NOT BE CALLED ($s)" }
 	}
 	kill 'USR2', $$ or die "kill $!";
 	ok(!defined($hit->{USR2}), 'no USR2 yet') or diag explain($hit);
@@ -44,16 +45,13 @@ SKIP: {
 		is(select($rvec, undef, undef, undef), 1, 'select() works');
 		ok($sigfd->wait_once, 'wait_once reported success');
 		for my $s (qw(HUP INT)) {
-			is($hit->{$s}->{sigfd}, 1, "sigfd fired $s");
-			is($hit->{$s}->{normal}, undef,
-				"normal \$SIG{$s} not fired");
+			is($hit->{$s}->{normal}, 1, "sigfd fired $s");
 		}
 		SKIP: {
 			skip 'Linux sigfd-only behavior', 1 if !$linux_sigfd;
-			is($hit->{USR2}->{sigfd}, 1,
+			is($hit->{USR2}->{normal}, 1,
 				'USR2 sent before signalfd created received');
 		}
-		ok(!$hit->{USR2}->{normal}, 'USR2 not fired normally');
 		PublicInbox::DS->Reset;
 		$sigfd = undef;
 
@@ -64,26 +62,39 @@ SKIP: {
 		kill('HUP', $$) or die "kill $!";
 		local @PublicInbox::DS::post_loop_do = (sub {}); # loop once
 		PublicInbox::DS::event_loop();
-		is($hit->{HUP}->{sigfd}, 2, 'HUP sigfd fired in event loop') or
+		is($hit->{HUP}->{normal}, 2, 'HUP sigfd fired in event loop') or
 			diag explain($hit); # sometimes fails on FreeBSD 11.x
 		kill('TERM', $$) or die "kill $!";
 		kill('HUP', $$) or die "kill $!";
 		PublicInbox::DS::event_loop();
 		PublicInbox::DS->Reset;
-		is($hit->{TERM}->{sigfd}, 1, 'TERM sigfd fired in event loop');
-		is($hit->{HUP}->{sigfd}, 3, 'HUP sigfd fired in event loop');
-		ok($hit->{WINCH}->{sigfd}, 'WINCH sigfd fired in event loop');
+		is($hit->{TERM}->{normal}, 1, 'TERM sigfd fired in event loop');
+		is($hit->{HUP}->{normal}, 3, 'HUP sigfd fired in event loop');
+		ok($hit->{WINCH}->{normal}, 'WINCH sigfd fired in event loop');
+
+		my $restore = PublicInbox::DS::allow_sigs 'HUP';
+		kill 'HUP', $$;
+		select undef, undef, undef, 0;
+		is $hit->{HUP}->{normal}, 4, 'HUP sigfd fired after allow_sigs';
+
+		undef $restore;
+		kill 'HUP', $$;
+		vec($rvec = '', fileno($nbsig->{sock}), 1) = 1;
+		ok select($rvec, undef, undef, 1),
+			'select reports sigfd readiness';
+		is $hit->{HUP}->{normal}, 4, 'HUP not fired when sigs blocked';
+		$nbsig->event_step;
+		is $hit->{HUP}->{normal}, 5, 'HUP fires only on ->event_step';
+
+		kill 'HUP', $$;
+		is $hit->{HUP}->{normal}, 5, 'HUP not fired, yet';
+		$restore = PublicInbox::DS::allow_sigs 'HUP';
+		select(undef, undef, undef, 0);
+		is $hit->{HUP}->{normal}, 6, 'HUP fires from allow_sigs';
 	} else {
 		skip('signalfd disabled?', 10);
 	}
-	ok(!$hit->{USR2}->{normal}, 'USR2 still not fired normally');
 	PublicInbox::DS::sig_setmask($old);
-	SKIP: {
-		($has_sigfd && !$linux_sigfd) or
-			skip 'EVFILT_SIGNAL-only behavior check', 1;
-		is($hit->{USR2}->{normal}, 1,
-			"USR2 fired normally after unblocking on $^O");
-	}
 }
 
 done_testing;
