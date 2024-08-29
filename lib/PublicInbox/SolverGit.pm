@@ -75,40 +75,84 @@ sub ERR ($$) {
 	die $err;
 }
 
+sub ck_existing_cb { # async_check cb
+	my (undef, $oid_full, $type, $size, $arg) = @_;
+	my ($self, $want) = @$arg;
+
+	# git <2.21 would show `dangling' (2.21+ shows `ambiguous')
+	# https://public-inbox.org/git/20190118033845.s2vlrb3wd3m2jfzu@dcvr/T/
+	if ($type =~ /\A(?:missing|ambiguous)\z/ ||
+				($oid_full//'') eq 'dangling') {
+		undef $oid_full;
+		undef $type;
+	}
+	my $try = $want->{try_gits};
+	my $git = shift @$try // die 'BUG: no {try_gits}';
+
+	if ($want->{oid_b} eq ($oid_full // '') || (defined($type) &&
+				(!$self->{have_hints} || $type eq 'blob'))) {
+		delete $want->{try_gits};
+		dbg($self, "found $want->{oid_b} in " .
+			join(" ||\n\t", $git->pub_urls($self->{psgi_env})));
+
+		my $existing = [ $git, $oid_full, $type, $size + 0 ];
+		if ($want->{oid_b} eq $self->{oid_want} || $type ne 'blob') {
+			eval { done($self, $existing) };
+			die "E: $@" if $@;
+			return;
+		}
+		mark_found($self, $want->{oid_b}, $existing);
+		return next_step($self); # onto patch application
+	}
+
+	# parse stderr of "git cat-file --batch-check", async means
+	# we may end up slurping output from other requests:
+	my $err = $git->last_check_err;
+	my $prev_oids = $git->{-prev_oids} //= [];
+	my @any_oids = ($err =~ /\b([a-f0-9]{40,})\s+blob\b/g);
+	push @$prev_oids, @any_oids;
+	my $oid_b_re = qr/\A$want->{oid_b}/;
+	my @ambig_oids = grep /$oid_b_re/, @$prev_oids;
+	@$prev_oids = grep !/$oid_b_re/, @$prev_oids;
+	delete $git->{-prev_oids} unless @$prev_oids;
+	@ambig_oids and dbg($self, "`$want->{oid_b}' ambiguous in " .
+			join("\n\t", $git->pub_urls($self->{psgi_env}))
+			. "\n" .
+			join('', map { "$_ blob\n" } @ambig_oids));
+
+	return retry_current($self, $want) if @$try;
+
+	# we may retry if inbox scan (below) fails
+	delete $want->{try_gits};
+
+	# scan through inboxes to look for emails which results in
+	# the oid we want:
+	my $ibx = shift(@{$want->{try_ibxs}}) or return done($self, undef);
+	if (my $msgs = find_smsgs($self, $ibx, $want)) {
+		$want->{try_smsgs} = $msgs;
+		$want->{cur_ibx} = $ibx;
+		$self->{tmp_diffs} = [];
+		return retry_current($self, $want);
+	}
+	try_harder($self, $want);
+}
+
 # look for existing objects already in git repos, returns arrayref
 # if found, number of remaining git coderepos to try if not.
 sub solve_existing ($$) {
 	my ($self, $want) = @_;
 	my $try = $want->{try_gits} //= [ @{$self->{gits}} ]; # array copy
-	my $git = shift @$try or die 'BUG {try_gits} empty';
-	my $oid_b = $want->{oid_b};
+	my $git = $try->[0] // die 'BUG {try_gits} empty';
 
-	# can't use async_check due to last_check_err :<
-	my ($oid_full, $type, $size) = $git->check($oid_b);
-	$git->schedule_cleanup if $self->{psgi_env}->{'pi-httpd.async'};
-
-	if ($oid_b eq ($oid_full // '') || (defined($type) &&
-				(!$self->{have_hints} || $type eq 'blob'))) {
-		delete $want->{try_gits};
-		return [ $git, $oid_full, $type, int($size) ]; # done, success
+	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+		async_check({ git => $git }, $want->{oid_b},
+				\&ck_existing_cb, [ $self, $want ]);
+		$git->schedule_cleanup;
+	} else {
+		my ($oid_full, $type, $size) = $git->check($want->{oid_b});
+		$type //= 'missing';
+		ck_existing_cb(undef, $oid_full, $type, $size, [ $self, $want ])
 	}
-
-	# TODO: deal with 40-char "abbreviations" with future SHA-256 git
-	return scalar(@$try) if length($oid_b) >= 40;
-
-	# parse stderr of "git cat-file --batch-check"
-	my $err = $git->last_check_err;
-	my (@oids) = ($err =~ /\b([a-f0-9]{40,})\s+blob\b/g);
-	return scalar(@$try) unless scalar(@oids);
-
-	# TODO: do something with the ambiguous array?
-	# push @ambiguous, [ $git, @oids ];
-
-	dbg($self, "`$oid_b' ambiguous in " .
-			join("\n\t", $git->pub_urls($self->{psgi_env}))
-			. "\n" .
-			join('', map { "$_ blob\n" } @oids));
-	scalar(@$try);
 }
 
 sub _tmp {
@@ -574,7 +618,7 @@ sub extract_diffs_done {
 	try_harder($self, $want);
 }
 
-sub extract_diff_async {
+sub extract_diff_async { # cat_async cb
 	my ($bref, $oid, $type, $size, $x) = @_;
 	my ($self, $want, $smsg) = @$x;
 	if (defined($oid)) {
@@ -590,7 +634,6 @@ sub extract_diff_async {
 sub resolve_patch ($$) {
 	my ($self, $want) = @_;
 
-	my $cur_want = $want->{oid_b};
 	if (scalar(@{$self->{patches}}) > $MAX_PATCH) {
 		die "Aborting, too many steps to $self->{oid_want}";
 	}
@@ -613,40 +656,11 @@ sub resolve_patch ($$) {
 	}
 
 	# see if we can find the blob in an existing git repo:
-	if (!$want->{try_ibxs} && $self->{seen_oid}->{$cur_want}++) {
-		die "Loop detected solving $cur_want\n";
+	if (!$want->{try_ibxs} && $self->{seen_oid}->{$want->{oid_b}}++) {
+		die "Loop detected solving $want->{oid_b}\n";
 	}
 	$want->{try_ibxs} //= [ @{$self->{inboxes}} ]; # array copy
-	my $existing = solve_existing($self, $want);
-	if (ref $existing) {
-		my ($found_git, undef, $type, undef) = @$existing;
-		dbg($self, "found $cur_want in " .
-			join(" ||\n\t",
-				$found_git->pub_urls($self->{psgi_env})));
-
-		if ($cur_want eq $self->{oid_want} || $type ne 'blob') {
-			eval { done($self, $existing) };
-			die "E: $@" if $@;
-			return;
-		}
-		mark_found($self, $cur_want, $existing);
-		return next_step($self); # onto patch application
-	} elsif ($existing > 0) {
-		return retry_current($self, $want);
-	} else { # $existing == 0: we may retry if inbox scan (below) fails
-		delete $want->{try_gits};
-	}
-
-	# scan through inboxes to look for emails which results in
-	# the oid we want:
-	my $ibx = shift(@{$want->{try_ibxs}}) or return done($self, undef);
-	if (my $msgs = find_smsgs($self, $ibx, $want)) {
-		$want->{try_smsgs} = $msgs;
-		$want->{cur_ibx} = $ibx;
-		$self->{tmp_diffs} = [];
-		return retry_current($self, $want);
-	}
-	try_harder($self, $want);
+	solve_existing($self, $want);
 }
 
 # this API is designed to avoid creating self-referential structures;

@@ -664,7 +664,7 @@ sub watch_async ($) {
 
 sub close {
 	my ($self) = @_;
-	delete @$self{qw(-bc err_c inflight)};
+	delete @$self{qw(-bc err_c inflight -prev_oids)};
 	delete($self->{epwatch}) ? $self->SUPER::close : delete($self->{sock});
 	# gcf_drain may run from PublicInbox::IO::DESTROY
 }
