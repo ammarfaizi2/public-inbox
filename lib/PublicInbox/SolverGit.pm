@@ -385,21 +385,28 @@ EOF
 
 sub do_finish ($) {
 	my ($self) = @_;
-	my ($found, $oid_want) = @$self{qw(found oid_want)};
-	if (my $exists = $found->{$oid_want}) {
+	my $oid_want = $self->{oid_want};
+	if (my $exists = $self->{found}->{$oid_want}) {
 		return done($self, $exists);
 	}
 
 	# let git disambiguate if oid_want was too short,
 	# but long enough to be unambiguous:
-	my $tmp_git = $self->{tmp_git};
-	if (my @res = $tmp_git->check($oid_want)) {
-		return done($self, $found->{$res[0]});
+	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+		async_check { git => $self->{tmp_git} }, $oid_want,
+				\&finish_cb, $self
+	} else {
+		my ($hex, $type) = $self->{tmp_git}->check($oid_want);
+		finish_cb(undef, $hex, $type // 'missing', undef, $self)
 	}
-	if (my $err = $tmp_git->last_check_err) {
-		dbg($self, $err);
-	}
-	done($self, undef);
+}
+
+sub finish_cb { # async_check cb
+	my (undef, $oid_full, $type, undef, $self) = @_;
+	return done $self, $self->{found}->{$oid_full} if $type eq 'blob';
+	my $err = $self->{tmp_git}->last_check_err;
+	dbg $self, $err if $err;
+	done $self, undef;
 }
 
 sub event_step ($) {
@@ -456,9 +463,10 @@ sub mark_found ($$$) {
 
 sub parse_ls_files ($$) {
 	my ($self, $bref) = @_;
-	my ($qsp_err, $di) = delete @$self{qw(-qsp_err -cur_di)};
+	my $qsp_err = delete $self->{-qsp_err};
 	die "git ls-files -s -z error:$qsp_err" if $qsp_err;
 
+	my $di = $self->{-cur_di};
 	my @ls = split(/\0/, $$bref);
 	my ($line, @extra) = grep(/\t\Q$di->{path_b}\E\z/, @ls);
 	scalar(@extra) and die "BUG: extra files in index: <",
@@ -469,14 +477,23 @@ sub parse_ls_files ($$) {
 	$file eq $di->{path_b} or die
 "BUG: index mismatch: file=$file != path_b=$di->{path_b}";
 
-	my $tmp_git = $self->{tmp_git} or die 'no git working tree';
-	my (undef, undef, $size) = $tmp_git->check($oid_b_full);
-	defined($size) or die "check $oid_b_full failed";
-
 	dbg($self, "index at:\n$mode_b $oid_b_full\t$file");
-	my $created = [ $tmp_git, $oid_b_full, 'blob', $size, $di ];
-	mark_found($self, $di->{oid_b}, $created);
-	next_step($self); # onto the next patch
+	my $tmp_git = $self->{tmp_git} or die 'no git working tree';
+	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+		async_check { git => $tmp_git }, $oid_b_full,
+			\&ck_size_cb, $self
+	} else {
+		ck_size_cb(undef, $tmp_git->check($oid_b_full), $self);
+	}
+}
+
+sub ck_size_cb { # async_check cb
+	my (undef, $oid_b_full, undef, $size, $self) = @_;
+	$size // die "check $oid_b_full failed";
+	my $di = delete $self->{-cur_di} // die 'BUG: no -cur_di';
+	my $created = [ $self->{tmp_git}, $oid_b_full, 'blob', $size, $di ];
+	mark_found $self, $di->{oid_b}, $created;
+	next_step $self; # onto the next patch
 }
 
 sub ls_files_result {
