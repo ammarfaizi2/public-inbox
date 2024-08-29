@@ -128,11 +128,38 @@ sub ck_existing_cb { # async_check cb
 	# scan through inboxes to look for emails which results in
 	# the oid we want:
 	my $ibx = shift(@{$want->{try_ibxs}}) or return done($self, undef);
-	if (my $msgs = find_smsgs($self, $ibx, $want)) {
-		$want->{try_smsgs} = $msgs;
-		$want->{cur_ibx} = $ibx;
-		$self->{tmp_diffs} = [];
-		return retry_current($self, $want);
+
+	# maybe another inbox has it
+	my $srch = $ibx->isrch or return try_harder($self, $want);
+
+	my $post = $want->{oid_b} or die 'BUG: no {oid_b}';
+	$post =~ /\A[a-f0-9]+\z/ or die "BUG: oid_b not hex: $post";
+	my ($q, $pre)= ("dfpost:$post", $want->{oid_a});
+	$q .= " dfpre:$pre" if defined $pre && $pre =~ /\A[a-f0-9]+\z/;
+	my $path_b = $want->{path_b};
+	if (path_searchable($path_b)) {
+		$q .= filename_query($path_b);
+
+		my $path_a = $want->{path_a};
+		(path_searchable($path_a) && $path_a ne $path_b) and
+			$q .= filename_query($path_a);
+	}
+	$srch->async_mset($q, { relevance => 1 },
+			\&find_results, $self, $want, $ibx);
+}
+
+sub find_results { # async_mset cb
+	my ($self, $want, $ibx, $mset, $exc) = @_;
+	if ($mset && $mset->size) {
+		if (my $srch = $ibx->isrch) {
+			my $msgs = $srch->mset_to_smsg($ibx, $mset);
+			$want->{try_smsgs} = $msgs;
+			$want->{cur_ibx} = $ibx;
+			$self->{tmp_diffs} = [];
+			return retry_current($self, $want);
+		}
+		my $dir = $ibx->{inboxdir} // $ibx->{topdir};
+		warn 'W: ', $dir, " search disappeared, skipping\n";
 	}
 	try_harder($self, $want);
 }
@@ -275,28 +302,6 @@ sub filename_query ($) {
 
 sub find_smsgs ($$$) {
 	my ($self, $ibx, $want) = @_;
-	my $srch = $ibx->isrch or return;
-
-	my $post = $want->{oid_b} or die 'BUG: no {oid_b}';
-	$post =~ /\A[a-f0-9]+\z/ or die "BUG: oid_b not hex: $post";
-
-	my $q = "dfpost:$post";
-	my $pre = $want->{oid_a};
-	if (defined $pre && $pre =~ /\A[a-f0-9]+\z/) {
-		$q .= " dfpre:$pre";
-	}
-
-	my $path_b = $want->{path_b};
-	if (path_searchable($path_b)) {
-		$q .= filename_query($path_b);
-
-		my $path_a = $want->{path_a};
-		if (path_searchable($path_a) && $path_a ne $path_b) {
-			$q .= filename_query($path_a);
-		}
-	}
-	my $mset = $srch->mset($q, { relevance => 1 });
-	$mset->size ? $srch->mset_to_smsg($ibx, $mset) : undef;
 }
 
 sub update_index_result ($$) {

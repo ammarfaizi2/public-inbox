@@ -56,6 +56,13 @@ sub mset {
 	$self; # we are the mset (and $ibx, and $self)
 }
 
+# fake support for async API
+sub async_mset {
+	my ($self, $qstr, undef, $cb, @arg) = @_; # $opt ($_[2]) ignored
+	$cb->(@arg, mset($self, $qstr));
+	undef;
+}
+
 sub size { scalar @{$_[0]->{smsg}} } # size of previous results
 
 sub mset_to_smsg {
