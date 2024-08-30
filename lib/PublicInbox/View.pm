@@ -270,9 +270,9 @@ sub emit_eml ($$) {
 	obfuscate_addrs($obfs_ibx, $from) if $obfs_ibx;
 	my $upfx = $ctx->{-upfx};
 	my $mhref = $upfx . mid_href($mid_raw) . '/';
-	say $zfh 'From: ', $from, ' @ ', fmt_ts($ds), qq[ UTC (<a\nhref="],
+	print $zfh 'From: ', $from, ' @ ', fmt_ts($ds), qq[ UTC (<a\nhref="],
 			$mhref, qq[">permalink</a> / <a\nhref="],
-			$mhref, 'raw">raw</a>';
+			$mhref, qq[raw">raw</a>)\n];
 	{
 		my ($to, $tlen) = to_cc_html($ctx, $eml, 'To', $t);
 		my ($cc, $clen) = to_cc_html($ctx, $eml, 'Cc', $t);
