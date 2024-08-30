@@ -343,7 +343,7 @@ SKIP: {
 	open my $fh, '>', my $trace = "$inboxdir/trace.out";
 	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
 		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });
-	$rd->poll_in(10) or die 'strace not ready';
+	$rd->poll_in(10_000) or die 'strace not ready';
 	ok ! eval {
 		open my $olderr, '>&', \*STDERR;
 		open STDERR, '>>', $gfi_err;
@@ -362,7 +362,7 @@ SKIP: {
 	$rd = popen_rd([$strace, '-p', $pid, '-o', $trace,
 		'-e', 'inject=write:error=ENOSPC:when=1'],
 		undef, { 2 => 1 });
-	$rd->poll_in(10) or die 'strace not ready';
+	$rd->poll_in(10_000) or die 'strace not ready';
 	ok !eval { $im->done }, 'done fails with ENOSPC';
 	ok $@, '$@ set on ENOSPC';
 	kill 'TERM', $rd->attached_pid;
