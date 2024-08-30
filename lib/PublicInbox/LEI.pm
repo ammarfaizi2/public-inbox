@@ -1155,8 +1155,7 @@ sub accept_dispatch { # Listener {post_accept} callback
 	my ($sock) = @_; # ignore other
 	$sock->autoflush(1);
 	my $self = bless { sock => $sock }, __PACKAGE__;
-	vec(my $rvec = '', fileno($sock), 1) = 1;
-	select($rvec, undef, undef, 60) or
+	poll_in $sock, 60_000 or
 		return send_gently $sock, 'timed out waiting to recv FDs';
 	# (4096 * 33) >MAX_ARG_STRLEN
 	my @fds = $PublicInbox::IPC::recv_cmd->($sock, my $buf, 4096 * 33) or
@@ -1589,8 +1588,7 @@ sub request_umask { # assumes client is trusted and fast
 	my ($v, $r, $u);
 	do { # n.b. poll_in returns -1 on EINTR
 		vec($v = '', fileno($s), 1) = 1;
-		$r = poll_in($s, 2) or
-			die 'timeout waiting for umask';
+		$r = poll_in $s, 60_000 or die 'timeout waiting for umask';
 	} while ($r < 0 && $! == EINTR);
 	do {
 		$r = recv $s, $v, 5, 0;
