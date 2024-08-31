@@ -74,7 +74,7 @@ is(eval {
 }, 'ok', 'atfork_* work on tmp_clone');
 
 SKIP: {
-	my $strace = strace_inject;
+	my $strace = strace_inject(1);
 	open my $fh, '>', my $trace = "$tmpdir/trace.out";
 	my $rd = popen_rd([ $strace, '-p', $$, '-o', $trace,
 		'-e', 'inject=pwrite64:error=ENOSPC'], undef, { 2 => 1 });

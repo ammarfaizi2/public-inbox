@@ -337,7 +337,7 @@ ok($@, 'V2Writable fails on non-existent dir');
 }
 
 SKIP: {
-	my $strace = strace_inject;
+	my $strace = strace_inject(1);
 	my $eml = eml_load 't/plack-qp.eml';
 	my $gfi_err = "$inboxdir/gfi.err";
 	open my $fh, '>', my $trace = "$inboxdir/trace.out";
