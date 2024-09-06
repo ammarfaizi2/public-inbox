@@ -203,8 +203,12 @@ sub addr2urlmap ($) {
 		my $tmp = $ctx->{www}->{pi_cfg}->{-addr2urlmap};
 		my @k = keys %$tmp; # random order
 		delete @$tmp{@k[0..3]} if scalar(@k) > 7;
-		my $re = join('|', map { quotemeta } keys %addr2url);
-		$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
+		if (scalar keys %addr2url) {
+			my $re = join('|', map { quotemeta } keys %addr2url);
+			$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
+		} else { # nothing? NUL should never match:
+			[ qr/(\0)/, { "\0" => './' } ];
+		}
 	};
 	@$ent;
 }
