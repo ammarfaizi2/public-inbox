@@ -726,7 +726,7 @@ href="d/">diff</a>)</pre><pre>];
 		$hbuf .= qq{\t<a\nhref="#r">[thread overview]</a>\n};
 		$hbuf =~ s!^Subject:\x20(.*?)(\n[A-Z]|\z)
 				!Subject: <a\nhref="#r"\nid=t>$1</a>$2!msx or
-			$hbuf .= qq(<a\nhref="#r\nid=t></a>);
+			$hbuf .= qq(<a\nhref="#r"\nid=t></a>);
 	}
 	if (scalar(@$mids) == 1) { # common case
 		my $x = ascii_html($mids->[0]);
