@@ -213,6 +213,7 @@ sub addr2urlmap ($) {
 	@$ent;
 }
 
+# called by /$INBOX/$MSGID/[tT]/
 sub to_cc_html ($$$$) {
 	my ($ctx, $eml, $field, $t) = @_;
 	my @vals = $eml->header($field) or return ('', 0);
@@ -239,7 +240,14 @@ sub to_cc_html ($$$$) {
 		}
 		$line_len += length($n);
 		$url = $addr2url->{lc($pair->[1] // '')};
-		$html .= $url ? qq(<a\nhref="$url$t">$n</a>) : $n;
+		# cross-inbox links are relative to /$CUR_INBOX/$MSGID/[tT]/
+		if ($url) {
+			$url =~ m!\A(?:https?:)?//!i or
+				substr $url, 0, 0, '../../../';
+			$html .= qq(<a\nhref="$url$t">$n</a>);
+		} else {
+			$html .= $n;
+		}
 	}
 	($html, $len + $line_len);
 }
@@ -716,7 +724,12 @@ href="d/">diff</a>)</pre><pre>];
 	$hbuf = ascii_html($hbuf);
 	my $t = $ts ? '?t='.ts2str($ts) : '';
 	my ($re, $addr2url) = addr2urlmap($ctx);
-	$hbuf =~ s!$re!qq(<a\nhref=").$addr2url->{lc $1}.qq($t">$1</a>)!sge;
+	# $url is relative to /$INBOX/$MSGID/
+	$hbuf =~ s#$re#
+		my ($addr, $url) = ($1, $addr2url->{lc $1});
+		substr $url, 0, 0, '../../' if $url !~ m!\A(?:https?:)?//!i;
+		qq(<a\nhref="$url$t">$addr</a>)
+		#sge;
 	$ctx->{-title_html} = ascii_html(join(' - ', @title));
 	if (my $obfs_ibx = $ctx->{-obfs_ibx}) {
 		obfuscate_addrs($obfs_ibx, $hbuf);
