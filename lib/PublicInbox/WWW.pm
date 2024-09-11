@@ -187,7 +187,10 @@ sub preload {
 		if (defined($pi_cfg->{'publicinbox.cgitrc'})) {
 			$pi_cfg->limiter('-cgit');
 		}
-		$pi_cfg->ALL and require PublicInbox::Isearch;
+		if ($pi_cfg->ALL) {
+			require PublicInbox::Isearch;
+			$pi_cfg->fill_all;
+		}
 		$self->cgit;
 		$self->coderepo;
 		$self->stylesheets_prepare($_) for ('', '../', '../../');
