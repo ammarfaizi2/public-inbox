@@ -19,6 +19,7 @@ sub generate {
 	my ($ctx) = @_;
 	my $msgs = $ctx->{msgs} = recent_msgs($ctx);
 	return _no_thread() unless @$msgs;
+	PublicInbox::View::addr2urlmap $ctx;
 	PublicInbox::WwwAtomStream->response($ctx, \&generate_i);
 }
 
@@ -26,6 +27,7 @@ sub generate_thread_atom {
 	my ($ctx) = @_;
 	my $msgs = $ctx->{msgs} = $ctx->{ibx}->over->get_thread($ctx->{mid});
 	return _no_thread() unless @$msgs;
+	PublicInbox::View::addr2urlmap $ctx;
 	PublicInbox::WwwAtomStream->response($ctx, \&generate_i);
 }
 
@@ -69,6 +71,7 @@ sub new_html {
 	$ctx->{-upfx} = '';
 	$ctx->{-spfx} = '' if $ctx->{ibx}->{coderepo};
 	$ctx->{-hr} = 1;
+	PublicInbox::View::addr2urlmap $ctx;
 	PublicInbox::WwwStream::aresponse($ctx, \&new_html_i);
 }
 

@@ -33,6 +33,7 @@ sub sres_top_html {
 	my $srch = $ctx->{srch} = $ctx->{ibx}->isrch or
 		return PublicInbox::WWW::need($ctx, 'Search');
 	my $q = PublicInbox::SearchQuery->new($ctx->{qp});
+	PublicInbox::View::addr2urlmap $ctx if $q->{x} eq 't';
 	my $o = $q->{o} // 0;
 	my $asc;
 	if ($o < 0) {

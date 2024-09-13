@@ -64,10 +64,39 @@ sub no_over_html ($) {
 	$ctx->html_done;
 }
 
+sub addr2urlmap ($) {
+	my ($ctx) = @_;
+	# cache makes a huge difference with /[tT] and large threads
+	my $key = PublicInbox::Git::host_prefix_url($ctx->{env}, '');
+	my $ent = $ctx->{www}->{pi_cfg}->{-addr2urlmap}->{$key} // do {
+		my $by_addr = $ctx->{www}->{pi_cfg}->{-by_addr};
+		my (%addr2url, $url);
+		while (my ($addr, $ibx) = each %$by_addr) {
+			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
+			$addr2url{ascii_html($addr)} = ascii_html($url) if
+				defined $url
+		}
+		# don't allow attackers to randomly change Host: headers
+		# and OOM us if the server handles all hostnames:
+		my $tmp = $ctx->{www}->{pi_cfg}->{-addr2urlmap};
+		my @k = keys %$tmp; # random order
+		delete @$tmp{@k[0..3]} if scalar(@k) > 7;
+		if (scalar keys %addr2url) {
+			my $re = join('|', map { quotemeta } keys %addr2url);
+			$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
+		} else { # nothing? NUL should never match:
+			[ qr/(\0)/, { "\0" => './' } ];
+		}
+	};
+	$ctx->{-addr2urlmap} = $ent;
+}
+
 # public functions: (unstable)
 
+# GET /$INBOX/$MSGID/ (single message page)
 sub msg_page {
 	my ($ctx) = @_;
+	addr2urlmap $ctx;
 	my $ibx = $ctx->{ibx};
 	$ctx->{-obfs_ibx} = $ibx->{obfuscate} ? $ibx : undef;
 	my $over = $ibx->over or return no_over_html($ctx);
@@ -187,38 +216,10 @@ sub nr_to_s ($$$) {
 	$nr == 1 ? "$nr $singular" : "$nr $plural";
 }
 
-sub addr2urlmap ($) {
-	my ($ctx) = @_;
-	# cache makes a huge difference with /[tT] and large threads
-	my $key = PublicInbox::Git::host_prefix_url($ctx->{env}, '');
-	my $ent = $ctx->{www}->{pi_cfg}->{-addr2urlmap}->{$key} // do {
-		my $by_addr = $ctx->{www}->{pi_cfg}->{-by_addr};
-		my (%addr2url, $url);
-		while (my ($addr, $ibx) = each %$by_addr) {
-			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
-			$addr2url{ascii_html($addr)} = ascii_html($url) if
-				defined $url;
-		}
-		# don't allow attackers to randomly change Host: headers
-		# and OOM us if the server handles all hostnames:
-		my $tmp = $ctx->{www}->{pi_cfg}->{-addr2urlmap};
-		my @k = keys %$tmp; # random order
-		delete @$tmp{@k[0..3]} if scalar(@k) > 7;
-		if (scalar keys %addr2url) {
-			my $re = join('|', map { quotemeta } keys %addr2url);
-			$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
-		} else { # nothing? NUL should never match:
-			[ qr/(\0)/, { "\0" => './' } ];
-		}
-	};
-	@$ent;
-}
-
 # called by /$INBOX/$MSGID/[tT]/
 sub to_cc_html ($$$$) {
 	my ($ctx, $eml, $field, $t) = @_;
 	my @vals = $eml->header($field) or return ('', 0);
-	my (undef, $addr2url) = addr2urlmap($ctx);
 	my $pairs = PublicInbox::Address::pairs(join(', ', @vals));
 	my ($len, $line_len, $html) = (0, 0, '');
 	my ($pair, $url);
@@ -227,6 +228,7 @@ sub to_cc_html ($$$$) {
 	my @html = split /\n/, ascii_html(join("\n", map {
 		$_->[0] // (split(/\@/, $_->[1]))[0]; # addr user if no name
 	} @$pairs));
+	my (undef, $addr2url) = @{$ctx->{-addr2urlmap}};
 	for my $n (@html) {
 		$pair = shift @$pairs;
 		if ($line_len) { # 9 = display width of ",\t":
@@ -552,6 +554,7 @@ EOM
 	walk_thread($rootset, $ctx, \&pre_thread); # pushes to ctx->{skel}
 
 	push @{$ctx->{skel}}, '</pre>';
+	addr2urlmap $ctx;
 	return stream_thread($rootset, $ctx) unless $ctx->{flat};
 
 	# flat display: lazy load the full message from smsg
@@ -724,7 +727,7 @@ href="d/">diff</a>)</pre><pre>];
 	$hbuf .= "Date: $_\n" for $eml->header('Date');
 	$hbuf = ascii_html($hbuf);
 	my $t = $ts ? '?t='.ts2str($ts) : '';
-	my ($re, $addr2url) = addr2urlmap($ctx);
+	my ($re, $addr2url) = @{$ctx->{-addr2urlmap}};
 	# $url is relative to /$INBOX/$MSGID/
 	$hbuf =~ s#$re#
 		my ($addr, $url) = ($1, $addr2url->{lc $1});
