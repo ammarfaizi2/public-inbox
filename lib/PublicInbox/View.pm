@@ -72,6 +72,9 @@ sub addr2urlmap ($) {
 		my $by_addr = $ctx->{www}->{pi_cfg}->{-by_addr};
 		my (%addr2url, $url);
 		while (my ($addr, $ibx) = each %$by_addr) {
+			# FIXME: use negative look(behind|ahead) in s// for
+			# `&' and `;' to make them not match \b
+			next if $addr =~ /\A(?:gt|lt|#[0-9]+)\z/;
 			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
 			$addr2url{ascii_html($addr)} = ascii_html($url) if
 				defined $url
@@ -83,6 +86,8 @@ sub addr2urlmap ($) {
 		delete @$tmp{@k[0..3]} if scalar(@k) > 7;
 		if (scalar keys %addr2url) {
 			my $re = join('|', map { quotemeta } keys %addr2url);
+			# FIXME: fix this regexp to allow `lt' and `gt' as
+			# local email addresses:
 			$tmp->{$key} = [ qr/\b($re)\b/i, \%addr2url ];
 		} else { # nothing? NUL should never match:
 			[ qr/(\0)/, { "\0" => './' } ];
