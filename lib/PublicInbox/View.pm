@@ -196,7 +196,8 @@ sub addr2urlmap ($) {
 		my (%addr2url, $url);
 		while (my ($addr, $ibx) = each %$by_addr) {
 			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
-			$addr2url{$addr} = ascii_html($url) if defined $url;
+			$addr2url{ascii_html($addr)} = ascii_html($url) if
+				defined $url;
 		}
 		# don't allow attackers to randomly change Host: headers
 		# and OOM us if the server handles all hostnames:
