@@ -51,7 +51,15 @@ if ($dst eq 'NEWS') {
 			HTTP_HOST => 'public-inbox.org',
 			'psgi.url_scheme' => 'https',
 		},
+		www => {
+			pi_cfg => {
+				-by_addr => { # for addr2urlmap
+					'meta@public-inbox.org' => $ibx,
+				}
+			}
+		}
 	};
+	PublicInbox::View::addr2urlmap $ctx;
 	if ($dst eq 'NEWS.html') {
 		html_start($out, $ctx);
 		mime2html($out, $mime_latest, $ctx);
