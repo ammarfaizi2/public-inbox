@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -9,17 +9,6 @@ use PublicInbox::Feed;
 use PublicInbox::Inbox;
 my $have_xml_treepp = eval { require XML::TreePP; 1 };
 my ($tmpdir, $for_destroy) = tmpdir();
-
-sub string_feed {
-	my $res = PublicInbox::Feed::generate($_[0]);
-	my $body = $res->[2];
-	my $str = '';
-	while (defined(my $chunk = $body->getline)) {
-		$str .= $chunk;
-	}
-	$body->close;
-	$str;
-}
 
 my $git_dir = "$tmpdir/gittest";
 my $ibx = create_inbox 'v1', tmpdir => $git_dir, sub {
@@ -46,13 +35,28 @@ EOF
 
 $ibx->{url} = [ 'http://example.com/test' ];
 $ibx->{feedmax} = 3;
+my $ctx = {
+	ibx => $ibx,
+	env => { HTTP_HOST => 'example.com', 'psgi.url_scheme' => 'http' },
+};
+my $string_feed = sub {
+	my $res = PublicInbox::Feed::generate($ctx);
+	my $body = $res->[2];
+	my $str = '';
+	while (defined(my $chunk = $body->getline)) {
+		$str .= $chunk;
+	}
+	$body->close;
+	$str;
+};
+
 my $im = $ibx->importer(0);
 
 # spam check
 {
 	# check initial feed
 	{
-		my $feed = string_feed({ ibx => $ibx });
+		my $feed = $string_feed->();
 		SKIP: {
 			skip 'XML::TreePP missing', 3 unless $have_xml_treepp;
 			my $t = XML::TreePP->new->parse($feed);
@@ -86,7 +90,7 @@ EOF
 
 	# check spam shows up
 	{
-		my $spammy_feed = string_feed({ ibx => $ibx });
+		my $spammy_feed = $string_feed->();
 		SKIP: {
 			skip 'XML::TreePP missing', 2 unless $have_xml_treepp;
 			my $t = XML::TreePP->new->parse($spammy_feed);
@@ -104,7 +108,7 @@ EOF
 
 	# spam no longer shows up
 	{
-		my $feed = string_feed({ ibx => $ibx });
+		my $feed = $string_feed->();
 		SKIP: {
 			skip 'XML::TreePP missing', 2 unless $have_xml_treepp;
 			my $t = XML::TreePP->new->parse($feed);
