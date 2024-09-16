@@ -209,7 +209,8 @@ sub require_mods {
 		if ($mod eq 'json') {
 			$mod = 'Cpanel::JSON::XS||JSON::MaybeXS||JSON||JSON::PP'
 		} elsif ($mod eq '-httpd') {
-			push @mods, qw(Plack::Builder Plack::Util);
+			push @mods, qw(Plack::Builder Plack::Util
+				HTTP::Date HTTP::Status);
 			next;
 		} elsif ($mod eq '-imapd') {
 			push @mods, qw(Parse::RecDescent DBD::SQLite);
