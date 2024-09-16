@@ -5,7 +5,7 @@
 use v5.12; use PublicInbox::TestCommon;
 use PublicInbox::Import;
 use IO::Uncompress::Gunzip qw(gunzip);
-require_mods(qw(json URI::Escape Plack::Builder HTTP::Tiny));
+require_mods qw(json URI::Escape psgi -httpd HTTP::Tiny);
 my $curl = require_cmd 'curl';
 require PublicInbox::WwwListing;
 require PublicInbox::ManifestJsGz;

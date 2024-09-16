@@ -5,12 +5,12 @@ use strict; use v5.10.1; use PublicInbox::TestCommon;
 use PublicInbox::Config;
 use PublicInbox::Spawn qw(spawn);
 require_cmd('sqlite3');
-require_mods(qw(DBD::SQLite HTTP::Request::Common Plack::Test URI::Escape
-	Plack::Builder IO::Uncompress::Gunzip Xapian));
+require_mods qw(DBD::SQLite psgi Xapian);
 use_ok($_) for qw(Plack::Test HTTP::Request::Common);
 require_ok 'PublicInbox::Msgmap';
 require_ok 'PublicInbox::AltId';
 require_ok 'PublicInbox::WWW';
+require IO::Uncompress::Gunzip;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $aid = 'xyz';
 my $cfgpath;

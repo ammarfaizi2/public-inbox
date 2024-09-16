@@ -6,8 +6,8 @@ use Test::More;
 use PublicInbox::TestCommon;
 my ($tmpdir, $for_destroy) = tmpdir();
 my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape);
-require_mods(@mods, 'IO::Uncompress::Gunzip');
-use_ok $_ foreach @mods;
+require_mods qw(psgi);
+require IO::Uncompress::Gunzip;
 use_ok 'PublicInbox::WwwStatic';
 
 my $app = sub {

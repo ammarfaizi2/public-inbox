@@ -196,10 +196,11 @@ sub need_accept_filter ($) {
 		skip "$af not loaded: kldload $af", 1;
 }
 
-sub require_mods {
+sub require_mods (@) {
 	my @mods = @_;
 	my $maybe = pop @mods if $mods[-1] =~ /\A[0-9]+\z/;
-	my @need;
+	my (@need, @use);
+
 	while (my $mod = shift(@mods)) {
 		if ($mod eq 'lei') {
 			require_git(2.6, $maybe ? $maybe : ());
@@ -211,6 +212,12 @@ sub require_mods {
 		} elsif ($mod eq '-httpd') {
 			push @mods, qw(Plack::Builder Plack::Util
 				HTTP::Date HTTP::Status);
+			next;
+		} elsif ($mod eq 'psgi') {
+			my @m = qw(Plack::Test HTTP::Request::Common
+				Plack::Builder);
+			push @use, @m;
+			push @mods, qw(Plack::Util), @m;
 			next;
 		} elsif ($mod eq '-imapd') {
 			push @mods, qw(Parse::RecDescent DBD::SQLite);
@@ -263,7 +270,14 @@ sub require_mods {
 			$ENV{TEST_IPV4_ONLY} = 1 if !eval { $mod->VERSION($v) };
 		}
 	}
-	return unless @need;
+	unless (@need) {
+		for my $mod (@use) {
+			my ($pkg) = caller(0);
+			eval "package $pkg; $mod->import";
+			xbail "$mod->import: $@" if $@;
+		}
+		return;
+	}
 	my $m = join(', ', @need)." missing for $0";
 	$m =~ s/\bEmail::MIME\b/Email::MIME (development purposes only)/;
 	skip($m, $maybe) if $maybe;
@@ -941,8 +955,8 @@ sub test_httpd ($$;$$) {
 	};
 	for (qw(PI_CONFIG)) { $env->{$_} or BAIL_OUT "$_ unset" }
 	SKIP: {
-		require_mods(qw(Plack::Test::ExternalServer LWP::UserAgent),
-				$skip // 1);
+		require_mods qw(Plack::Test::ExternalServer LWP::UserAgent
+				-httpd), $skip // 1;
 		my $sock = tcp_server() or die;
 		my ($out, $err) = map { "$env->{TMPDIR}/std$_.log" } qw(out err);
 		my $cmd = [ qw(-httpd -W0), "--stdout=$out", "--stderr=$err" ];

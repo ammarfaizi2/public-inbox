@@ -4,11 +4,10 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-my @use = qw(HTTP::Request::Common Plack::Test);
 my @req = qw(URI::Escape DBD::SQLite);
 require_git v2.6;
-require_mods(@use, @req, qw(PublicInbox::WWW));
-$_->import for @use;
+require_mods qw(DBD::SQLite psgi);
+use_ok 'PublicInbox::WWW';
 my $cfgtxt = '';
 foreach my $i (1..2) {
 	my $ibx = create_inbox "test-$i", version => 2, indexlevel => 'basic',

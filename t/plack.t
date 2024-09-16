@@ -5,9 +5,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
 my $psgi = "./examples/public-inbox.psgi";
-my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape);
-require_mods(@mods);
-foreach my $mod (@mods) { use_ok $mod; }
+require_mods 'psgi';
 ok(-f $psgi, "psgi example file found");
 my ($tmpdir, $for_destroy) = tmpdir();
 my $pfx = 'http://example.com/test';

@@ -8,7 +8,7 @@ use Errno qw(EADDRINUSE);
 use Cwd qw(abs_path);
 use Carp qw(croak);
 use autodie qw(close);
-require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
+require_mods qw(-httpd);
 use IO::Socket::UNIX;
 use POSIX qw(mkfifo);
 require PublicInbox::Sigfd;

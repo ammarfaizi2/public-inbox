@@ -6,10 +6,7 @@ use PublicInbox::Eml;
 use PublicInbox::TestCommon;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $v1dir = "$tmpdir/v1.git";
-my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape
-	Plack::Builder Plack::App::URLMap);
-require_mods(@mods);
-use_ok $_ foreach @mods;
+require_mods 'psgi';
 use_ok 'PublicInbox::WWW';
 my $ibx = create_inbox 'test', tmpdir => $v1dir, sub {
 	my ($im, $ibx) = @_;

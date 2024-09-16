@@ -1,12 +1,12 @@
 #!perl -w
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
-require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
+require_mods '-httpd';
 require_git_http_backend;
 
 # FIXME: too much setup

@@ -4,9 +4,7 @@
 use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
-my @mods = qw(HTTP::Request::Common Plack::Builder Plack::Test URI::Escape);
-require_mods(@mods);
-use_ok $_ foreach @mods;
+require_mods 'psgi';
 use_ok 'PublicInbox::WWW';
 use PublicInbox::Config;
 use PublicInbox::Eml;

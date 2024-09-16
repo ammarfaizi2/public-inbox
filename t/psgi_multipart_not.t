@@ -5,10 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
 require_git 2.6;
-my @mods = qw(DBD::SQLite Xapian HTTP::Request::Common
-              Plack::Test URI::Escape Plack::Builder Plack::Test);
-require_mods(@mods);
-use_ok($_) for (qw(HTTP::Request::Common Plack::Test));
+require_mods qw(DBD::SQLite Xapian psgi);
 use_ok 'PublicInbox::WWW';
 my $ibx = create_inbox 'v2', version => 2, sub {
 	my ($im) = @_;

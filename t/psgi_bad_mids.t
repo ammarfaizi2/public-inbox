@@ -4,11 +4,8 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
-my @mods = qw(DBD::SQLite HTTP::Request::Common Plack::Test
-		URI::Escape Plack::Builder);
-require_git 2.6;
-require_mods(@mods);
-use_ok($_) for @mods;
+require_git v2.6;
+require_mods qw(DBD::SQLite psgi);
 use_ok 'PublicInbox::WWW';
 my $msgs = <<'';
 F1V5OR6NMF.3M649JTLO9IXD@tux.localdomain/hehe1"'<foo

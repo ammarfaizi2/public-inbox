@@ -6,7 +6,7 @@ use Socket qw(SOCK_STREAM IPPROTO_TCP SOL_SOCKET);
 use PublicInbox::TestCommon;
 use File::Copy qw(cp);
 # IO::Poll is part of the standard library, but distros may split them off...
-require_mods(qw(IO::Socket::SSL IO::Poll Plack::Util));
+require_mods qw(IO::Socket::SSL IO::Poll -httpd);
 my @certs = qw(certs/server-cert.pem certs/server-key.pem
 	certs/server2-cert.pem certs/server2-key.pem);
 if (scalar(grep { -r $_ } @certs) != scalar(@certs)) {

@@ -7,7 +7,7 @@ use v5.12; use PublicInbox::TestCommon;
 use Time::HiRes qw(gettimeofday tv_interval);
 use autodie qw(getsockopt setsockopt);
 use PublicInbox::Spawn qw(spawn popen_rd);
-require_mods(qw(Plack::Util Plack::Builder HTTP::Date HTTP::Status));
+require_mods '-httpd';
 use PublicInbox::SHA qw(sha1_hex);
 use IO::Handle ();
 use IO::Socket::UNIX;
@@ -658,9 +658,7 @@ SKIP: {
 
 # ensure compatibility with other PSGI servers
 SKIP: {
-	require_mods(@zmods, qw(Plack::Test HTTP::Request::Common), 3);
-	use_ok 'HTTP::Request::Common';
-	use_ok 'Plack::Test';
+	require_mods @zmods, 'psgi', 3;
 	STDERR->flush;
 	open my $olderr, '>&', \*STDERR or die "dup stderr: $!";
 	open my $tmperr, '+>', undef or die;

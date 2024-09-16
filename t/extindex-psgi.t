@@ -8,9 +8,7 @@ use PublicInbox::Config;
 use File::Copy qw(cp);
 use IO::Handle ();
 require_git(2.6);
-require_mods(qw(json DBD::SQLite Xapian
-		HTTP::Request::Common Plack::Test URI::Escape Plack::Builder));
-use_ok($_) for (qw(HTTP::Request::Common Plack::Test));
+require_mods qw(json DBD::SQLite Xapian psgi);
 use IO::Uncompress::Gunzip qw(gunzip);
 require PublicInbox::WWW;
 my ($ro_home, $cfg_path) = setup_public_inboxes;

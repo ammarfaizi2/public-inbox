@@ -7,7 +7,7 @@ use Cwd qw(abs_path);
 require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(run_qx);
-require_mods(qw(DBD::SQLite Xapian URI::Escape));
+require_mods(qw(DBD::SQLite Xapian));
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
 my $git_dir = xqx([qw(git rev-parse --git-common-dir)], undef, $rdr);
@@ -208,10 +208,8 @@ my $hinted = $res;
 shift @$res; shift @$hinted;
 is_deeply($res, $hinted, 'hints work (or did not hurt :P');
 
-my @psgi = qw(HTTP::Request::Common Plack::Test Plack::Builder);
 SKIP: {
-	require_mods(@psgi, 7 + scalar(@psgi));
-	use_ok($_) for @psgi;
+	require_mods qw(psgi 1);
 	require PublicInbox::WWW;
 	my $binfoo = "$ibx->{inboxdir}/binfoo.git";
 	my $l = "$ibx->{inboxdir}/inbox.lock";
