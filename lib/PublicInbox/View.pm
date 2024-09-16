@@ -74,7 +74,7 @@ sub addr2urlmap ($) {
 		while (my ($addr, $ibx) = each %$by_addr) {
 			# FIXME: use negative look(behind|ahead) in s// for
 			# `&' and `;' to make them not match \b
-			next if $addr =~ /\A(?:gt|lt|#[0-9]+)\z/;
+			next if $addr =~ /\A(?:[&;<>]|gt|lt|#[0-9]+)\z/;
 			$url = $ibx->base_url // $ibx->base_url($ctx->{env});
 			$addr2url{ascii_html($addr)} = ascii_html($url) if
 				defined $url
