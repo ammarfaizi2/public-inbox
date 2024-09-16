@@ -492,16 +492,14 @@ sub _fill_ibx {
 	($ibx->{name}) = keys %dedupe; # used as a key everywhere
 	$ibx->{-pi_cfg} = $self;
 	$ibx = PublicInbox::Inbox->new($ibx);
-	foreach (@{$ibx->{address}}) {
+	for (grep /\S/, @{$ibx->{address}}) {
 		my $lc_addr = lc($_);
 		$self->{-by_addr}->{$lc_addr} = $ibx;
 		$self->{-no_obfuscate}->{$lc_addr} = 1;
 	}
-	if (my $listids = $ibx->{listid}) {
-		# RFC2919 section 6 stipulates "case insensitive equality"
-		foreach my $list_id (@$listids) {
-			$self->{-by_list_id}->{lc($list_id)} = $ibx;
-		}
+	# RFC2919 section 6 stipulates "case insensitive equality"
+	for my $list_id (grep /\S/, @{$ibx->{listid} // []}) {
+		$self->{-by_list_id}->{lc($list_id)} = $ibx;
 	}
 	if (defined(my $ngname = $ibx->{newsgroup})) {
 		if (ref($ngname)) {
