@@ -409,8 +409,9 @@ sub show_tree_result ($$) {
 	my $upfx = $ctx->{-upfx} //= '../../';
 	if (defined $pfx) {
 		$pfx =~ s!/+\z!!s;
-		if (my $t = $ctx->{-obj}) {
-			my $t = ascii_html($t);
+		if (my $t = $ctx->{-obj}) { # $t eq "$tip:$path"
+			$t = ascii_html($t);
+			$pfx .= '/' if $pfx ne '';
 			$$bref .= <<EOM
 \n\$ git ls-tree -l $t	# shows similar output on the CLI
 EOM
