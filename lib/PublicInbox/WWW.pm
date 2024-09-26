@@ -13,6 +13,7 @@
 package PublicInbox::WWW;
 use strict;
 use v5.10.1;
+use autodie qw(chdir opendir);
 use PublicInbox::Config;
 use PublicInbox::Git;
 use PublicInbox::Hval;
@@ -593,6 +594,7 @@ sub stylesheets_prepare ($$) {
 	my $stylesheets = $self->{pi_cfg}->{css} || [];
 	my $links = [];
 	my $inline_ok = 1;
+	my (%css_dir, @css_dir);
 
 	foreach my $s (@$stylesheets) {
 		my $attr = {};
@@ -606,8 +608,9 @@ sub stylesheets_prepare ($$) {
 		if (defined $attr->{href}) {
 			$inline_ok = 0;
 		} else {
-			my $fn = $_;
-			my ($key) = (m!([^/]+?)(?:\.css)?\z!i);
+			my ($fn, $dir, $key);
+			$fn = $_;
+			($dir, $key) = (m!\A(?:(.+?)/)?([^/]+?)(?:\.css)?\z!i);
 			if ($key !~ /\A[a-zA-Z0-9_\-\.]+\z/) {
 				warn "ignoring $fn, non-ASCII word character\n";
 				next;
@@ -617,6 +620,8 @@ sub stylesheets_prepare ($$) {
 				($local, $ctime) = @$rec;
 			} elsif (open(my $fh, '<', $fn)) {
 				($local, $ctime) = _read_css $fh, $mini, $fn;
+				$local =~ /\@import\b/ && !$css_dir{$dir}++ and
+					push @css_dir, $dir;
 				$css_map->{$key} = [ $local, $ctime ];
 			} else {
 				warn "failed to open $fn: $!\n";
@@ -660,6 +665,31 @@ sub stylesheets_prepare ($$) {
 		$self->{"-style-$upfx"} = $buf;
 	} else {
 		$self->{-style_inline} = $buf;
+	}
+	# load potentially imported CSS files in known CSS directories
+	if (@css_dir && !$self->{-css_dir}) {
+		opendir my $cwddh, '.';
+		for my $d (@css_dir) {
+			CORE::opendir my $dh, $d or do {
+				warn "W: opendir($d): $!";
+				next;
+			};
+			chdir $dh;
+			my @css = grep /\.css\z/i, readdir $dh;
+			for my $fn (@css) {
+				my ($key) = ($fn =~ m!([^/]+?)(?:\.css)?\z!i);
+				next if $css_map->{$key};
+				-f $fn or next;
+				# no warning for autoloaded CSS
+				open my $fh, '<', $fn or next;
+				-T $fh or next;
+				my ($local, $ctime) =
+						_read_css $fh, $mini, "$d/$fn";
+				$css_map->{$key} = [ $local, $ctime ];
+			}
+			chdir $cwddh;
+		}
+		$self->{-css_dir} = \@css_dir;
 	}
 	$css_map;
 }
