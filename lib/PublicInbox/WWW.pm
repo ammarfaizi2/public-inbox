@@ -565,6 +565,20 @@ sub get_attach {
 # <pre>-formatted anyways.
 our $STYLE = 'pre{white-space:pre-wrap}*{font-size:100%;font-family:monospace}';
 
+sub _read_css ($$$) {
+	my ($fh, $mini, $fn) = @_;
+	my $ctime = 0;
+	my $local = PublicInbox::IO::read_all $fh; # sets _
+	if ($local =~ /\S/) {
+		$ctime = sprintf('%x',(stat(_))[10]);
+		$local = $mini->($local);
+	}
+	# do not let BOFHs override userContent.css:
+	return ($local, $ctime) if $local !~ /!\s*important\b/i;
+	warn "W: ignoring $fn since it uses `!important'\n";
+	();
+}
+
 sub stylesheets_prepare ($$) {
 	my ($self, $upfx) = @_;
 	my $mini = eval {
@@ -575,7 +589,7 @@ sub stylesheets_prepare ($$) {
 		sub { CSS::Minifier::XS::minify($_[0]) };
 	} || sub { $_[0] };
 
-	my $css_map = {};
+	my $css_map = $self->{-css_map} //= {};
 	my $stylesheets = $self->{pi_cfg}->{css} || [];
 	my $links = [];
 	my $inline_ok = 1;
@@ -598,24 +612,17 @@ sub stylesheets_prepare ($$) {
 				warn "ignoring $fn, non-ASCII word character\n";
 				next;
 			}
-			open(my $fh, '<', $fn) or do {
+			my ($local, $ctime);
+			if (my $rec = $css_map->{$key}) { # already loaded
+				($local, $ctime) = @$rec;
+			} elsif (open(my $fh, '<', $fn)) {
+				($local, $ctime) = _read_css $fh, $mini, $fn;
+				$css_map->{$key} = [ $local, $ctime ];
+			} else {
 				warn "failed to open $fn: $!\n";
 				next;
-			};
-			my $ctime = 0;
-			my $local = PublicInbox::IO::read_all $fh; # sets _
-			if ($local =~ /\S/) {
-				$ctime = sprintf('%x',(stat(_))[10]);
-				$local = $mini->($local);
 			}
 
-			# do not let BOFHs override userContent.css:
-			if ($local =~ /!\s*important\b/i) {
-				warn "ignoring $fn since it uses `!important'\n";
-				next;
-			}
-
-			$css_map->{$key} = $local;
 			$attr->{href} = "$upfx$key.css?$ctime";
 			if (defined($attr->{title})) {
 				$inline_ok = 0;
@@ -654,7 +661,7 @@ sub stylesheets_prepare ($$) {
 	} else {
 		$self->{-style_inline} = $buf;
 	}
-	$self->{-css_map} = $css_map;
+	$css_map;
 }
 
 # returns an HTML fragment with <style> or <link> tags in them
@@ -679,11 +686,12 @@ sub get_css ($$$) {
 	my $self = $ctx->{www};
 	my $css_map = $self->{-css_map} ||
 		stylesheets_prepare($self, defined($inbox) ? '' : '+/');
-	my $css = $css_map->{$key};
-	if (!defined($css) && defined($inbox) && $key eq 'userContent') {
-		$css = PublicInbox::UserContent::sample($ctx);
+	my $rec = $css_map->{$key};
+	if (!defined($rec) && defined($inbox) && $key eq 'userContent') {
+		$rec = [ PublicInbox::UserContent::sample($ctx) ];
 	}
-	defined $css or return r404();
+	$rec // return r404();
+	my ($css, undef) = @$rec; # TODO: Last-Modified
 	my $h = [ 'Content-Length', length($css), 'Content-Type', 'text/css' ];
 	PublicInbox::GitHTTPBackend::cache_one_year($h);
 	[ 200, $h, [ $css ] ];
