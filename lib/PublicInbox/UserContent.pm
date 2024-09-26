@@ -74,7 +74,7 @@ _
 sub sample ($) {
 	my ($ctx) = @_;
 	my $url_prefix = $ctx->{ibx}->base_url($ctx->{env});
-	my $preamble = <<"";
+	my $css = <<"";
 /*
  * Firefox users: this goes in \$PROFILE_FOLDER/chrome/userContent.css
  * where \$PROFILE_FOLDER is platform-specific
@@ -87,7 +87,8 @@ sub sample ($) {
  */
 \@-moz-document url-prefix($url_prefix) { /* moz-only */
 
-	$preamble . CSS . "\n} /* moz-only */\n";
+	$css .= CSS . "\n} /* moz-only */\n";
+	wantarray ? ($css, (stat(__FILE__))[9]) : $css;
 }
 
 # Auto-update this file based on the contents of a CSS file:

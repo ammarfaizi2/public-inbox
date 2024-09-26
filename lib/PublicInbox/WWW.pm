@@ -568,14 +568,14 @@ our $STYLE = 'pre{white-space:pre-wrap}*{font-size:100%;font-family:monospace}';
 
 sub _read_css ($$$) {
 	my ($fh, $mini, $fn) = @_;
-	my $ctime = 0;
+	my $mtime = 0;
 	my $local = PublicInbox::IO::read_all $fh; # sets _
 	if ($local =~ /\S/) {
-		$ctime = sprintf('%x',(stat(_))[10]);
+		$mtime = sprintf('%x',(stat(_))[9]);
 		$local = $mini->($local);
 	}
 	# do not let BOFHs override userContent.css:
-	return ($local, $ctime) if $local !~ /!\s*important\b/i;
+	return ($local, $mtime) if $local !~ /!\s*important\b/i;
 	warn "W: ignoring $fn since it uses `!important'\n";
 	();
 }
@@ -626,22 +626,22 @@ sub stylesheets_prepare ($$) {
 				warn "ignoring $fn, non-ASCII word character\n";
 				next;
 			}
-			my ($local, $ctime);
+			my ($local, $mtime);
 			if (my $rec = $css_map->{$key}) { # already loaded
-				($local, $ctime) = @$rec;
+				($local, $mtime) = @$rec;
 			} elsif (open(my $fh, '<', $fn)) {
-				($local, $ctime) = _read_css $fh, $mini, $fn;
+				($local, $mtime) = _read_css $fh, $mini, $fn;
 				if ($local =~ /\@import\b/) {
 					$import = $attr->{-do_import} = 1;
 					push @css_dir, $dir if !$css_dir{$dir}++
 				}
-				$css_map->{$key} = [ $local, $ctime ];
+				$css_map->{$key} = [ $local, $mtime ];
 			} else {
 				warn "failed to open $fn: $!\n";
 				next;
 			}
 
-			$attr->{href} = "$upfx$key.css?$ctime";
+			$attr->{href} = "$upfx$key.css?$mtime";
 			if (defined($attr->{title})) { # browser-selectable
 				$inline_ok = 0;
 			} elsif (($attr->{media}||'screen') eq 'screen') {
@@ -710,9 +710,9 @@ sub stylesheets_prepare ($$) {
 				# no warning for autoloaded CSS
 				open my $fh, '<', $fn or next;
 				-T $fh or next;
-				my ($local, $ctime) =
+				my ($local, $mtime) =
 						_read_css $fh, $mini, "$d/$fn";
-				$css_map->{$key} = [ $local, $ctime ];
+				$css_map->{$key} = [ $local, $mtime ];
 			}
 			chdir $cwddh;
 		}
@@ -748,7 +748,7 @@ sub get_css ($$$) {
 		$rec = [ PublicInbox::UserContent::sample($ctx) ];
 	}
 	$rec // return r404();
-	my ($css, undef) = @$rec; # TODO: Last-Modified
+	my ($css, undef) = @$rec; # TODO: Last-Modified + If-Modified-Since
 	my $h = [ 'Content-Length', length($css), 'Content-Type', 'text/css' ];
 	PublicInbox::GitHTTPBackend::cache_one_year($h);
 	[ 200, $h, [ $css ] ];
