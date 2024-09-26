@@ -77,9 +77,7 @@ sub get_text {
 
 sub _colors_help ($$) {
 	my ($ctx, $txt) = @_;
-	my $ibx = $ctx->{ibx};
-	my $env = $ctx->{env};
-	my $base_url = $ibx->base_url($env);
+	my $base_url = $ctx->{ibx}->base_url($ctx->{env});
 	$$txt .= "color customization for $base_url\n";
 	$$txt .= <<EOF;
 
@@ -96,7 +94,7 @@ CSS sample
 ----------
 ```css
 EOF
-	$$txt .= PublicInbox::UserContent::sample($ibx, $env) . "```\n";
+	$$txt .= PublicInbox::UserContent::sample($ctx) . "```\n";
 }
 
 # git-config section names are quoted in the config file, so escape them

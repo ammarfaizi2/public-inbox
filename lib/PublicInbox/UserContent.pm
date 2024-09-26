@@ -1,11 +1,11 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Self-updating module containing a sample CSS for client-side
 # customization by users of public-inbox.  Used by Makefile.PL
 package PublicInbox::UserContent;
-use strict;
-use warnings;
+use v5.12;
+use autodie qw(close open seek);
 
 # this sub is updated automatically:
 sub CSS () {
@@ -71,9 +71,9 @@ _
 # end of auto-updated sub
 
 # return a sample CSS
-sub sample ($$) {
-	my ($ibx, $env) = @_;
-	my $url_prefix = $ibx->base_url($env);
+sub sample ($) {
+	my ($ctx) = @_;
+	my $url_prefix = $ctx->{ibx}->base_url($ctx->{env});
 	my $preamble = <<"";
 /*
  * Firefox users: this goes in \$PROFILE_FOLDER/chrome/userContent.css
@@ -87,15 +87,16 @@ sub sample ($$) {
  */
 \@-moz-document url-prefix($url_prefix) { /* moz-only */
 
-	$preamble . CSS() . "\n} /* moz-only */\n";
+	$preamble . CSS . "\n} /* moz-only */\n";
 }
 
 # Auto-update this file based on the contents of a CSS file:
 # usage: perl -I lib __FILE__ contrib/css/216dark.css
 # (See Makefile.PL)
 if (scalar(@ARGV) == 1 && -r __FILE__) {
-	open my $ro, '<', $ARGV[0] or die $!;
-	my $css = do { local $/; <$ro> } or die $!;
+	require PublicInbox::IO;
+	open my $ro, '<', $ARGV[0];
+	my $css = PublicInbox::IO::read_all($ro);
 
 	# indent one level:
 	$css =~ s/^([ \t]*\S)/\t$1/smg;
@@ -104,13 +105,13 @@ if (scalar(@ARGV) == 1 && -r __FILE__) {
 	$css =~ s/;/ !important;/sg;
 	$css =~ s/(\w) \}/$1 !important }/msg;
 
-	open my $rw, '+<', __FILE__ or die $!;
-	my $out = do { local $/; <$rw> } or die $!;
+	open my $rw, '+<', __FILE__;
+	my $out = PublicInbox::IO::read_all($rw);
 	$css =~ s/; /;\n\t\t/g;
 	$out =~ s/^sub CSS.*^_\n\}/sub CSS () {\n\t<<'_'\n${css}_\n}/sm;
 	seek $rw, 0, 0;
-	print $rw $out or die $!;
-	close $rw or die $!;
+	print $rw $out;
+	close $rw;
 }
 
 1;

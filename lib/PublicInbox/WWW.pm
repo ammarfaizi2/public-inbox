@@ -681,8 +681,7 @@ sub get_css ($$$) {
 		stylesheets_prepare($self, defined($inbox) ? '' : '+/');
 	my $css = $css_map->{$key};
 	if (!defined($css) && defined($inbox) && $key eq 'userContent') {
-		my $env = $ctx->{env};
-		$css = PublicInbox::UserContent::sample($ctx->{ibx}, $env);
+		$css = PublicInbox::UserContent::sample($ctx);
 	}
 	defined $css or return r404();
 	my $h = [ 'Content-Length', length($css), 'Content-Type', 'text/css' ];
