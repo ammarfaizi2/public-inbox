@@ -39,9 +39,10 @@ test_lei({ tmpdir => $tmpdir }, sub {
 	lei_ok 'ls-mail-sync';
 	like($lei_out, qr!$re\n\z!, 'ls-mail-sync');
 	chomp(my $u = $lei_out);
-	lei_ok('import', $u, \'UIDVALIDITY match in URL');
 	$url = $u;
-	$u =~ s/;UIDVALIDITY=(\d+)\s*/;UIDVALIDITY=9$1/s;
+	$u =~ s/;UIDVALIDITY=(\d+)\s*/;UIDVALIDITY=9$1/s or
+		xbail 'no UIDVALIDITY=\\d+ in URL=', \$u, 'lei_out=', \$lei_out;
+	lei_ok('import', $url, \'UIDVALIDITY match in URL');
 	ok(!lei('import', $u), 'UIDVALIDITY mismatch in URL rejected');
 	like($lei_err, qr/UIDVALIDITY mismatch/, 'mismatch noted');
 
