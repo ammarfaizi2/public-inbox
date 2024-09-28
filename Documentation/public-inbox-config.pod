@@ -256,12 +256,34 @@ Default: :all
 =item publicinbox.css
 
 The local path name of a CSS file for the PSGI web interface.
-May contain the attributes "media", "title" and "href" which match
-the associated attributes of the HTML <style> tag.
-"href" may be specified to point to the URL of a remote CSS file
+Space-separated attributes (C<key=val> or C<key='val with spaces'>)
+may be specified after the path on the same line; C<media>, C<title>
+and C<href> are currently supported, and match the associated attributes
+of the HTML C<E<lt>styleE<gt>> tag.
+
+C<href> may be specified to point to the URL of a remote CSS file
 and the path may be "/dev/null" or any empty file.
+
+public-inbox 2.0+ also supports a C<load> attribute with values
+C<link> or C<import>; C<link> forces the use of a C<E<lt>linkE<gt>> tag
+and disables inlining CSS into the C<E<lt>styleE<gt>> tag while
+C<import> puts CSS C<@import> statements into the C<E<lt>styleE<gt>> tag.
+C<import> appears necessary for some browser and C<media> query combinations.
+
 Multiple files may be specified and will be included in the
-order specified.
+given order, but files specified via C<load=import> are
+always handled first.
+
+Example:
+
+	[publicinbox]
+		css = /path/to/216dark.css title=216dark \
+		  media='screen,(prefers-color-scheme:dark)'
+
+See the L<contrib/css
+directory of the public-inbox
+source|https://80x24.org/public-inbox.git/tree/contrib/css>
+for more examples.
 
 =item publicinboxImport.dropUniqueUnsubscribe
 

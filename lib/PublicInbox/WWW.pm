@@ -594,17 +594,28 @@ sub stylesheets_prepare ($$) {
 	my $stylesheets = $self->{pi_cfg}->{css} || [];
 	my $links = [];
 	my $inline_ok = 1;
-	my (%css_dir, @css_dir);
+	my (%css_dir, @css_dir, $import);
 
 	foreach my $s (@$stylesheets) {
 		my $attr = {};
 		local $_ = $s;
-		foreach my $k (qw(media title href)) {
+		foreach my $k (qw(media title href load)) {
 			if (s/\s*$k='([^']+)'// || s/\s*$k=(\S+)//) {
 				$attr->{$k} = $1;
 			}
 		}
-
+		# we may support `last' (to load CSS last at </html>)
+		# or other load directives in the future...
+		for my $l (split /,/, delete $attr->{load} // '') {
+			if ($l eq 'import') {
+				$inline_ok = 0;
+				$import = $attr->{-do_import} = 1;
+			} elsif ($l eq 'link') {
+				$inline_ok = 0;
+			} else {
+				warn "W: load=$l not recognized (ignored)\n";
+			}
+		}
 		if (defined $attr->{href}) {
 			$inline_ok = 0;
 		} else {
@@ -620,8 +631,10 @@ sub stylesheets_prepare ($$) {
 				($local, $ctime) = @$rec;
 			} elsif (open(my $fh, '<', $fn)) {
 				($local, $ctime) = _read_css $fh, $mini, $fn;
-				$local =~ /\@import\b/ && !$css_dir{$dir}++ and
-					push @css_dir, $dir;
+				if ($local =~ /\@import\b/) {
+					$import = $attr->{-do_import} = 1;
+					push @css_dir, $dir if !$css_dir{$dir}++
+				}
 				$css_map->{$key} = [ $local, $ctime ];
 			} else {
 				warn "failed to open $fn: $!\n";
@@ -629,7 +642,7 @@ sub stylesheets_prepare ($$) {
 			}
 
 			$attr->{href} = "$upfx$key.css?$ctime";
-			if (defined($attr->{title})) {
+			if (defined($attr->{title})) { # browser-selectable
 				$inline_ok = 0;
 			} elsif (($attr->{media}||'screen') eq 'screen') {
 				$attr->{-inline} = $local;
@@ -637,8 +650,22 @@ sub stylesheets_prepare ($$) {
 		}
 		push @$links, $attr;
 	}
-
-	my $buf = "<style>$STYLE";
+	my $buf = '<style>';
+	if ($import) {
+		my @links;
+		for my $attr (@$links) {
+			if (delete $attr->{-do_import}) {
+				$buf .= '@import url("'.$attr->{href}.'") '.
+					$attr->{media}.';';
+			} else {
+				push @links, $attr;
+			}
+		}
+		$links = \@links;
+	}
+	# can't have $STYLE before @import(?)
+	# <https://developer.mozilla.org/en-US/docs/Web/CSS/@import>
+	$buf .= $STYLE;
 	if ($inline_ok) {
 		my @ext; # for media=print and whatnot
 		foreach my $attr (@$links) {
