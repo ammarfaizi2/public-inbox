@@ -7,7 +7,7 @@ use_ok 'PublicInbox';
 ok(defined(eval('$PublicInbox::VERSION')), 'VERSION defined');
 use_ok 'PublicInbox::Config';
 my ($tmpdir, $for_destroy) = tmpdir();
-use autodie qw(open close);
+use autodie qw(close mkdir open);
 my $validate_git_behavior = $ENV{TEST_VALIDATE_GIT_BEHAVIOR};
 
 {
@@ -240,8 +240,9 @@ for my $s (@valid) {
 	inboxdir = /path/to/foo
 	coderepo = project
 [coderepo "project"]
-	dir = /path/to/project.git
+	dir = $tmpdir/project.git
 EOF
+	mkdir "$tmpdir/project.git"; # must exist for ->fill_coderepo
 	my $t1 = $cfg->lookup_name('test1');
 	my $t2 = $cfg->lookup_name('test2');
 	ok $cfg->repo_objs($t1)->[0], 'coderepo parsed';

@@ -6,8 +6,11 @@ use PublicInbox::TestCommon;
 use Cwd qw(abs_path);
 require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
-use PublicInbox::Spawn qw(run_qx);
-require_mods(qw(DBD::SQLite Xapian));
+use PublicInbox::Spawn qw(run_qx which);
+use File::Path qw(remove_tree);
+use PublicInbox::IO qw(write_file);
+use autodie qw(symlink unlink);
+require_mods qw(DBD::SQLite Xapian);
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
 my $git_dir = xqx([qw(git rev-parse --git-common-dir)], undef, $rdr);
@@ -22,6 +25,8 @@ my $patch2 = eml_load 't/solve/0002-rename-with-modifications.patch';
 my $patch2_oid = git_sha(1, $patch2)->hexdigest;
 
 my ($tmpdir, $for_destroy) = tmpdir();
+my $gone_repo = "$tmpdir/to-be-deleted.git";
+
 my $ibx = create_inbox 'v2', version => 2,
 			indexlevel => 'medium', sub {
 	my ($im) = @_;
@@ -287,6 +292,8 @@ SKIP: {
 [coderepo "binfoo"]
 	dir = $binfoo
 	cgiturl = http://example.com/binfoo
+[coderepo "goner"]
+	dir = $gone_repo
 EOF
 	close $cfgfh or die;
 	my $exp_digest;
@@ -450,9 +457,32 @@ EOF
 			my $t = XML::TreePP->new->parse($res->content);
 			ok(scalar @{$t->{feed}->{entry}}, 'got tag entries');
 		}
+
+		# test disappearing repos
+		$res = $cb->(GET('/goner/'));
+		is $res->code, 200, 'coderepo summary for goner repo';
+		$res = $cb->(GET("/goner/$oid{'iso-8859-1'}/s/"));
+		is $res->code, 200, 'goner repo OID /s/ still available';
+		$stderr_empty->();
+		remove_tree $gone_repo;
+
+		$res = $cb->(GET('/goner/'));
+		is $res->code, 404, '/goner/ repo summary';
+		$stderr_empty->();
+
+		$res = $cb->(GET("/goner/$oid{'iso-8859-1'}/s/"));
+		is $res->code, 404, 'gone repo OID /s/';
+		$stderr_empty->();
 	};
+
+	state $cp = which('cp');
+	$cp or xbail "`cp' not available (WTF!?)";
+	xsys_e $cp, qw(-Rp), $binfoo, $gone_repo;
+
 	test_psgi(sub { $www->call(@_) }, $client);
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };
+
+	xsys_e $cp, qw(-Rp), $binfoo, $gone_repo; # for test_httpd $client
 	test_httpd($env, $client, 7, sub {
 	SKIP: {
 		require_cmd('curl', 1) or skip 'no curl', 1;

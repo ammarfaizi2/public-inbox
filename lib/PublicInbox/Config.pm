@@ -375,7 +375,9 @@ sub valid_dir ($$) {
 sub fill_coderepo {
 	my ($self, $nick) = @_;
 	my $pfx = "coderepo.$nick";
-	my $git = PublicInbox::Git->new(valid_dir($self, "$pfx.dir") // return);
+	my $git_dir = valid_dir($self, "$pfx.dir") // return;
+	-e $git_dir // return;
+	my $git = PublicInbox::Git->new($git_dir);
 	if (defined(my $cgits = $self->{"$pfx.cgiturl"})) {
 		$git->{cgit_url} = $cgits = _array($cgits);
 		$self->{"$pfx.cgiturl"} = $cgits;
@@ -701,13 +703,14 @@ sub glob2re ($) {
 
 sub get_coderepo {
 	my ($self, $nick) = @_;
-	$self->{-coderepos}->{$nick} // do {
+	my $git = $self->{-coderepos}->{$nick} // do {
 		defined($self->{-cgit_scan_path}) ? do {
 			apply_cgit_scan_path($self);
 			my $cr = fill_coderepo($self, $nick);
 			$cr ? ($self->{-coderepos}->{$nick} = $cr) : undef;
 		} : undef;
 	};
+	$git && -e $git->{git_dir} ? $git : undef;
 }
 
 1;

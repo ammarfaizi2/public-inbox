@@ -250,7 +250,9 @@ sub cat_async_step ($$) {
 	my $cmd = ref($req) ? $$req : $req;
 	# ->fail may be called via Gcf2Client.pm
 	my $info = $self->{-bc} && substr($cmd, 0, 5) eq 'info ';
-	if ($head =~ /^([0-9a-f]{40,}) (\S+) ([0-9]+)$/) {
+	if (!defined $head) {
+		$self->fail("E: $self->{git_dir} gone? (\$!=$!)");
+	} elsif ($head =~ /^([0-9a-f]{40,}) (\S+) ([0-9]+)$/) {
 		($oid, $type, $size) = ($1, $2, $3 + 0);
 		unless ($info) { # --batch-command
 			$bref = $self->{sock}->my_bufread($size + 1) or
