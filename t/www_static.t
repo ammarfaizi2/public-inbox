@@ -109,6 +109,42 @@ $client = sub {
 	IO::Uncompress::Gunzip::gunzip(\$in => \$out);
 	like($out, qr/\A<html>/, 'got HTML start after gunzip');
 	like($out, qr{</html>$}, 'got HTML end after gunzip');
+	unlink "$tmpdir/dir/foo.gz";
+	$get = GET('/dir/foo');
+
+	require HTTP::Date;
+	HTTP::Date->import('time2str');
+	$get->header('If-Modified-Since' => time2str(0));
+	$res = $cb->($get);
+	is $res->code, 304, '304 on If-Modified-Since hit';
+	$get->header('If-Modified-Since' => time2str(1));
+	$res = $cb->($get);
+	is $res->code, 200, '200 on If-Modified-Since miss';
+SKIP: {
+	# validating with curl ensures we didn't carry the same
+	# misunderstandings across both the code being tested
+	# and the test itself.
+	$ENV{TEST_EXPENSIVE} or
+		skip 'TEST_EXPENSIVE unset for validation w/curl', 1;
+	my $uri = $ENV{PLACK_TEST_EXTERNALSERVER_URI} or
+		skip 'curl test skipped w/o external server', 1;
+	my $dst = "$tmpdir/foo.dst";
+	my $dst2 = "$dst.2";
+	$uri .= '/dir/foo';
+	state $curl = require_cmd 'curl', 1;
+	xsys_e $curl, '-gsSfR', '-o', $dst, $uri;
+	xsys_e [ $curl, '-vgsSfR', '-o', $dst2, $uri, '-z', $dst ],
+		undef, { 2 => \(my $curl_err) };
+	like $curl_err, qr! HTTP/1\.[012] 304 !sm,
+		'got 304 response w/ If-Modified-Since';
+	is -s $dst2, undef, 'nothing downloaded on 304';
+	utime 1, 1, "$tmpdir/dir/foo";
+	xsys_e [ $curl, '-vgsSfR', '-o', $dst2, $uri, '-z', $dst ],
+		undef, { 2 => \$curl_err };
+	is -s $dst2, -s $dst, 'got 200 on If-Modified-Since mismatch';
+	like $curl_err, qr! HTTP/1\.[012] 200 !sm,
+		'got 200 response w/ If-Modified-Since';
+} # SKIP
 	remove_tree "$tmpdir/dir";
 };
 
