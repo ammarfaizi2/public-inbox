@@ -4,9 +4,7 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Config; # this relies on PI_CONFIG // ~/.public-inbox/config
-my @psgi = qw(HTTP::Request::Common Plack::Test URI::Escape Plack::Builder);
-require_mods(qw(DBD::SQLite Xapian), @psgi);
-use_ok($_) for @psgi;
+require_mods qw(DBD::SQLite Xapian psgi);
 use_ok 'PublicInbox::WWW';
 my $cfg = PublicInbox::Config->new;
 my $www = PublicInbox::WWW->new($cfg);
