@@ -1,17 +1,17 @@
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+#!perl -w
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use warnings;
-use Test::More;
+use v5.12;
+use autodie;
 use PublicInbox::TestCommon;
-my ($tmpdir, $for_destroy) = tmpdir();
-my @mods = qw(HTTP::Request::Common Plack::Test URI::Escape);
+use PublicInbox::IO qw(write_file);
+my $tmpdir = tmpdir();
 require_mods qw(psgi);
 require IO::Uncompress::Gunzip;
 use_ok 'PublicInbox::WwwStatic';
 
 my $app = sub {
-	my $ws = PublicInbox::WwwStatic->new(docroot => $tmpdir, @_);
+	my $ws = PublicInbox::WwwStatic->new(docroot => "$tmpdir", @_);
 	sub { $ws->call(shift) };
 };
 
@@ -19,9 +19,7 @@ test_psgi($app->(), sub {
 	my $cb = shift;
 	my $res = $cb->(GET('/'));
 	is($res->code, 404, '404 on "/" by default');
-	open my $fh, '>', "$tmpdir/index.html" or die;
-	print $fh 'hi' or die;
-	close $fh or die;
+	write_file '>', "$tmpdir/index.html", 'hi';
 	$res = $cb->(GET('/'));
 	is($res->code, 200, '200 with index.html');
 	is($res->content, 'hi', 'default index.html returned');
@@ -41,8 +39,8 @@ test_psgi($app->(autoindex => 1, index => []), sub {
 	my $ls = $res->content;
 	like($ls, qr/index\.html/, 'got listing with index.html');
 	ok(index($ls, $updir) < 0, 'no updir at /');
-	mkdir("$tmpdir/dir") or die;
-	rename("$tmpdir/index.html", "$tmpdir/dir/index.html") or die;
+	mkdir "$tmpdir/dir";
+	rename "$tmpdir/index.html", "$tmpdir/dir/index.html";
 
 	$res = $cb->(GET('/dir/'));
 	is($res->code, 200, '200 with autoindex for dir/');
@@ -58,8 +56,8 @@ test_psgi($app->(autoindex => 1, index => []), sub {
 	like($res->header('Location'), qr!://[^/]+/dir/\z!,
 		'redirected w/ slash');
 
-	rename("$tmpdir/dir/index.html", "$tmpdir/dir/foo") or die;
-	link("$tmpdir/dir/foo", "$tmpdir/dir/foo.gz") or die;
+	rename "$tmpdir/dir/index.html", "$tmpdir/dir/foo";
+	link "$tmpdir/dir/foo", "$tmpdir/dir/foo.gz";
 	$res = $cb->(GET('/dir/'));
 	unlike($res->content, qr/>foo\.gz</,
 		'.gz file hidden if mtime matches uncompressed');
@@ -68,15 +66,13 @@ test_psgi($app->(autoindex => 1, index => []), sub {
 	$res = $cb->(GET('/dir/foo/bar'));
 	is($res->code, 404, 'using file as dir fails');
 
-	unlink("$tmpdir/dir/foo") or die;
+	unlink "$tmpdir/dir/foo";
 	$res = $cb->(GET('/dir/'));
 	like($res->content, qr/>foo\.gz</,
 		'.gz shown when no uncompressed version exists');
 
-	open my $fh, '>', "$tmpdir/dir/foo" or die;
-	print $fh "uncompressed\n" or die;
-	close $fh or die;
-	utime(0, 0, "$tmpdir/dir/foo") or die;
+	write_file '>', "$tmpdir/dir/foo", "uncompressed\n";
+	utime 0, 0, "$tmpdir/dir/foo";
 	$res = $cb->(GET('/dir/'));
 	my $html = $res->content;
 	like($html, qr/>foo</, 'uncompressed foo shown');
@@ -86,7 +82,7 @@ test_psgi($app->(autoindex => 1, index => []), sub {
 	is($res->content, "uncompressed\n",
 		'got uncompressed on mtime mismatch');
 
-	utime(0, 0, "$tmpdir/dir/foo.gz") or die;
+	utime 0, 0, "$tmpdir/dir/foo.gz";
 	my $get = GET('/dir/foo');
 	$get->header('Accept-Encoding' => 'gzip');
 	$res = $cb->($get);
