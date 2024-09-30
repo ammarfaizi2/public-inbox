@@ -9,7 +9,7 @@ use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(run_qx which);
 use File::Path qw(remove_tree);
 use PublicInbox::IO qw(write_file);
-use autodie qw(symlink unlink);
+use autodie qw(close mkdir open rename symlink unlink);
 require_mods qw(DBD::SQLite Xapian);
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
@@ -35,8 +35,7 @@ my $ibx = create_inbox 'v2', version => 2,
 };
 my $md = "$tmpdir/md";
 File::Path::make_path(map { $md.$_ } (qw(/cur /new /tmp)));
-symlink(abs_path('t/solve/0001-simple-mod.patch'), "$md/cur/foo:2,") or
-	xbail "symlink: $!";
+symlink abs_path('t/solve/0001-simple-mod.patch'), "$md/cur/foo:2,";
 
 my $v1_0_0_rev = '8a918a8523bc9904123460f85999d75f6d604916';
 my $v1_0_0_tag = 'cb7c42b1e15577ed2215356a2bf925aef59cdd8d';
@@ -45,7 +44,7 @@ my $expect = '69df7d565d49fbaaeb0a067910f03dc22cd52bd0';
 my $non_existent = 'ee5e32211bf62ab6531bdf39b84b6920d0b6775a';
 my $stderr_empty = sub {
 	my ($msg) = @_;
-	open my $efh, '<', "$tmpdir/stderr.log" or xbail $!;
+	open my $efh, '<', "$tmpdir/stderr.log";
 	my @l = <$efh>;
 	@l = grep(!/reverse ?proxy/i, @l);
 	is_xdeeply(\@l, [], $msg // 'stderr.log is empty');
@@ -158,7 +157,7 @@ my $git = PublicInbox::Git->new($git_dir);
 $ibx->{-repo_objs} = [ $git ];
 my $res;
 my $solver = PublicInbox::SolverGit->new($ibx, sub { $res = $_[0] });
-open my $log, '+>>', "$tmpdir/solve.log" or die "open: $!";
+open my $log, '+>>', "$tmpdir/solve.log";
 my $psgi_env = { 'psgi.errors' => \*STDERR, 'psgi.url_scheme' => 'http',
 		'HTTP_HOST' => 'example.com' };
 $solver->solve($psgi_env, $log, '69df7d5', {});
@@ -230,7 +229,7 @@ SKIP: {
 	my $lk = PublicInbox::Lock->new($l);
 	my $acq = $lk->lock_for_scope;
 	my $stamp = "$binfoo/stamp-";
-	if (open my $fh, '<', $stamp) {
+	if (CORE::open my $fh, '<', $stamp) {
 		%oid = map { chomp; split(/=/, $_) } (<$fh>);
 	} else {
 		PublicInbox::Import::init_bare($binfoo);
@@ -243,7 +242,7 @@ SKIP: {
 			$oid{$label} = $x;
 		}
 
-		open my $null, '<', '/dev/null' or xbail "open /dev/null: $!";
+		open my $null, '<', '/dev/null';
 		my $t = xqx([qw(git mktree)], $env, { 0 => $null });
 		xbail "mktree: $?" if $?;
 		chomp($t);
@@ -264,20 +263,19 @@ SKIP: {
 		chomp($c);
 		$oid{'8859-parent'} = $c;
 
-		open my $fh, '>', "$stamp.$$" or BAIL_OUT;
+		open my $fh, '>', "$stamp.$$";
 		while (my ($k, $v) = each %oid) {
-			print $fh "$k=$v\n" or xbail "print: $!";
+			print $fh "$k=$v\n";
 		}
-		close $fh or BAIL_OUT;
-		rename("$stamp.$$", $stamp) or BAIL_OUT;
+		close $fh;
+		rename "$stamp.$$", $stamp;
 	}
 	undef $acq;
 	# ensure the PSGI frontend (ViewVCS) works:
 	my $name = $ibx->{name};
 	my $cfgpfx = "publicinbox.$name";
 	my $cfgpath = "$tmpdir/httpd-config";
-	open my $cfgfh, '>', $cfgpath or die;
-	print $cfgfh <<EOF or die;
+	write_file '>', $cfgpath, <<EOF;
 [coderepo]
 	snapshots = tar.gz
 [publicinbox "$name"]
@@ -295,7 +293,6 @@ SKIP: {
 [coderepo "goner"]
 	dir = $gone_repo
 EOF
-	close $cfgfh or die;
 	my $exp_digest;
 	{
 		my $exp = xqx([qw(git archive --format=tar.gz
@@ -354,13 +351,12 @@ EOF
 		if (defined $ENV{PLACK_TEST_EXTERNALSERVER_URI}) {
 			$stderr_empty->('nothing in stderr.log, yet');
 		} else {
-			open $olderr, '>&', \*STDERR or xbail "open: $!";
-			open STDERR, '+>>', "$tmpdir/stderr.log" or
-				xbail "open: $!";
+			open $olderr, '>&', \*STDERR;
+			open STDERR, '+>>', "$tmpdir/stderr.log";
 		}
 		$res = $cb->(GET('/binfoo/'));
 		defined($ENV{PLACK_TEST_EXTERNALSERVER_URI}) or
-			open STDERR, '>&', $olderr or xbail "open: $!";
+			open STDERR, '>&', $olderr;
 		is($res->code, 200, 'coderepo summary (binfoo)');
 		$stderr_empty->();
 
@@ -486,7 +482,7 @@ EOF
 	test_httpd($env, $client, 7, sub {
 	SKIP: {
 		require_cmd('curl', 1) or skip 'no curl', 1;
-		mkdir "$tmpdir/ext" // xbail "mkdir $!";
+		mkdir "$tmpdir/ext";
 		my $rurl = "$ENV{PLACK_TEST_EXTERNALSERVER_URI}/$name";
 		test_lei({tmpdir => "$tmpdir/ext"}, sub {
 			lei_ok(qw(blob --no-mail 69df7d5 -I), $rurl);

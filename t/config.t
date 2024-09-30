@@ -3,6 +3,7 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use PublicInbox::Import;
+use PublicInbox::IO qw(write_file);
 use_ok 'PublicInbox';
 ok(defined(eval('$PublicInbox::VERSION')), 'VERSION defined');
 use_ok 'PublicInbox::Config';
@@ -12,13 +13,11 @@ my $validate_git_behavior = $ENV{TEST_VALIDATE_GIT_BEHAVIOR};
 
 {
 	my $f = "$tmpdir/bool_config";
-	open my $fh, '>', $f;
-	print $fh <<EOM;
+	write_file '>', $f, <<EOM;
 [imap]
 	debug
 	port = 2
 EOM
-	close $fh;
 	my $cfg = PublicInbox::Config->git_config_dump($f);
 	$validate_git_behavior and
 		is(xqx([qw(git config -f), $f, qw(--bool imap.debug)]),
@@ -32,7 +31,7 @@ EOM
 	my $inboxdir = "$tmpdir/new\nline";
 	my @cmd = ('git', "--git-dir=$tmpdir",
 		qw(config publicinbox.foo.inboxdir), $inboxdir);
-	is(xsys(@cmd), 0, "set config");
+	xsys_e(@cmd);
 
 	my $tmp = PublicInbox::Config->new("$tmpdir/config");
 
@@ -212,17 +211,17 @@ for my $s (@valid) {
 
 {
 	my $f = "$tmpdir/ordered";
-	open my $fh, '>', $f or die "open: $!";
+	open my $fh, '>', $f;
 	my @expect;
 	foreach my $i (0..3) {
 		push @expect, "$i";
-		print $fh <<"" or die "print: $!";
+		print $fh <<"";
 [publicinbox "$i"]
 	inboxdir = /path/to/$i.git
 	address = $i\@example.com
 
 	}
-	close $fh or die "close: $!";
+	close $fh;
 	my $cfg = PublicInbox::Config->new($f);
 	my @result;
 	$cfg->each_inbox(sub { push @result, $_[0]->{name} });
