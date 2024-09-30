@@ -8,15 +8,23 @@ use PublicInbox::IO qw(write_file);
 my $tmpdir = tmpdir();
 require_mods qw(psgi);
 require IO::Uncompress::Gunzip;
+use File::Path qw(remove_tree);
 use_ok 'PublicInbox::WwwStatic';
 
-my $app = sub {
-	my $ws = PublicInbox::WwwStatic->new(docroot => "$tmpdir", @_);
-	sub { $ws->call(shift) };
+my $psgi_env = sub { # @_ is passed to WwwStatic->new
+	my $ret = "$tmpdir/www_static.psgi";
+	write_file '>', $ret, <<EOM;
+use v5.12;
+use Plack::Builder;
+my \$ws = PublicInbox::WwwStatic->new(docroot => "$tmpdir" @_);
+builder { sub { \$ws->call(shift) } }
+EOM
+	{ psgi_file => $ret, TMPDIR => "$tmpdir" };
 };
 
-test_psgi($app->(), sub {
+my $client = sub {
 	my $cb = shift;
+	unlink "$tmpdir/index.html" if -f "$tmpdir/index.html";
 	my $res = $cb->(GET('/'));
 	is($res->code, 404, '404 on "/" by default');
 	write_file '>', "$tmpdir/index.html", 'hi';
@@ -29,10 +37,15 @@ test_psgi($app->(), sub {
 	is($res->header('Content-Length'), '2', 'content-length set');
 	like($res->header('Content-Type'), qr!^text/html\b!,
 		'content-type is html');
-});
+};
 
-test_psgi($app->(autoindex => 1, index => []), sub {
+my $env = $psgi_env->();
+test_psgi(Plack::Util::load_psgi($env->{psgi_file}), $client);
+test_httpd $env, $client;
+
+$client = sub {
 	my $cb = shift;
+	write_file '>', "$tmpdir/index.html", 'hi';
 	my $res = $cb->(GET('/'));
 	my $updir = 'href="../">../</a>';
 	is($res->code, 200, '200 with autoindex default');
@@ -96,6 +109,11 @@ test_psgi($app->(autoindex => 1, index => []), sub {
 	IO::Uncompress::Gunzip::gunzip(\$in => \$out);
 	like($out, qr/\A<html>/, 'got HTML start after gunzip');
 	like($out, qr{</html>$}, 'got HTML end after gunzip');
-});
+	remove_tree "$tmpdir/dir";
+};
+
+$env = $psgi_env->(', autoindex => 1, index => []');
+test_psgi(Plack::Util::load_psgi($env->{psgi_file}), $client);
+test_httpd $env, $client;
 
 done_testing();

@@ -949,17 +949,21 @@ sub create_inbox ($;@) {
 sub test_httpd ($$;$$) {
 	my ($env, $client, $skip, $cb) = @_;
 	my ($tmpdir, $for_destroy);
+	my $psgi = delete $env->{psgi_file};
+	if (!defined $psgi) {
+		for (qw(PI_CONFIG)) { $env->{$_} or BAIL_OUT "$_ unset" }
+	}
 	$env->{TMPDIR} //= do {
 		($tmpdir, $for_destroy) = tmpdir();
 		$tmpdir;
 	};
-	for (qw(PI_CONFIG)) { $env->{$_} or BAIL_OUT "$_ unset" }
 	SKIP: {
 		require_mods qw(Plack::Test::ExternalServer LWP::UserAgent
 				-httpd), $skip // 1;
 		my $sock = tcp_server() or die;
 		my ($out, $err) = map { "$env->{TMPDIR}/std$_.log" } qw(out err);
 		my $cmd = [ qw(-httpd -W0), "--stdout=$out", "--stderr=$err" ];
+		push @$cmd, $psgi if defined $psgi;
 		my $td = start_script($cmd, $env, { 3 => $sock });
 		my ($h, $p) = tcp_host_port($sock);
 		local $ENV{PLACK_TEST_EXTERNALSERVER_URI} = "http://$h:$p";
