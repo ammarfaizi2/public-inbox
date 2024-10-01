@@ -322,6 +322,12 @@ sub refs_foo { # /$REPO/refs/{heads,tags} endpoints
 	$qsp->psgi_yield($ctx->{env}, undef, \&_refs_parse_hdr, $ctx);
 }
 
+sub _get_css ($$) {
+	my ($ctx, $key) = @_;
+	$ctx->{www}->{-css_map} // $ctx->{www}->stylesheets_prepare('');
+	PublicInbox::WWW::srv_css_rec $ctx->{www}->{-css_map}->{$key};
+}
+
 sub srv { # endpoint called by PublicInbox::WWW
 	my ($self, $ctx) = @_;
 	my $path_info = $ctx->{env}->{PATH_INFO};
@@ -357,6 +363,9 @@ sub srv { # endpoint called by PublicInbox::WWW
 	} elsif ($path_info =~ m!\A/(.+?)/(refs/(?:heads|tags))/\z! and
 			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		refs_foo($self, $ctx, $2);
+	} elsif ($path_info =~ m!\A/(.+?)/([a-zA-Z0-9_\-\.]+)\.css\z! &&
+			$pi_cfg->get_coderepo($1)) {
+		_get_css $ctx, $2;
 	} elsif ($path_info =~ m!\A/(.*?\*.*?)/*\z!) {
 		my $re = PublicInbox::Config::glob2re($1);
 		PublicInbox::RepoList::html($self, $ctx, qr!$re\z!) // r(404);

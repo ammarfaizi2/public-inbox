@@ -747,7 +747,11 @@ sub get_css ($$$) {
 	if (!defined($rec) && defined($inbox) && $key eq 'userContent') {
 		$rec = [ PublicInbox::UserContent::sample($ctx) ];
 	}
-	$rec // return r404();
+	srv_css_rec($rec);
+}
+
+sub srv_css_rec { # $_[0] may be ctx->{www}
+	my $rec = $_[-1] // return r404();
 	my ($css, undef) = @$rec; # TODO: Last-Modified + If-Modified-Since
 	my $h = [ 'Content-Length', length($css), 'Content-Type', 'text/css' ];
 	PublicInbox::GitHTTPBackend::cache_one_year($h);
