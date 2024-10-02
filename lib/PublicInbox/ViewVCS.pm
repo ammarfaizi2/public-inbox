@@ -291,6 +291,7 @@ EOM
 		# TODO: should there be another textarea which attempts to
 		# search for the exact email which was applied to make this
 		# commit?
+		print $zfh '</pre>';
 		my ($rows, $q) = PublicInbox::View::dfqry_text $ctx, $s;
 		if ($rows) {
 			my $ibx_url = ibx_url_for($ctx);
@@ -305,7 +306,7 @@ EOM
 				$alt = '';
 			}
 			print $zfh <<EOM;
-</pre><hr><form action="$ibx_url"
+<hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
 <textarea name=q cols=${\PublicInbox::View::COLS} rows=$rows>$q</textarea>
 <input type=submit value="search$alt"
