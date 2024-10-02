@@ -308,7 +308,7 @@ EOM
 			print $zfh <<EOM;
 <hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
-<textarea name=q cols=${\PublicInbox::View::COLS} rows=$rows>$q</textarea>
+<textarea name=q cols=78 rows=$rows>$q</textarea>
 <input type=submit value="search$alt"
 />\t(<a href="${ibx_url}_/text/help/">help</a>)</pre></form>
 EOM
