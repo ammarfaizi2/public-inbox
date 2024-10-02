@@ -154,7 +154,7 @@ sub do_check_async {
 	}
 }
 
-sub cmt_hdr_prep { # psgi_qx cb
+sub cmt_hdr_prep { # psgi_qx cb for "git show" commit output
 	my ($fh, $ctx, $cmt_fin) = @_;
 	return if $ctx->{-qsp_err_h}; # let cmt_fin handle it
 	seek $fh, 0, SEEK_SET;
@@ -221,7 +221,26 @@ sub ibx_url_for {
 	wantarray ? (@ret) : $ret[0];
 }
 
-sub cmt_fin { # OnDestroy cb
+sub prep_merge_titles ($) {
+	my ($in_titles, @s, $t, @lines);
+	chomp(@lines = split /^/ms, $_[0]);
+	for (@lines) {
+		if (/^\* /) { # * branch/name:
+			$in_titles = 1;
+		} elsif ($in_titles) { # commit titles
+			if (s/^  //) { # break up Xapian phrases
+				$t = join " AND\n ", map { qq{s:"$_"} }
+					split /["\x{201c}\x{201d}]+/;
+				push @s, $t if $t ne 's:"..."';
+			} else { # trailing text or trailers?
+				undef $in_titles;
+			}
+		} # else: preamble text
+	}
+	@s ? \@s : undef;
+}
+
+sub cmt_fin { # OnDestroy cb for `git show' commit output
 	my ($ctx) = @_;
 	my ($eh, $ep) = delete @$ctx{qw(-qsp_err_h -qsp_err_p)};
 	if ($eh || $ep) {
@@ -242,7 +261,17 @@ sub cmt_fin { # OnDestroy cb
 		$au =~ s/>/>$x/;
 	}
 	$_ = ascii_html($_) for ($au, $co);
-	my $ibx_url = ibx_url_for($ctx) // $upfx;
+	my ($merge_titles, $ibx_url, $ibx_url_html, $alt);
+	$ibx_url = ibx_url_for($ctx);
+	if (defined $ibx_url) {
+		$ibx_url =~ m!://! or
+			substr($ibx_url, 0, 0, '../../../');
+		$ibx_url_html = ascii_html($ibx_url);
+		$alt = " `$ibx_url_html'";
+	} else {
+		$ibx_url = $ibx_url_html = $upfx;
+		$alt = '';
+	}
 	$au =~ s!(&gt; +)([0-9]{4,}-\S+ \S+)!
 		my ($gt, $t) = ($1, $2);
 		$t =~ tr/ :-//d;
@@ -258,6 +287,7 @@ title="list contemporary emails">$2</a>)
 		$x = qq{ (<a
 href="$f.patch">patch</a>)\n   <a href=#parent>parent</a> $P->[0]};
 	} elsif (@$P > 1) {
+		$merge_titles = 1;
 		$x = qq(\n  <a href=#parents>parents</a> $P->[0]\n);
 		shift @$P;
 		$x .= qq(          $_\n) for @$P;
@@ -275,7 +305,10 @@ committer $co
 
 <b>$title_html</b>
 EOM
-	print $zfh "\n", $ctx->{-linkify}->to_html($bdy) if length($bdy);
+	if (length($bdy)) {
+		print $zfh "\n", $ctx->{-linkify}->to_html($bdy);
+		$merge_titles = prep_merge_titles $bdy if $merge_titles;
+	}
 	undef $bdy; # free memory
 	my $fh = delete $ctx->{patch_fh};
 	if (-s $fh > $MAX_SIZE) {
@@ -293,26 +326,27 @@ EOM
 		# commit?
 		print $zfh '</pre>';
 		my ($rows, $q) = PublicInbox::View::dfqry_text $ctx, $s;
-		if ($rows) {
-			my $ibx_url = ibx_url_for($ctx);
-			my $alt;
-			if (defined $ibx_url) {
-				$alt = " `$ibx_url'";
-				$ibx_url =~ m!://! or
-					substr($ibx_url, 0, 0, '../../../');
-				$ibx_url = ascii_html($ibx_url);
-			} else {
-				$ibx_url = $upfx;
-				$alt = '';
-			}
-			print $zfh <<EOM;
+		print $zfh <<EOM if $rows;
 <hr><form action="$ibx_url"
 id=related><pre>find related emails, including ancestors/descendants/conflicts
 <textarea name=q cols=78 rows=$rows>$q</textarea>
 <input type=submit value="search$alt"
 />\t(<a href="${ibx_url}_/text/help/">help</a>)</pre></form>
 EOM
-		}
+	}
+	if (ref $merge_titles) {
+		print $zfh <<EOM;
+<hr><form action="$ibx_url" id=merged><pre>find merged patch emails
+<textarea name=q cols=78
+EOM
+		my $nr = scalar @$merge_titles;
+		$merge_titles = ascii_html(join ") OR\n(", @$merge_titles);
+		print $zfh 'rows=', $nr, '>(', $merge_titles, <<EOM;
+)</textarea>
+<input type=submit value="search$alt"
+/></pre></form>
+EOM
+		undef $merge_titles;
 	}
 	chop($x = <<EOM);
 <hr><pre>glossary
