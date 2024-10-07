@@ -6,7 +6,7 @@
 package PublicInbox::Lock;
 use v5.12;
 use Fcntl qw(LOCK_UN LOCK_EX O_RDWR O_CREAT);
-use Carp qw(croak);
+use Carp qw(confess);
 use PublicInbox::OnDestroy;
 use Errno qw(EINTR);
 use autodie qw(close sysopen syswrite);
@@ -23,19 +23,19 @@ sub new { bless { lock_path => $_[1] }, $_[0] }
 sub lock_acquire {
 	my ($self) = @_;
 	my $fn = $self->{lock_path};
-	croak 'already locked '.($fn // '(undef)') if $self->{lockfh};
+	confess 'E: already locked '.($fn // '(undef)') if $self->{lockfh};
 	$fn // return;
 	sysopen(my $fh, $fn, O_RDWR|O_CREAT);
-	xflock($fh, LOCK_EX) or croak "LOCK_EX $fn: $!";
+	xflock($fh, LOCK_EX) or confess "LOCK_EX $fn: $!";
 	$self->{lockfh} = $fh;
 }
 
 sub lock_release {
 	my ($self, $wake) = @_;
 	my $fn = $self->{lock_path} // return;
-	my $fh = delete $self->{lockfh} or croak "not locked: $fn";
+	my $fh = delete $self->{lockfh} or confess "E: not locked: $fn";
 	syswrite($fh, '.') if $wake;
-	xflock($fh, LOCK_UN) or croak "LOCK_UN $fn: $!";
+	xflock($fh, LOCK_UN) or confess "LOCK_UN $fn: $!";
 	close $fh; # may detect errors
 }
 
@@ -48,12 +48,12 @@ sub lock_for_scope {
 
 sub lock_acquire_fast {
 	my $fh = $_[0]->{lockfh} or return lock_acquire($_[0]);
-	xflock($fh, LOCK_EX) or croak "LOCK_EX $_[0]->{lock_path}: $!";
+	xflock($fh, LOCK_EX) or confess "E: LOCK_EX $_[0]->{lock_path}: $!";
 }
 
 sub lock_release_fast {
 	xflock($_[0]->{lockfh} // return, LOCK_UN) or
-		croak "LOCK_UN $_[0]->{lock_path}: $!"
+		confess "E: LOCK_UN $_[0]->{lock_path}: $!"
 }
 
 # caller must use return value
