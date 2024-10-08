@@ -23,6 +23,7 @@ use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob);
 use IO::Handle; # ->autoflush
 use POSIX ();
+use Carp qw(confess);
 
 my $OID = qr/[a-f0-9]{40,}/;
 # an estimate of the post-packed size to the raw uncompressed size
@@ -90,9 +91,9 @@ sub init_inbox {
 
 sub idx_shard ($$) {
 	my ($self, $num) = @_;
-	use Carp qw(confess); # FIXME: lei_store bug somewhere..
+	# FIXME: lei_store bug somewhere..
 	confess 'BUG: {idx_shards} unset' if !$self->{idx_shards};
-	confess 'BUG: {idx_shards} empty'  if !@{$self->{idx_shards}};
+	confess 'BUG: {idx_shards} empty' if !@{$self->{idx_shards}};
 	$self->{idx_shards}->[$num % scalar(@{$self->{idx_shards}})];
 }
 
@@ -227,11 +228,18 @@ sub _idx_init { # with_umask callback
 
 	# need to create all shards before initializing msgmap FD
 	# idx_shards must be visible to all forked processes
-	my $max = $self->{shards} - 1;
-	my $idx = $self->{idx_shards} = [];
-	push @$idx, PublicInbox::SearchIdxShard->new($self, $_) for (0..$max);
-	$self->{-need_xapian} = $idx->[0]->need_xapian;
-
+	eval {
+		my $max = $self->{shards} - 1;
+		my $idx = $self->{idx_shards} = [];
+		for (0..$max) {
+			push @$idx, PublicInbox::SearchIdxShard->new($self, $_)
+		}
+		$self->{-need_xapian} = $idx->[0]->need_xapian;
+	};
+	if ($@) {
+		delete $self->{idx_shards};
+		confess $@;
+	}
 	# SearchIdxShard may do their own flushing, so don't scale
 	# until after forking
 	$self->{batch_bytes} *= $self->{shards} if $self->{parallel};
