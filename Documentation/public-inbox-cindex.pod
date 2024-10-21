@@ -59,7 +59,7 @@ Incrementally index all previously-indexed coderepos.
 
 =item --prune
 
-Removes commits which are no longer accessible via git.
+Unindexes commits which are no longer accessible via git.
 Use this after L<git-gc(1)> (or L<git-prune(1)>).
 
 =item --no-fsync
