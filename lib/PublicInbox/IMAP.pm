@@ -88,7 +88,7 @@ for my $att (keys %FETCH_ATT) {
 }
 undef %FETCH_NEED;
 
-my $valid_range = '[0-9]+|[0-9]+:[0-9]+|[0-9]+:\*';
+my $valid_range = '[0-9]+|[0-9]+:[0-9]+|[0-9]+:\*|\*';
 $valid_range = qr/\A(?:$valid_range)(?:,(?:$valid_range))*\z/;
 
 sub do_greet {
@@ -697,6 +697,9 @@ sub range_step ($$) {
 		# just let the caller do an out-of-range query if a single
 		# UID is out-of-range
 		++$beg if ($beg <= $uid_base || $end > $uid_end);
+	} elsif ($range eq '*') {
+		$beg = $end = $self->{ibx}->over(1)->max;
+		uid_clamp($self, \$beg, \$end);
 	} else {
 		return 'BAD fetch range';
 	}

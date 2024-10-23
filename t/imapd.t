@@ -174,7 +174,7 @@ is_deeply(scalar $mic->flags('1'), [], '->flags works');
 	is_deeply($ret, {}, "out-of-range UID FETCH $r");
 }
 
-for my $r ('1:*', '1') {
+for my $r ('1:*', '1', '*') {
 	$ret = $mic->fetch_hash($r, 'RFC822') or BAIL_OUT "FETCH $@";
 	is_deeply([keys %$ret], [1]);
 	like($ret->{1}->{RFC822}, qr/\r\n\r\nThis is a test/, 'read full');
