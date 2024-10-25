@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # Used for training spam (via SpamAssassin) and removing messages from a
@@ -16,6 +16,7 @@ required action argument:
 options:
 
   --all  scan all inboxes on `rm'
+  -k     keep going after errors (for read-only inboxes)
 
 See public-inbox-learn(1) man page for full documentation.
 EOF
@@ -27,7 +28,7 @@ use PublicInbox::Address;
 use PublicInbox::Spamcheck::Spamc;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 my %opt = (all => 0);
-GetOptions(\%opt, qw(all help|h)) or die $help;
+GetOptions(\%opt, qw(all keep-going|k help|h)) or die $help;
 use PublicInbox::Import;
 
 my $train = shift or die $help;
@@ -40,7 +41,7 @@ my $spamc = PublicInbox::Spamcheck::Spamc->new;
 my $pi_cfg = PublicInbox::Config->new;
 local $PublicInbox::Import::DROP_UNIQUE_UNSUB;
 PublicInbox::Import::load_config($pi_cfg);
-my $err;
+my ($err, @fail_ibx);
 my $mime = PublicInbox::Eml->new(do{
 	my $data = PublicInbox::IO::read_all \*STDIN;
 	PublicInbox::Eml::strip_from($data);
@@ -52,51 +53,66 @@ my $mime = PublicInbox::Eml->new(do{
 			} elsif ($train eq 'spam') {
 				$spamc->spamlearn(\$data);
 			}
-			die "spamc failed with: $?\n" if $?;
+			die "E: spamc failed with: $?\n" if $?;
 		};
 		$err = $@;
 	}
 	\$data
 });
 
-sub remove_or_add ($$$$) {
+my $ibx_fail = sub {
+	my ($ibx) = @_;
+	my $m = "E: $@ ($ibx->{inboxdir})\n";
+	die $m if !$opt{'keep-going'};
+	warn $m;
+	push @fail_ibx, $ibx;
+};
+
+my $remove_or_add = sub {
 	my ($ibx, $train, $mime, $addr) = @_;
+	eval {
+		# We do not touch GIT_COMMITTER_* env here so we can track
+		# who trained the message.
+		$ibx->{name} = $ENV{GIT_COMMITTER_NAME} // $ibx->{name};
+		$ibx->{-primary_address} = $ENV{GIT_COMMITTER_EMAIL} // $addr;
+		$ibx = PublicInbox::InboxWritable->new($ibx);
+		$ibx->{indexlevel} = $ibx->detect_indexlevel;
+		my $im = $ibx->importer(0);
 
-	# We do not touch GIT_COMMITTER_* env here so we can track
-	# who trained the message.
-	$ibx->{name} = $ENV{GIT_COMMITTER_NAME} // $ibx->{name};
-	$ibx->{-primary_address} = $ENV{GIT_COMMITTER_EMAIL} // $addr;
-	$ibx = PublicInbox::InboxWritable->new($ibx);
-	$ibx->{indexlevel} = $ibx->detect_indexlevel;
-	my $im = $ibx->importer(0);
+		if ($train eq "rm") {
+			# This needs to be idempotent, as my inotify trainer
+			# may train for each cross-posted message, and this
+			# script already learns for every list in
+			# ~/.public-inbox/config
+			$im->remove($mime, $train);
+		} elsif ($train eq "ham") {
+			# no checking for spam here, we assume the message has
+			# been reviewed by a human at this point:
+			PublicInbox::MDA->set_list_headers($mime, $ibx);
 
-	if ($train eq "rm") {
-		# This needs to be idempotent, as my inotify trainer
-		# may train for each cross-posted message, and this
-		# script already learns for every list in
-		# ~/.public-inbox/config
-		$im->remove($mime, $train);
-	} elsif ($train eq "ham") {
-		# no checking for spam here, we assume the message has
-		# been reviewed by a human at this point:
-		PublicInbox::MDA->set_list_headers($mime, $ibx);
+			# Ham messages are trained when they're marked into
+			# a SEEN state, so this is idempotent:
+			$im->add($mime);
+		}
+		$im->done;
+	};
+	$ibx_fail->($ibx) if $@;
+};
 
-		# Ham messages are trained when they're marked into
-		# a SEEN state, so this is idempotent:
-		$im->add($mime);
-	}
-	$im->done;
-}
-
-# spam is removed from all known inboxes since it is often Bcc:-ed
-if ($train eq 'spam' || ($train eq 'rm' && $opt{all})) {
-	$pi_cfg->each_inbox(sub {
-		my ($ibx) = @_;
+my $remove_all = sub { # each_inbox cb
+	my ($ibx) = @_;
+	eval {
 		$ibx = PublicInbox::InboxWritable->new($ibx);
 		my $im = $ibx->importer(0);
 		$im->remove($mime, $train);
 		$im->done;
-	});
+	};
+	$ibx_fail->($ibx) if $@;
+};
+
+# spam is removed from all known inboxes since it is often Bcc:-ed
+if ($train eq 'spam' || ($train eq 'rm' && $opt{all})) {
+	$pi_cfg->each_inbox($remove_all);
 } else {
 	require PublicInbox::MDA;
 
@@ -114,16 +130,17 @@ if ($train eq 'spam' || ($train eq 'rm' && $opt{all})) {
 	while (my ($addr, $ibx) = each %dests) {
 		next unless ref($ibx); # $ibx may be 0
 		next if $seen{0 + $ibx}++;
-		remove_or_add($ibx, $train, $mime, $addr);
+		$remove_or_add->($ibx, $train, $mime, $addr);
 	}
 	my $dests = PublicInbox::MDA->inboxes_for_list_id($pi_cfg, $mime);
 	for my $ibx (@$dests) {
 		next if $seen{0 + $ibx}++;
-		remove_or_add($ibx, $train, $mime, $ibx->{-primary_address});
+		$remove_or_add->($ibx, $train, $mime, $ibx->{-primary_address});
 	}
 }
 
-if ($err) {
-	warn $err;
+if ($err || @fail_ibx) {
+	warn $err if $err;
+	warn 'E: ', scalar(@fail_ibx), " inbox(es) failed\n";
 	exit 1;
 }

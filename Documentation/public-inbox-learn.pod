@@ -54,9 +54,28 @@ This is similar to the C<spam> command above, but does
 not feed the message to L<spamc(1)> and only removes messages
 which match on any of the C<To:>, C<Cc:>, and C<List-ID:> headers.
 
-The C<--all> option may be used to match C<spam> semantics in removing
-the message from all configured inboxes.  C<--all> is only
-available in public-inbox 1.6.0+.
+=back
+
+=head1 OPTIONS
+
+=over
+
+=item --all
+
+C<--all> may be used with C<rm> to match C<spam> semantics in
+removing a message from all configured inboxes.  C<--all> is
+only available in public-inbox 1.6.0+.
+
+=item --keep-going
+
+=item -k
+
+Continue to other inboxes after errors.  This ensures C<spam>
+and C<rm --all> can succeed on all writable inboxes and act
+as a no-op on read-only inboxes.
+
+Useful for dealing with cases where some inboxes in PI_CONFIG
+are read-only.
 
 =back
 

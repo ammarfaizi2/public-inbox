@@ -507,6 +507,7 @@ t/io.t
 t/ipc.t
 t/iso-2202-jp.eml
 t/kqnotify.t
+t/learn.t
 t/lei-auto-watch.t
 t/lei-convert.t
 t/lei-daemon.t
