@@ -20,7 +20,7 @@ options:
 
 See public-inbox-learn(1) man page for full documentation.
 EOF
-use strict;
+use v5.12;
 use PublicInbox::Config;
 use PublicInbox::InboxWritable;
 use PublicInbox::Eml;
