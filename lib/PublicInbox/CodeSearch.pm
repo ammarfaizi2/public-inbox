@@ -266,6 +266,15 @@ sub load_commit_times { # each_cindex callback
 	@$todo = @pending;
 }
 
+# sort per-inbox scores from public-inbox-cindex --join
+sub _cr_score_sort ($$) {
+	my ($gits, $cr_score) = @_;
+	use sort 'stable'; # preserve manual ordering in config file
+	@$gits = sort {
+		$cr_score->{$b->{nick}} <=> $cr_score->{$a->{nick}}
+	} @$gits;
+}
+
 sub load_coderepos { # each_cindex callback
 	my ($self, $pi_cfg) = @_;
 	my $name = $self->{name};
@@ -341,6 +350,7 @@ EOM
 		}
 		if (@$gits) {
 			push @{$ibx->{-csrch}}, $self if $ibx2self;
+			_cr_score_sort $gits, $cr_score;
 		} else {
 			delete $ibx->{-repo_objs};
 			delete $ibx->{-cr_score};
@@ -359,6 +369,7 @@ EOM
 	push @$gits, @alls_gits;
 	my $cr_score = $ALL->{-cr_score} //= {};
 	$cr_score->{$_->{nick}} //= scalar(@{$_->{ibx_score}//[]}) for @$gits;
+	_cr_score_sort $gits, $cr_score;
 }
 
 sub repos_sorted {
