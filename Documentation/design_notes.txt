@@ -111,7 +111,7 @@ Laziness
 
 * Custom, difficult-for-Bayes requires custom anti-spam rules.
   We may steal rules from the Debian listmasters:
-  svn://anonscm.debian.org/pkg-listmaster
+  https://salsa.debian.org/debian-listmasters/spamassassin_config.git
 
 * Full archives are easily distributable with git, so somebody else
   can take over the list if we give up.  Anybody may also run an SMTP
