@@ -6,7 +6,7 @@
 # and/or lossy connections.
 package PublicInbox::Daemon;
 use v5.12;
-use autodie qw(chdir open pipe);
+use autodie qw(chdir open pipe setsockopt);
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use IO::Socket;
@@ -644,20 +644,26 @@ sub tls_cb {
 
 sub defer_accept ($$) {
 	my ($s, $af_name) = @_;
-	return unless defined $af_name;
-	if ($^O eq 'linux') {
-		my $TCP_DEFER_ACCEPT = 9; # Socket::TCP_DEFER_ACCEPT is in 5.14+
-		my $x = getsockopt($s, IPPROTO_TCP, $TCP_DEFER_ACCEPT);
-		return unless defined $x; # may be Unix socket
-		my $sec = unpack('i', $x);
-		return if $sec > 0; # systemd users may set a higher value
-		setsockopt($s, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 1);
-	} elsif ($^O =~ /\A(?:freebsd|netbsd|dragonfly)\z/) {
-		my $x = getsockopt($s, SOL_SOCKET, $SO_ACCEPTFILTER);
-		return if ($x // "\0") =~ /[^\0]/s; # don't change if set
-		my $accf_arg = pack('a16a240', $af_name, '');
-		setsockopt($s, SOL_SOCKET, $SO_ACCEPTFILTER, $accf_arg);
-	}
+	$af_name // return;
+	eval {
+		if ($^O eq 'linux') {
+			# Socket::TCP_DEFER_ACCEPT is only in 5.14+
+			my $TCP_DEFER_ACCEPT = 9;
+			my $x = getsockopt($s, IPPROTO_TCP, $TCP_DEFER_ACCEPT)
+				// return; # may be Unix socket
+			my $sec = unpack('i', $x);
+			return if $sec > 0; # systemd users may this higher
+			setsockopt $s, IPPROTO_TCP, $TCP_DEFER_ACCEPT, 1;
+		} elsif ($^O =~ /\A(?:freebsd|netbsd|dragonfly)\z/) {
+			# getsockopt can EINVAL if SO_ACCEPTFILTER is unset:
+			my $x = getsockopt($s, SOL_SOCKET, $SO_ACCEPTFILTER);
+			return if ($x // '') =~ /[^\0]/s; # don't change if set
+			my $accf_arg = pack('a16a240', $af_name, '');
+			setsockopt $s, SOL_SOCKET, $SO_ACCEPTFILTER, $accf_arg;
+		}
+	};
+	my $err = $@; # sockname() clobbers $@
+	warn 'W: ', sockname($s), ' ', $err, "\n" if $err;
 }
 
 sub daemon_loop () {
