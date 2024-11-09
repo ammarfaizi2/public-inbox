@@ -6,6 +6,7 @@
 # and/or lossy connections.
 package PublicInbox::Daemon;
 use v5.12;
+use autodie qw(chdir open pipe);
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use IO::Socket;
@@ -102,7 +103,7 @@ sub do_chown ($) {
 }
 
 sub open_log_path ($$) { # my ($fh, $path) = @_; # $_[0] is modified
-	open $_[0], '>>', $_[1] or die "open(>> $_[1]): $!";
+	open $_[0], '>>', $_[1];
 	$_[0]->autoflush(1);
 	do_chown($_[1]);
 	$_[0];
@@ -316,8 +317,7 @@ sub daemonize () {
 		check_absolute('--pid-file', $pid_file);
 		check_absolute('--cert', $default_cert);
 		check_absolute('--key', $default_key);
-
-		chdir '/' or die "chdir failed: $!";
+		chdir '/';
 	}
 	if (defined($pid_file) || defined($group) || defined($user)) {
 		eval { require Net::Server::Daemonize; 1 } // die <<EOF;
@@ -345,10 +345,9 @@ EOF
 	if ($daemonize) {
 		my $pid = PublicInbox::OnDestroy::fork_tmp;
 		exit if $pid;
-		open(STDIN, '+<', '/dev/null') or
-					die "redirect stdin failed: $!\n";
-		open STDOUT, '>&STDIN' or die "redirect stdout failed: $!\n";
-		open STDERR, '>&STDIN' or die "redirect stderr failed: $!\n";
+		open STDIN, '+<', '/dev/null';
+		open STDOUT, '>&STDIN';
+		open STDERR, '>&STDIN';
 		POSIX::setsid();
 		$pid = PublicInbox::OnDestroy::fork_tmp;
 		exit if $pid;
@@ -471,7 +470,7 @@ sub inherit ($) {
 	my $end = $fds + 2; # LISTEN_FDS_START - 1
 	my @rv = ();
 	foreach my $fd (3..$end) {
-		open(my $s, '<&=', $fd) or warn "fdopen fd=$fd: $!";
+		CORE::open(my $s, '<&=', $fd) or warn "fdopen fd=$fd: $!";
 		if (my $k = sockname($s)) {
 			my $prev_was_blocking = $s->blocking(0);
 			warn <<"" if $prev_was_blocking;
@@ -541,7 +540,7 @@ sub upgrade_aborted {
 sub unlink_pid_file_safe_ish ($) {
 	my ($fref) = @_;
 
-	open my $fh, '<', $$fref or return;
+	CORE::open my $fh, '<', $$fref or return;
 	local $/ = "\n";
 	defined(my $read_pid = <$fh>) or return;
 	chomp $read_pid;
@@ -593,7 +592,7 @@ sub trim_workers {
 
 sub master_loop {
 	local $parent_pipe;
-	pipe($parent_pipe, my $p1) or die "failed to create parent-pipe: $!";
+	pipe $parent_pipe, my $p1;
 	my $set_workers = $nworker; # for SIGWINCH
 	reopen_logs();
 	spawn_xh;
