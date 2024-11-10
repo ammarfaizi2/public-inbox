@@ -27,6 +27,7 @@ sub abort_err_wr { close($err_wr) if $err_wr; undef $err_wr }
 sub emit ($@) {
 	my ($efh, @msg) = @_;
 	open(local $err_wr, '>&', $efh); # fdopen(dup(fileno($efh)), "w")
+	$err_wr->autoflush(1);
 	local $SIG{ALRM} = \&abort_err_wr;
 	Time::HiRes::alarm(1.0, 0.1);
 	my $ret = print $err_wr @msg;
