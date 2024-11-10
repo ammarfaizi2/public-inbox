@@ -4,6 +4,7 @@
 # pretends to be like LeiDedupe and also PublicInbox::Inbox
 package PublicInbox::LeiSavedSearch;
 use v5.12;
+use autodie qw(opendir);
 use parent qw(PublicInbox::Lock);
 use PublicInbox::Git qw(git_exe);
 use PublicInbox::OverIdx;
@@ -57,16 +58,18 @@ sub lss_dir_for ($$;$) {
 		my @cur = stat(_);
 		my $want = pack('dd', @cur[1,0]); # st_ino + st_dev
 		my ($c, $o, @st);
-		for my $g ("$pfx-*", '*') {
-			my @maybe = glob("$lss_dir$g/lei.saved-search");
-			for my $f (@maybe) {
-				$c = $lei->cfg_dump($f) // next;
-				$o = $c->{'lei.q.output'} // next;
-				$o =~ s!$LOCAL_PFX!! or next;
-				@st = stat($o) or next;
-				next if pack('dd', @st[1,0]) ne $want;
-				$f =~ m!\A(.+?)/[^/]+\z! and return $1;
-			}
+		opendir(my $dh, $lss_dir);
+		my @d = sort(grep(!/\A\.\.?\z/, readdir($dh)));
+		my $re = qr/\A\Q$pfx\E-\./;
+		for my $d (grep(/$re/, @d), grep(!/$re/, @d)) {
+			my $f = "$lss_dir/$d/lei.saved-search";
+			-f $f // next;
+			$c = $lei->cfg_dump($f) // next;
+			$o = $c->{'lei.q.output'} // next;
+			$o =~ s!$LOCAL_PFX!! or next;
+			@st = stat($o) or next;
+			next if pack('dd', @st[1,0]) ne $want;
+			$f =~ m!\A(.+?)/[^/]+\z! and return $1;
 		}
 	}
 	$d;
@@ -80,8 +83,11 @@ sub list {
 	my $fh = File::Temp->new(TEMPLATE => 'lss_list-XXXX', TMPDIR => 1) or
 		die "File::Temp->new: $!";
 	print $fh "[include]\n";
-	for my $p (glob("$lss_dir/*/lei.saved-search")) {
-		print $fh "\tpath = ", cquote_val($p), "\n";
+	opendir(my $dh, $lss_dir);
+	for my $d (sort(grep(!/\A\.\.?\z/, readdir($dh)))) {
+		next if $d eq '.' || $d eq '..';
+		my $p = "$lss_dir/$d/lei.saved-search";
+		say $fh "\tpath = ", cquote_val($p) if -f $p;
 	}
 	$fh->flush or die "flush: $fh";
 	my $cfg = $lei->cfg_dump($fh->filename);
