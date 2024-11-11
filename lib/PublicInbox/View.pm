@@ -849,7 +849,7 @@ sub thread_skel ($$$) {
 sub dfqry_text ($$) {
 	my ($ctx, $subj) = @_;
 	my $qry_dfblob = delete $ctx->{-qry_dfblob} or return (undef);
-	my @bs = split /["\x{201c}\x{201d}]+/, $subj;
+	my @bs = split /["\x{201c}\x{201d}]+/, $subj // '';
 	my $q = join ' ', (@bs ? ('(') : ()), map {
 		chop if length > 7; # include 1 abbrev "older" patches
 		"dfblob:$_";
