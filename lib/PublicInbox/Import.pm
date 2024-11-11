@@ -152,8 +152,8 @@ sub progress {
 	my ($self, $msg) = @_;
 	my $io = $self->{io} or return;
 	print $io "progress $msg\n" or wfail;
-	readline($io) eq "progress $msg\n" or die
-		"progress $msg not received\n";
+	my $res = <$io> // die "EOF from fast-import progress $msg: $!";
+	$res eq "progress $msg\n" or die "BUG: `$res' != `progress $msg'";
 	undef;
 }
 
