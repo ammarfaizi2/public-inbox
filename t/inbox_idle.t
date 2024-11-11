@@ -9,6 +9,11 @@ require PublicInbox::SearchIdx;
 use_ok 'PublicInbox::InboxIdle';
 my ($tmpdir, $for_destroy) = tmpdir();
 
+# for non-inotify|kqueue systems w/ low-res FS timestamps
+# This only makes the test work, but either high-res FS timestamps
+# or inotify or kqueue support needs to be added to your system.
+my $poll_delay = 1;
+
 for my $V (1, 2) {
 	my $inboxdir = "$tmpdir/$V";
 	my $ibx = create_inbox "idle$V", tmpdir => $inboxdir, version => $V,
@@ -35,16 +40,21 @@ EOF
 	my $ii = PublicInbox::InboxIdle->new($pi_cfg);
 	ok($ii, 'InboxIdle created');
 	SKIP: {
-		skip('inotify or kqueue missing', 1) unless $ii->{sock};
+		$ii->{sock} or skip
+'inotify or kqueue missing, expect real-world breakage on low-res FSes', 1;
 		ok(fileno($ii->{sock}) >= 0, 'fileno() gave valid FD');
+		$poll_delay = 0;
 	}
 	my $im = $ibx->importer(0);
 	ok($im->add(eml_load('t/utf8.eml')), "$V added");
+	tick $poll_delay if $poll_delay;
 	$im->done;
 	$ii->event_step;
-	is(scalar @{$obj->{called}}, 1, 'called on unlock');
+	is(scalar @{$obj->{called}}, 1, 'called on unlock') or
+		diag explain($obj);
 	$pi_cfg->each_inbox(sub { shift->unsubscribe_unlock($ident) });
 	ok($im->add(eml_load('t/data/0001.patch')), "$V added #2");
+	tick $poll_delay if $poll_delay;
 	$im->done;
 	$ii->event_step;
 	is(scalar @{$obj->{called}}, 1, 'not called when unsubbed');
