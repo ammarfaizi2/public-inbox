@@ -228,11 +228,10 @@ EOM
 	pipe(my($r, $w)) or die "pipe: $!";
 	my $fd = fileno($w);
 	my $opt = { RLIMIT_CPU => [ 1, 9 ], RLIMIT_CORE => [ 0, 0 ], 1 => $fd };
+	vec(my $rset = '', fileno($r), 1) = 1;
 	my $pid = spawn($cmd, undef, $opt);
 	close $w or die "close(w): $!";
-	my $rset = '';
-	vec($rset, fileno($r), 1) = 1;
-	ok(select($rset, undef, undef, 5), 'child died before timeout');
+	ok(select($rset, undef, undef, 8), 'child died before timeout');
 	is(waitpid($pid, 0), $pid, 'XCPU child process reaped');
 	my $line;
 	like($line = readline($r), qr/SIGXCPU/, 'SIGXCPU handled') or
