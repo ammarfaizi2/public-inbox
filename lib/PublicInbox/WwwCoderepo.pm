@@ -22,7 +22,6 @@ use PublicInbox::RepoTree;
 use PublicInbox::RepoList;
 use PublicInbox::OnDestroy;
 use URI::Escape qw(uri_escape_utf8);
-use File::Spec;
 use autodie qw(fcntl open);
 use PublicInbox::Git qw(git_exe);
 
