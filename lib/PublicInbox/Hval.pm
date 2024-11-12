@@ -13,7 +13,7 @@ our @EXPORT_OK = qw/ascii_html obfuscate_addrs to_filename src_escape
 		to_attr prurl mid_href fmt_ts ts2str utf8_maybe/;
 use POSIX qw(strftime);
 my $enc_ascii = find_encoding('us-ascii');
-use File::Spec;
+use File::Spec::Functions qw(abs2rel);
 
 # safe-ish acceptable filename pattern for portability
 our $FN = '[a-zA-Z0-9][a-zA-Z0-9_\-\.]+[a-zA-Z0-9]'; # needs \z anchor
@@ -76,7 +76,7 @@ sub prurl ($$) {
 	} elsif ($dslash < 0 && substr($u, 0, 1) ne '/' &&
 			substr(my $path = $env->{PATH_INFO}, 0, 1) eq '/') {
 		# this won't touch the FS at all:
-		File::Spec->abs2rel("/$u", $path);
+		abs2rel "/$u", $path;
 	} else {
 		$u;
 	}
