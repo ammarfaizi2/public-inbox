@@ -11,7 +11,7 @@ use PublicInbox::Spawn qw(spawn run_wait run_die run_qx);
 use PublicInbox::IO qw(write_file);
 use File::Path ();
 use File::Temp ();
-use File::Spec ();
+use File::Spec::Functions qw(abs2rel rel2abs splitpath);
 use Fcntl qw(SEEK_SET O_CREAT O_EXCL O_WRONLY);
 use Carp qw(croak);
 use URI;
@@ -502,9 +502,9 @@ EOM
 EOM
 	}
 	if (!$self->{dry_run}) {
-		my $alt = File::Spec->rel2abs("$dir/objects");
+		my $alt = rel2abs "$dir/objects";
 		my $o = "$self->{cur_dst}/objects";
-		my $l = File::Spec->abs2rel($alt, File::Spec->rel2abs($o));
+		my $l = abs2rel $alt, rel2abs($o);
 		open my $fh, '+>>', my $f = "$o/info/alternates";
 		seek($fh, 0, SEEK_SET); # Perl did SEEK_END when it saw '>>'
 		my $seen = grep /\A\Q$l\E\n/, PublicInbox::IO::read_all $fh;
@@ -780,15 +780,14 @@ sub update_ent {
 		start_cmd($self, $cmd, { 2 => $self->{lei}->{2} }) if $cmd;
 	}
 	if (my $symlinks = $self->{-ent}->{symlinks}) {
-		my $top = File::Spec->rel2abs($self->{dst});
+		my $top = rel2abs $self->{dst};
 		push @{$self->{-new_symlinks}}, @$symlinks;
 		for my $p (@$symlinks) {
 			my $ln = "$top/$p";
 			$ln =~ tr!/!/!s;
-			my (undef, $dn, $bn) = File::Spec->splitpath($ln);
+			my (undef, $dn, $bn) = splitpath $ln;
 			File::Path::mkpath($dn);
-			my $tgt = "$top/$key";
-			$tgt = File::Spec->abs2rel($tgt, $dn);
+			my $tgt = abs2rel "$top/$key", $dn;
 			if (lstat($ln)) {
 				if (-l _) {
 					next if readlink($ln) eq $tgt;
@@ -828,12 +827,12 @@ sub v1_done { # called via OnDestroy
 	update_ent($self) if $self->{-ent};
 	my $o = "$dst/objects";
 	if (CORE::open(my $fh, '<', my $fn = "$o/info/alternates")) {;
-		my $base = File::Spec->rel2abs($o);
+		my $base = rel2abs $o;
 		my @l = <$fh>;
 		my $ft;
 		for (@l) {
 			next unless m!\A/!;
-			$_ = File::Spec->abs2rel($_, $base);
+			$_ = abs2rel $_, $base;
 			$ft //= File::Temp->new(TEMPLATE => '.XXXX',
 						DIR => "$o/info");
 		}
@@ -1123,7 +1122,7 @@ EOM
 	}
 	$self->{chg}->{nr_chg} += scalar(@remote) + scalar(@local);
 	return if !defined($f) || $self->{dry_run};
-	my (undef, $dn, $bn) = File::Spec->splitpath($f);
+	my (undef, $dn, $bn) = splitpath $f;
 	my $new = join("\n", @list, '');
 	atomic_write($dn, $bn, $new) if $new ne $old;
 }
