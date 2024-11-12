@@ -56,7 +56,7 @@ use PublicInbox::PktOp;
 use PublicInbox::IPC qw(nproc_shards);
 use POSIX qw(WNOHANG SEEK_SET strftime);
 use File::Path ();
-use File::Spec ();
+use File::Spec::Functions qw(canonpath);
 use List::Util qw(max);
 use PublicInbox::SHA qw(sha256_hex sha_all);
 use PublicInbox::Search qw(xap_terms);
@@ -1341,15 +1341,15 @@ sub cidx_run { # main entry point
 		delete $REINDEX->{lock_path};
 		$REINDEX->dbh;
 	}
-	my @nc = grep { File::Spec->canonpath($_) ne $_ } @{$self->{git_dirs}};
-	if (@nc) {
-		warn "E: BUG? paths in $self->{cidx_dir} not canonicalized:\n";
-		for my $d (@{$self->{git_dirs}}) {
-			my $c = File::Spec->canonpath($_);
-			warn "E: $d => $c\n";
-			$d = $c;
-		}
-		warn "E: canonicalized and attempting to continue\n";
+	my $cwarn;
+	for my $d (@{$self->{git_dirs}}) {
+		my $c = canonpath $d;
+		next if $c eq $d;
+		$cwarn = warn <<EOM if !$cwarn;
+E: BUG? paths in $self->{cidx_dir} not canonicalized:
+EOM
+		warn "E: $d => $c\n";
+		$d = $c;
 	}
 	if (defined(my $excl = $self->{-opt}->{exclude})) {
 		my $re = '(?:'.join('\\z|', map {
