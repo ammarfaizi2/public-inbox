@@ -609,6 +609,7 @@ if ('indexheader support') {
 	$es = PublicInbox::Config->new($cfg_path)->ALL;
 	my $mset = $es->mset('xarchiveshash:deadbeefcafe');
 	is $mset->size, 1, 'extindex.*.indexheader works';
+	require PublicInbox::XapClient;
 	local $PublicInbox::Search::XHC =
 			PublicInbox::XapClient::start_helper('-j0') or
 			xbail "no XHC: $@";
