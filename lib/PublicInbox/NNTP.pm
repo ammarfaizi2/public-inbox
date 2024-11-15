@@ -26,8 +26,8 @@ use constant {
 	r502 => "502 Command unavailable\r\n",
 	r221 => "221 Header follows\r\n",
 	r225 =>	"225 Headers follow (multi-line)\r\n",
-	r430 => "430 No article with that message-id\r\n",
 };
+sub r430 ($) { "430 No article with that message-id <$_[0]>\r\n" }
 use Errno qw(EAGAIN);
 my $ONE_MSGID = qr/\A$MID_EXTRACT\z/;
 my @OVERVIEW = qw(Subject From Date Message-ID References);
@@ -466,17 +466,16 @@ sub set_nntp_headers ($$) {
 
 sub art_lookup ($$$) {
 	my ($self, $art, $code) = @_;
-	my ($ibx, $n);
-	my $err;
+	my ($ibx, $n, $mid, $err);
 	if (defined $art) {
 		if ($art =~ /\A[0-9]+\z/) {
-			$err = \"423 no such article number in this group\r\n";
+			$err = \"423 no such article (#$art) in this group\r\n";
 			$n = int($art);
 			goto find_ibx;
 		} elsif ($art =~ $ONE_MSGID) {
-			($ibx, $n) = mid_lookup($self, $1);
+			($ibx, $n) = mid_lookup($self, $mid = $1);
 			goto found if $ibx;
-			return \r430;
+			return \r430 $mid;
 		} else {
 			return \r501;
 		}
@@ -488,7 +487,13 @@ find_ibx:
 			return \"412 no newsgroup has been selected\r\n";
 	}
 found:
-	my $smsg = $ibx->over(1)->get_art($n) or return $err;
+	my $smsg = $ibx->over(1)->get_art($n) or do {
+		if (defined $mid) {
+			warn "BUG: $ibx->{newsgroup} <$mid> #$n missing";
+			return r430 $mid;
+		}
+		return $err;
+	};
 	$smsg->{-ibx} = $ibx;
 	if ($code == 223) { # STAT
 		set_art($self, $n);
@@ -632,8 +637,8 @@ sub hdr_message_id ($$$) { # optimize XHDR Message-ID [range] for slrnpull.
 	my ($self, $xhdr, $range) = @_;
 
 	if (defined $range && $range =~ $ONE_MSGID) {
-		my ($ibx, $n) = mid_lookup($self, $1);
-		return r430 unless $n;
+		my ($ibx, $n) = mid_lookup($self, my $mid = $1);
+		return r430 $mid unless $n;
 		hdr_mid_response($self, $xhdr, $ibx, $n, $range, $range);
 	} else { # numeric range
 		$range = $self->{article} unless defined $range;
@@ -703,7 +708,7 @@ sub hdr_xref ($$$) { # optimize XHDR Xref [range] for rtin
 	if (defined $range && $range =~ $ONE_MSGID) {
 		my $mid = $1;
 		my ($ibx, $n) = mid_lookup($self, $mid);
-		return r430 unless $n;
+		return r430 $mid unless defined $n;
 		my $smsg = $ibx->over(1)->get_art($n) or return;
 		hdr_mid_response($self, $xhdr, $ibx, $n, $range,
 				xref($self, $ibx, $smsg));
@@ -747,8 +752,8 @@ sub smsg_range_i {
 sub hdr_smsg ($$$$) {
 	my ($self, $xhdr, $field, $range) = @_;
 	if (defined $range && $range =~ $ONE_MSGID) {
-		my ($ibx, $n) = mid_lookup($self, $1);
-		return r430 unless defined $n;
+		my ($ibx, $n) = mid_lookup($self, my $mid = $1);
+		return r430 $mid unless defined $n;
 		my $v = over_header_for($ibx, $n, $field);
 		hdr_mid_response($self, $xhdr, $ibx, $n, $range, $v);
 	} else { # numeric range
@@ -849,9 +854,12 @@ sub over_line ($$$) {
 sub cmd_over ($;$) {
 	my ($self, $range) = @_;
 	if ($range && $range =~ $ONE_MSGID) {
-		my ($ibx, $n) = mid_lookup($self, $1);
-		defined $n or return r430;
-		my $smsg = $ibx->over(1)->get_art($n) or return r430;
+		my ($ibx, $n) = mid_lookup($self, my $mid = $1);
+		defined $n or return r430 $mid;
+		my $smsg = $ibx->over(1)->get_art($n) or do {
+			warn "BUG: $ibx->{newsgroup} <$mid> #$n missing";
+			return r430 $mid;
+		};
 		$self->msg_more(
 			"224 Overview information follows (multi-line)\r\n");
 
