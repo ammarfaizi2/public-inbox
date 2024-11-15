@@ -272,13 +272,12 @@ sub emit_eml ($$) {
 	my $root_anchor = $ctx->{root_anchor} || '';
 	my $irt;
 	my $obfs_ibx = $ctx->{-obfs_ibx};
-	$subj = '(no subject)' if $subj eq '';
-	$subj = '<b>'.ascii_html($subj).'</b>';
+	$subj = $subj eq '' ? '(no subject)' : ascii_html($subj);
 	obfuscate_addrs($obfs_ibx, $subj) if $obfs_ibx;
 	$subj = "<u\nid=u>$subj</u>" if $root_anchor eq $id_m;
 	my $zfh = $ctx->{zfh} // die 'BUG: no {zfh}';
-	print $zfh "<a\nhref=#e", $id, "\nid=m", $id, '>*</a> ',
-		$subj, "\n", _th_index_lite($mid_raw, \$irt, $id, $ctx);
+	print $zfh "<a\nhref=#e", $id, "\nid=m", $id, '>*</a> <b>',
+		$subj, "</b>\n", _th_index_lite($mid_raw, \$irt, $id, $ctx);
 	my @tocc;
 	my $ds = delete $smsg->{ds}; # for v1 non-Xapian/SQLite users
 
