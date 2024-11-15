@@ -592,8 +592,9 @@ sub submsg_hdr ($$) {
 	for my $h (qw(From To Cc Subject Date Message-ID X-Alt-Message-ID)) {
 		$s .= "$h: $_\n" for $eml->header($h);
 	}
+	$s = ascii_html($s);
 	obfuscate_addrs($ctx->{-obfs_ibx}, $s) if $ctx->{-obfs_ibx};
-	ascii_html($s);
+	$s;
 }
 
 sub attach_link ($$$$;$) {
