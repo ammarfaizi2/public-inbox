@@ -18,6 +18,7 @@ our $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err);
 use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
 $ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
+$ENV{GIT_TEST_FSYNC} = 0; # hopefully reduce wear
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
 our $CURRENT_DAEMON;
@@ -87,6 +88,7 @@ sub tmpdir (;$) {
 	my ($base) = @_;
 	require File::Temp;
 	($base) = ($0 =~ m!\b([^/]+)\.[^\.]+\z!) unless defined $base;
+	($base) = ($0 =~ m!\b([^/]+)\z!) unless defined $base;
 	my $tmpdir = File::Temp->newdir("pi-$base-$$-XXXX", TMPDIR => 1);
 	wantarray ? ($tmpdir->dirname, $tmpdir) : $tmpdir;
 }
