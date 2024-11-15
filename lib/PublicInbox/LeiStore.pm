@@ -241,6 +241,12 @@ sub sto_export_kw ($$$) {
 	}
 }
 
+# commit every 5s to get under the default DBD::SQLite timeout of 30s
+sub _schedule_checkpoint ($) {
+	my ($self) = @_;
+	add_uniq_timer("$self-checkpoint", 5, \&_commit, $self, 'barrier');
+}
+
 # vmd = { kw => [ qw(seen ...) ], L => [ qw(inbox ...) ] }
 sub set_eml_vmd {
 	my ($self, $eml, $vmd, $docids) = @_;
@@ -250,6 +256,7 @@ sub set_eml_vmd {
 		$eidx->idx_shard($docid)->ipc_do('set_vmd', $docid, $vmd);
 		sto_export_kw($self, $docid, $vmd);
 	}
+	_schedule_checkpoint $self;
 	$docids;
 }
 
@@ -260,6 +267,7 @@ sub add_eml_vmd {
 	for my $docid (@docids) {
 		$eidx->idx_shard($docid)->ipc_do('add_vmd', $docid, $vmd);
 	}
+	_schedule_checkpoint $self;
 	\@docids;
 }
 
@@ -270,6 +278,7 @@ sub remove_eml_vmd { # remove just the VMD
 	for my $docid (@docids) {
 		$eidx->idx_shard($docid)->ipc_do('remove_vmd', $docid, $vmd);
 	}
+	_schedule_checkpoint $self;
 	\@docids;
 }
 
@@ -319,6 +328,7 @@ sub remove_eml {
 	}
 	$git->async_wait_all;
 	remove_docids($self, @docids);
+	_schedule_checkpoint $self;
 	\@docids;
 }
 
@@ -343,6 +353,7 @@ sub _add_vmd ($$$$) {
 
 sub _docids_and_maybe_kw ($$) {
 	my ($self, $docids) = @_;
+	_schedule_checkpoint $self;
 	return $docids unless wantarray;
 	my (@kw, $idx, @tmp);
 	for my $num (@$docids) { # likely only 1, unless ContentHash changes
@@ -376,6 +387,7 @@ sub _reindex_1 { # git->cat_async callback
 	} else {
 		warn("E: $type $hex\n");
 	}
+	_schedule_checkpoint $self;
 }
 
 sub reindex_art {
@@ -469,6 +481,7 @@ sub add_eml {
 		my $idx = $eidx->idx_shard($smsg->{num});
 		$idx->index_eml($eml, $smsg);
 		_add_vmd($self, $idx, $smsg->{num}, $vmd) if $vmd;
+		_schedule_checkpoint $self;
 		wantarray ? ($smsg, []) : $smsg;
 	}
 }
@@ -514,6 +527,7 @@ sub update_xvmd {
 	my ($eidx, $tl) = eidx_init($self);
 	my $oidx = $eidx->{oidx};
 	my %seen;
+	_schedule_checkpoint $self;
 	for my $oid (keys %$xoids) {
 		my $docid = oid2docid($self, $oid) // next;
 		delete $xoids->{$oid};
@@ -550,6 +564,8 @@ sub set_xvmd {
 	my ($eidx, $tl) = eidx_init($self);
 	my $oidx = $eidx->{oidx};
 	my %seen;
+
+	_schedule_checkpoint $self;
 
 	# see if we can just update existing docs
 	for my $oid (keys %$xoids) {
