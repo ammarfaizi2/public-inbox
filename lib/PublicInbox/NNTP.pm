@@ -520,7 +520,7 @@ sub msg_body_write ($$) {
 
 sub set_art {
 	my ($self, $art) = @_;
-	$self->{article} = $art if defined $art && $art =~ /\A[0-9]+\z/;
+	$self->{article} = $art + 0 if defined $art && $art =~ /\A[0-9]+\z/;
 }
 
 sub msg_hdr_write ($$) {
