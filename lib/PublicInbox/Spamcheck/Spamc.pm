@@ -4,6 +4,7 @@
 # Default spam filter class for wrapping spamc(1)
 package PublicInbox::Spamcheck::Spamc;
 use v5.12;
+use autodie qw(open sysseek);
 use PublicInbox::Spawn qw(run_qx run_wait);
 use IO::Handle;
 use Fcntl qw(SEEK_SET);
@@ -48,8 +49,7 @@ sub _learn {
 sub _devnull {
 	my ($self) = @_;
 	$self->{-devnull} //= do {
-		open my $fh, '+>', '/dev/null' or
-				die "failed to open /dev/null: $!";
+		open my $fh, '+>', '/dev/null';
 		$fh
 	}
 }
@@ -60,13 +60,11 @@ sub _msg_to_fh {
 		my $fd = eval { fileno($msg) };
 		return $msg if defined($fd) && $fd >= 0;
 
-		open(my $tmpfh, '+>', undef) or die "failed to open: $!";
+		open my $tmpfh, '+>', undef;
 		$tmpfh->autoflush(1);
 		$msg = \($msg->as_string) if $ref ne 'SCALAR';
 		print $tmpfh $$msg or die "failed to print: $!";
-		sysseek($tmpfh, 0, SEEK_SET) or
-			die "sysseek(fh) failed: $!";
-
+		sysseek $tmpfh, 0, SEEK_SET;
 		return $tmpfh;
 	}
 	$msg;
