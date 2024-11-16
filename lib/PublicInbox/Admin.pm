@@ -6,6 +6,7 @@
 package PublicInbox::Admin;
 use v5.12;
 use parent qw(Exporter);
+use autodie qw(chdir open);
 our @EXPORT_OK = qw(setup_signals fmt_localtime);
 use PublicInbox::Config;
 use PublicInbox::Inbox;
@@ -313,9 +314,7 @@ sub progress_prepare ($;$) {
 		$opt->{quiet} = !$opt->{verbose};
 	}
 	if ($opt->{quiet}) {
-		open my $null, '>', '/dev/null' or
-			die "failed to open /dev/null: $!\n";
-		$opt->{1} = $null; # suitable for spawn() redirect
+		open $opt->{1}, '>', '/dev/null'; # suitable for spawn() redirect
 	} else {
 		$opt->{verbose} ||= 1;
 		$dst //= \*STDERR;
@@ -378,7 +377,7 @@ sub do_chdir ($) {
 	my $chdir = $_[0] // return;
 	for my $d (@$chdir) {
 		next if $d eq ''; # same as git(1)
-		chdir $d or die "cd $d: $!";
+		chdir $d;
 	}
 }
 
