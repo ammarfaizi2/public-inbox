@@ -13,6 +13,7 @@ use PublicInbox::Smsg;
 use Compress::Zlib qw(uncompress);
 use constant DEFAULT_LIMIT => 1000;
 use List::Util (); # for max
+use autodie qw(open);
 
 sub dbh_new {
 	my ($self, $rw) = @_;
@@ -22,7 +23,7 @@ sub dbh_new {
 			require PublicInbox::Syscall;
 			my ($dir) = ($f =~ m!(.+)/[^/]+\z!);
 			PublicInbox::Syscall::nodatacow_dir($dir);
-			open my $fh, '+>>', $f or die "failed to open $f: $!";
+			open my $fh, '+>>', $f;
 		} else {
 			$self->{filename} = $f; # die on stat() below:
 		}
