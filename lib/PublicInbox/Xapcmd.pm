@@ -2,6 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::Xapcmd;
 use v5.12;
+use autodie qw(chmod opendir rename syswrite);
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::Syscall;
 use PublicInbox::Admin qw(setup_signals);
@@ -61,12 +62,9 @@ sub commit_changes ($$$$) {
 			next;
 		}
 
-		chmod($mode & 07777, $new) or die "chmod($new): $!\n";
-		if ($have_old) {
-			rename($old, "$new/old") or
-					die "rename $old => $new/old: $!\n";
-		}
-		rename($new, $old) or die "rename $new => $old: $!\n";
+		chmod $mode & 07777, $new;
+		rename $old, "$new/old" if $have_old;
+		rename $new, $old;
 		push @old_shard, "$old/old" if $have_old;
 	}
 
@@ -219,7 +217,7 @@ sub prepare_run {
 		PublicInbox::Syscall::nodatacow_dir($wip->dirname);
 		push @queue, [ $old, $wip ];
 	} elsif (defined $old) {
-		opendir my $dh, $old or die "Failed to opendir $old: $!\n";
+		opendir my $dh, $old;
 		my @old_shards;
 		while (defined(my $dn = readdir($dh))) {
 			if ($dn =~ /\A[0-9]+\z/) {
