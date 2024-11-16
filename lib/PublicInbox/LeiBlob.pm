@@ -7,6 +7,7 @@ package PublicInbox::LeiBlob;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC);
+use autodie qw(open seek);
 use PublicInbox::Spawn qw(run_wait run_qx which);
 use PublicInbox::DS;
 use PublicInbox::Eml;
@@ -22,7 +23,7 @@ sub get_git_dir ($$) {
 	if (defined($lei->{opt}->{cwd})) { # --cwd used, report errors
 		$opt->{2} = $lei->{2};
 	} else { # implicit --cwd, quiet errors
-		open $opt->{2}, '>', '/dev/null' or die "open /dev/null: $!";
+		open $opt->{2}, '>', '/dev/null';
 	}
 	chomp(my $git_dir = run_qx($cmd, {GIT_DIR => undef}, $opt));
 	$? ? undef : $git_dir;
@@ -57,7 +58,7 @@ sub do_solve_blob { # via wq_do
 		$x =~ tr/-/_/;
 		$hints->{$x} = $v;
 	}
-	open my $log, '+>', \(my $log_buf = '') or die "PerlIO::scalar: $!";
+	open my $log, '+>', \(my $log_buf = '');
 	$lei->{log_buf} = \$log_buf;
 	my $git = $lei->{ale}->git;
 	my @rmt = map {
@@ -114,9 +115,9 @@ sub lei_blob {
 		}
 		my $rdr = {};
 		if ($opt->{mail}) {
-			open $rdr->{2}, '+>', undef or die "open: $!";
+			open $rdr->{2}, '+>', undef;
 		} else {
-			open $rdr->{2}, '>', '/dev/null' or die "open: $!";
+			open $rdr->{2}, '>', '/dev/null';
 		}
 		my $cmd = $lei->ale->git->cmd('cat-file', 'blob', $blob);
 		my $cerr;
@@ -139,7 +140,7 @@ sub lei_blob {
 					extract_attach($lei, $blob, $bref) :
 					$lei->out($$bref);
 		if ($opt->{mail}) {
-			seek($rdr->{2}, 0, 0);
+			seek $rdr->{2}, 0, 0; # regular file (see above)
 			return $lei->child_error($cerr, read_all($rdr->{2}));
 		} # else: fall through to solver below
 	}
