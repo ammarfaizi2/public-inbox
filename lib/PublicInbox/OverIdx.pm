@@ -439,6 +439,7 @@ sub commit_lazy {
 	delete $self->{txn} or return;
 	$self->{dbh}->commit;
 	eval { $self->{dbh}->do('PRAGMA optimize') };
+	warn 'W: optimize ', $self->{dbh}->sqlite_db_filename, ': ', $@ if $@;
 }
 
 sub begin_lazy {

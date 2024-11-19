@@ -522,11 +522,8 @@ sub checkpoint ($;$) {
 	$self->{im}->barrier if $self->{im};
 	my $shards = $self->{idx_shards};
 	if ($shards) {
-		my $dbh = $self->{mm}->{dbh} if $self->{mm};
-
-		# SQLite msgmap data is second in importance
-		$dbh->commit if $dbh;
-		eval { $dbh->do('PRAGMA optimize') };
+		# SQLite msgmap is second in importance (not in eidx)
+		my $dbh = $self->{mm} ? $self->{mm}->mm_commit : undef;
 
 		# SQLite overview is third
 		$self->{oidx}->commit_lazy;

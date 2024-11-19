@@ -275,4 +275,13 @@ sub check_inodes {
 	$self->{dbh} //= PublicInbox::Over::dbh_new($self, !$rw);
 }
 
+sub mm_commit {
+	my ($self) = @_;
+	my $dbh = $self->{dbh} // return;
+	$dbh->commit;
+	eval { $dbh->do('PRAGMA optimize') };
+	warn 'W: optimize ', $dbh->sqlite_db_filename, ': ', $@ if $@;
+	$dbh;
+}
+
 1;

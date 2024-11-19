@@ -49,8 +49,9 @@ sub lms_write_prepare { ($_[0]->{dbh} //= dbh_new($_[0])); $_[0] }
 sub lms_pause {
 	my ($self) = @_;
 	$self->{fmap} = {};
-	my $dbh = delete $self->{dbh};
-	eval { $dbh->do('PRAGMA optimize') } if $dbh;
+	my $dbh = delete $self->{dbh} // return;
+	eval { $dbh->do('PRAGMA optimize') };
+	warn 'W: optimize ', $dbh->sqlite_db_filename, ': ', $@ if $@;
 }
 
 sub create_tables {
