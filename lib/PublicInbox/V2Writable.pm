@@ -21,6 +21,7 @@ use PublicInbox::Msgmap;
 use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob);
+use PublicInbox::DS qw(now);
 use IO::Handle; # ->autoflush
 use POSIX ();
 use Carp qw(confess);
@@ -723,7 +724,7 @@ sub reindex_checkpoint ($$) {
 	# allow -watch or -mda to write...
 	$self->idx_init($sync->{-opt}); # reacquire lock
 	if (my $intvl = $sync->{check_intvl}) { # eidx
-		$sync->{next_check} = PublicInbox::DS::now() + $intvl;
+		$sync->{next_check} = now + $intvl;
 	}
 	$mm_tmp->atfork_parent if $mm_tmp;
 }
