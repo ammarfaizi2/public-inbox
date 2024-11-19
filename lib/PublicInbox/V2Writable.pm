@@ -579,6 +579,7 @@ sub active { !!$_[0]->{im} }
 # public
 sub done {
 	my ($self) = @_;
+	local $PublicInbox::DS::in_loop; # sync awaitpid in shard_close
 	my $err = '';
 	if (my $im = delete $self->{im}) {
 		eval { $im->done }; # PublicInbox::Import::done
