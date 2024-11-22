@@ -123,7 +123,6 @@ sub do_import_index ($$@) {
 	}
 	($lei->{opt}->{'new-only'} && (!$net || !$net->{imap_order})) and
 		warn "# --new-only is only for IMAP\n";
-	$lei->{-eml_noisy} = 1;
 	$lei->{-err_type} = 'non-fatal';
 	$lei->wq1_start($self, $j);
 }

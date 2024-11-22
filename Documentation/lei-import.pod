@@ -89,6 +89,11 @@ Use the specified proxy (e.g., C<socks5h://0:9050>).
 Consider L<imap.proxy> and L<nntp.proxy> which can be persistently
 configured on a per-host basis in L<lei-config(1)>.
 
+=item --noisy
+
+Warn on misformatted email headers.  Not particularly useful but this was
+the default prior to public-inbox 2.0.0.  New in public-inbox 2.0.0.
+
 =back
 
 See L<lei-config(1)> for various C<imap.*> and C<nntp.*> options.

@@ -271,7 +271,7 @@ import => [ 'LOCATION...|--stdin [LABELS...]',
 	'one-time import/update from URL or filesystem',
 	qw(stdin| offset=i recursive|r exclude=s include|I=s new-only
 	lock=s@ in-format|F=s kw! verbose|v+ incremental! mail-sync!
-	commit-delay=i sort|s:s@),
+	commit-delay=i sort|s:s@ noisy),
 	@net_opt, @c_opt ],
 'forget-mail-sync' => [ 'LOCATION...',
 	'forget sync information for a mail folder', @c_opt ],
@@ -623,7 +623,7 @@ sub _lei_atfork_child {
 	eval 'no warnings; undef $PublicInbox::LeiNoteEvent::to_flush';
 	undef $errors_log;
 	$quit = \&CORE::exit;
-	if (!$self->{-eml_noisy}) { # only "lei import" sets this atm
+	if (!$self->{opt}->{noisy}) { # only "lei import" sets this atm
 		my $cb = $SIG{__WARN__} // \&CORE::warn;
 		$SIG{__WARN__} = sub {
 			$cb->(@_) unless PublicInbox::Eml::warn_ignore(@_)
