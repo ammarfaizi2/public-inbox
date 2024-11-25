@@ -1,0 +1,28 @@
+# Copyright all contributors <meta@public-inbox.org>
+# License: AGPL-3.0+ <http://www.gnu.org/licenses/agpl-3.0.txt>
+# For interactive testing + debugging of lei with a clean $HOME:
+# Usage: ./devel/try-lei
+eval 'exec perl -w -S $0 ${1+"$@"}' # no shebang
+if 0; # running under some shell
+use autodie qw(mkdir symlink);
+my $cwd;
+BEGIN {
+	use Cwd qw(getcwd);
+	$cwd = getcwd;
+	die <<EOM unless -f 'lei.sh';
+must be run in top-level public-inbox worktree (cwd=$cwd)
+EOM
+	unshift @INC, "$cwd/lib";
+	$ENV{PERL5LIB} = join(':', @INC);
+}
+use PublicInbox::TestCommon;
+$ENV{TEST_RUN_MODE} = '0'; # no fork optimization
+test_lei(sub {
+	diag "spawning shell, HOME=$ENV{HOME}, will be deleted when done";
+	mkdir "$ENV{HOME}/bin";
+	diag "ln -s $cwd/lei.sh $ENV{HOME}/bin/lei";
+	symlink "$cwd/lei.sh", "$ENV{HOME}/bin/lei";
+	$ENV{PATH} = "$ENV{HOME}/bin:$ENV{PATH}";
+	is system($ENV{SHELL} // '/bin/sh'), 0, 'subshell ran successfully';
+});
+done_testing;
