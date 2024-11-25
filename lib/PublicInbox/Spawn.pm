@@ -332,7 +332,7 @@ EOM
 		$ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		%RLIMITS = rlimit_map();
 		*send_cmd4 = sub ($$$$;$) {
-			send_cmd4_($_[0], $_[1], $_[2], $_[3], 50);
+			send_cmd4_($_[0], $_[1], $_[2], $_[3], $_[4] // 50);
 		}
 	} else {
 		require PublicInbox::SpawnPP;
