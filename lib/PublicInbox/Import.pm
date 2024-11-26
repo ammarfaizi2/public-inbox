@@ -22,6 +22,7 @@ use autodie qw(socketpair);
 use Carp qw(croak);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::IO qw(read_all);
+our $noisy = 1;
 
 sub default_branch () {
 	state $default_branch = do {
@@ -297,7 +298,7 @@ sub extract_cmt_info ($;$) {
 		utf8::encode($email);
 	} else {
 		$email = '';
-		warn "no email in From: $from or Sender: $sender\n";
+		warn "no email in From: $from or Sender: $sender\n" if $noisy;
 	}
 
 	# git gets confused with:
@@ -309,7 +310,7 @@ sub extract_cmt_info ($;$) {
 		utf8::encode($name);
 	} else {
 		$name = '';
-		warn "no name in From: $from or Sender: $sender\n";
+		warn "no name in From: $from or Sender: $sender\n" if $noisy;
 	}
 
 	my $subject = delete($smsg->{Subject}) // '(no subject)';

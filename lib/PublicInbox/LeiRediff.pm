@@ -223,11 +223,8 @@ sub dequote_add { # Eml each_part callback
 sub input_eml_cb { # callback for all emails
 	my ($self, $eml) = @_;
 	{
-		local $SIG{__WARN__} = sub {
-			return if "@_" =~ /^no email in From: .*? or Sender:/;
-			return if PublicInbox::Eml::warn_ignore(@_);
-			warn @_;
-		};
+		local $PublicInbox::Import::noisy;
+		local $SIG{__WARN__} = \&PublicInbox::Eml::warn_ignore_cb;
 		$self->{tmp_sto}->add_eml($eml);
 		$eml->each_part(\&dequote_add, $self) if $self->{dqre};
 		$self->{tmp_sto}->done;
