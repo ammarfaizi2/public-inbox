@@ -590,6 +590,8 @@ sub note_sigpipe { # triggers sigpipe_handler
 	x_it($self, 13);
 }
 
+my $term_handler = sub { exit(128 + 15) };
+
 sub _lei_atfork_child {
 	my ($self, $persist) = @_;
 	# we need to explicitly close things which are on stack
@@ -629,7 +631,7 @@ sub _lei_atfork_child {
 			$cb->(@_) unless PublicInbox::Eml::warn_ignore(@_)
 		};
 	}
-	$SIG{TERM} = sub { exit(128 + 15) };
+	$SIG{TERM} = $term_handler;
 	$current_lei = $persist ? undef : $self; # for SIG{__WARN__}
 }
 
