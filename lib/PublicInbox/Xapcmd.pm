@@ -217,7 +217,7 @@ sub prepare_run {
 		PublicInbox::Syscall::nodatacow_dir($wip->dirname);
 		push @queue, [ $old, $wip ];
 	} elsif (defined $old) {
-		opendir my $dh, $old;
+		opendir(my $dh, $old);
 		my @old_shards;
 		while (defined(my $dn = readdir($dh))) {
 			if ($dn =~ /\A[0-9]+\z/) {
