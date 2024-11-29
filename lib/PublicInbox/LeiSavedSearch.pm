@@ -234,11 +234,9 @@ sub prepare_dedupe {
 		my $lk = $self->lock_for_scope; # git-config doesn't wait
 		my $oidx = PublicInbox::OverIdx->new($self->{-ovf});
 		$oidx->{-no_fsync} = 1;
+		$oidx->{journal_mode} = 'WAL';
 		$oidx->dbh;
-		if ($creat) {
-			$oidx->{dbh}->do('PRAGMA journal_mode = WAL');
-			$oidx->eidx_prep; # for xref3
-		}
+		$oidx->eidx_prep if $creat; # for xref3
 		$oidx
 	};
 }

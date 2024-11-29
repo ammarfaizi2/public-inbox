@@ -219,7 +219,7 @@ sub v2_num_for_harder {
 sub _idx_init { # with_umask callback
 	my ($self, $opt) = @_;
 	$self->lock_acquire unless $opt && $opt->{-skip_lock};
-	$self->{oidx}->create;
+	$self->{oidx}->create($opt);
 
 	# xcpdb can change shard count while -watch is idle
 	my $nshards = count_shards($self);

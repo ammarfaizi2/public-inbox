@@ -62,8 +62,14 @@ sub dbh_new {
 		# If an admin is willing to give read-only daemons R/W
 		# permissions; they can enable WAL manually and we will
 		# respect that by not clobbering it.
-		my $jm = $dbh->selectrow_array('PRAGMA journal_mode');
-		$dbh->do('PRAGMA journal_mode = TRUNCATE') if $jm ne 'wal';
+		my $jm = $self->{journal_mode}; # set by lei
+		if (defined $jm) {
+			$dbh->do('PRAGMA journal_mode = '.$jm);
+		} else {
+			$jm = $dbh->selectrow_array('PRAGMA journal_mode');
+			$jm eq 'wal' or
+				$dbh->do('PRAGMA journal_mode = TRUNCATE');
+		}
 
 		$dbh->do('PRAGMA synchronous = OFF') if $rw > 1;
 	}

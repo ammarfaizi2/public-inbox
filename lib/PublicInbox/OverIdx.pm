@@ -464,7 +464,7 @@ sub dbh_close {
 }
 
 sub create {
-	my ($self) = @_;
+	my ($self, $opt) = @_;
 	my $fn = $self->{filename} // do {
 		croak('BUG: no {filename}') unless $self->{dbh};
 		return;
@@ -474,6 +474,7 @@ sub create {
 		my ($dir) = ($fn =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($dir);
 	}
+	$self->{journal_mode} = 'WAL' if $opt->{-private};
 	# create the DB:
 	PublicInbox::Over::dbh($self);
 	$self->dbh_close;
