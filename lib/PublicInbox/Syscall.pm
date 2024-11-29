@@ -502,7 +502,7 @@ require PublicInbox::CmdIPC4;
 			$msg_controllen,
 			0); # msg_flags
 	my $s;
-	$tries //= 50;
+	$tries //= -1;
 	do {
 		$s = syscall($SYS_sendmsg, fileno($sock), $mh, $flags);
 	} while ($s < 0 && PublicInbox::CmdIPC4::sendmsg_retry($tries));

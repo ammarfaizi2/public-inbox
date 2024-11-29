@@ -176,15 +176,15 @@ out:
 	return (int)pid;
 }
 
-static int sendmsg_retry(int *tries)
+static int sendmsg_retry(long *tries)
 {
 	const struct timespec req = { 0, 100000000 }; /* 100ms */
 	int err = errno;
 	switch (err) {
 	case EINTR: PERL_ASYNC_CHECK(); return 1;
 	case ENOBUFS: case ENOMEM: case ETOOMANYREFS:
-		if (--*tries < 0) return 0;
-		fprintf(stderr, "# sleeping on sendmsg: %s (%d tries left)\n",
+		if (*tries-- == 0) return 0;
+		fprintf(stderr, "# sleeping on sendmsg: %s (%ld tries left)\n",
 			strerror(err), *tries);
 		nanosleep(&req, NULL);
 		PERL_ASYNC_CHECK();
@@ -201,7 +201,7 @@ union my_cmsg {
 	char pad[sizeof(struct cmsghdr) + 16 + SEND_FD_SPACE];
 };
 
-SV *send_cmd4_(PerlIO *s, SV *svfds, SV *data, int flags, int tries)
+SV *send_cmd4_(PerlIO *s, SV *svfds, SV *data, int flags, long tries)
 {
 	struct msghdr msg = { 0 };
 	union my_cmsg cmsg = { 0 };

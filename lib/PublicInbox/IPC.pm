@@ -331,11 +331,13 @@ sub wq_nonblock_do { # always async
 	my $buf = ipc_freeze([$sub, @args]);
 	if ($self->{wqb}) { # saturated once, assume saturated forever
 		$self->{wqb}->flush_send($buf);
-	} else {
-		$send_cmd->($self->{-wq_s1}, [], $buf, 0) //
-			($!{EAGAIN} ? PublicInbox::WQBlocked->new($self, $buf)
-					: croak("sendmsg: $!"));
-	}
+	} elsif (!defined $send_cmd->($self->{-wq_s1}, [], $buf, 0)) {
+		if ($!{EAGAIN} || $!{ENOBUFS} || $!{ENOMEM}) {
+			PublicInbox::WQBlocked->new($self, $buf);
+		} else {
+			croak "sendmsg: $!";
+		}
+	} # else success
 }
 
 sub _wq_worker_start {

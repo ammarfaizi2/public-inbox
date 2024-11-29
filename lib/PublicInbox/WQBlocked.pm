@@ -26,8 +26,15 @@ sub flush_send {
 			my $n = $PublicInbox::IPC::send_cmd->($wq_s1, [], $buf,
 								0);
 			next if defined($n);
-			Carp::croak("sendmsg: $!") unless $!{EAGAIN};
-			PublicInbox::DS::epwait($wq_s1, EPOLLOUT|EPOLLONESHOT);
+			if ($!{EAGAIN}) {
+				PublicInbox::DS::epwait($wq_s1,
+							EPOLLOUT|EPOLLONESHOT);
+			} elsif ($!{ENOBUFS} || $!{ENOMEM}) {
+				PublicInbox::DS::add_timer(0.1, \&flush_send,
+							$self);
+			} else {
+				Carp::croak("sendmsg: $!");
+			}
 			unshift @{$self->{msgq}}, $buf;
 			last; # wait for ->event_step
 		}

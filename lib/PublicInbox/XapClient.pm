@@ -12,7 +12,7 @@ use PublicInbox::Spawn qw(spawn);
 use Socket qw(AF_UNIX SOCK_SEQPACKET);
 use PublicInbox::IPC;
 use autodie qw(pipe socketpair);
-our $tries = 50;
+our $tries = -1; # set to zero by read-only daemon
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;
