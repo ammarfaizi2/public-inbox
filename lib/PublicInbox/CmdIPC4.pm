@@ -12,7 +12,8 @@ sub sendmsg_retry ($) {
 	return 1 if $!{EINTR};
 	return unless ($!{ENOMEM} || $!{ENOBUFS} || $!{ETOOMANYREFS});
 	return if $_[0]-- == 0;
-	warn "# sleeping on sendmsg: $! ($_[0] tries left)\n";
+	# n.b. `N & (power-of-two - 1)' is a faster `N % power-of-two'
+	warn "# sleeping on sendmsg: $! ($_[0] tries left)\n" if !($_[0] & 15);
 	select(undef, undef, undef, 0.1);
 	1;
 }

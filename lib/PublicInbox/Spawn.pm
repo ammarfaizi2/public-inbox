@@ -184,8 +184,10 @@ static int sendmsg_retry(long *tries)
 	case EINTR: PERL_ASYNC_CHECK(); return 1;
 	case ENOBUFS: case ENOMEM: case ETOOMANYREFS:
 		if (*tries-- == 0) return 0;
-		fprintf(stderr, "# sleeping on sendmsg: %s (%ld tries left)\n",
-			strerror(err), *tries);
+		if (!(*tries & 15))
+			fprintf(stderr,
+				"# sleeping on sendmsg: %s (%ld tries left)\n",
+				strerror(err), *tries);
 		nanosleep(&req, NULL);
 		PERL_ASYNC_CHECK();
 		return 1;
