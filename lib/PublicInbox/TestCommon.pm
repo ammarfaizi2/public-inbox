@@ -30,7 +30,7 @@ BEGIN {
 		create_coderepo require_bsd kernel_version check_broken_tmpfs
 		quit_waiter_pipe wait_for_eof require_git_http_backend
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
-		test_httpd xbail require_cmd is_xdeeply tail_f
+		test_httpd no_httpd_errors xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
 		strace strace_inject lsof_pid oct_is);
 	require Test::More;
@@ -948,6 +948,16 @@ sub create_inbox ($;@) {
 	$ibx;
 }
 
+sub no_httpd_errors ($;$) {
+	my ($err, $msg) = @_;
+	open my $fh, '<', $err;
+	my $e = read_all $fh;
+	$e =~ s/^Plack::Middleware::ReverseProxy missing,\n//gms and
+		$e =~ s/^URL generation for redirects[^\n]*\n//gms;
+	$e =~ s/^W: .*?try `kldload[^\n]+\n//gms;
+	is $e, '', $msg // 'no httpd errors';
+}
+
 sub test_httpd ($$;$$) {
 	my ($env, $client, $skip, $cb) = @_;
 	my ($tmpdir, $for_destroy);
@@ -976,12 +986,7 @@ sub test_httpd ($$;$$) {
 							ua => $ua);
 		$cb->() if $cb;
 		$td->join('TERM');
-		open my $fh, '<', $err;
-		my $e = read_all($fh);
-		if ($e =~ s/^Plack::Middleware::ReverseProxy missing,\n//gms) {
-			$e =~ s/^URL generation for redirects .*\n//gms;
-		}
-		is($e, '', 'no errors');
+		no_httpd_errors $err;
 	}
 };
 

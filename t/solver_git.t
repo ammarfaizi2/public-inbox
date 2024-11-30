@@ -43,11 +43,8 @@ my $v1_0_0_tag_short = substr($v1_0_0_tag, 0, 16);
 my $expect = '69df7d565d49fbaaeb0a067910f03dc22cd52bd0';
 my $non_existent = 'ee5e32211bf62ab6531bdf39b84b6920d0b6775a';
 my $stderr_empty = sub {
-	my ($msg) = @_;
-	open my $efh, '<', "$tmpdir/stderr.log";
-	my @l = <$efh>;
-	@l = grep(!/reverse ?proxy/i, @l);
-	is_xdeeply(\@l, [], $msg // 'stderr.log is empty');
+	no_httpd_errors "$tmpdir/stderr.log",
+		$_[0] // 'stderr.log is empty';
 };
 
 test_lei({tmpdir => "$tmpdir/blob"}, sub {

@@ -658,8 +658,11 @@ sub defer_accept ($$) {
 			# getsockopt can EINVAL if SO_ACCEPTFILTER is unset:
 			my $x = getsockopt($s, SOL_SOCKET, $SO_ACCEPTFILTER);
 			return if ($x // '') =~ /[^\0]/s; # don't change if set
-			my $accf_arg = pack('a16a240', $af_name, '');
-			setsockopt $s, SOL_SOCKET, $SO_ACCEPTFILTER, $accf_arg;
+			CORE::setsockopt $s, SOL_SOCKET, $SO_ACCEPTFILTER,
+					pack('a16a240', $af_name, '') or
+				warn 'W: ', sockname($s), <<EOM;
+ SO_ACCEPTFILTER $af_name: $! (try `kldload $af_name')
+EOM
 		}
 	};
 	my $err = $@; # sockname() clobbers $@
