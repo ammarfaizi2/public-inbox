@@ -30,8 +30,8 @@ sub flush_send {
 				PublicInbox::DS::epwait($wq_s1,
 							EPOLLOUT|EPOLLONESHOT);
 			} elsif ($!{ENOBUFS} || $!{ENOMEM}) {
-				PublicInbox::DS::add_timer(0.1, \&flush_send,
-							$self);
+				PublicInbox::DS::add_uniq_timer($self + 0,
+						0.1, \&flush_send, $self);
 			} else {
 				Carp::croak("sendmsg: $!");
 			}
