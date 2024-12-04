@@ -93,7 +93,7 @@ sub create_state_tables ($$) {
 	$dbh->do(<<''); # map publicinbox.<name>.newsgroup to integers
 CREATE TABLE IF NOT EXISTS newsgroups (
 	newsgroup_id INTEGER PRIMARY KEY NOT NULL,
-	newsgroup VARBINARY NOT NULL,
+	newsgroup BLOB NOT NULL,
 	UNIQUE (newsgroup) )
 
 	# the $NEWSGROUP_NAME.$SLICE_INDEX is part of the POP3 username;
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS mailboxes (
 	$dbh->do(<<''); # actual users are differentiated by their UUID
 CREATE TABLE IF NOT EXISTS users (
 	user_id INTEGER PRIMARY KEY NOT NULL,
-	uuid VARBINARY NOT NULL,
+	uuid BLOB NOT NULL,
 	last_seen INTEGER NOT NULL, /* to expire idle accounts */
 	UNIQUE (uuid) )
 

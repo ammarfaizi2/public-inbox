@@ -32,8 +32,8 @@ sub dbh {
 				($opt->{journal_mode} // 'WAL'));
 		$dbh->do(<<'');
 CREATE TABLE IF NOT EXISTS kv (
-	k VARBINARY PRIMARY KEY NOT NULL,
-	v VARBINARY NOT NULL,
+	k BLOB PRIMARY KEY NOT NULL,
+	v BLOB NOT NULL,
 	UNIQUE (k)
 )
 

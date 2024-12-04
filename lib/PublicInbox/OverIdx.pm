@@ -389,7 +389,7 @@ CREATE TABLE IF NOT EXISTS over (
 	sid INTEGER, /* Subject ID (IMAP ORDEREDSUBJECT "threading") */
 	ts INTEGER, /* IMAP INTERNALDATE (Received: header, git commit time) */
 	ds INTEGER, /* RFC-2822 sent Date: header, git author time */
-	ddd VARBINARY /* doc-data-deflated (->to_doc_data, ->load_from_data) */
+	ddd BLOB /* doc-data-deflated (->to_doc_data, ->load_from_data) */
 )
 
 	$dbh->do('CREATE INDEX IF NOT EXISTS idx_tid ON over (tid)');
@@ -543,7 +543,7 @@ CREATE TABLE IF NOT EXISTS xref3 (
 	docid INTEGER NOT NULL, /* <=> over.num */
 	ibx_id INTEGER NOT NULL, /* <=> inboxes.ibx_id */
 	xnum INTEGER NOT NULL, /* NNTP article number in ibx */
-	oidbin VARBINARY NOT NULL, /* 20-byte SHA-1 or 32-byte SHA-256 */
+	oidbin BLOB NOT NULL, /* 20-byte SHA-1 or 32-byte SHA-256 */
 	UNIQUE (docid, ibx_id, xnum, oidbin)
 )
 

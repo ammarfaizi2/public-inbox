@@ -61,13 +61,13 @@ sub create_tables {
 	$dbh->do(<<'');
 CREATE TABLE IF NOT EXISTS folders (
 	fid INTEGER PRIMARY KEY,
-	loc VARBINARY NOT NULL, /* URL;UIDVALIDITY=$N or $TYPE:/pathname */
+	loc BLOB NOT NULL, /* URL;UIDVALIDITY=$N or $TYPE:/pathname */
 	UNIQUE (loc)
 )
 
 	$dbh->do(<<'');
 CREATE TABLE IF NOT EXISTS blob2num (
-	oidbin VARBINARY NOT NULL,
+	oidbin BLOB NOT NULL,
 	fid INTEGER NOT NULL, /* folder ID */
 	uid INTEGER NOT NULL, /* NNTP article number, IMAP UID, MH number */
 	/* not UNIQUE(fid, uid), since we may have broken servers */
@@ -80,9 +80,9 @@ CREATE INDEX IF NOT EXISTS idx_fid_uid ON blob2num(fid,uid)
 
 	$dbh->do(<<'');
 CREATE TABLE IF NOT EXISTS blob2name (
-	oidbin VARBINARY NOT NULL,
+	oidbin BLOB NOT NULL,
 	fid INTEGER NOT NULL, /* folder ID */
-	name VARBINARY NOT NULL, /* Maildir basename, JMAP blobId */
+	name BLOB NOT NULL, /* Maildir basename, JMAP blobId */
 	/* not UNIQUE(fid, name), since we may have broken software */
 	UNIQUE (oidbin, fid, name)
 )
