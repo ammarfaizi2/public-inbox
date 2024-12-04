@@ -12,6 +12,7 @@ use File::Temp qw(tempdir);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::Spawn;
 use File::Path qw(rmtree);
+use PublicInbox::SQLiteUtil;
 
 sub dbh {
 	my ($self, $lock) = @_;
@@ -79,23 +80,17 @@ SELECT k,v FROM kv
 }
 
 sub keys {
-	my ($self, @pfx) = @_;
+	my ($self, $pfx, $anywhere) = @_;
+	# n.b. can't use GLOB for index optimization due to SQL_BLOB,
+	# so regexps it is.
 	my $sql = 'SELECT k FROM kv';
-	if (defined $pfx[0]) {
-		$sql .= ' WHERE k LIKE ? ESCAPE ?';
-		my $anywhere = !!$pfx[1];
-		$pfx[1] = '\\';
-		$pfx[0] =~ s/([%_\\])/\\$1/g; # glob chars
-		$pfx[0] .= '%';
-		substr($pfx[0], 0, 0, '%') if $anywhere;
-	} else {
-		@pfx = (); # [0] may've been undef
+	my $re;
+	if (defined $pfx) {
+		$sql .= ' WHERE k REGEXP ?'; # DBD::SQLite uses perlre
+		$re = PublicInbox::SQLiteUtil::mk_sqlite_re $pfx, $anywhere;
 	}
 	my $sth = $self->dbh->prepare($sql);
-	if (@pfx) {
-		$sth->bind_param(1, $pfx[0], SQL_BLOB);
-		$sth->bind_param(2, $pfx[1]);
-	}
+	$sth->bind_param(1, $re) if defined $re;
 	$sth->execute;
 	map { $_->[0] } @{$sth->fetchall_arrayref};
 }

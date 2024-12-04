@@ -46,4 +46,9 @@ $skv->dbh;
 ok($skv->set_maybe('02', '2'), "`02' set");
 ok($skv->set_maybe('2', '2'), "`2' set (no match on `02')");
 
+my @k = $skv->keys('2');
+is_deeply \@k, [ '2' ], 'prefix match on ->keys';
+@k = sort $skv->keys('2', 1);
+is_deeply \@k, [ '02', '2' ], 'anywhere match on ->keys';
+
 done_testing;

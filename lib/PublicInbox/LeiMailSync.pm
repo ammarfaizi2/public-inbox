@@ -12,6 +12,7 @@ use PublicInbox::ContentHash qw(git_sha);
 use Carp ();
 use PublicInbox::Git qw(%HEXLEN2SHA);
 use PublicInbox::IO qw(read_all);
+use PublicInbox::SQLiteUtil;
 
 sub dbh_new {
 	my ($self) = @_;
@@ -31,7 +32,6 @@ sub dbh_new {
 	# no sqlite_unicode, here, all strings are binary
 	create_tables($self, $dbh);
 	$dbh->do('PRAGMA journal_mode = WAL') if $creat;
-	$dbh->do('PRAGMA case_sensitive_like = ON');
 	$dbh;
 }
 
@@ -421,18 +421,12 @@ sub locations_for {
 
 # returns a list of folders used for completion
 sub folders {
-	my ($self, @pfx) = @_;
+	my ($self, $pfx, $anywhere) = @_;
 	my $sql = 'SELECT loc FROM folders';
 	my $re;
-	if (defined($pfx[0])) {
+	if (defined $pfx) {
 		$sql .= ' WHERE loc REGEXP ?'; # DBD::SQLite uses perlre
-		if (ref($pfx[0])) { # assume qr// "Regexp"
-			$re = $pfx[0];
-		} else {
-			$re = !!$pfx[1] ? '.*' : '';
-			$re .= quotemeta($pfx[0]);
-			$re .= '.*';
-		}
+		$re = PublicInbox::SQLiteUtil::mk_sqlite_re $pfx, $anywhere;
 	}
 	my $sth = ($self->{dbh} //= dbh_new($self))->prepare($sql);
 	$sth->bind_param(1, $re) if defined($re);

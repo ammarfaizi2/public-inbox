@@ -21,6 +21,7 @@ use Carp qw(croak carp);
 use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
 use File::Glob qw(bsd_glob GLOB_NOSORT);
+use PublicInbox::SQLiteUtil;
 use PublicInbox::Isearch;
 use PublicInbox::MultiGit;
 use PublicInbox::Spawn ();
@@ -461,15 +462,14 @@ EOM
 DELETE FROM inboxes WHERE ibx_id = ?
 
 		# drop last_commit info
-		my $pat = $eidx_key;
-		$pat =~ s/([_%\\])/\\$1/g;
-		$self->{oidx}->dbh->do('PRAGMA case_sensitive_like = ON');
+		# We use GLOB in addition to REGEXP since GLOB can use indices
 		my $lc_i = $self->{oidx}->dbh->prepare(<<'');
-SELECT key FROM eidx_meta WHERE key LIKE ? ESCAPE ?
+SELECT key FROM eidx_meta WHERE key GLOB ? AND key REGEXP ?
 
-		$lc_i->execute("lc-%:$pat//%", '\\');
+		my $ekg = 'lc-v[1-9]*:'.
+			PublicInbox::SQLiteUtil::escape_glob($eidx_key).'//*';
+		$lc_i->execute($ekg, qr!\Alc-v[1-9]+:\Q$eidx_key\E//!);
 		while (my ($key) = $lc_i->fetchrow_array) {
-			next if $key !~ m!\Alc-v[1-9]+:\Q$eidx_key\E//!;
 			warn "# removing $key\n";
 			$self->{oidx}->dbh->do(<<'', undef, $key);
 DELETE FROM eidx_meta WHERE key = ?
