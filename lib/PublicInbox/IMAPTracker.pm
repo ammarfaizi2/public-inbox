@@ -6,6 +6,7 @@ use parent qw(PublicInbox::Lock);
 use DBI;
 use DBD::SQLite;
 use PublicInbox::Config;
+use PublicInbox::SQLiteUtil;
 
 sub create_tables ($) {
 	my ($dbh) = @_;
@@ -75,11 +76,9 @@ sub new {
 	}
 	if (!-f $dbname) {
 		require File::Path;
-		require PublicInbox::Syscall;
 		my ($dir) = ($dbname =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($dir);
-		PublicInbox::Syscall::nodatacow_dir($dir);
-		open my $fh, '+>>', $dbname or die "failed to open $dbname: $!";
+		PublicInbox::SQLiteUtil::create_db $dbname;
 	}
 	my $self = bless { lock_path => "$dbname.lock", url => $url }, $class;
 	$self->lock_acquire;

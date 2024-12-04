@@ -18,11 +18,7 @@ sub dbh_new {
 	my ($self) = @_;
 	my $f = $self->{filename};
 	my $creat = !-s $f;
-	if ($creat) {
-		require PublicInbox::Syscall;
-		open my $fh, '+>>', $f or Carp::croak "open($f): $!";
-		PublicInbox::Syscall::nodatacow_fh($fh);
-	}
+	PublicInbox::SQLiteUtil::create_db $f if $creat;
 	my $dbh = DBI->connect("dbi:SQLite:dbname=$f",'','', {
 		AutoCommit => 1,
 		RaiseError => 1,

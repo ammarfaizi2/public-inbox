@@ -10,7 +10,7 @@ use Carp ();
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use PublicInbox::Config;
 use PublicInbox::POP3;
-use PublicInbox::Syscall;
+use PublicInbox::SQLiteUtil;
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use Fcntl qw(F_SETLK F_UNLCK F_WRLCK SEEK_SET);
 my ($FLOCK_TMPL, @FLOCK_ORDER);
@@ -73,7 +73,6 @@ sub refresh_groups { # PublicInbox::Daemon callback
 	-d $d or do {
 		require File::Path;
 		File::Path::make_path($d, { mode => 0700 });
-		PublicInbox::Syscall::nodatacow_dir($d);
 	};
 	$self->{lock_path} //= "$d/db.lock";
 	if (my $old = $self->{pi_cfg}) {
@@ -127,10 +126,7 @@ sub state_dbh_new {
 	my ($self) = @_;
 	my $f = "$self->{pi_cfg}->{'publicinbox.pop3state'}/db.sqlite3";
 	my $creat = !-s $f;
-	if ($creat) {
-		open my $fh, '+>>', $f or Carp::croak "open($f): $!";
-		PublicInbox::Syscall::nodatacow_fh($fh);
-	}
+	PublicInbox::SQLiteUtil::create_db $f if $creat;
 
 	my $dbh = DBI->connect("dbi:SQLite:dbname=$f",'','', {
 		AutoCommit => 1,

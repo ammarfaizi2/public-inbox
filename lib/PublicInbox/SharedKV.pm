@@ -49,11 +49,7 @@ sub new {
 	$base //= '';
 	my $f = $self->{filename} = "$dir/$base.sqlite3";
 	$self->{lock_path} = $opt->{lock_path} // "$dir/$base.flock";
-	unless (-s $f) {
-		require PublicInbox::Syscall;
-		PublicInbox::Syscall::nodatacow_dir($dir); # for journal/shm/wal
-		open my $fh, '+>>', $f or die "failed to open $f: $!";
-	}
+	PublicInbox::SQLiteUtil::create_db $f if !-s $f;
 	$self;
 }
 

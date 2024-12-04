@@ -13,17 +13,14 @@ use PublicInbox::Smsg;
 use Compress::Zlib qw(uncompress);
 use constant DEFAULT_LIMIT => 1000;
 use List::Util (); # for max
-use autodie qw(open);
+use PublicInbox::SQLiteUtil;
 
 sub dbh_new {
 	my ($self, $rw) = @_;
 	my $f = delete $self->{filename};
-	if (!-s $f) { # SQLite defaults mode to 0644, we want 0666
+	if (!-s $f) {
 		if ($rw) {
-			require PublicInbox::Syscall;
-			my ($dir) = ($f =~ m!(.+)/[^/]+\z!);
-			PublicInbox::Syscall::nodatacow_dir($dir);
-			open my $fh, '+>>', $f;
+			PublicInbox::SQLiteUtil::create_db $f;
 		} else {
 			$self->{filename} = $f; # die on stat() below:
 		}

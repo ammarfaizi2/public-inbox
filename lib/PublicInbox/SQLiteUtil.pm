@@ -4,6 +4,7 @@
 # common bits for SQLite users in our codebase
 package PublicInbox::SQLiteUtil;
 use v5.12;
+use autodie qw(open);
 
 my %SQLITE_GLOB_MAP = (
 	'[' => '[[]',
@@ -25,6 +26,15 @@ sub mk_sqlite_re ($$) {
 	my ($pfx, $anywhere) = @_;
 	ref($pfx) ? $pfx # assume qr// Regexp
 		: ($anywhere ? '.*' : '^')."\Q$pfx\E.*";
+}
+
+sub create_db ($) {
+	my ($f) = @_;
+	require PublicInbox::Syscall;
+	my ($dir) = ($f =~ m!(.+)/[^/]+\z!);
+	PublicInbox::Syscall::nodatacow_dir($dir); # for journal/shm/wal
+	# SQLite defaults mode to 0644, we want 0666 to respect umask
+	open my $fh, '+>>', $f;
 }
 
 1;
