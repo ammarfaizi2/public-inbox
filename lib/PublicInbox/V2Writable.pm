@@ -82,11 +82,11 @@ sub init_inbox {
 		$self->{parallel} = 0 if $shards == 0;
 		$self->{shards} = $shards if $shards > 0;
 	}
-	$self->idx_init;
-	$self->{mm}->skip_artnum($skip_artnum) if defined $skip_artnum;
 	my $max = $self->{ibx}->max_git_epoch;
 	$max = $skip_epoch if (defined($skip_epoch) && !defined($max));
 	$self->{mg}->add_epoch($max // 0);
+	$self->idx_init;
+	$self->{mm}->skip_artnum($skip_artnum) if defined $skip_artnum;
 	$self->done;
 }
 
