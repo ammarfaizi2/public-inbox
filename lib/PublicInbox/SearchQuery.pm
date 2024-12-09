@@ -17,8 +17,10 @@ sub new {
 	my ($l) = (($qp->{l} || '') =~ /([0-9]+)/);
 	$l = $LIM if !$l || $l > $LIM;
 	my ($o) = (($qp->{o} || '0') =~ /(-?[0-9]+)/);
+	my $q = $qp->{'q'};
+	$q =~ s/\r\n/\n/sg if defined $q;
 	bless {
-		q => $qp->{'q'},
+		q => $q,
 		x => $qp->{x} || '',
 		o => $o,
 		l => $l,
