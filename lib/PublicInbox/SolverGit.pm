@@ -107,18 +107,21 @@ sub ck_existing_cb { # async_check cb
 
 	# parse stderr of "git cat-file --batch-check", async means
 	# we may end up slurping output from other requests:
-	my $err = $git->last_check_err;
-	my $prev_oids = $git->{-prev_oids} //= [];
-	my @any_oids = ($err =~ /\b([a-f0-9]{40,})\s+blob\b/g);
-	push @$prev_oids, @any_oids;
-	my $oid_b_re = qr/\A$want->{oid_b}/;
-	my @ambig_oids = grep /$oid_b_re/, @$prev_oids;
-	@$prev_oids = grep !/$oid_b_re/, @$prev_oids;
-	delete $git->{-prev_oids} unless @$prev_oids;
-	@ambig_oids and dbg($self, "`$want->{oid_b}' ambiguous in " .
-			join("\n\t", $git->pub_urls($self->{psgi_env}))
-			. "\n" .
-			join('', map { "$_ blob\n" } @ambig_oids));
+	my @err = grep /\s+(?:[a-f0-9]{7,})\s+(?:blob|commit|tree|tag)\b/g,
+			split /^/ms, $git->last_check_err;
+	my $prev = $git->{-prev} //= [];
+	push @$prev, @err;
+	my $oid_b_re = qr/\s+\Q$want->{oid_b}\E[a-f0-9]*\s+/;
+	my $ambig = join '', grep /$oid_b_re/, @$prev;
+	@$prev = grep !/$oid_b_re/, @$prev;
+	delete $git->{-prev} unless @$prev;
+	if ($ambig ne '') {
+		my @urls = $git->pub_urls($self->{psgi_env});
+		rindex($urls[0], '/') >= 0 and
+			$ambig =~ s!\b([a-f0-9]{7,})\b!$urls[0]$1/s/!g;
+		dbg($self, "`$want->{oid_b}' ambiguous in " .
+			join("\n\t", @urls) . "\n" .  $ambig);
+	}
 
 	return retry_current($self, $want) if @$try;
 
