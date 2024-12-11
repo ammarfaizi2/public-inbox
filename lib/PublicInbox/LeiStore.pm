@@ -17,6 +17,7 @@ use v5.10.1;
 use parent qw(PublicInbox::Lock PublicInbox::IPC);
 use autodie qw(open pipe);
 use PublicInbox::ExtSearchIdx;
+use PublicInbox::SearchIdx;
 use PublicInbox::Eml;
 use PublicInbox::Import;
 use PublicInbox::InboxWritable qw(eml_from_path);
@@ -244,7 +245,8 @@ sub sto_export_kw ($$$) {
 # commit every 5s to get under the default DBD::SQLite timeout of 30s
 sub _schedule_checkpoint ($) {
 	my ($self) = @_;
-	add_uniq_timer("$self-checkpoint", 5, \&_commit, $self, 'barrier');
+	add_uniq_timer("$self-ckpt", $PublicInbox::SearchIdx::CHECKPOINT_INTVL,
+			\&_commit, $self, 'barrier');
 }
 
 # vmd = { kw => [ qw(seen ...) ], L => [ qw(inbox ...) ] }
