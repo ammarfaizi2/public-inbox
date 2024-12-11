@@ -139,8 +139,7 @@ SELECT id FROM msgid WHERE mid = ? LIMIT 1
 	my $id = $sth->fetchrow_array;
 	defined $id or return;
 
-	push(@$cols, 'num');
-	$cols = join(',', map { $_ } @$cols);
+	$cols = join ',', @$cols, 'num';
 	my $lim = 10;
 	my $prev = get_counter($dbh, 'ghost');
 	while (1) {
