@@ -12,6 +12,7 @@ use v5.10.1;
 use parent qw(PublicInbox::Search PublicInbox::Lock PublicInbox::Umask
 	Exporter);
 use PublicInbox::Eml;
+use PublicInbox::DS qw(now);
 use PublicInbox::Search qw(xap_terms);
 use PublicInbox::InboxWritable;
 use PublicInbox::MID qw(mids_for_index mids);
@@ -28,11 +29,12 @@ use PublicInbox::MsgTime qw(msg_timestamp msg_datestamp);
 use PublicInbox::Address;
 use Config;
 our @EXPORT_OK = qw(log2stack is_ancestor check_size prepare_stack
-	index_text term_generator add_val is_bad_blob);
+	index_text term_generator add_val is_bad_blob update_checkpoint);
 my $X = \%PublicInbox::Search::X;
 our ($DB_CREATE_OR_OPEN, $DB_OPEN);
 our $DB_NO_SYNC = 0;
 our $DB_DANGEROUS = 0;
+our $CHECKPOINT_INTVL = 5; # seconds
 our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# assume a typical 64-bit system has 8x more RAM than a
 	# typical 32-bit system:
@@ -785,15 +787,23 @@ sub is_bad_blob ($$$$) {
 	$size == 0 ? 1 : 0; # size == 0 means purged
 }
 
+sub update_checkpoint ($$) {
+	my ($self, $smsg) = @_;
+	($self->{transact_bytes} += $smsg->{bytes}) >= $self->{batch_bytes} and
+		return 1;
+	my $now = now;
+	my $next = $self->{next_checkpoint} //= $now + $CHECKPOINT_INTVL;
+	$now > $next;
+}
+
 sub index_both { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $sync) = @_;
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
-	my ($nr, $max) = @$sync{qw(nr max)};
-	++$$nr;
-	$$max -= $size;
+	++${$sync->{nr}};
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
 	my $self = $sync->{sidx};
+	${$sync->{need_checkpoint}} = 1 if update_checkpoint $self, $smsg;
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
 	$smsg->{num} = index_mm($self, $eml, $oid, $sync) or
@@ -850,6 +860,7 @@ sub check_size { # check_async cb for -index --max-size=...
 sub v1_checkpoint ($$;$) {
 	my ($self, $sync, $stk) = @_;
 	$self->{ibx}->git->async_wait_all;
+	${$sync->{need_checkpoint}} = undef;
 
 	# $newest may be undef
 	my $newest = $stk ? $stk->{latest_cmt} : ${$sync->{latest_cmt}};
@@ -859,7 +870,6 @@ sub v1_checkpoint ($$;$) {
 			$self->{mm}->last_commit($newest);
 		}
 	}
-	${$sync->{max}} = $self->{batch_bytes};
 	$self->{mm}->mm_commit;
 	my $xdb = $self->{xdb};
 	if ($newest && $xdb) {
@@ -889,17 +899,18 @@ sub v1_checkpoint ($$;$) {
 		begin_txn_lazy($self);
 		$self->{mm}->{dbh}->begin_work;
 	}
+	$self->{transact_bytes} = 0;
+	delete $self->{next_checkpoint};
 }
 
 # only for v1
 sub process_stack {
 	my ($self, $sync, $stk) = @_;
 	my $git = $sync->{ibx}->git;
-	my $max = $self->{batch_bytes};
 	my $nr = 0;
 	$sync->{nr} = \$nr;
-	$sync->{max} = \$max;
 	$sync->{sidx} = $self;
+	$sync->{need_checkpoint} = \(my $need_ckpt);
 	$sync->{latest_cmt} = \(my $latest_cmt);
 
 	$self->{mm}->{dbh}->begin_work;
@@ -926,10 +937,11 @@ sub process_stack {
 			} else {
 				$git->cat_async($oid, \&index_both, $arg);
 			}
-			v1_checkpoint($self, $sync) if $max <= 0;
 		} elsif ($f eq 'd') {
 			$git->cat_async($oid, \&unindex_both, $arg);
 		}
+		${$sync->{need_checkpoint}} and
+			v1_checkpoint $self, $sync;
 	}
 	v1_checkpoint($self, $sync, $sync->{quit} ? undef : $stk);
 }
@@ -1072,6 +1084,7 @@ sub _index_sync {
 		$ibx->git->cat_file($tip);
 		$ibx->git->check($tip);
 	}
+	local $self->{transact_bytes} = 0;
 	my $pr = $opt->{-progress};
 	my $sync = { reindex => $opt->{reindex}, -opt => $opt, ibx => $ibx };
 	my $quit = quit_cb($sync);

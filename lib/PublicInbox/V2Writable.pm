@@ -20,7 +20,8 @@ use PublicInbox::OverIdx;
 use PublicInbox::Msgmap;
 use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
-use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob);
+use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob
+	update_checkpoint);
 use PublicInbox::DS qw(now);
 use IO::Handle; # ->autoflush
 use POSIX ();
@@ -106,8 +107,7 @@ sub do_idx ($$$) {
 		my $idx = idx_shard($self, $smsg->{num});
 		$idx->index_eml($eml, $smsg);
 	}
-	my $n = $self->{transact_bytes} += $smsg->{bytes};
-	$n >= $self->{batch_bytes};
+	update_checkpoint $self, $smsg;
 }
 
 # returns undef on duplicate or spam
@@ -136,10 +136,7 @@ sub add {
 	my $cmt = $im->add($mime, undef, $smsg); # sets $smsg->{ds|ts|blob}
 	$cmt = $im->get_mark($cmt);
 	$self->{last_commit}->[$self->{epoch_max}] = $cmt;
-
-	if (do_idx($self, $mime, $smsg)) {
-		$self->checkpoint;
-	}
+	$self->checkpoint if do_idx $self, $mime, $smsg;
 	$cmt;
 }
 
@@ -564,6 +561,7 @@ shard[$i] bad echo:$echo != $i waiting for txn commit
 			$dbh->begin_work;
 		}
 	}
+	delete $self->{next_checkpoint};
 	$self->{total_bytes} += $self->{transact_bytes};
 	$self->{transact_bytes} = 0;
 }
@@ -819,9 +817,7 @@ sub index_oid { # cat_async callback
 	}, 'PublicInbox::Smsg';
 	$smsg->populate($eml, $arg);
 	$smsg->set_bytes($$bref, $size);
-	if (do_idx($self, $eml, $smsg)) {
-		${$arg->{need_checkpoint}} = 1;
-	}
+	${$arg->{need_checkpoint}} = 1 if do_idx $self, $eml, $smsg;
 	index_finalize($arg, 1);
 }
 
@@ -1103,7 +1099,6 @@ sub index_xap_only { # git->cat_async callback
 	my $self = delete $smsg->{self};
 	my $idx = idx_shard($self, $smsg->{num});
 	$idx->index_eml(PublicInbox::Eml->new($bref), $smsg);
-	$self->{transact_bytes} += $smsg->{bytes};
 }
 
 sub index_xap_step ($$$;$) {
@@ -1122,7 +1117,10 @@ sub index_xap_step ($$$;$) {
 		my $smsg = $ibx->over->get_art($num) or next;
 		$smsg->{self} = $self;
 		$ibx->git->cat_async($smsg->{blob}, \&index_xap_only, $smsg);
-		if ($self->{transact_bytes} >= $self->{batch_bytes}) {
+		# n.b. ignore CHECKPOINT_INTVL for Xapian-only, Xapian doesn't
+		# have timeout problems like SQLite
+		my $n = $self->{transact_bytes} += $smsg->{bytes};
+		if ($n >= $self->{batch_bytes}) {
 			${$sync->{nr}} = $num;
 			reindex_checkpoint($self, $sync);
 		}

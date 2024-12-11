@@ -26,7 +26,8 @@ use PublicInbox::Isearch;
 use PublicInbox::MultiGit;
 use PublicInbox::Spawn ();
 use PublicInbox::Search;
-use PublicInbox::SearchIdx qw(prepare_stack is_ancestor is_bad_blob);
+use PublicInbox::SearchIdx qw(prepare_stack is_ancestor is_bad_blob
+	update_checkpoint);
 use PublicInbox::OverIdx;
 use PublicInbox::MiscIdx;
 use PublicInbox::MID qw(mids);
@@ -123,12 +124,9 @@ sub attach_config {
 
 sub check_batch_limit ($) {
 	my ($req) = @_;
-	my $self = $req->{self};
-	my $new_smsg = $req->{new_smsg};
-	my $n = $self->{transact_bytes} += $new_smsg->{bytes};
-
 	# set flag for PublicInbox::V2Writable::index_todo:
-	${$req->{need_checkpoint}} = 1 if $n >= $self->{batch_bytes};
+	update_checkpoint $req->{self}, $req->{new_smsg} and
+		${$req->{need_checkpoint}} = 1;
 }
 
 sub bad_ibx_id ($$;$) {
@@ -535,7 +533,7 @@ sub eidx_gc {
 	$self->{cfg} or die "E: GC requires ->attach_config\n";
 	$opt->{-idx_gc} = 1;
 	my $sync = {
-		need_checkpoint => \(my $need_checkpoint = 0),
+		need_checkpoint => \(my $need_checkpoint),
 		check_intvl => 10,
 		next_check => now() + 10,
 		checkpoint_unlocks => 1,
@@ -1136,7 +1134,7 @@ sub eidx_sync { # main entry point
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	$self->{oidx}->rethread_prepare($opt);
 	my $sync = {
-		need_checkpoint => \(my $need_checkpoint = 0),
+		need_checkpoint => \(my $need_checkpoint),
 		check_intvl => 10,
 		next_check => now() + 10,
 		-opt => $opt,
