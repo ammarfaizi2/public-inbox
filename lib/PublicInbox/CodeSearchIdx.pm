@@ -813,11 +813,18 @@ sub prune_init { # via wq_io_do in IDX_SHARDS
 	$self->begin_txn_lazy;
 }
 
+# <20230504084559.M203335@dcvr> thread on xapian-discuss@lists.xapian.org
+# discusses getting an estimate term length to multiply the get_doclength()
+# result to estimate memory use of uncommitted deletes.  We need to estimate
+# length here since the data may no longer be available at all if we get to
+# prune_one().
+our $EST_LEN = 6;
+
 sub prune_one { # via wq_io_do in IDX_SHARDS
 	my ($self, $term) = @_;
 	my @docids = $self->docids_by_postlist($term);
 	for (@docids) {
-		$TXN_BYTES -= $self->{xdb}->get_doclength($_) * 42;
+		$TXN_BYTES -= $self->{xdb}->get_doclength($_) * $EST_LEN;
 		$self->{xdb}->delete_document($_);
 	}
 	++$self->{nr_prune};
