@@ -107,7 +107,7 @@ sub do_idx ($$$) {
 		my $idx = idx_shard($self, $smsg->{num});
 		$idx->index_eml($eml, $smsg);
 	}
-	update_checkpoint $self, $smsg;
+	update_checkpoint $self, $smsg->{bytes};
 }
 
 # returns undef on duplicate or spam

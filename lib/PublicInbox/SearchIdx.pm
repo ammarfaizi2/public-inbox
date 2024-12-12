@@ -788,8 +788,8 @@ sub is_bad_blob ($$$$) {
 }
 
 sub update_checkpoint ($$) {
-	my ($self, $smsg) = @_;
-	($self->{transact_bytes} += $smsg->{bytes}) >= $self->{batch_bytes} and
+	my ($self, $bytes) = @_;
+	($self->{transact_bytes} += $bytes) >= $self->{batch_bytes} and
 		return 1;
 	my $now = now;
 	my $next = $self->{next_checkpoint} //= $now + $CHECKPOINT_INTVL;
@@ -803,7 +803,7 @@ sub index_both { # git->cat_async callback
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
 	my $self = $sync->{sidx};
-	${$sync->{need_checkpoint}} = 1 if update_checkpoint $self, $smsg;
+	${$sync->{need_checkpoint}} = 1 if update_checkpoint $self, $smsg->{bytes};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
 	$smsg->{num} = index_mm($self, $eml, $oid, $sync) or

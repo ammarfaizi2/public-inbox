@@ -125,7 +125,7 @@ sub attach_config {
 sub check_batch_limit ($) {
 	my ($req) = @_;
 	# set flag for PublicInbox::V2Writable::index_todo:
-	update_checkpoint $req->{self}, $req->{new_smsg} and
+	update_checkpoint $req->{self}, $req->{new_smsg}->{bytes} and
 		${$req->{need_checkpoint}} = 1;
 }
 
