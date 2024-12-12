@@ -787,13 +787,15 @@ sub is_bad_blob ($$$$) {
 	$size == 0 ? 1 : 0; # size == 0 means purged
 }
 
-sub update_checkpoint ($$) {
+# returns true if checkpoint is needed
+sub update_checkpoint ($;$) {
 	my ($self, $bytes) = @_;
-	($self->{transact_bytes} += $bytes) >= $self->{batch_bytes} and
-		return 1;
+	my $nr = $self->{transact_bytes} += $bytes // 0;
+	$self->{need_checkpoint} // return; # must be defined via local
+	return ++$self->{need_checkpoint} if $nr >= $self->{batch_bytes};
 	my $now = now;
 	my $next = $self->{next_checkpoint} //= $now + $CHECKPOINT_INTVL;
-	$now > $next;
+	$self->{need_checkpoint} += ($now > $next ? 1 : 0);
 }
 
 sub index_both { # git->cat_async callback
@@ -803,7 +805,7 @@ sub index_both { # git->cat_async callback
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
 	my $self = $sync->{sidx};
-	${$sync->{need_checkpoint}} = 1 if update_checkpoint $self, $smsg->{bytes};
+	update_checkpoint $self, $smsg->{bytes};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
 	$smsg->{num} = index_mm($self, $eml, $oid, $sync) or
@@ -860,7 +862,7 @@ sub check_size { # check_async cb for -index --max-size=...
 sub v1_checkpoint ($$;$) {
 	my ($self, $sync, $stk) = @_;
 	$self->{ibx}->git->async_wait_all;
-	${$sync->{need_checkpoint}} = undef;
+	$self->{need_checkpoint} = 0;
 
 	# $newest may be undef
 	my $newest = $stk ? $stk->{latest_cmt} : ${$sync->{latest_cmt}};
@@ -910,7 +912,7 @@ sub process_stack {
 	my $nr = 0;
 	$sync->{nr} = \$nr;
 	$sync->{sidx} = $self;
-	$sync->{need_checkpoint} = \(my $need_ckpt);
+	local $self->{need_checkpoint} = 0;
 	$sync->{latest_cmt} = \(my $latest_cmt);
 
 	$self->{mm}->{dbh}->begin_work;
@@ -940,8 +942,7 @@ sub process_stack {
 		} elsif ($f eq 'd') {
 			$git->cat_async($oid, \&unindex_both, $arg);
 		}
-		${$sync->{need_checkpoint}} and
-			v1_checkpoint $self, $sync;
+		v1_checkpoint $self, $sync if $self->{need_checkpoint};
 	}
 	v1_checkpoint($self, $sync, $sync->{quit} ? undef : $stk);
 }

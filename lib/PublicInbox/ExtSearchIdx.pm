@@ -122,13 +122,6 @@ sub attach_config {
 	$cfg->each_inbox(\&_ibx_attach, $self, $types);
 }
 
-sub check_batch_limit ($) {
-	my ($req) = @_;
-	# set flag for PublicInbox::V2Writable::index_todo:
-	update_checkpoint $req->{self}, $req->{new_smsg}->{bytes} and
-		${$req->{need_checkpoint}} = 1;
-}
-
 sub bad_ibx_id ($$;$) {
 	my ($self, $ibx_id, $cb) = @_;
 	my $msg = "E: bad/stale ibx_id=#$ibx_id encountered";
@@ -262,7 +255,7 @@ sub index_unseen ($) {
 	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ibx->eidx_key);
 	$new_smsg->{eidx_key} = $ibx->eidx_key;
 	$idx->index_eml($eml, $new_smsg);
-	check_batch_limit($req);
+	update_checkpoint $self, $new_smsg->{bytes};
 }
 
 sub do_finalize ($) {
@@ -450,7 +443,7 @@ EOM
 			$oid = unpack('H*', $oid);
 			$r = $r ? 'unref' : 'remove';
 			warn "# $r #$docid $eidx_key $oid\n";
-			if (checkpoint_due($sync)) {
+			if (update_checkpoint $self) {
 				$x3_doc = $ibx_ck = undef;
 				reindex_checkpoint($self, $sync);
 				goto restart;
@@ -483,20 +476,20 @@ sub eidx_gc_scan_shards ($$) { # TODO: use for lei/store
 DELETE FROM xref3 WHERE docid NOT IN (SELECT num FROM over)
 
 	warn "# eliminated $nr stale xref3 entries\n" if $nr != 0;
-	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
+	reindex_checkpoint($self, $sync) if update_checkpoint $self;
 
 	# fixup from old bugs:
 	$nr = $self->{oidx}->dbh->do(<<'');
 DELETE FROM over WHERE num > 0 AND num NOT IN (SELECT docid FROM xref3)
 
 	warn "# eliminated $nr stale over entries\n" if $nr != 0;
-	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
+	reindex_checkpoint($self, $sync) if update_checkpoint $self;
 
 	$nr = $self->{oidx}->dbh->do(<<'');
 DELETE FROM eidxq WHERE docid NOT IN (SELECT num FROM over)
 
 	warn "# eliminated $nr stale reindex queue entries\n" if $nr != 0;
-	reindex_checkpoint($self, $sync) if checkpoint_due($sync);
+	reindex_checkpoint($self, $sync) if update_checkpoint $self;
 
 	my ($cur) = $self->{oidx}->dbh->selectrow_array(<<EOM);
 SELECT MIN(num) FROM over WHERE num > 0
@@ -517,7 +510,7 @@ SELECT num FROM over WHERE num >= ? ORDER BY num ASC LIMIT 10000
 			}
 			$cur = $n + 1;
 		}
-		if (checkpoint_due($sync)) {
+		if (update_checkpoint $self) {
 			for my $idx (values %active_shards) {
 				$nr += $idx->ipc_do('nr_quiet_rm')
 			}
@@ -533,10 +526,8 @@ sub eidx_gc { # top-level entry point
 	$self->{cfg} or die "E: GC requires ->attach_config\n";
 	$opt->{-idx_gc} = 1;
 	local $self->{checkpoint_unlocks} = 1;
+	local $self->{need_checkpoint} = 0;
 	my $sync = {
-		need_checkpoint => \(my $need_checkpoint),
-		check_intvl => 10,
-		next_check => now() + 10,
 		-opt => $opt,
 		self => $self,
 	};
@@ -585,7 +576,7 @@ sub _reindex_finalize ($$$) {
 	my $orig_smsg = $req->{orig_smsg} // die 'BUG: no {orig_smsg}';
 	my $docid = $smsg->{num} = $orig_smsg->{num};
 	$self->{oidx}->add_overview($eml, $smsg); # may rethread
-	check_batch_limit({ %$sync, new_smsg => $smsg });
+	update_checkpoint $self, $smsg->{bytes};
 	my $chash0 = $smsg->{chash} // die "BUG: $smsg->{blob} no {chash}";
 	my $stable = delete($by_chash->{$chash0}) //
 				die "BUG: $smsg->{blob} chash missing";
@@ -697,11 +688,6 @@ BUG? #$docid $smsg->{blob} is not referenced by inboxes during reindex
 	@$xr3 = map { [ $_->[0], $_->[1], unpack('H*', $_->[2]) ] } @$xr3;
 	my $req = { orig_smsg => $smsg, sync => $sync, xr3r => $xr3, ix => 0 };
 	$self->git->cat_async($xr3->[$req->{ix}]->[2], \&_reindex_oid, $req);
-}
-
-sub checkpoint_due ($) {
-	my ($sync) = @_;
-	${$sync->{need_checkpoint}} || (now() > $sync->{next_check});
 }
 
 sub host_ident () {
@@ -830,7 +816,7 @@ restart:
 		$del->execute($docid);
 		++${$sync->{nr}};
 
-		if (checkpoint_due($sync)) {
+		if (update_checkpoint $self) {
 			$dbh = $del = $iter = undef;
 			reindex_checkpoint($self, $sync); # release lock
 			$dbh = $self->{oidx}->dbh;
@@ -922,9 +908,8 @@ sub _reindex_check_ibx ($$$) {
 		$beg = $msgs->[-1]->{num} + 1;
 		$end = $beg + $slice;
 		$end = $max if $end > $max;
-		if (checkpoint_due($sync)) {
+		update_checkpoint $self and
 			reindex_checkpoint($self, $sync); # release lock
-		}
 		($lo, $hi) = ($msgs->[0]->{num}, $msgs->[-1]->{num});
 		$usr //= _unref_stale_range($sync, $ibx, "xnum < $lo");
 		my $x3a = $self->{oidx}->dbh->selectall_arrayref(
@@ -1107,7 +1092,7 @@ EOS
 		# Message-IDs.
 		$self->git->async_wait_all;
 
-		if (checkpoint_due($sync)) {
+		if (update_checkpoint $self) {
 			undef $iter;
 			reindex_checkpoint($self, $sync);
 			goto dedupe_restart;
@@ -1133,10 +1118,8 @@ sub eidx_sync { # main entry point
 	};
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	$self->{oidx}->rethread_prepare($opt);
+	local $self->{need_checkpoint} = 0;
 	my $sync = {
-		need_checkpoint => \(my $need_checkpoint),
-		check_intvl => 10,
-		next_check => now() + 10,
 		-opt => $opt,
 		# DO NOT SET {reindex} here, it's incompatible with reused
 		# V2Writable code, reindex is totally different here
@@ -1144,7 +1127,7 @@ sub eidx_sync { # main entry point
 		self => $self,
 		-regen_fmt => "%u/?\n",
 	};
-	local $SIG{USR1} = sub { $need_checkpoint = 1 };
+	local $SIG{USR1} = sub { $self->{need_checkpoint} = 1 };
 	my $quit = PublicInbox::SearchIdx::quit_cb($sync);
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;

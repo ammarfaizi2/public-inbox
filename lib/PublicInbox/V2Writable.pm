@@ -22,7 +22,7 @@ use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob
 	update_checkpoint);
-use PublicInbox::DS qw(now);
+use PublicInbox::DS;
 use IO::Handle; # ->autoflush
 use POSIX ();
 use Carp qw(confess);
@@ -703,7 +703,7 @@ sub reindex_checkpoint ($$) {
 
 	$self->git->async_wait_all;
 	$self->update_last_commit($sync);
-	${$sync->{need_checkpoint}} = 0;
+	$self->{need_checkpoint} = 0;
 	my $mm_tmp = $sync->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
 	die 'BUG: {im} during reindex' if $self->{im};
@@ -719,9 +719,6 @@ sub reindex_checkpoint ($$) {
 
 	# allow -watch or -mda to write...
 	$self->idx_init($sync->{-opt}); # reacquire lock
-	if (my $intvl = $sync->{check_intvl}) { # eidx
-		$sync->{next_check} = now + $intvl;
-	}
 	$mm_tmp->atfork_parent if $mm_tmp;
 }
 
@@ -817,7 +814,7 @@ sub index_oid { # cat_async callback
 	}, 'PublicInbox::Smsg';
 	$smsg->populate($eml, $arg);
 	$smsg->set_bytes($$bref, $size);
-	${$arg->{need_checkpoint}} = 1 if do_idx $self, $eml, $smsg;
+	do_idx $self, $eml, $smsg;
 	index_finalize($arg, 1);
 }
 
@@ -1169,9 +1166,7 @@ sub index_todo ($$$) {
 		} elsif ($f eq 'd') {
 			$all->cat_async($oid, $unindex_oid, $req);
 		}
-		if (${$sync->{need_checkpoint}}) {
-			reindex_checkpoint($self, $sync);
-		}
+		reindex_checkpoint($self, $sync) if $self->{need_checkpoint};
 	}
 	$all->async_wait_all;
 	$self->update_last_commit($sync, $stk);
@@ -1185,7 +1180,6 @@ sub xapian_only {
 	$self->idx_init($opt); # acquire lock
 	if (my $art_end = $self->{ibx}->mm->max) {
 		$sync //= {
-			need_checkpoint => \(my $bool = 0),
 			-opt => $opt,
 			self => $self,
 			nr => \(my $nr = 0),
@@ -1214,6 +1208,7 @@ sub xapian_only {
 sub index_sync {
 	my ($self, $opt) = @_;
 	$opt //= {};
+	local $self->{need_checkpoint} = 0;
 	return xapian_only($self, $opt) if $opt->{xapian_only};
 
 	my $epoch_max;
@@ -1238,7 +1233,6 @@ sub index_sync {
 	$self->{mg}->fill_alternates;
 	$self->{oidx}->rethread_prepare($opt);
 	my $sync = {
-		need_checkpoint => \(my $bool = 0),
 		reindex => $opt->{reindex},
 		-opt => $opt,
 		self => $self,
