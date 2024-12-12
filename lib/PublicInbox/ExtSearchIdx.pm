@@ -528,15 +528,15 @@ SELECT num FROM over WHERE num >= ? ORDER BY num ASC LIMIT 10000
 	warn "# eliminated $nr stale Xapian documents\n" if $nr != 0;
 }
 
-sub eidx_gc {
+sub eidx_gc { # top-level entry point
 	my ($self, $opt) = @_;
 	$self->{cfg} or die "E: GC requires ->attach_config\n";
 	$opt->{-idx_gc} = 1;
+	local $self->{checkpoint_unlocks} = 1;
 	my $sync = {
 		need_checkpoint => \(my $need_checkpoint),
 		check_intvl => 10,
 		next_check => now() + 10,
-		checkpoint_unlocks => 1,
 		-opt => $opt,
 		self => $self,
 	};
@@ -1159,11 +1159,11 @@ sub eidx_sync { # main entry point
 	}
 
 	if (my $msgids = delete($opt->{dedupe})) {
-		local $sync->{checkpoint_unlocks} = 1;
+		local $self->{checkpoint_unlocks} = 1;
 		eidx_dedupe($self, $sync, $msgids);
 	}
 	if (delete($opt->{reindex})) {
-		local $sync->{checkpoint_unlocks} = 1;
+		local $self->{checkpoint_unlocks} = 1;
 		eidx_reindex($self, $sync);
 	}
 

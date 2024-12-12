@@ -707,7 +707,7 @@ sub reindex_checkpoint ($$) {
 	my $mm_tmp = $sync->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
 	die 'BUG: {im} during reindex' if $self->{im};
-	if ($self->{ibx_map} && !$sync->{checkpoint_unlocks}) {
+	if ($self->{ibx_map} && !$self->{checkpoint_unlocks}) {
 		checkpoint($self, 1); # no need to release lock on pure index
 	} else {
 		$self->done; # release lock
