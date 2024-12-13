@@ -10,7 +10,7 @@ use_ok 'PublicInbox::Filter::Base';
 	my $f = PublicInbox::Filter::Base->new;
 	ok($f, 'created stock object');
 	ok(defined $f->{reject_suffix}, 'rejected suffix redefined');
-	is(ref($f->{reject_suffix}), 'Regexp', 'reject_suffix should be a RE');
+	ok $f->{reject_suffix}->isa('Regexp'), 'reject_suffix should be a RE';
 }
 
 {
