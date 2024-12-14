@@ -703,4 +703,16 @@ EOF
 	is $args[0]->size, 0, 'isrch->async_mset altid miss works';
 }
 
+if ('max-size') {
+	my $dir = "$home/extindex-max";
+	my $rdr = { 2 => \(my $err) };
+	ok run_script([qw(-extindex --max-size=500 --all -vvv), $dir],
+			undef, $rdr), 'extindex with max-size';
+	my $es = PublicInbox::ExtSearch->new($dir);
+	my $mset = $es->mset('z:500..');
+	is $mset->size, 0, 'no hits w/ max-size=500';
+	like $err, qr/ skipping [a-f0-9]{40,} .*? > 500\b/,
+		'noted skipping messages in stderr';
+}
+
 done_testing;
