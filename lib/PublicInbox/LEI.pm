@@ -625,12 +625,8 @@ sub _lei_atfork_child {
 	eval 'no warnings; undef $PublicInbox::LeiNoteEvent::to_flush';
 	undef $errors_log;
 	$quit = \&CORE::exit;
-	if (!$self->{opt}->{noisy}) { # only "lei import" sets this atm
-		my $cb = $SIG{__WARN__} // \&CORE::warn;
-		$SIG{__WARN__} = sub {
-			$cb->(@_) unless PublicInbox::Eml::warn_ignore(@_)
-		};
-	}
+	$self->{opt}->{noisy} or # only "lei import" sets this atm
+		$SIG{__WARN__} = PublicInbox::Eml::warn_ignore_cb();
 	$SIG{TERM} = $term_handler;
 	$current_lei = $persist ? undef : $self; # for SIG{__WARN__}
 }
