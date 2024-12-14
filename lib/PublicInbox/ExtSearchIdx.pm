@@ -1110,12 +1110,8 @@ EOS
 sub eidx_sync { # main entry point
 	my ($self, $opt) = @_;
 
-	my $warn_cb = $SIG{__WARN__} || \&CORE::warn;
 	local $self->{current_info} = '';
-	local $SIG{__WARN__} = sub {
-		return if PublicInbox::Eml::warn_ignore(@_);
-		$warn_cb->($self->{current_info}, ': ', @_);
-	};
+	local $SIG{__WARN__} = PublicInbox::Admin::warn_cb $self;
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	$self->{oidx}->rethread_prepare($opt);
 	local $self->{need_checkpoint} = 0;
@@ -1386,11 +1382,7 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 	return if $sync->{quit};
 	my $oldset = PublicInbox::DS::block_signals();
 	local $self->{current_info} = '';
-	my $cb = $SIG{__WARN__} || \&CORE::warn;
-	local $SIG{__WARN__} = sub {
-		return if PublicInbox::Eml::warn_ignore(@_);
-		$cb->($self->{current_info}, ': ', @_);
-	};
+	local $SIG{__WARN__} = PublicInbox::Admin::warn_cb $self;
 	my $sig = {
 		HUP => sub { eidx_reload($self, $idler) },
 		USR1 => sub { eidx_resync_start($self) },

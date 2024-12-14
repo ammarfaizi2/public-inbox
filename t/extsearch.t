@@ -292,7 +292,7 @@ if ('reindex catches missed messages') {
 	is($oidx->eidx_meta($lc_key), $cmt_b, 'lc-v2 stays unchanged');
 	my @err = split(/^/, $err);
 	is(scalar(@err), 1, 'only one warning') or diag "err=$err";
-	like($err[0], qr/# reindex_unseen/, 'got reindex_unseen message');
+	like $err[0], qr/# .*? reindex_unseen/, 'got reindex_unseen message';
 	my $new = $oidx->get_art($max + 1);
 	is($new->{subject}, $eml->header('Subject'), 'new message added');
 

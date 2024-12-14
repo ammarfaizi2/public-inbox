@@ -51,6 +51,7 @@ package PublicInbox::CodeSearchIdx;
 use v5.12;
 # parent order matters, we want ->DESTROY from IPC, not SearchIdx
 use parent qw(PublicInbox::CodeSearch PublicInbox::IPC PublicInbox::SearchIdx);
+use PublicInbox::Admin;
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::PktOp;
 use PublicInbox::IPC qw(nproc_shards);
@@ -1334,13 +1335,7 @@ sub cidx_run { # main entry point
 	};
 	local @PRUNE_BATCH = @PRUNE_BATCH;
 	$MY_SIG->{$_} = \&parent_quit for qw(TERM QUIT INT);
-	my $cb = $SIG{__WARN__} || \&CORE::warn;
-	local $SIG{__WARN__} = sub {
-		my $m = shift @_;
-		$self->{current_info} eq '' or
-			$m =~ s/\A(#?\s*)/$1$self->{current_info}: /;
-		$cb->($m, @_);
-	};
+	local $SIG{__WARN__} = PublicInbox::Admin::warn_cb $self;
 	load_existing($self) unless $self->{-cidx_internal};
 	if ($self->{-opt}->{reindex}) {
 		require PublicInbox::SharedKV;

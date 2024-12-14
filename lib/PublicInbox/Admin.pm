@@ -266,6 +266,18 @@ sub index_terminate {
 	$ibx->git->cleanup;
 }
 
+sub warn_cb ($) {
+	my ($self) = @_;
+	my $cb = $SIG{__WARN__} || \&CORE::warn;
+	sub {
+		return if PublicInbox::Eml::warn_ignore(@_);
+		my @m = @_;
+		$self->{current_info} ne '' && @m && $m[0] =~ s/\A# // and
+			unshift @m, '# ', $self->{current_info}, ': ';
+		$cb->(@m);
+	}
+}
+
 sub index_inbox {
 	my ($ibx, $im, $opt) = @_;
 	require PublicInbox::InboxWritable;
@@ -276,10 +288,7 @@ sub index_inbox {
 	local @SIG{keys %SIG} = values %SIG;
 	setup_signals(\&index_terminate, $ibx);
 	my $idx = { current_info => $ibx->{inboxdir} };
-	local $SIG{__WARN__} = sub {
-		return if PublicInbox::Eml::warn_ignore(@_);
-		warn($idx->{current_info}, ': ', @_);
-	};
+	local $SIG{__WARN__} = warn_cb $idx;
 	if ($ibx->version == 2) {
 		eval { require PublicInbox::V2Writable };
 		die "v2 requirements not met: $@\n" if $@;
