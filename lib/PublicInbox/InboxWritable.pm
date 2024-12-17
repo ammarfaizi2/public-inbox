@@ -172,13 +172,6 @@ sub cleanup ($) {
 	delete @{$_[0]}{qw(over mm git search)};
 }
 
-# v2+ only, XXX: maybe we can just rely on ->max_git_epoch and remove
-sub git_dir_latest {
-	my ($self, $max) = @_;
-	defined($$max = $self->max_git_epoch) ?
-		"$self->{inboxdir}/git/$$max.git" : undef;
-}
-
 # for unconfigured inboxes
 sub detect_indexlevel ($) {
 	my ($ibx) = @_;

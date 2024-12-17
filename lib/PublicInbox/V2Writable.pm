@@ -630,22 +630,20 @@ sub importer {
 			return $self->import_init($git, 0);
 		}
 	}
-	my $epoch = 0;
-	my $max;
-	my $latest = $self->{ibx}->git_dir_latest(\$max);
-	if (defined $latest) {
-		my $git = PublicInbox::Git->new($latest);
+	my $epoch = $self->{ibx}->max_git_epoch;
+	if (defined $epoch) { # use existing if not too big
+		my $git = PublicInbox::Git->new(
+			$self->{mg}->epoch_dir."/$epoch.git");
 		my $packed_bytes = $git->packed_bytes;
 		my $unpacked_bytes = $packed_bytes / $PACKING_FACTOR;
 
-		if ($unpacked_bytes >= $self->{rotate_bytes}) {
-			$epoch = $max + 1;
-		} else {
-			$self->{epoch_max} = $max;
+		if ($unpacked_bytes < $self->{rotate_bytes}) { # ok, space left
+			$self->{epoch_max} = $epoch;
 			return $self->import_init($git, $packed_bytes);
 		}
+		++$epoch; # too big, start a new epoch on fall through
 	}
-	$self->{epoch_max} = $epoch;
+	$self->{epoch_max} = $epoch //= 0;
 	my $dir = $self->{mg}->add_epoch($epoch);
 	$self->import_init(PublicInbox::Git->new($dir), 0);
 }
@@ -1211,8 +1209,8 @@ sub index_sync {
 	local $self->{need_checkpoint} = 0;
 	return xapian_only($self, $opt) if $opt->{xapian_only};
 
-	my $epoch_max;
-	my $latest = $self->{ibx}->git_dir_latest(\$epoch_max) // return;
+	my $epoch_max = $self->{ibx}->max_git_epoch // return;
+	my $latest = $self->{mg}->epoch_dir."/$epoch_max.git";
 	if ($opt->{'fast-noop'}) { # nanosecond (st_ctim) comparison
 		use Time::HiRes qw(stat);
 		if (my @mm = stat("$self->{ibx}->{inboxdir}/msgmap.sqlite3")) {
