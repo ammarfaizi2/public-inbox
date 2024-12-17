@@ -94,15 +94,14 @@ sub importer {
 		$self->done; # unlock
 		# re-acquire lock, update alternates for new epoch
 		(undef, $tl) = eidx_init($self);
-		my $packed_bytes = $git->packed_bytes;
-		my $unpacked_bytes = $packed_bytes / $self->packing_factor;
+		my $unpacked_bytes = int($git->packed_bytes / $self->packing_factor);
 		if ($unpacked_bytes >= $self->rotate_bytes) {
 			$max++;
 			next;
 		}
 		my ($n, $e) = git_ident($git);
 		$self->{im} = $im = PublicInbox::Import->new($git, $n, $e);
-		$im->{bytes_added} = int($packed_bytes / $self->packing_factor);
+		$im->{bytes_added} = $unpacked_bytes;
 		$im->{lock_path} = undef;
 		$im->{path_type} = 'v2';
 		return $im;

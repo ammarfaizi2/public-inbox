@@ -634,12 +634,11 @@ sub importer {
 	if (defined $epoch) { # use existing if not too big
 		my $git = PublicInbox::Git->new(
 			$self->{mg}->epoch_dir."/$epoch.git");
-		my $packed_bytes = $git->packed_bytes;
-		my $unpacked_bytes = $packed_bytes / $PACKING_FACTOR;
+		my $unpacked_bytes = int($git->packed_bytes / $PACKING_FACTOR);
 
 		if ($unpacked_bytes < $self->{rotate_bytes}) { # ok, space left
 			$self->{epoch_max} = $epoch;
-			return $self->import_init($git, $packed_bytes);
+			return $self->import_init($git, $unpacked_bytes);
 		}
 		++$epoch; # too big, start a new epoch on fall through
 	}
@@ -649,9 +648,9 @@ sub importer {
 }
 
 sub import_init {
-	my ($self, $git, $packed_bytes, $tmp) = @_;
+	my ($self, $git, $unpacked_bytes, $tmp) = @_;
 	my $im = PublicInbox::Import->new($git, undef, undef, $self->{ibx});
-	$im->{bytes_added} = int($packed_bytes / $PACKING_FACTOR);
+	$im->{bytes_added} = $unpacked_bytes;
 	$im->{lock_path} = undef;
 	$im->{path_type} = 'v2';
 	$self->{im} = $im unless $tmp;
