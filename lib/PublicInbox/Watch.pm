@@ -207,6 +207,7 @@ sub remove_eml_i { # each_inbox callback
 	}
 }
 
+# returns true if a file was read
 sub _remove_spam {
 	my ($self, $path) = @_;
 	# path must be marked as (S)een
@@ -214,6 +215,7 @@ sub _remove_spam {
 	my $eml = eml_from_path($path) or return;
 	local $SIG{__WARN__} = PublicInbox::Eml::warn_ignore_cb();
 	$self->{pi_cfg}->each_inbox(\&remove_eml_i, $self, $eml, $path);
+	1;
 }
 
 sub import_eml ($$$) {
@@ -243,13 +245,18 @@ sub import_eml ($$$) {
 	}
 }
 
-sub _try_path {
+# returns true if a file was read
+sub _try_path ($$) {
 	my ($self, $path) = @_;
-	$path =~ $self->{d_re} or
-		return warn("BUG? unrecognized path: $path\n");
+	if ($path !~ $self->{d_re}) {
+		warn "BUG? unrecognized path: $path\n";
+		return;
+	}
 	my $dir = $1;
-	my $inboxes = $self->{d_map}->{$dir} //
-		return warn("W: unmappable dir: $dir\n");
+	my $inboxes = $self->{d_map}->{$dir} // do {
+		warn "W: unmappable dir: $dir\n";
+		return;
+	};
 	my ($md_fl, $mh_seq);
 	if ($self->{d_type}->{$dir} & D_MH) {
 		$path =~ m!/([0-9]+)\z! ? ($mh_seq = $1) : return;
@@ -267,13 +274,12 @@ sub _try_path {
 		my $pfx = ($_[0] // '') =~ /^([A-Z]: )/g ? $1 : '';
 		$warn_cb->($pfx, "path: $path\n", @_);
 	};
-	if (!ref($inboxes) && $inboxes eq 'watchspam') {
-		return _remove_spam($self, $path);
-	}
-	foreach my $ibx (@$inboxes) {
+	return _remove_spam($self, $path) if $inboxes eq 'watchspam';
+	for my $ibx (@$inboxes) {
 		my $eml = eml_from_path($path) or next;
-		import_eml($self, $ibx, $eml);
+		import_eml($self, $ibx, $eml); # $eml may be scrubbed
 	}
+	1;
 }
 
 sub quit_done ($) {
@@ -598,8 +604,7 @@ sub fs_scan_step {
 		}
 		my $n = $self->{max_batch};
 		while (my $fn = readdir($dh)) {
-			_try_path($self, "$dir/$fn");
-			last if --$n < 0;
+			last if _try_path($self, "$dir/$fn") and --$n < 0;
 		}
 		if ($n < 0) {
 			unshift @{$self->{scan_q}}, [ $dir, $dh ];
