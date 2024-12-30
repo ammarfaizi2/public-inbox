@@ -222,8 +222,10 @@ sub import_eml ($$$) {
 	eval {
 		my $im = _importer_for($self, $ibx);
 		if (my $filter = $ibx->filter($im)) {
-			my $ret = $filter->scrub($eml) or return;
+			my $tmp = PublicInbox::Eml->new(\($eml->as_string));
+			my $ret = $filter->scrub($tmp) or return;
 			$ret == REJECT and return;
+			$eml = $tmp;
 		}
 		$im->add($eml, $self->{spamcheck});
 	};
@@ -263,9 +265,9 @@ sub _try_path ($$) {
 		$warn_cb->($pfx, "path: $path\n", @_);
 	};
 	return _remove_spam($self, $path) if $inboxes eq 'watchspam';
+	my $eml = eml_from_path($path) or return;
 	for my $ibx (@$inboxes) {
-		my $eml = eml_from_path($path) or next;
-		import_eml($self, $ibx, $eml); # $eml may be scrubbed
+		import_eml($self, $ibx, $eml);
 	}
 	1;
 }
@@ -323,13 +325,9 @@ sub net_cb { # NetReader::(nntp|imap)_each callback
 	return if grep(/\Adraft\z/, @$kw);
 	local $self->{cur_uid} = $art; # IMAP UID or NNTP article
 	if (ref($inboxes)) {
-		my @ibx = @$inboxes;
-		my $last = pop @ibx;
-		for my $ibx (@ibx) {
-			my $tmp = PublicInbox::Eml->new(\($eml->as_string));
-			import_eml($self, $ibx, $tmp);
+		for my $ibx (@$inboxes) {
+			import_eml($self, $ibx, $eml);
 		}
-		import_eml($self, $last, $eml);
 	} elsif ($inboxes eq 'watchspam') {
 		if ($uri->scheme =~ /\Aimaps?\z/ && !grep(/\Aseen\z/, @$kw)) {
 			return;
