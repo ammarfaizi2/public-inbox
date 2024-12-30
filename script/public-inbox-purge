@@ -38,16 +38,16 @@ PublicInbox::Eml::strip_from($data);
 my $n_purged = 0;
 
 foreach my $ibx (@ibxs) {
-	my $mime = PublicInbox::Eml->new($data);
+	my $eml = PublicInbox::Eml->new($data);
 	my $v2w = PublicInbox::V2Writable->new($ibx, 0);
 
-	my $commits = $v2w->purge($mime) || [];
+	my $commits = $v2w->purge($eml) || [];
 
-	if (my $scrub = $ibx->filter($v2w)) {
-		my $scrubbed = $scrub->scrub($mime, 1);
+	if (my $filter = $ibx->filter($v2w)) {
+		my $ret = $filter->scrub($eml, 1); # destructive
 
-		if ($scrubbed && $scrubbed != REJECT()) {
-			my $scrub_commits = $v2w->purge($scrubbed);
+		if ($ret && $ret != REJECT) {
+			my $scrub_commits = $v2w->purge($eml);
 			push @$commits, @$scrub_commits if $scrub_commits;
 		}
 	}

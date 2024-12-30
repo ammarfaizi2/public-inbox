@@ -1,9 +1,10 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # Filter for vger.kernel.org list trailer
 package PublicInbox::Filter::Vger;
-use base qw(PublicInbox::Filter::Base);
+use v5.10.1; # check regexps before v5.12
+use parent qw(PublicInbox::Filter::Base);
 use strict;
 use PublicInbox::Eml;
 
@@ -18,16 +19,16 @@ my $l3 =
 my $l4 = qr!Please read the FAQ at +http://www\.tux\.org/lkml/!;
 
 sub scrub {
-	my ($self, $mime) = @_;
-	my $s = $mime->as_string;
+	my ($self, $eml) = @_;
+	my $s = $eml->as_string;
 
-	# the vger appender seems to only work on the raw string,
+	# the old vger appender seemed to only work on the raw string,
 	# so in multipart (e.g. GPG-signed) messages, the list trailer
 	# becomes invisible to MIME-aware email clients.
 	if ($s =~ s/$l0\n$l1\n$l2\n$l3\n(?:$l4\n)?\n*\z//os) {
-		$mime = PublicInbox::Eml->new(\$s);
+		$_[1] = $eml= PublicInbox::Eml->new(\$s);
 	}
-	$self->ACCEPT($mime);
+	$self->ACCEPT($eml);
 }
 
 sub delivery {

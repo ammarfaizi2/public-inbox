@@ -129,7 +129,6 @@ sub _each_maildir_eml {
 	if ($self && (my $filter = $self->filter($im))) {
 		my $ret = $filter->scrub($eml) or return;
 		return if $ret == REJECT();
-		$eml = $ret;
 	}
 	$im->add($eml);
 }
@@ -153,7 +152,6 @@ sub _mbox_eml_cb { # MboxReader->mbox* callback
 	if ($filter) {
 		my $ret = $filter->scrub($eml) or return;
 		return if $ret == REJECT();
-		$eml = $ret;
 	}
 	$im->add($eml);
 }

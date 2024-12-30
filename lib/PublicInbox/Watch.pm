@@ -176,30 +176,19 @@ sub remove_eml_i { # each_inbox callback
 	eval {
 		# try to avoid taking a lock or unnecessary spawning
 		my $im = $self->{importers}->{"$ibx"};
-		my $scrubbed;
+		my @eml = ($eml);
+		if (my $filter = $ibx->filter($im)) {
+			my $tmp = PublicInbox::Eml->new(\($eml->as_string));
+			my $ret = $filter->scrub($tmp, 1);
+			push @eml, $tmp if $ret && $ret != REJECT;
+		}
+
 		if ((!$im || !$im->active) && $ibx->over) {
-			if (content_exists($ibx, $eml)) {
-				# continue
-			} elsif (my $scrub = $ibx->filter($im)) {
-				$scrubbed = $scrub->scrub($eml, 1);
-				if ($scrubbed && $scrubbed != REJECT &&
-					  !content_exists($ibx, $scrubbed)) {
-					return;
-				}
-			} else {
-				return;
-			}
+			@eml = grep { content_exists($ibx, $_) } @eml or return;
 		}
 
 		$im //= _importer_for($self, $ibx); # may spawn fast-import
-		$im->remove($eml, 'spam');
-		$scrubbed //= do {
-			my $scrub = $ibx->filter($im);
-			$scrub ? $scrub->scrub($eml, 1) : undef;
-		};
-		if ($scrubbed && $scrubbed != REJECT) {
-			$im->remove($scrubbed, 'spam');
-		}
+		$im->remove($_, 'spam') for @eml;
 	};
 	if ($@) {
 		warn "error removing spam at: $loc from $ibx->{name}: $@\n";
@@ -232,10 +221,9 @@ sub import_eml ($$$) {
 	}
 	eval {
 		my $im = _importer_for($self, $ibx);
-		if (my $scrub = $ibx->filter($im)) {
-			my $scrubbed = $scrub->scrub($eml) or return;
-			$scrubbed == REJECT and return;
-			$eml = $scrubbed;
+		if (my $filter = $ibx->filter($im)) {
+			my $ret = $filter->scrub($eml) or return;
+			$ret == REJECT and return;
 		}
 		$im->add($eml, $self->{spamcheck});
 	};
