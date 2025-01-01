@@ -28,6 +28,15 @@ sub mime_load ($) {
 	is($eml->as_string, "a: b\n\nhi\n", '->as_string');
 	my $empty = PublicInbox::Eml->new("\n\n");
 	is($empty->as_string, "\n\n", 'empty message');
+
+	# we use this pattern in -watch for writing an eml to multiple inboxes
+	my $in = do { # n.b. `my' must be used to assign a local var
+		local $eml->{hdr} = \(my $copy = ${$eml->{hdr}});
+		$eml->header_set(qw(Message-ID <a@example> <b@example>));
+		${$eml->{hdr}};
+	};
+	like $in, qr/<a\@example>.*?<b\@example>/s, 'Message-ID set in copy';
+	is $eml->header_raw('Message-ID'), undef, 'local $eml->{hdr} works';
 }
 
 for my $cls (@classes) {

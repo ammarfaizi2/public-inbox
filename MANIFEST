@@ -641,6 +641,7 @@ t/watch_maildir.t
 t/watch_maildir_v2.t
 t/watch_mh.t
 t/watch_multiple_headers.t
+t/watch_v1_v2_mix_no_modify.t
 t/www_altid.t
 t/www_listing.t
 t/www_static.t

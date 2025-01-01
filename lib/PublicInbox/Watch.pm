@@ -210,6 +210,10 @@ sub _remove_spam {
 sub import_eml ($$$) {
 	my ($self, $ibx, $eml) = @_;
 
+	# v2 may add a new Message-ID header on conflicts w/ different content
+	# and SpamAssassin may alter headers.  $copy is CoW in newer Perls.
+	local $eml->{hdr} = \(my $copy = ${$eml->{hdr}});
+
 	# any header match means it's eligible for the inbox:
 	if (my $watch_hdrs = $ibx->{-watchheaders}) {
 		my $ok;
