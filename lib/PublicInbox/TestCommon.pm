@@ -209,6 +209,13 @@ sub require_mods (@) {
 			push @mods, qw(DBD::SQLite Xapian +SCM_RIGHTS);
 			$mod = 'json'; # fall-through
 		}
+		if ($mod eq 'v2') {
+			require_git v2.6, $maybe ? $maybe : 0;
+			push @mods, 'DBD::SQLite';
+			next;
+		} elsif ($mod =~ /\Av/) { # don't confuse with Perl versions
+			Carp::croak "BUG: require_mods `$mod' ambiguous";
+		}
 		if ($mod eq 'json') {
 			$mod = 'Cpanel::JSON::XS||JSON::MaybeXS||JSON||JSON::PP'
 		} elsif ($mod eq '-httpd') {
