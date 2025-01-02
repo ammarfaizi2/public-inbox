@@ -28,6 +28,7 @@ use PublicInbox::Spawn ();
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(prepare_stack is_ancestor is_bad_blob
 	update_checkpoint);
+use PublicInbox::IPC qw(nproc_shards);
 use PublicInbox::OverIdx;
 use PublicInbox::MiscIdx;
 use PublicInbox::MID qw(mids);
@@ -61,7 +62,7 @@ sub new {
 		lock_path => "$dir/ei.lock",
 	}, __PACKAGE__;
 	$self->{shards} = $self->count_shards ||
-		nproc_shards({ nproc => $opt->{jobs} });
+		nproc_shards { nproc => $opt->{jobs} };
 	my $oidx = PublicInbox::OverIdx->new("$self->{xpfx}/over.sqlite3");
 	$self->{-no_fsync} = $oidx->{-no_fsync} = 1 if !$opt->{fsync};
 	$self->{-dangerous} = 1 if $opt->{dangerous};
@@ -1401,7 +1402,6 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 no warnings 'once';
 *done = \&PublicInbox::V2Writable::done;
 *parallel_init = \&PublicInbox::V2Writable::parallel_init;
-*nproc_shards = \&PublicInbox::V2Writable::nproc_shards;
 *sync_prepare = \&PublicInbox::V2Writable::sync_prepare;
 *index_todo = \&PublicInbox::V2Writable::index_todo;
 *count_shards = \&PublicInbox::V2Writable::count_shards;
