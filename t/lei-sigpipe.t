@@ -33,8 +33,8 @@ test_lei(sub {
 	my $imported;
 	for my $out ([], [qw(-f mboxcl2)], [qw(-f text)]) {
 		pipe(my $r, my $w);
-		my $size = $F_SETPIPE_SZ && fcntl($w, $F_SETPIPE_SZ, 4096) ?
-			4096 : 65536;
+		my $size = ($F_SETPIPE_SZ && fcntl($w, $F_SETPIPE_SZ, 4096)) ||
+		    65536;
 		unless (-f $f) {
 			my $fh = write_file '>', $f, <<'EOM';
 From: big@example.com
