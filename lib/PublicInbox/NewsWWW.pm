@@ -25,11 +25,11 @@ sub redirect ($$) {
 }
 
 sub try_inbox {
-	my ($ibx, $arg) = @_;
+	my ($ibx, $arg, @url_env) = @_;
 	return if scalar(@$arg) > 1;
 
 	# do not pass $env since HTTP_HOST may differ
-	my $url = $ibx->base_url or return;
+	my $url = $ibx->base_url(@url_env) or return;
 
 	my ($mid) = @$arg;
 	eval { $ibx->mm->num_for($mid) } or return;
@@ -49,8 +49,9 @@ sub call {
 		[ 404, [qw(Content-Type text/plain)], ["404 Not Found\n"] ];
 	my ($ng, $article) = @parts;
 	my $pi_cfg = $self->{pi_cfg};
+	my @url_env = $pi_cfg->{lc 'publicinbox.nameIsUrl'} ? ($env) : ();
 	if (my $ibx = $pi_cfg->lookup_newsgroup($ng)) {
-		my $url = prurl($env, $ibx->{url});
+		my $url = prurl($env, $ibx->{url} // $ibx->base_url(@url_env));
 		my $code = 301;
 		if (defined $article && $article =~ /\A[0-9]+\z/) {
 			my $mid = eval { $ibx->mm->mid_for($article) };
@@ -83,7 +84,8 @@ sub call {
 					s/:[0-9]+:$x->{blob}\z// or next;
 					my $ibx = $by_eidx_key->{$_} // next;
 					my $url = $ALL->base_url($env) //
-							$ibx->base_url // next;
+						$ibx->base_url(@url_env) //
+						next;
 					$url .= mid_escape($mid) . '/';
 					return redirect(302, $url);
 				}
@@ -92,7 +94,7 @@ sub call {
 	} else { # slow path, scan every inbox
 		for my $mid (@try) {
 			my $arg = [ $mid ]; # [1] => result
-			$pi_cfg->each_inbox(\&try_inbox, $arg);
+			$pi_cfg->each_inbox(\&try_inbox, $arg, @url_env);
 			return $arg->[1] if $arg->[1];
 		}
 	}

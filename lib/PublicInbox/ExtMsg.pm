@@ -76,7 +76,8 @@ sub search_partial ($$) {
 sub ext_msg_i {
 	my ($other, $ctx) = @_;
 
-	return if $other->{name} eq $ctx->{ibx}->{name} || !$other->base_url;
+	return if $other->{name} eq $ctx->{ibx}->{name} ||
+		!$other->base_url(@{$ctx->{-url_env}});
 
 	my $mm = $other->mm or return;
 
@@ -117,7 +118,7 @@ sub ext_msg_ALL ($) {
 			$k =~ s/:[0-9]+:$x->{blob}\z// or next;
 			next if $k eq $cur_key;
 			my $ibx = $by_eidx_key->{$k} // next;
-			$ibx->base_url or next;
+			$ibx->base_url(@{$ctx->{-url_env}}) or next;
 			push(@{$ctx->{found}}, $ibx) unless $seen{$k}++;
 		}
 	}
@@ -132,8 +133,11 @@ sub ext_msg_ALL ($) {
 	partial_response($ctx);
 }
 
+# only public entry point
 sub ext_msg {
 	my ($ctx) = @_;
+	@{$ctx->{-url_env}} = $ctx->{www}->{pi_cfg}->{
+			lc 'publicinbox.nameIsUrl'} ? ($ctx->{env}) : ();
 	ext_msg_ALL($ctx) // sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server write callback
 
@@ -188,8 +192,9 @@ sub finalize_exact {
 	finalize_partial($ctx);
 }
 
-sub _url_pfx ($$) {
-	my ($ctx, $u) = @_;
+sub _url_pfx ($$;$) {
+	my ($ctx, $ibx, $env) = @_;
+	my $u = $ibx->base_url(@{$env // $ctx->{-url_env}}) // return;
 	(index($u, '://') < 0 && index($u, '/') != 0) ?
 		"$ctx->{-upfx}../$u" : $u;
 }
@@ -209,10 +214,11 @@ sub partial_response ($) {
 		$n_partial .= '+' if ($n_partial == PARTIAL_MAX);
 		$s .= "\n$n_partial partial match$es found:\n\n";
 		my $cur_name = $ctx->{ibx}->{name};
+		my $e = [ $ctx->{env} ];
 		foreach my $pair (@{$ctx->{partial}}) {
 			my ($ibx, $res) = @$pair;
-			my $e = $ibx->{name} eq $cur_name ? $ctx->{env} : undef;
-			my $u = _url_pfx($ctx, $ibx->base_url($e) // next);
+			my $u = _url_pfx($ctx, $ibx,
+				$ibx->{name} eq $cur_name ? $e : undef) // next;
 			foreach my $m (@$res) {
 				my $href = mid_href($m);
 				my $html = ascii_html($m);
@@ -265,7 +271,7 @@ sub exact {
 	$ctx->{-html_tip} = join('',
 			"<pre>Message-ID: &lt;$html&gt;\nfound in $end:\n\n",
 				(map {
-					my $u = _url_pfx($ctx, $_->base_url);
+					my $u = _url_pfx($ctx, $_);
 					qq(<a\nhref="$u$href/">$u$html/</a>\n)
 				} @$found),
 			$ext_urls, '</pre>');
