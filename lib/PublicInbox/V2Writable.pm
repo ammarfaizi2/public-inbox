@@ -845,17 +845,18 @@ sub last_commits {
 # returns a revision range for git-log(1)
 sub log_range ($$$) {
 	my ($sync, $unit, $tip) = @_;
-	my $opt = $sync->{self}->{-opt};
+	my $self = $sync->{self};
+	my $opt = $self->{-opt};
 	my $pr = $opt->{-progress} if (($opt->{verbose} || 0) > 1);
 	my $i = $unit->{epoch};
-	my $cur = $sync->{ranges}->[$i] or do {
+	my $cur = $self->{ranges}->[$i] or do {
 		$pr->("$i.git indexing all of $tip\n") if $pr;
 		return $tip; # all of it
 	};
 
 	# fast equality check to avoid (v)fork+execve overhead
 	if ($cur eq $tip) {
-		$sync->{ranges}->[$i] = undef;
+		$self->{ranges}->[$i] = undef;
 		return;
 	}
 
@@ -867,7 +868,7 @@ sub log_range ($$$) {
 		my $n = $git->qx(qw(rev-list --count), $range);
 		chomp($n);
 		if ($n == 0) {
-			$sync->{ranges}->[$i] = undef;
+			$self->{ranges}->[$i] = undef;
 			$pr->("$i.git has nothing new\n") if $pr;
 			return; # nothing to do
 		}
@@ -907,7 +908,7 @@ sub artnum_max { $_[0]->{mm}->num_highwater }
 
 sub sync_prepare ($$) {
 	my ($self, $sync) = @_;
-	$sync->{ranges} = sync_ranges($self, $sync);
+	$self->{ranges} = sync_ranges($self, $sync);
 	my $pr = $self->{-opt}->{-progress};
 	my $regen_max = 0;
 	my $head = $self->{ibx}->{ref_head} || 'HEAD';
@@ -1234,6 +1235,7 @@ sub index_sync {
 	local $self->{reindex} = $opt->{reindex};
 	local $self->{mm_tmp};
 	local $self->{todo}; # sync_prepare
+	local $self->{ranges};
 	local $self->{unindexed};
 	my $sync = { self => $self, ibx => $self->{ibx} };
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
