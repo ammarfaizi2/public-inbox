@@ -349,7 +349,7 @@ sub index_oid { # git->cat_async callback for 'm'
 		blob => $oid,
 	}, 'PublicInbox::Smsg';
 	$new_smsg->set_bytes($$bref, $size);
-	++${$req->{nr}};
+	++$self->{nrec};
 	my $mismatch = [];
 	$req->{xnum} = cur_ibx_xnum($req, $bref, $mismatch) // do {
 		warn "# deleted\n";
@@ -397,7 +397,7 @@ sub _sync_inbox ($$$) {
 		return "W: skipping $ekey ($err)";
 	}
 	$sync->{ibx} = $ibx;
-	$sync->{nr} = \(my $nr = 0);
+	$self->{nrec} = 0;
 	my $v = $ibx->version;
 	if ($v == 2) {
 		$sync->{epoch_max} = $ibx->max_git_epoch // return;
@@ -528,10 +528,8 @@ sub eidx_gc { # top-level entry point
 	$opt->{-idx_gc} = 1;
 	local $self->{checkpoint_unlocks} = 1;
 	local $self->{need_checkpoint} = 0;
-	my $sync = {
-		-opt => $opt,
-		self => $self,
-	};
+	local $self->{nrec};
+	my $sync = { -opt => $opt, self => $self };
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	eidx_gc_scan_inboxes($self, $sync);
 	eidx_gc_scan_shards($self, $sync);
@@ -793,7 +791,7 @@ sub eidxq_process ($$) { # for reindexing
 	return unless ($self->{cfg} && eidxq_lock_acquire($self));
 	my $dbh = $self->{oidx}->dbh;
 	my $tot = $dbh->selectrow_array('SELECT COUNT(*) FROM eidxq') or return;
-	${$sync->{nr}} = 0;
+	$self->{nrec} = 0;
 	local $sync->{-regen_fmt} = "%u/$tot\n";
 	my $pr = $sync->{-opt}->{-progress};
 	if ($pr) {
@@ -815,7 +813,7 @@ restart:
 			warn "E: #$docid does not exist in over\n";
 		}
 		$del->execute($docid);
-		++${$sync->{nr}};
+		++$self->{nrec};
 
 		if (update_checkpoint $self) {
 			$dbh = $del = $iter = undef;
@@ -825,7 +823,7 @@ restart:
 		}
 	}
 	$self->git->async_wait_all;
-	$pr->("reindexed ${$sync->{nr}}/$tot\n") if $pr;
+	$pr->("reindexed $self->{nrec}/$tot\n") if $pr;
 }
 
 sub _reindex_unseen { # git->cat_async callback
@@ -900,12 +898,12 @@ sub _reindex_check_ibx ($$$) {
 	my $msgs;
 	my $pr = $sync->{-opt}->{-progress};
 	local $sync->{-regen_fmt} = "$ekey checking %u/$max\n";
-	${$sync->{nr}} = 0;
+	$self->{nrec} = 0;
 	my $fast = $sync->{-opt}->{fast};
 	my $usr; # _unref_stale_range (< $lo) called
 	my ($lo, $hi);
 	while (scalar(@{$msgs = $ibx->over->query_xover($beg, $end, $opt)})) {
-		${$sync->{nr}} = $beg;
+		$self->{nrec} = $beg;
 		$beg = $msgs->[-1]->{num} + 1;
 		$end = $beg + $slice;
 		$end = $max if $end > $max;
@@ -1067,7 +1065,7 @@ EOS
 	while (my ($mid, $id) = $iter->fetchrow_array) {
 		last if $sync->{quit};
 		$self->{current_info} = "dedupe $mid";
-		${$sync->{nr}} = $min_id = $id;
+		$self->{nrec} = $min_id = $id;
 		my ($prv, @smsg);
 		while (my $x = $self->{oidx}->next_by_mid($mid, \$id, \$prv)) {
 			push @smsg, $x;
@@ -1105,7 +1103,7 @@ EOS
 	if (my $pr = $sync->{-opt}->{-progress}) {
 		$pr->("culled $n/$candidates candidates ($nr_mid msgids)\n");
 	}
-	${$sync->{nr}} = 0;
+	$self->{nrec} = 0;
 }
 
 sub eidx_sync { # main entry point
@@ -1116,6 +1114,7 @@ sub eidx_sync { # main entry point
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	$self->{oidx}->rethread_prepare($opt);
 	local $self->{need_checkpoint} = 0;
+	local $self->{nrec} = 0;
 	my $sync = {
 		-opt => $opt,
 		# DO NOT SET {reindex} here, it's incompatible with reused

@@ -711,7 +711,7 @@ sub reindex_checkpoint ($$) {
 	}
 
 	if (my $pr = $sync->{-regen_fmt} ? $sync->{-opt}->{-progress} : undef) {
-		$pr->(sprintf($sync->{-regen_fmt}, ${$sync->{nr}}));
+		$pr->(sprintf $sync->{-regen_fmt}, $self->{nrec});
 	}
 
 	# allow -watch or -mda to write...
@@ -803,7 +803,7 @@ sub index_oid { # cat_async callback
 		warn "E: $oid <", join('> <', @$mids), "> is a duplicate\n";
 		return;
 	}
-	++${$arg->{nr}};
+	++$self->{nrec};
 	my $smsg = bless {
 		num => $num,
 		blob => $oid,
@@ -994,7 +994,7 @@ sub sync_prepare ($$) {
 	# it's a problem and we need to notice it via die()
 	my $pad = length($regen_max) + 1;
 	$sync->{-regen_fmt} = "% ${pad}u/$regen_max\n";
-	$sync->{nr} = \(my $nr = 0);
+	$self->{nrec} = 0;
 	return -1 if $sync->{reindex};
 	$regen_max + $self->artnum_max || 0;
 }
@@ -1115,7 +1115,7 @@ sub index_xap_step ($$$;$) {
 		# have timeout problems like SQLite
 		my $n = $self->{transact_bytes} += $smsg->{bytes};
 		if ($n >= $self->{batch_bytes}) {
-			${$sync->{nr}} = $num;
+			$self->{nrec} = $num;
 			reindex_checkpoint($self, $sync);
 		}
 	}
@@ -1179,7 +1179,6 @@ sub xapian_only {
 		$sync //= {
 			-opt => $opt,
 			self => $self,
-			nr => \(my $nr = 0),
 			-regen_fmt => "%u/?\n",
 		};
 		$sync->{art_end} = $art_end;
@@ -1206,6 +1205,7 @@ sub index_sync {
 	my ($self, $opt) = @_;
 	$opt //= {};
 	local $self->{need_checkpoint} = 0;
+	local $self->{nrec} = 0;
 	return xapian_only($self, $opt) if $opt->{xapian_only};
 
 	my $epoch_max = $self->{ibx}->max_git_epoch // return;
@@ -1262,9 +1262,9 @@ sub index_sync {
 	$self->{oidx}->rethread_done($opt) unless $sync->{quit};
 	$self->done;
 
-	if (my $nr = $sync->{nr}) {
+	if (my $nrec = $self->{nrec}) {
 		my $pr = $sync->{-opt}->{-progress};
-		$pr->('all.git '.sprintf($sync->{-regen_fmt}, $$nr)) if $pr;
+		$pr->('all.git '.sprintf($sync->{-regen_fmt}, $nrec)) if $pr;
 	}
 
 	my $quit_warn;

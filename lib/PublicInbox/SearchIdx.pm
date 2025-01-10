@@ -801,7 +801,6 @@ sub update_checkpoint ($;$) {
 sub index_both { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $sync) = @_;
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
-	++${$sync->{nr}};
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
 	my $self = $sync->{sidx};
@@ -812,6 +811,7 @@ sub index_both { # git->cat_async callback
 		die "E: could not generate NNTP article number for $oid";
 	add_message($self, $eml, $smsg, $sync);
 	++$self->{nidx};
+	++$self->{nrec};
 	my $cur_cmt = $sync->{cur_cmt} // die 'BUG: {cur_cmt} missing';
 	${$sync->{latest_cmt}} = $cur_cmt;
 }
@@ -891,11 +891,11 @@ sub v1_checkpoint ($$;$) {
 	}
 	commit_txn_lazy($self);
 	$sync->{ibx}->git->cleanup;
-	my $nr = ${$sync->{nr}};
-	idx_release($self, $nr);
+	my $nrec = $self->{nrec};
+	idx_release($self, $nrec);
 	# let another process do some work...
 	if (my $pr = $sync->{-opt}->{-progress}) {
-		$pr->("indexed $nr/$sync->{ntodo}\n") if $nr;
+		$pr->("indexed $nrec/$sync->{ntodo}\n") if $nrec;
 	}
 	if (!$stk && !$sync->{quit}) { # more to come
 		begin_txn_lazy($self);
@@ -909,8 +909,7 @@ sub v1_checkpoint ($$;$) {
 sub process_stack {
 	my ($self, $sync, $stk) = @_;
 	my $git = $sync->{ibx}->git;
-	my $nr = 0;
-	$sync->{nr} = \$nr;
+	$self->{nrec} = 0;
 	$sync->{sidx} = $self;
 	local $self->{need_checkpoint} = 0;
 	$sync->{latest_cmt} = \(my $latest_cmt);
