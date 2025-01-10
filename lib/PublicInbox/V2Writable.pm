@@ -961,14 +961,14 @@ sub sync_prepare ($$) {
 		# messages to show up in mirrors, too.
 		$sync->{D} //= $sync->{reindex} ? {} : undef; # OID_BIN => NR
 		my $stk = log2stack($self, $sync, $git, $range);
-		return 0 if $sync->{quit};
+		return 0 if $self->{quit};
 		my $nr = $stk ? $stk->num_records : 0;
 		$pr->("$nr\n") if $pr;
 		$unit->{stack} = $stk; # may be undef
 		unshift @{$sync->{todo}}, $unit;
 		$regen_max += $nr;
 	}
-	return 0 if $sync->{quit};
+	return 0 if $self->{quit};
 
 	# XXX this should not happen unless somebody bypasses checks in
 	# our code and blindly injects "d" file history into git repos
@@ -977,14 +977,14 @@ sub sync_prepare ($$) {
 		local $self->{current_info} = 'leftover ';
 		my $unindex_oid = $self->can('unindex_oid');
 		for my $oid (@leftovers) {
-			last if $sync->{quit};
+			last if $self->{quit};
 			$oid = unpack('H*', $oid);
 			my $req = { %$sync, oid => $oid };
 			$self->git->cat_async($oid, $unindex_oid, $req);
 		}
 		$self->git->async_wait_all;
 	}
-	return 0 if $sync->{quit};
+	return 0 if $self->{quit};
 	if (!$regen_max) {
 		$self->{-regen_fmt} = "%u/?\n";
 		return 0;
@@ -1107,7 +1107,7 @@ sub index_xap_step ($$$;$) {
 			"$beg..$end (% $step)\n");
 	}
 	for (my $num = $beg; $num <= $end; $num += $step) {
-		last if $sync->{quit};
+		last if $self->{quit};
 		my $smsg = $ibx->over->get_art($num) or next;
 		$smsg->{self} = $self;
 		$ibx->git->cat_async($smsg->{blob}, \&index_xap_only, $smsg);
@@ -1123,7 +1123,7 @@ sub index_xap_step ($$$;$) {
 
 sub index_todo ($$$) {
 	my ($self, $sync, $unit) = @_;
-	return if $sync->{quit};
+	return if $self->{quit};
 	unindex_todo($self, $sync, $unit);
 	my $stk = delete($unit->{stack}) or return;
 	my $all = $self->git; # initialize self->{ibx}->{git}
@@ -1140,7 +1140,7 @@ sub index_todo ($$$) {
 	local $self->{latest_cmt};
 	local $sync->{unit} = $unit;
 	while (my ($f, $at, $ct, $oid, $cmt) = $stk->pop_rec) {
-		if ($sync->{quit}) {
+		if ($self->{quit}) {
 			warn "waiting to quit...\n";
 			$all->async_wait_all;
 			$self->update_last_commit($sync);
@@ -1181,7 +1181,7 @@ sub xapian_only ($;$$) {
 		if ($seq || !$self->{parallel}) {
 			my $shard_end = $self->{shards} - 1;
 			for my $i (0..$shard_end) {
-				last if $sync->{quit};
+				last if $self->{quit};
 				index_xap_step($self, $sync, $art_beg + $i);
 				if ($i != $shard_end) {
 					reindex_checkpoint($self, $sync);
@@ -1233,7 +1233,7 @@ sub index_sync {
 		ibx => $self->{ibx},
 		epoch_max => $epoch_max,
 	};
-	my $quit = PublicInbox::SearchIdx::quit_cb($sync);
+	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
 	local $SIG{TERM} = $quit;
@@ -1256,7 +1256,7 @@ sub index_sync {
 	}
 	# work forwards through history
 	index_todo($self, $sync, $_) for @{delete($sync->{todo}) // []};
-	$self->{oidx}->rethread_done($opt) unless $sync->{quit};
+	$self->{oidx}->rethread_done($opt) unless $self->{quit};
 	$self->done;
 
 	if (my $nrec = $self->{nrec}) {
@@ -1267,17 +1267,17 @@ sub index_sync {
 	my $quit_warn;
 	# deal with Xapian shards sequentially
 	if ($seq && delete($sync->{mm_tmp})) {
-		if ($sync->{quit}) {
+		if ($self->{quit}) {
 			$quit_warn = 1;
 		} else {
 			$self->{ibx}->{indexlevel} = $idxlevel;
 			xapian_only($self, $sync, $art_beg);
-			$quit_warn = 1 if $sync->{quit};
+			$quit_warn = 1 if $self->{quit};
 		}
 	}
 
 	# --reindex on the command-line
-	if (!$sync->{quit} && $opt->{reindex} &&
+	if (!$self->{quit} && $opt->{reindex} &&
 			!ref($opt->{reindex}) && $idxlevel ne 'basic') {
 		$self->lock_acquire;
 		my $s0 = PublicInbox::SearchIdx->new($self->{ibx}, 0, 0);
@@ -1290,13 +1290,12 @@ sub index_sync {
 	}
 
 	# reindex does not pick up new changes, so we rerun w/o it:
-	if ($opt->{reindex} && !$sync->{quit} &&
+	if ($opt->{reindex} && !$self->{quit} &&
 			!grep(defined, @$opt{qw(since until)})) {
 		my %again = %$opt;
 		$sync = undef;
 		delete @again{qw(rethread reindex -skip_lock)};
 		index_sync($self, \%again);
-		$opt->{quit} = $again{quit}; # propagate to caller
 	}
 	warn <<EOF if $quit_warn;
 W: interrupted, --xapian-only --reindex required upon restart

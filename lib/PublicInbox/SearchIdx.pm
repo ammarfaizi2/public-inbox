@@ -839,12 +839,11 @@ sub index_sync {
 	my ($self, $opt) = @_;
 	delete $self->{lock_path} if $opt->{-skip_lock};
 	$self->with_umask(\&_index_sync, $self, $opt);
-	if ($opt->{reindex} && !$opt->{quit} &&
+	if ($opt->{reindex} && !$self->{quit} &&
 			!grep(defined, @$opt{qw(since until)})) {
 		my %again = %$opt;
 		delete @again{qw(rethread reindex)};
 		index_sync($self, \%again);
-		$opt->{quit} = $again{quit}; # propagate to caller
 	}
 }
 
@@ -897,7 +896,7 @@ sub v1_checkpoint ($$;$) {
 	if (my $pr = $self->{-opt}->{-progress}) {
 		$pr->("indexed $nrec/$sync->{ntodo}\n") if $nrec;
 	}
-	if (!$stk && !$sync->{quit}) { # more to come
+	if (!$stk && !$self->{quit}) { # more to come
 		begin_txn_lazy($self);
 		$self->{mm}->{dbh}->begin_work;
 	}
@@ -917,7 +916,7 @@ sub v1_process_stack ($$$) {
 	if (my @leftovers = keys %{delete($sync->{D}) // {}}) {
 		warn('W: unindexing '.scalar(@leftovers)." leftovers\n");
 		for my $oid (@leftovers) {
-			last if $sync->{quit};
+			last if $self->{quit};
 			$oid = unpack('H*', $oid);
 			$git->cat_async($oid, \&v1_unindex_both, $sync);
 		}
@@ -927,7 +926,7 @@ sub v1_process_stack ($$$) {
 	}
 	while (my ($f, $at, $ct, $oid, $cur_cmt) = $stk->pop_rec) {
 		my $arg = { %$sync, cur_cmt => $cur_cmt, oid => $oid };
-		last if $sync->{quit};
+		last if $self->{quit};
 		if ($f eq 'm') {
 			$arg->{autime} = $at;
 			$arg->{cotime} = $ct;
@@ -941,7 +940,7 @@ sub v1_process_stack ($$$) {
 		}
 		v1_checkpoint $self, $sync if $self->{need_checkpoint};
 	}
-	v1_checkpoint($self, $sync, $sync->{quit} ? undef : $stk);
+	v1_checkpoint($self, $sync, $self->{quit} ? undef : $stk);
 }
 
 sub log2stack ($$$$) {
@@ -969,7 +968,7 @@ sub log2stack ($$$$) {
 	my $fh = $git->popen(@cmd, $range);
 	my ($at, $ct, $stk, $cmt, $l);
 	while (defined($l = <$fh>)) {
-		return if $sync->{quit};
+		return if $self->{quit};
 		if ($l =~ /\A([0-9]+)-([0-9]+)-($OID)$/o) {
 			($at, $ct, $cmt) = ($1 + 0, $2 + 0, $3);
 			$stk //= PublicInbox::IdxStack->new($cmt);
@@ -1061,12 +1060,12 @@ sub v1_reindex_from ($$) {
 }
 
 sub quit_cb ($) {
-	my ($sync) = @_;
+	my ($self) = @_;
 	sub {
-		# we set {-opt}->{quit} too, so ->index_sync callers
-		# can abort multi-inbox loops this way
-		$sync->{quit} = $sync->{self}->{-opt}->{quit} = 1;
-		warn "gracefully quitting\n";
+		# we set {-opt}->{quit} for public-inbox-index so
+		# can abort multi-inbox loops this way (for now...)
+		$self->{quit} = $self->{-opt}->{quit} = 1;
+		warn "# gracefully quitting\n";
 	}
 }
 
@@ -1086,7 +1085,7 @@ sub _index_sync {
 	my $pr = $opt->{-progress};
 	local $self->{-opt} = $opt;
 	my $sync = { reindex => $opt->{reindex}, ibx => $ibx };
-	my $quit = quit_cb($sync);
+	my $quit = quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
 	local $SIG{TERM} = $quit;
@@ -1110,7 +1109,7 @@ sub _index_sync {
 	my $stk = prepare_stack($self, $sync, $range);
 	$sync->{ntodo} = $stk ? $stk->num_records : 0;
 	$pr->("$sync->{ntodo}\n") if $pr; # continue previous line
-	v1_process_stack($self, $sync, $stk) if !$sync->{quit};
+	v1_process_stack($self, $sync, $stk) if !$self->{quit};
 }
 
 sub DESTROY {
