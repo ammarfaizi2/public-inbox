@@ -1012,19 +1012,18 @@ sub dd_smsg { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $dd) = @_;
 	my $smsg = $dd->{smsg} // die 'BUG: dd->{smsg} missing';
 	my $self = $dd->{self} // die 'BUG: {self} missing';
-	my $per_mid = $dd->{per_mid} // die 'BUG: {per_mid} missing';
 	if ($type eq 'missing') {
 		_blob_missing($dd, $smsg);
 	} elsif (!is_bad_blob($oid, $type, $size, $smsg->{blob})) {
 		local $self->{current_info} = "$self->{current_info} $oid";
 		my $chash = content_hash(PublicInbox::Eml->new($bref));
-		push(@{$per_mid->{dd_chash}->{$chash}}, $smsg);
+		push @{$self->{dd_chash}->{$chash}}, $smsg;
 	}
-	return if $per_mid->{last_smsg} != $smsg;
-	while (my ($chash, $ary) = each %{$per_mid->{dd_chash}}) {
+	return if $self->{last_smsg} != $smsg;
+	while (my ($chash, $ary) = each %{$self->{dd_chash}}) {
 		my $keep = shift @$ary;
 		next if !scalar(@$ary);
-		$per_mid->{self}->{dedupe_cull} += scalar(@$ary);
+		$self->{dedupe_cull} += scalar(@$ary);
 		print STDERR
 			"# <$keep->{mid}> keeping #$keep->{num}, dropping ",
 			join(', ', map { "#$_->{num}" } @$ary),"\n";
@@ -1076,18 +1075,13 @@ EOS
 			push @smsg, $x;
 		}
 		next if scalar(@smsg) < 2;
-		my $per_mid = {
-			dd_chash => {}, # chash => [ary of smsgs]
-			last_smsg => $smsg[-1],
-		};
+		# per-msgid data:
+		local $self->{dd_chash} = {}; # chash => [ary of smsgs]
+		local $self->{last_smsg} = $smsg[-1];
 		$nr_mid++;
 		$candidates += scalar(@smsg) - 1;
 		for my $smsg (@smsg) {
-			my $dd = {
-				per_mid => $per_mid,
-				smsg => $smsg,
-				self => $self,
-			};
+			my $dd = { smsg => $smsg, self => $self };
 			$self->git->cat_async($smsg->{blob}, \&dd_smsg, $dd);
 		}
 		# need to wait on every single one @smsg contents can get
