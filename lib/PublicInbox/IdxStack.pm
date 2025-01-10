@@ -14,7 +14,7 @@ use PublicInbox::IO qw(read_all);
 sub new {
 	open(my $io, '+>', undef);
 	# latest_cmt is still useful when the newest revision is a `d'(elete),
-	# otherwise we favor $sync->{latest_cmt} for checkpoints and {quit}
+	# otherwise we favor $self->{latest_cmt} for checkpoints and {quit}
 	bless { wr => $io, latest_cmt => $_[1] }, __PACKAGE__
 }
 

@@ -723,7 +723,7 @@ sub index_finalize ($$) {
 	my ($arg, $index) = @_;
 	++$arg->{self}->{nidx};
 	if (defined(my $cur = $arg->{cur_cmt})) {
-		${$arg->{latest_cmt}} = $cur;
+		$arg->{self}->{latest_cmt} = $cur;
 	} elsif ($index) {
 		die 'BUG: {cur_cmt} missing';
 	} # else { unindexing @leftovers doesn't set {cur_cmt}
@@ -819,7 +819,7 @@ sub index_oid { # cat_async callback
 sub update_last_commit {
 	my ($self, $sync, $stk) = @_;
 	my $unit = $sync->{unit} // return;
-	my $latest_cmt = $stk ? $stk->{latest_cmt} : ${$sync->{latest_cmt}};
+	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
 	my $last = last_epoch_commit($self, $unit->{epoch});
 	if (defined $last && is_ancestor($self->git, $last, $latest_cmt)) {
@@ -1137,7 +1137,7 @@ sub index_todo ($$$) {
 		$pfx //= $unit->{git}->{git_dir};
 	}
 	local $self->{current_info} = "$pfx ";
-	local $sync->{latest_cmt} = \(my $latest_cmt);
+	local $self->{latest_cmt};
 	local $sync->{unit} = $unit;
 	while (my ($f, $at, $ct, $oid, $cmt) = $stk->pop_rec) {
 		if ($sync->{quit}) {

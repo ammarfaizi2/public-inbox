@@ -813,7 +813,7 @@ sub index_both { # git->cat_async callback
 	++$self->{nidx};
 	++$self->{nrec};
 	my $cur_cmt = $sync->{cur_cmt} // die 'BUG: {cur_cmt} missing';
-	${$sync->{latest_cmt}} = $cur_cmt;
+	$self->{latest_cmt} = $cur_cmt;
 }
 
 sub unindex_both { # git->cat_async callback
@@ -824,7 +824,7 @@ sub unindex_both { # git->cat_async callback
 	unindex_eml($self, $oid, PublicInbox::Eml->new($bref));
 	# may be undef if leftover
 	if (defined(my $cur_cmt = $sync->{cur_cmt})) {
-		${$sync->{latest_cmt}} = $cur_cmt;
+		$self->{latest_cmt} = $cur_cmt;
 	}
 	++$self->{nidx};
 }
@@ -865,7 +865,7 @@ sub v1_checkpoint ($$;$) {
 	$self->{need_checkpoint} = 0;
 
 	# $newest may be undef
-	my $newest = $stk ? $stk->{latest_cmt} : ${$sync->{latest_cmt}};
+	my $newest = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	if (defined($newest)) {
 		my $cur = $self->{mm}->last_commit;
 		if (need_update($self, $sync, $cur, $newest)) {
@@ -912,7 +912,7 @@ sub process_stack {
 	$self->{nrec} = 0;
 	$sync->{sidx} = $self;
 	local $self->{need_checkpoint} = 0;
-	$sync->{latest_cmt} = \(my $latest_cmt);
+	local $self->{latest_cmt};
 
 	$self->{mm}->{dbh}->begin_work;
 	if (my @leftovers = keys %{delete($sync->{D}) // {}}) {

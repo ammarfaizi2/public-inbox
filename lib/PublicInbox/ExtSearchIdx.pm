@@ -271,7 +271,7 @@ sub do_finalize ($) {
 	}
 	# cur_cmt may be undef for unindex_oid, set by V2Writable::index_todo
 	if (defined(my $cur_cmt = $req->{cur_cmt})) {
-		${$req->{latest_cmt}} = $cur_cmt;
+		$req->{self}->{latest_cmt} = $cur_cmt;
 	}
 }
 
@@ -342,7 +342,7 @@ sub cur_ibx_xnum ($$;$) {
 
 sub index_oid { # git->cat_async callback for 'm'
 	my ($bref, $oid, $type, $size, $req) = @_;
-	my $self = $req->{self};
+	my $self = $req->{self} // die 'BUG: {self} missing';
 	local $self->{current_info} = "$self->{current_info} $oid";
 	return if is_bad_blob($oid, $type, $size, $req->{oid});
 	my $new_smsg = $req->{new_smsg} = bless {
@@ -354,7 +354,7 @@ sub index_oid { # git->cat_async callback for 'm'
 	$req->{xnum} = cur_ibx_xnum($req, $bref, $mismatch) // do {
 		warn "# deleted\n";
 		warn "# mismatch $_->{blob}\n" for @$mismatch;
-		${$req->{latest_cmt}} = $req->{cur_cmt} //
+		$self->{latest_cmt} = $req->{cur_cmt} //
 			die "BUG: {cur_cmt} unset ($oid)\n";
 		return;
 	};
@@ -531,6 +531,7 @@ sub eidx_gc { # top-level entry point
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec};
 	local $self->{-opt} = $opt;
+	local $self->{latest_cmt};
 	my $sync = { self => $self };
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	eidx_gc_scan_inboxes($self, $sync);
@@ -1119,6 +1120,7 @@ sub eidx_sync { # main entry point
 	local $self->{nrec} = 0;
 	local $self->{-opt} = $opt;
 	local $self->{-regen_fmt} = "%u/?\n";
+	local $self->{latest_cmt};
 	my $sync = {
 		# DO NOT SET {reindex} here, it's incompatible with reused
 		# V2Writable code, reindex is totally different here
@@ -1166,7 +1168,7 @@ sub eidx_sync { # main entry point
 sub update_last_commit { # overrides V2Writable
 	my ($self, $sync, $stk) = @_;
 	my $unit = $sync->{unit} // return;
-	my $latest_cmt = $stk ? $stk->{latest_cmt} : ${$sync->{latest_cmt}};
+	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
 	my $ibx = $sync->{ibx} or die 'BUG: {ibx} missing';
 	my $ekey = $ibx->eidx_key;
