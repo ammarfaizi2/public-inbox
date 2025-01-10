@@ -407,7 +407,8 @@ sub _sync_inbox ($$$) {
 		my $lc = $self->{oidx}->eidx_meta("lc-v1:$ekey//$uv");
 		my $head = $ibx->mm->last_commit //
 			return "E: $ibx->{inboxdir} is not indexed";
-		my $stk = prepare_stack($sync, $lc ? "$lc..$head" : $head);
+		my $stk = prepare_stack($self, $sync,
+					$lc ? "$lc..$head" : $head);
 		my $unit = { stack => $stk, git => $ibx->git };
 		push @{$sync->{todo}}, $unit;
 	} else {
@@ -529,7 +530,8 @@ sub eidx_gc { # top-level entry point
 	local $self->{checkpoint_unlocks} = 1;
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec};
-	my $sync = { -opt => $opt, self => $self };
+	local $self->{-opt} = $opt;
+	my $sync = { self => $self };
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
 	eidx_gc_scan_inboxes($self, $sync);
 	eidx_gc_scan_shards($self, $sync);
@@ -793,7 +795,7 @@ sub eidxq_process ($$) { # for reindexing
 	my $tot = $dbh->selectrow_array('SELECT COUNT(*) FROM eidxq') or return;
 	$self->{nrec} = 0;
 	local $sync->{-regen_fmt} = "%u/$tot\n";
-	my $pr = $sync->{-opt}->{-progress};
+	my $pr = $self->{-opt}->{-progress};
 	if ($pr) {
 		my $min = $dbh->selectrow_array('SELECT MIN(docid) FROM eidxq');
 		my $max = $dbh->selectrow_array('SELECT MAX(docid) FROM eidxq');
@@ -896,10 +898,10 @@ sub _reindex_check_ibx ($$$) {
 
 	# first, check if we missed any messages in target $ibx
 	my $msgs;
-	my $pr = $sync->{-opt}->{-progress};
+	my $pr = $self->{-opt}->{-progress};
 	local $sync->{-regen_fmt} = "$ekey checking %u/$max\n";
 	$self->{nrec} = 0;
-	my $fast = $sync->{-opt}->{fast};
+	my $fast = $self->{-opt}->{fast};
 	my $usr; # _unref_stale_range (< $lo) called
 	my ($lo, $hi);
 	while (scalar(@{$msgs = $ibx->over->query_xover($beg, $end, $opt)})) {
@@ -1023,7 +1025,7 @@ sub dd_smsg { # git->cat_async callback
 		print STDERR
 			"# <$keep->{mid}> keeping #$keep->{num}, dropping ",
 			join(', ', map { "#$_->{num}" } @$ary),"\n";
-		next if $per_mid->{sync}->{-opt}->{'dry-run'};
+		next if $self->{-opt}->{'dry-run'};
 		my $oidx = $self->{oidx};
 		for my $smsg (@$ary) {
 			my $gone = $smsg->{num};
@@ -1100,7 +1102,7 @@ EOS
 	goto dedupe_restart if defined($msgids->[++$idx]);
 
 	my $n = delete $sync->{dedupe_cull};
-	if (my $pr = $sync->{-opt}->{-progress}) {
+	if (my $pr = $self->{-opt}->{-progress}) {
 		$pr->("culled $n/$candidates candidates ($nr_mid msgids)\n");
 	}
 	$self->{nrec} = 0;
@@ -1115,8 +1117,8 @@ sub eidx_sync { # main entry point
 	$self->{oidx}->rethread_prepare($opt);
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec} = 0;
+	local $self->{-opt} = $opt;
 	my $sync = {
-		-opt => $opt,
 		# DO NOT SET {reindex} here, it's incompatible with reused
 		# V2Writable code, reindex is totally different here
 		# compared to v1/v2 inboxes because we have multiple histories
@@ -1306,7 +1308,7 @@ sub _watch_commit { # PublicInbox::DS::add_timer callback
 
 sub on_inbox_unlock { # called by PublicInbox::InboxIdle
 	my ($self, $ibx) = @_;
-	my $opt = $self->{-watch_sync}->{-opt};
+	my $opt = $self->{-opt};
 	my $pr = $opt->{-progress};
 	my $ekey = $ibx->eidx_key;
 	local $0 = "sync $ekey";
@@ -1320,7 +1322,7 @@ sub on_inbox_unlock { # called by PublicInbox::InboxIdle
 sub eidx_reload { # -extindex --watch SIGHUP handler
 	my ($self, $idler) = @_;
 	if ($self->{cfg}) {
-		my $pr = $self->{-watch_sync}->{-opt}->{-progress};
+		my $pr = $self->{-opt}->{-progress};
 		$pr->('reloading ...') if $pr;
 		delete $self->{-resync_queue};
 		delete $self->{-ibx_ary_known};
@@ -1359,6 +1361,7 @@ sub event_step { # PublicInbox::DS::requeue callback
 	}
 }
 
+# FIXME: totally untested and undocumented
 sub eidx_watch { # public-inbox-extindex --watch main loop
 	my ($self, $opt) = @_;
 	local @SIG{keys %SIG} = values %SIG;
@@ -1378,6 +1381,7 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 	}
 	my $pr = $opt->{-progress};
 	$pr->("performing initial scan ...\n") if $pr;
+	local $self->{-opt} = $opt;
 	my $sync = eidx_sync($self, $opt); # initial sync
 	return if $sync->{quit};
 	my $oldset = PublicInbox::DS::block_signals();

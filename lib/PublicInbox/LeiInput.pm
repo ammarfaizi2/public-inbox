@@ -146,7 +146,8 @@ EOM
 	my $sync = { D => {}, ibx => $ibx }; # D => {} filters out deletes
 	my ($f, $at, $ct, $oid, $cmt);
 	for my $git (grep defined, @g) {
-		my $s = PublicInbox::SearchIdx::log2stack($sync, $git, 'HEAD');
+		my $s = PublicInbox::SearchIdx::log2stack($sync, $sync,
+							$git, 'HEAD');
 		while (($f, $at, $ct, $oid, $cmt) = $s->pop_rec) {
 			$git->cat_async($oid, \&oid2eml, $self) if $f eq 'm';
 		}

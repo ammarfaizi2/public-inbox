@@ -887,14 +887,14 @@ sub v1_checkpoint ($$;$) {
 			my $n = $xdb->get_metadata('has_threadid');
 			$xdb->set_metadata('has_threadid', '1') if $n ne '1';
 		}
-		$self->{oidx}->rethread_done($sync->{-opt}); # all done
+		$self->{oidx}->rethread_done($self->{-opt}); # all done
 	}
 	commit_txn_lazy($self);
 	$sync->{ibx}->git->cleanup;
 	my $nrec = $self->{nrec};
 	idx_release($self, $nrec);
 	# let another process do some work...
-	if (my $pr = $sync->{-opt}->{-progress}) {
+	if (my $pr = $self->{-opt}->{-progress}) {
 		$pr->("indexed $nrec/$sync->{ntodo}\n") if $nrec;
 	}
 	if (!$stk && !$sync->{quit}) { # more to come
@@ -923,7 +923,7 @@ sub process_stack {
 			$git->cat_async($oid, \&unindex_both, $sync);
 		}
 	}
-	if ($sync->{max_size} = $sync->{-opt}->{max_size}) {
+	if ($sync->{max_size} = $self->{-opt}->{max_size}) {
 		$sync->{index_oid} = \&index_both;
 	}
 	while (my ($f, $at, $ct, $oid, $cur_cmt) = $stk->pop_rec) {
@@ -946,8 +946,8 @@ sub process_stack {
 	v1_checkpoint($self, $sync, $sync->{quit} ? undef : $stk);
 }
 
-sub log2stack ($$$) {
-	my ($sync, $git, $range) = @_;
+sub log2stack ($$$$) {
+	my ($self, $sync, $git, $range) = @_;
 	my $D = $sync->{D}; # OID_BIN => NR (if reindexing, undef otherwise)
 	my ($add, $del);
 	if ($sync->{ibx}->version == 1) {
@@ -964,8 +964,8 @@ sub log2stack ($$$) {
 	my @cmd = qw(log --raw -r --pretty=tformat:%at-%ct-%H
 			--no-notes --no-color --no-renames --no-abbrev);
 	for my $k (qw(since until)) {
-		my $v = $sync->{-opt}->{$k} // next;
-		next if !$sync->{-opt}->{reindex};
+		my $v = $self->{-opt}->{$k} // next;
+		next if !$self->{-opt}->{reindex};
 		push @cmd, "--$k=$v";
 	}
 	my $fh = $git->popen(@cmd, $range);
@@ -999,8 +999,8 @@ sub log2stack ($$$) {
 	$stk->read_prepare;
 }
 
-sub prepare_stack ($$) {
-	my ($sync, $range) = @_;
+sub prepare_stack ($$$) {
+	my ($self, $sync, $range) = @_;
 	my $git = $sync->{ibx}->git;
 
 	if (index($range, '..') < 0) {
@@ -1010,7 +1010,7 @@ sub prepare_stack ($$) {
 		return PublicInbox::IdxStack->new->read_prepare if $?;
 	}
 	$sync->{D} = $sync->{reindex} ? {} : undef; # OID_BIN => NR
-	log2stack($sync, $git, $range);
+	log2stack($self, $sync, $git, $range);
 }
 
 # --is-ancestor requires git 1.8.0+
@@ -1028,7 +1028,7 @@ sub need_update ($$$$) {
 
 	# don't rewind if --{since,until,before,after} are in use
 	return if $cur ne '' &&
-		grep(defined, @{$sync->{-opt}}{qw(since until)}) &&
+		grep(defined, @{$self->{-opt}}{qw(since until)}) &&
 		is_ancestor($git, $new, $cur);
 
 	return 1 if $cur ne '' && !is_ancestor($git, $cur, $new);
@@ -1067,7 +1067,7 @@ sub quit_cb ($) {
 	sub {
 		# we set {-opt}->{quit} too, so ->index_sync callers
 		# can abort multi-inbox loops this way
-		$sync->{quit} = $sync->{-opt}->{quit} = 1;
+		$sync->{quit} = $sync->{self}->{-opt}->{quit} = 1;
 		warn "gracefully quitting\n";
 	}
 }
@@ -1086,7 +1086,8 @@ sub _index_sync {
 	}
 	local $self->{transact_bytes} = 0;
 	my $pr = $opt->{-progress};
-	my $sync = { reindex => $opt->{reindex}, -opt => $opt, ibx => $ibx };
+	local $self->{-opt} = $opt;
+	my $sync = { reindex => $opt->{reindex}, ibx => $ibx };
 	my $quit = quit_cb($sync);
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
@@ -1108,7 +1109,7 @@ sub _index_sync {
 	my $lx = reindex_from($sync->{reindex}, $last_commit);
 	my $range = $lx eq '' ? $tip : "$lx..$tip";
 	$pr->("counting changes\n\t$range ... ") if $pr;
-	my $stk = prepare_stack($sync, $range);
+	my $stk = prepare_stack($self, $sync, $range);
 	$sync->{ntodo} = $stk ? $stk->num_records : 0;
 	$pr->("$sync->{ntodo}\n") if $pr; # continue previous line
 	process_stack($self, $sync, $stk) if !$sync->{quit};

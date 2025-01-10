@@ -710,12 +710,12 @@ sub reindex_checkpoint ($$) {
 		$self->done; # release lock
 	}
 
-	if (my $pr = $sync->{-regen_fmt} ? $sync->{-opt}->{-progress} : undef) {
+	if (my $pr = $sync->{-regen_fmt} ? $self->{-opt}->{-progress} : undef) {
 		$pr->(sprintf $sync->{-regen_fmt}, $self->{nrec});
 	}
 
 	# allow -watch or -mda to write...
-	$self->idx_init($sync->{-opt}); # reacquire lock
+	$self->idx_init($self->{-opt}); # reacquire lock
 	$mm_tmp->atfork_parent if $mm_tmp;
 }
 
@@ -829,7 +829,7 @@ sub update_last_commit {
 	}
 	# don't rewind if --{since,until,before,after} are in use
 	return if (defined($last) &&
-			grep(defined, @{$sync->{-opt}}{qw(since until)}) &&
+			grep(defined, @{$self->{-opt}}{qw(since until)}) &&
 			is_ancestor($self->git, $latest_cmt, $last));
 
 	last_epoch_commit($self, $unit->{epoch}, $latest_cmt);
@@ -847,7 +847,7 @@ sub last_commits {
 # returns a revision range for git-log(1)
 sub log_range ($$$) {
 	my ($sync, $unit, $tip) = @_;
-	my $opt = $sync->{-opt};
+	my $opt = $sync->{self}->{-opt};
 	my $pr = $opt->{-progress} if (($opt->{verbose} || 0) > 1);
 	my $i = $unit->{epoch};
 	my $cur = $sync->{ranges}->[$i] or do {
@@ -910,7 +910,7 @@ sub artnum_max { $_[0]->{mm}->num_highwater }
 sub sync_prepare ($$) {
 	my ($self, $sync) = @_;
 	$sync->{ranges} = sync_ranges($self, $sync);
-	my $pr = $sync->{-opt}->{-progress};
+	my $pr = $self->{-opt}->{-progress};
 	my $regen_max = 0;
 	my $head = $sync->{ibx}->{ref_head} || 'HEAD';
 	my $pfx;
@@ -935,7 +935,7 @@ sub sync_prepare ($$) {
 		# rerun index_sync without {reindex}
 		$reindex_heads = $self->last_commits($sync);
 	}
-	if ($sync->{max_size} = $sync->{-opt}->{max_size}) {
+	if ($sync->{max_size} = $self->{-opt}->{max_size}) {
 		$sync->{index_oid} = $self->can('index_oid');
 	}
 	my $git_pfx = "$sync->{ibx}->{inboxdir}/git";
@@ -960,7 +960,7 @@ sub sync_prepare ($$) {
 		# because we want NNTP article number gaps from unindexed
 		# messages to show up in mirrors, too.
 		$sync->{D} //= $sync->{reindex} ? {} : undef; # OID_BIN => NR
-		my $stk = log2stack($sync, $git, $range);
+		my $stk = log2stack($self, $sync, $git, $range);
 		return 0 if $sync->{quit};
 		my $nr = $stk ? $stk->num_records : 0;
 		$pr->("$nr\n") if $pr;
@@ -1066,7 +1066,7 @@ sub unindex_todo ($$$) {
 	$fh->close or die "git log failed: \$?=$?";
 	$self->git->async_wait_all;
 
-	return unless $sync->{-opt}->{prune};
+	return unless $self->{-opt}->{prune};
 	my $after = scalar keys %$unindexed;
 	return if $before == $after;
 
@@ -1102,7 +1102,7 @@ sub index_xap_step ($$$;$) {
 
 	$step //= $self->{shards};
 	my $ibx = $self->{ibx};
-	if (my $pr = $sync->{-opt}->{-progress}) {
+	if (my $pr = $self->{-opt}->{-progress}) {
 		$pr->("Xapian indexlevel=$ibx->{indexlevel} ".
 			"$beg..$end (% $step)\n");
 	}
@@ -1169,15 +1169,14 @@ sub index_todo ($$$) {
 	$self->update_last_commit($sync, $stk);
 }
 
-sub xapian_only {
-	my ($self, $opt, $sync, $art_beg) = @_;
-	my $seq = $opt->{'sequential-shard'};
+sub xapian_only ($;$$) {
+	my ($self, $sync, $art_beg) = @_;
+	my $seq = $self->{-opt}->{'sequential-shard'};
 	$art_beg //= 0;
 	local $self->{parallel} = 0 if $seq;
-	$self->idx_init($opt); # acquire lock
+	$self->idx_init($self->{-opt}); # acquire lock
 	if (my $art_end = $self->{ibx}->mm->max) {
 		$sync //= {
-			-opt => $opt,
 			self => $self,
 			-regen_fmt => "%u/?\n",
 		};
@@ -1206,7 +1205,8 @@ sub index_sync {
 	$opt //= {};
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec} = 0;
-	return xapian_only($self, $opt) if $opt->{xapian_only};
+	local $self->{-opt} = $opt;
+	return xapian_only($self) if $opt->{xapian_only};
 
 	my $epoch_max = $self->{ibx}->max_git_epoch // return;
 	my $latest = $self->{mg}->epoch_dir."/$epoch_max.git";
@@ -1231,7 +1231,6 @@ sub index_sync {
 	$self->{oidx}->rethread_prepare($opt);
 	my $sync = {
 		reindex => $opt->{reindex},
-		-opt => $opt,
 		self => $self,
 		ibx => $self->{ibx},
 		epoch_max => $epoch_max,
@@ -1263,7 +1262,7 @@ sub index_sync {
 	$self->done;
 
 	if (my $nrec = $self->{nrec}) {
-		my $pr = $sync->{-opt}->{-progress};
+		my $pr = $self->{-opt}->{-progress};
 		$pr->('all.git '.sprintf($sync->{-regen_fmt}, $nrec)) if $pr;
 	}
 
@@ -1274,7 +1273,7 @@ sub index_sync {
 			$quit_warn = 1;
 		} else {
 			$self->{ibx}->{indexlevel} = $idxlevel;
-			xapian_only($self, $opt, $sync, $art_beg);
+			xapian_only($self, $sync, $art_beg);
 			$quit_warn = 1 if $sync->{quit};
 		}
 	}
