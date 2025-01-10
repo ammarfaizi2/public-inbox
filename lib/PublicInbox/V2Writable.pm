@@ -1095,9 +1095,8 @@ sub index_xap_only { # git->cat_async callback
 	$idx->index_eml(PublicInbox::Eml->new($bref), $smsg);
 }
 
-sub index_xap_step ($$$;$) {
-	my ($self, $sync, $beg, $step) = @_;
-	my $end = $sync->{art_end};
+sub index_xap_step ($$$$;$) {
+	my ($self, $sync, $beg, $end, $step) = @_;
 	return if $beg > $end; # nothing to do
 
 	$step //= $self->{shards};
@@ -1177,18 +1176,18 @@ sub xapian_only ($;$$) {
 	if (my $art_end = $self->{ibx}->mm->max) {
 		$self->{-regen_fmt} //= "%u/?\n";
 		$sync //= { self => $self };
-		$sync->{art_end} = $art_end;
 		if ($seq || !$self->{parallel}) {
 			my $shard_end = $self->{shards} - 1;
 			for my $i (0..$shard_end) {
 				last if $self->{quit};
-				index_xap_step($self, $sync, $art_beg + $i);
+				index_xap_step $self, $sync, $art_beg + $i,
+						$art_end;
 				if ($i != $shard_end) {
 					reindex_checkpoint($self, $sync);
 				}
 			}
 		} else { # parallel (maybe)
-			index_xap_step($self, $sync, $art_beg, 1);
+			index_xap_step $self, $sync, $art_beg, $art_end, 1;
 		}
 	}
 	$self->git->async_wait_all;
