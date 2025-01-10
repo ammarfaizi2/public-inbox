@@ -529,7 +529,7 @@ sub v1_index_mm ($$$$) {
 	my ($self, $eml, $oid, $sync) = @_;
 	my $mids = mids($eml);
 	my $mm = $self->{mm};
-	if ($sync->{reindex}) {
+	if ($self->{reindex}) {
 		my $oidx = $self->{oidx};
 		for my $mid (@$mids) {
 			my ($num, undef) = $oidx->num_mid0_for_oid($oid, $mid);
@@ -883,7 +883,7 @@ sub v1_checkpoint ($$;$) {
 	if ($stk) { # all done if $stk is passed
 		# let SearchView know a full --reindex was done so it can
 		# generate ->has_threadid-dependent links
-		if ($xdb && $sync->{reindex} && !ref($sync->{reindex})) {
+		if ($xdb && $self->{reindex} && !ref($self->{reindex})) {
 			my $n = $xdb->get_metadata('has_threadid');
 			$xdb->set_metadata('has_threadid', '1') if $n ne '1';
 		}
@@ -1006,7 +1006,7 @@ sub prepare_stack ($$$) {
 		$git->qx(qw(rev-parse -q --verify), "$range^0");
 		return PublicInbox::IdxStack->new->read_prepare if $?;
 	}
-	local $self->{D} = $sync->{reindex} ? {} : undef; # OID_BIN => NR
+	local $self->{D} = $self->{reindex} ? {} : undef; # OID_BIN => NR
 	log2stack($self, $sync, $git, $range);
 }
 
@@ -1084,7 +1084,8 @@ sub _index_sync {
 	local $self->{transact_bytes} = 0;
 	my $pr = $opt->{-progress};
 	local $self->{-opt} = $opt;
-	my $sync = { reindex => $opt->{reindex}, ibx => $ibx };
+	local $self->{reindex} = $opt->{reindex};
+	my $sync = { ibx => $ibx };
 	my $quit = quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
@@ -1092,18 +1093,18 @@ sub _index_sync {
 	my $xdb = $self->begin_txn_lazy;
 	$self->{oidx}->rethread_prepare($opt);
 	my $mm = v1_mm_init $self;
-	if ($sync->{reindex}) {
+	if ($self->{reindex}) {
 		my $last = $mm->last_commit;
 		if ($last) {
 			$tip = $last;
 		} else {
 			# somebody just blindly added --reindex when indexing
 			# for the first time, allow it:
-			undef $sync->{reindex};
+			delete $self->{reindex};
 		}
 	}
 	my $last_commit = v1_last_x_commit $self, $mm;
-	my $lx = v1_reindex_from $sync->{reindex}, $last_commit;
+	my $lx = v1_reindex_from $self->{reindex}, $last_commit;
 	my $range = $lx eq '' ? $tip : "$lx..$tip";
 	$pr->("counting changes\n\t$range ... ") if $pr;
 	my $stk = prepare_stack($self, $sync, $range);

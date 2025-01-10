@@ -931,7 +931,7 @@ sub sync_prepare ($$) {
 		for my $i (0..$sync->{epoch_max}) {
 			$reindex_heads->[$i] = $mm->last_commit_xap($v, $i);
 		}
-	} elsif ($sync->{reindex}) { # V2 inbox
+	} elsif ($self->{reindex}) { # V2 inbox
 		# reindex stops at the current heads and we later
 		# rerun index_sync without {reindex}
 		$reindex_heads = $self->last_commits($sync);
@@ -959,7 +959,7 @@ sub sync_prepare ($$) {
 		# We intentionally do NOT use {D} in the non-reindex case
 		# because we want NNTP article number gaps from unindexed
 		# messages to show up in mirrors, too.
-		$self->{D} //= $sync->{reindex} ? {} : undef; # OID_BIN => NR
+		$self->{D} //= $self->{reindex} ? {} : undef; # OID_BIN => NR
 		my $stk = log2stack($self, $sync, $git, $range);
 		return 0 if $self->{quit};
 		my $nr = $stk ? $stk->num_records : 0;
@@ -995,7 +995,7 @@ sub sync_prepare ($$) {
 	my $pad = length($regen_max) + 1;
 	$self->{-regen_fmt} = "% ${pad}u/$regen_max\n";
 	$self->{nrec} = 0;
-	return -1 if $sync->{reindex};
+	return -1 if $self->{reindex};
 	$regen_max + $self->artnum_max || 0;
 }
 
@@ -1077,7 +1077,7 @@ sub unindex_todo ($$$) {
 
 sub sync_ranges ($$) {
 	my ($self, $sync) = @_;
-	my $reindex = $sync->{reindex};
+	my $reindex = $self->{reindex};
 	return $self->last_commits($sync) unless $reindex;
 	return [] if ref($reindex) ne 'HASH';
 
@@ -1227,8 +1227,8 @@ sub index_sync {
 	$self->idx_init($opt); # acquire lock
 	$self->{mg}->fill_alternates;
 	$self->{oidx}->rethread_prepare($opt);
+	local $self->{reindex} = $opt->{reindex};
 	my $sync = {
-		reindex => $opt->{reindex},
 		self => $self,
 		ibx => $self->{ibx},
 		epoch_max => $epoch_max,
