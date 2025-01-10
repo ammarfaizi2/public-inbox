@@ -1014,7 +1014,7 @@ sub unindex_oid ($$;$) { # git->cat_async callback
 		return index_finalize($arg, 0);
 	my $self = $arg->{self};
 	local $self->{current_info} = "$self->{current_info} $oid";
-	my $unindexed = $arg->{in_unindex} ? $arg->{unindexed} : undef;
+	my $unindexed = $self->{in_unindex} ? $arg->{unindexed} : undef;
 	my $mm = $self->{mm};
 	my $mids = mids(PublicInbox::Eml->new($bref));
 	undef $$bref;
@@ -1057,7 +1057,7 @@ sub unindex_todo ($$$) {
 	# order does not matter, here:
 	my $fh = $unit->{git}->popen(qw(log --raw -r --no-notes --no-color
 				--no-abbrev --no-renames), $unindex_range);
-	local $sync->{in_unindex} = 1;
+	local $self->{in_unindex} = 1;
 	my $unindex_oid = $self->can('unindex_oid');
 	while (<$fh>) {
 		/\A:\d{6} 100644 $OID ($OID) [AM]\tm$/o or next;
