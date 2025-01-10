@@ -838,7 +838,7 @@ sub update_last_commit {
 sub last_commits {
 	my ($self, $sync) = @_;
 	my $heads = [];
-	for (my $i = $sync->{epoch_max}; $i >= 0; $i--) {
+	for (my $i = $self->{epoch_max}; $i >= 0; $i--) {
 		$heads->[$i] = last_epoch_commit($self, $i);
 	}
 	$heads;
@@ -928,7 +928,7 @@ sub sync_prepare ($$) {
 		$reindex_heads = [];
 		my $v = PublicInbox::Search::SCHEMA_VERSION;
 		my $mm = $self->{ibx}->mm;
-		for my $i (0..$sync->{epoch_max}) {
+		for my $i (0..$self->{epoch_max}) {
 			$reindex_heads->[$i] = $mm->last_commit_xap($v, $i);
 		}
 	} elsif ($self->{reindex}) { # V2 inbox
@@ -939,7 +939,7 @@ sub sync_prepare ($$) {
 	$self->{max_size} = $self->{-opt}->{max_size} and
 		$self->{index_oid} = $self->can('index_oid');
 	my $git_pfx = "$self->{ibx}->{inboxdir}/git";
-	for (my $i = $sync->{epoch_max}; $i >= 0; $i--) {
+	for (my $i = $self->{epoch_max}; $i >= 0; $i--) {
 		my $git_dir = "$git_pfx/$i.git";
 		-d $git_dir or next; # missing epochs are fine
 		my $git = PublicInbox::Git->new($git_dir);
@@ -1205,8 +1205,8 @@ sub index_sync {
 	local $self->{-regen_fmt};
 	return xapian_only($self) if $opt->{xapian_only};
 
-	my $epoch_max = $self->{ibx}->max_git_epoch // return;
-	my $latest = $self->{mg}->epoch_dir."/$epoch_max.git";
+	local $self->{epoch_max} = $self->{ibx}->max_git_epoch // return;
+	my $latest = $self->{mg}->epoch_dir."/$self->{epoch_max}.git";
 	if ($opt->{'fast-noop'}) { # nanosecond (st_ctim) comparison
 		use Time::HiRes qw(stat);
 		if (my @mm = stat("$self->{ibx}->{inboxdir}/msgmap.sqlite3")) {
@@ -1231,7 +1231,6 @@ sub index_sync {
 	my $sync = {
 		self => $self,
 		ibx => $self->{ibx},
-		epoch_max => $epoch_max,
 	};
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;

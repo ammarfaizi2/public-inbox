@@ -377,7 +377,7 @@ sub last_commits {
 	my $heads = [];
 	my $ekey = $self->{ibx}->eidx_key;
 	my $uv = $self->{ibx}->uidvalidity;
-	for my $i (0..$sync->{epoch_max}) {
+	for my $i (0..$self->{epoch_max}) {
 		$heads->[$i] = $self->{oidx}->eidx_meta("lc-v2:$ekey//$uv;$i");
 	}
 	$heads;
@@ -400,9 +400,10 @@ sub _sync_inbox ($$$) {
 	$sync->{ibx} = $ibx; # FIXME: eliminate
 	local $self->{ibx} = $ibx;
 	$self->{nrec} = 0;
+	local $self->{epoch_max};
 	my $v = $ibx->version;
 	if ($v == 2) {
-		$sync->{epoch_max} = $ibx->max_git_epoch // return;
+		$self->{epoch_max} = $ibx->max_git_epoch // return;
 		sync_prepare($self, $sync); # or return # TODO: once MiscIdx is stable
 	} elsif ($v == 1) {
 		my $uv = $ibx->uidvalidity;
