@@ -1024,7 +1024,7 @@ sub dd_smsg { # git->cat_async callback
 	while (my ($chash, $ary) = each %{$per_mid->{dd_chash}}) {
 		my $keep = shift @$ary;
 		next if !scalar(@$ary);
-		$per_mid->{sync}->{dedupe_cull} += scalar(@$ary);
+		$per_mid->{self}->{dedupe_cull} += scalar(@$ary);
 		print STDERR
 			"# <$keep->{mid}> keeping #$keep->{num}, dropping ",
 			join(', ', map { "#$_->{num}" } @$ary),"\n";
@@ -1040,7 +1040,7 @@ sub dd_smsg { # git->cat_async callback
 
 sub eidx_dedupe ($$$) {
 	my ($self, $sync, $msgids) = @_;
-	$sync->{dedupe_cull} = 0;
+	local $self->{dedupe_cull} = 0;
 	my $candidates = 0;
 	my $nr_mid = 0;
 	return unless eidxq_lock_acquire($self);
@@ -1079,7 +1079,6 @@ EOS
 		my $per_mid = {
 			dd_chash => {}, # chash => [ary of smsgs]
 			last_smsg => $smsg[-1],
-			sync => $sync
 		};
 		$nr_mid++;
 		$candidates += scalar(@smsg) - 1;
@@ -1104,7 +1103,7 @@ EOS
 	}
 	goto dedupe_restart if defined($msgids->[++$idx]);
 
-	my $n = delete $sync->{dedupe_cull};
+	my $n = delete $self->{dedupe_cull};
 	if (my $pr = $self->{-opt}->{-progress}) {
 		$pr->("culled $n/$candidates candidates ($nr_mid msgids)\n");
 	}
