@@ -75,6 +75,7 @@ sub attach_inbox {
 	$self->{ibx_map}->{$ibx->eidx_key} //= do {
 		delete $self->{-ibx_ary_known}; # invalidate cache
 		delete $self->{-ibx_ary_active}; # invalidate cache
+		delete $self->{id2pos};
 		$types //= [ qw(active known) ];
 		for my $t (@$types) {
 			push @{$self->{"ibx_$t"}}, $ibx;
@@ -143,7 +144,7 @@ sub check_xr3 ($$$) {
 
 sub apply_boost ($$) {
 	my ($req, $smsg) = @_;
-	my $id2pos = $req->{id2pos}; # index in ibx_sorted
+	my $id2pos = $req->{self}->{id2pos}; # index in ibx_sorted
 	my $xr3 = $req->{self}->{oidx}->get_xref3($smsg->{num}, 1);
 	check_xr3($req->{self}, $id2pos, $xr3);
 	@$xr3 = sort { # sort ascending
@@ -542,7 +543,7 @@ sub eidx_gc { # top-level entry point
 sub _ibx_for ($$$) {
 	my ($self, $sync, $smsg) = @_;
 	my $ibx_id = delete($smsg->{ibx_id}) // die 'BUG: {ibx_id} unset';
-	my $pos = $sync->{id2pos}->{$ibx_id} //
+	my $pos = $self->{id2pos}->{$ibx_id} //
 		bad_ibx_id($self, $ibx_id, \&croak);
 	$self->{-ibx_ary_known}->[$pos] //
 		die "BUG: ibx for $smsg->{blob} not mapped"
@@ -680,7 +681,7 @@ BUG? #$docid $smsg->{blob} is not referenced by inboxes during reindex
 	# we sort {xr3r} in the reverse order of ibx_sorted so we can
 	# hit the common case in _reindex_finalize without rereading
 	# from git (or holding multiple messages in memory).
-	my $id2pos = $sync->{id2pos}; # index in ibx_sorted
+	my $id2pos = $self->{id2pos}; # index in ibx_sorted
 	check_xr3($self, $id2pos, $xr3);
 	@$xr3 = sort { # sort descending
 		$id2pos->{$b->[0]} <=> $id2pos->{$a->[0]}
@@ -802,7 +803,7 @@ sub eidxq_process ($$) { # for reindexing
 		my $max = $dbh->selectrow_array('SELECT MAX(docid) FROM eidxq');
 		$pr->("Xapian indexing $min..$max (total=$tot)\n");
 	}
-	$sync->{id2pos} //= prep_id2pos($self);
+	$self->{id2pos} //= prep_id2pos $self;
 	my ($del, $iter);
 restart:
 	$del = $dbh->prepare('DELETE FROM eidxq WHERE docid = ?');
@@ -1135,9 +1136,8 @@ sub eidx_sync { # main entry point
 	for my $ibx (@{ibx_sorted($self, 'known')}) {
 		$ibx->{-ibx_id} //= $self->{oidx}->ibx_id($ibx->eidx_key);
 	}
-
-	if (scalar(grep { defined($_->{boost}) } @{$self->{ibx_known}})) {
-		$sync->{id2pos} //= prep_id2pos($self);
+	if (grep { defined($_->{boost}) } @{$self->{ibx_known}}) {
+		$self->{id2pos} //= prep_id2pos $self;
 		$self->{boost_in_use} = 1;
 	}
 
@@ -1329,11 +1329,11 @@ sub eidx_reload { # -extindex --watch SIGHUP handler
 		delete $self->{-resync_queue};
 		delete $self->{-ibx_ary_known};
 		delete $self->{-ibx_ary_active};
+		delete $self->{id2pos};
 		delete $self->{boost_in_use};
 		$self->{ibx_known} = [];
 		$self->{ibx_active} = [];
 		%{$self->{ibx_map}} = ();
-		delete $self->{-watch_sync}->{id2pos};
 		my $cfg = PublicInbox::Config->new;
 		attach_config($self, $cfg);
 		$idler->refresh($cfg);
