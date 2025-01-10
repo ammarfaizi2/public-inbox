@@ -223,7 +223,7 @@ sub do_xpost ($$) {
 	my $self = $req->{self};
 	my $docid = $smsg->{num};
 	my $oid = $req->{oid};
-	my $xibx = $req->{ibx};
+	my $xibx = $req->{ibx} // $self->{ibx};
 	my $eml = $req->{eml};
 	if (my $new_smsg = $req->{new_smsg}) { # 'm' on cross-posted message
 		my $eidx_key = $xibx->eidx_key;
@@ -253,7 +253,7 @@ sub index_unseen ($) {
 	my $idx = $self->idx_shard($docid);
 	$self->{oidx}->add_overview($eml, $new_smsg);
 	my $oid = $new_smsg->{blob};
-	my $ibx = delete $req->{ibx} or die 'BUG: {ibx} unset';
+	my $ibx = ($req->{ibx} // $self->{ibx}) or die 'BUG: {ibx} unset';
 	my $ekey = $new_smsg->{eidx_key} = $ibx->eidx_key;
 	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ekey);
 	$idx->index_eml($eml, $new_smsg);
@@ -326,8 +326,8 @@ sub ck_existing { # git->cat_async callback
 # return the number if so
 sub cur_ibx_xnum ($$;$) {
 	my ($req, $bref, $mismatch) = @_;
-	my $ibx = $req->{ibx} or die 'BUG: current {ibx} missing';
-
+	my $ibx = ($req->{ibx} // $req->{self}->{ibx}) or
+		die 'BUG: current {ibx} missing';
 	$req->{eml} = PublicInbox::Eml->new($bref);
 	$req->{chash} = content_hash($req->{eml});
 	$req->{mids} = mids($req->{eml});
@@ -397,7 +397,6 @@ sub _sync_inbox ($$$) {
 	if (defined(my $err = _ibx_index_reject($ibx))) {
 		return "W: skipping $ekey ($err)";
 	}
-	$sync->{ibx} = $ibx; # FIXME: eliminate
 	local $self->{ibx} = $ibx;
 	$self->{nrec} = 0;
 	local $self->{epoch_max};

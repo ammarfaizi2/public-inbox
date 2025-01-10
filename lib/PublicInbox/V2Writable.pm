@@ -1237,7 +1237,7 @@ sub index_sync {
 	local $self->{todo}; # sync_prepare
 	local $self->{ranges};
 	local $self->{unindexed};
-	my $sync = { self => $self, ibx => $self->{ibx} };
+	my $sync = { self => $self };
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
