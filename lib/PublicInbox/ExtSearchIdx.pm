@@ -794,7 +794,7 @@ sub eidxq_process ($$) { # for reindexing
 	my $dbh = $self->{oidx}->dbh;
 	my $tot = $dbh->selectrow_array('SELECT COUNT(*) FROM eidxq') or return;
 	$self->{nrec} = 0;
-	local $sync->{-regen_fmt} = "%u/$tot\n";
+	local $self->{-regen_fmt} = "%u/$tot\n";
 	my $pr = $self->{-opt}->{-progress};
 	if ($pr) {
 		my $min = $dbh->selectrow_array('SELECT MIN(docid) FROM eidxq');
@@ -899,7 +899,7 @@ sub _reindex_check_ibx ($$$) {
 	# first, check if we missed any messages in target $ibx
 	my $msgs;
 	my $pr = $self->{-opt}->{-progress};
-	local $sync->{-regen_fmt} = "$ekey checking %u/$max\n";
+	local $self->{-regen_fmt} = "$ekey checking %u/$max\n";
 	$self->{nrec} = 0;
 	my $fast = $self->{-opt}->{fast};
 	my $usr; # _unref_stale_range (< $lo) called
@@ -1047,7 +1047,7 @@ sub eidx_dedupe ($$$) {
 	my ($max_id) = $self->{oidx}->dbh->selectrow_array(<<EOS);
 SELECT MAX(id) FROM msgid
 EOS
-	local $sync->{-regen_fmt} = "dedupe %u/$max_id\n";
+	local $self->{-regen_fmt} = "dedupe %u/$max_id\n";
 
 	# note: we could write this query more intelligently,
 	# but that causes lock contention with read-only processes
@@ -1118,12 +1118,12 @@ sub eidx_sync { # main entry point
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec} = 0;
 	local $self->{-opt} = $opt;
+	local $self->{-regen_fmt} = "%u/?\n";
 	my $sync = {
 		# DO NOT SET {reindex} here, it's incompatible with reused
 		# V2Writable code, reindex is totally different here
 		# compared to v1/v2 inboxes because we have multiple histories
 		self => $self,
-		-regen_fmt => "%u/?\n",
 	};
 	local $SIG{USR1} = sub { $self->{need_checkpoint} = 1 };
 	my $quit = PublicInbox::SearchIdx::quit_cb($sync);
@@ -1298,9 +1298,9 @@ sub _watch_commit { # PublicInbox::DS::add_timer callback
 	delete $self->{-commit_timer};
 	eidxq_process($self, $self->{-watch_sync});
 	eidxq_release($self);
-	my $fmt = delete $self->{-watch_sync}->{-regen_fmt};
+	my $fmt = delete $self->{-regen_fmt};
 	reindex_checkpoint($self, $self->{-watch_sync});
-	$self->{-watch_sync}->{-regen_fmt} = $fmt;
+	$self->{-regen_fmt} = $fmt;
 
 	# call event_step => done unless commit_timer is armed
 	PublicInbox::DS::requeue($self);

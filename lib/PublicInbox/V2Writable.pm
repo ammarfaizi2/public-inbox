@@ -710,8 +710,8 @@ sub reindex_checkpoint ($$) {
 		$self->done; # release lock
 	}
 
-	if (my $pr = $sync->{-regen_fmt} ? $self->{-opt}->{-progress} : undef) {
-		$pr->(sprintf $sync->{-regen_fmt}, $self->{nrec});
+	if (my $pr = $self->{-regen_fmt} ? $self->{-opt}->{-progress} : undef) {
+		$pr->(sprintf $self->{-regen_fmt}, $self->{nrec});
 	}
 
 	# allow -watch or -mda to write...
@@ -986,14 +986,14 @@ sub sync_prepare ($$) {
 	}
 	return 0 if $sync->{quit};
 	if (!$regen_max) {
-		$sync->{-regen_fmt} = "%u/?\n";
+		$self->{-regen_fmt} = "%u/?\n";
 		return 0;
 	}
 
 	# reindex should NOT see new commits anymore, if we do,
 	# it's a problem and we need to notice it via die()
 	my $pad = length($regen_max) + 1;
-	$sync->{-regen_fmt} = "% ${pad}u/$regen_max\n";
+	$self->{-regen_fmt} = "% ${pad}u/$regen_max\n";
 	$self->{nrec} = 0;
 	return -1 if $sync->{reindex};
 	$regen_max + $self->artnum_max || 0;
@@ -1176,10 +1176,8 @@ sub xapian_only ($;$$) {
 	local $self->{parallel} = 0 if $seq;
 	$self->idx_init($self->{-opt}); # acquire lock
 	if (my $art_end = $self->{ibx}->mm->max) {
-		$sync //= {
-			self => $self,
-			-regen_fmt => "%u/?\n",
-		};
+		$self->{-regen_fmt} //= "%u/?\n";
+		$sync //= { self => $self };
 		$sync->{art_end} = $art_end;
 		if ($seq || !$self->{parallel}) {
 			my $shard_end = $self->{shards} - 1;
@@ -1206,6 +1204,7 @@ sub index_sync {
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec} = 0;
 	local $self->{-opt} = $opt;
+	local $self->{-regen_fmt};
 	return xapian_only($self) if $opt->{xapian_only};
 
 	my $epoch_max = $self->{ibx}->max_git_epoch // return;
@@ -1263,7 +1262,7 @@ sub index_sync {
 
 	if (my $nrec = $self->{nrec}) {
 		my $pr = $self->{-opt}->{-progress};
-		$pr->('all.git '.sprintf($sync->{-regen_fmt}, $nrec)) if $pr;
+		$pr->('all.git '.sprintf($self->{-regen_fmt}, $nrec)) if $pr;
 	}
 
 	my $quit_warn;
