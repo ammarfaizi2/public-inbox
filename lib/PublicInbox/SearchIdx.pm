@@ -516,13 +516,30 @@ sub add_xapian ($$$$) {
 	$self->{xdb}->replace_document($smsg->{num}, $doc);
 }
 
-sub _msgmap_init ($) {
+sub v1_mm_init ($) {
 	my ($self) = @_;
-	die "BUG: _msgmap_init is only for v1\n" if $self->{ibx}->version != 1;
+	die "BUG: v1_mm_init is only for v1\n" if $self->{ibx}->version != 1;
 	$self->{mm} //= do {
 		require PublicInbox::Msgmap;
 		PublicInbox::Msgmap->new_file($self->{ibx}, 1);
 	};
+}
+
+sub v1_index_mm ($$$$) {
+	my ($self, $eml, $oid, $sync) = @_;
+	my $mids = mids($eml);
+	my $mm = $self->{mm};
+	if ($sync->{reindex}) {
+		my $oidx = $self->{oidx};
+		for my $mid (@$mids) {
+			my ($num, undef) = $oidx->num_mid0_for_oid($oid, $mid);
+			return $num if defined $num;
+		}
+		$mm->num_for($mids->[0]) // $mm->mid_insert($mids->[0]);
+	} else {
+		# fallback to num_for since filters like RubyLang set the number
+		$mm->mid_insert($mids->[0]) // $mm->num_for($mids->[0]);
+	}
 }
 
 sub add_message {
@@ -533,8 +550,8 @@ sub add_message {
 	$smsg //= bless { blob => '' }, 'PublicInbox::Smsg'; # test-only compat
 	$smsg->{mid} //= $mids->[0]; # v1 compatibility
 	$smsg->{num} //= do { # v1
-		_msgmap_init($self);
-		index_mm($self, $mime, $smsg->{blob}, $sync);
+		v1_mm_init $self;
+		v1_index_mm $self, $mime, $smsg->{blob}, $sync;
 	};
 
 	# v1 and tests only:
@@ -734,8 +751,7 @@ sub index_git_blob_id {
 	}
 }
 
-# v1 only
-sub unindex_eml {
+sub v1_unindex_eml ($$$) {
 	my ($self, $oid, $eml) = @_;
 	my $mids = mids($eml);
 	my $nr = 0;
@@ -760,23 +776,6 @@ sub unindex_eml {
 	xdb_remove($self, keys %tmp) if need_xapian($self);
 }
 
-sub index_mm {
-	my ($self, $mime, $oid, $sync) = @_;
-	my $mids = mids($mime);
-	my $mm = $self->{mm};
-	if ($sync->{reindex}) {
-		my $oidx = $self->{oidx};
-		for my $mid (@$mids) {
-			my ($num, undef) = $oidx->num_mid0_for_oid($oid, $mid);
-			return $num if defined $num;
-		}
-		$mm->num_for($mids->[0]) // $mm->mid_insert($mids->[0]);
-	} else {
-		# fallback to num_for since filters like RubyLang set the number
-		$mm->mid_insert($mids->[0]) // $mm->num_for($mids->[0]);
-	}
-}
-
 sub is_bad_blob ($$$$) {
 	my ($oid, $type, $size, $expect_oid) = @_;
 	if ($type ne 'blob') {
@@ -798,7 +797,7 @@ sub update_checkpoint ($;$) {
 	$self->{need_checkpoint} += ($now > $next ? 1 : 0);
 }
 
-sub index_both { # git->cat_async callback
+sub v1_index_both { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $sync) = @_;
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
@@ -807,7 +806,7 @@ sub index_both { # git->cat_async callback
 	update_checkpoint $self, $smsg->{bytes};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
-	$smsg->{num} = index_mm($self, $eml, $oid, $sync) or
+	$smsg->{num} = v1_index_mm $self, $eml, $oid, $sync or
 		die "E: could not generate NNTP article number for $oid";
 	add_message($self, $eml, $smsg, $sync);
 	++$self->{nidx};
@@ -816,12 +815,12 @@ sub index_both { # git->cat_async callback
 	$self->{latest_cmt} = $cur_cmt;
 }
 
-sub unindex_both { # git->cat_async callback
+sub v1_unindex_both { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $sync) = @_;
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
 	my $self = $sync->{sidx};
 	local $self->{current_info} = "$self->{current_info}: $oid";
-	unindex_eml($self, $oid, PublicInbox::Eml->new($bref));
+	v1_unindex_eml $self, $oid, PublicInbox::Eml->new($bref);
 	# may be undef if leftover
 	if (defined(my $cur_cmt = $sync->{cur_cmt})) {
 		$self->{latest_cmt} = $cur_cmt;
@@ -868,7 +867,7 @@ sub v1_checkpoint ($$;$) {
 	my $newest = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	if (defined($newest)) {
 		my $cur = $self->{mm}->last_commit;
-		if (need_update($self, $sync, $cur, $newest)) {
+		if (v1_need_update($self, $sync, $cur, $newest)) {
 			$self->{mm}->last_commit($newest);
 		}
 	}
@@ -876,7 +875,7 @@ sub v1_checkpoint ($$;$) {
 	my $xdb = $self->{xdb};
 	if ($newest && $xdb) {
 		my $cur = $xdb->get_metadata('last_commit');
-		if (need_update($self, $sync, $cur, $newest)) {
+		if (v1_need_update($self, $sync, $cur, $newest)) {
 			$xdb->set_metadata('last_commit', $newest);
 		}
 	}
@@ -905,8 +904,7 @@ sub v1_checkpoint ($$;$) {
 	delete $self->{next_checkpoint};
 }
 
-# only for v1
-sub process_stack {
+sub v1_process_stack ($$$) {
 	my ($self, $sync, $stk) = @_;
 	my $git = $sync->{ibx}->git;
 	$self->{nrec} = 0;
@@ -920,11 +918,11 @@ sub process_stack {
 		for my $oid (@leftovers) {
 			last if $sync->{quit};
 			$oid = unpack('H*', $oid);
-			$git->cat_async($oid, \&unindex_both, $sync);
+			$git->cat_async($oid, \&v1_unindex_both, $sync);
 		}
 	}
 	if ($sync->{max_size} = $self->{-opt}->{max_size}) {
-		$sync->{index_oid} = \&index_both;
+		$sync->{index_oid} = \&v1_index_both;
 	}
 	while (my ($f, $at, $ct, $oid, $cur_cmt) = $stk->pop_rec) {
 		my $arg = { %$sync, cur_cmt => $cur_cmt, oid => $oid };
@@ -936,10 +934,10 @@ sub process_stack {
 				$arg->{git} = $git;
 				$git->check_async($oid, \&check_size, $arg);
 			} else {
-				$git->cat_async($oid, \&index_both, $arg);
+				$git->cat_async($oid, \&v1_index_both, $arg);
 			}
 		} elsif ($f eq 'd') {
-			$git->cat_async($oid, \&unindex_both, $arg);
+			$git->cat_async($oid, \&v1_unindex_both, $arg);
 		}
 		v1_checkpoint $self, $sync if $self->{need_checkpoint};
 	}
@@ -1021,7 +1019,7 @@ sub is_ancestor ($$$) {
 	run_wait($cmd) == 0;
 }
 
-sub need_update ($$$$) {
+sub v1_need_update ($$$$) {
 	my ($self, $sync, $cur, $new) = @_;
 	my $git = $self->{ibx}->git;
 	$cur //= ''; # XS Search::Xapian ->get_metadata doesn't give undef
@@ -1040,7 +1038,7 @@ sub need_update ($$$$) {
 # The last git commit we indexed with Xapian or SQLite (msgmap)
 # This needs to account for cases where Xapian or SQLite is
 # out-of-date with respect to the other.
-sub _last_x_commit {
+sub v1_last_x_commit ($$) {
 	my ($self, $mm) = @_;
 	my $lm = $mm->last_commit || '';
 	my $lx = '';
@@ -1056,7 +1054,7 @@ sub _last_x_commit {
 	$lx;
 }
 
-sub reindex_from ($$) {
+sub v1_reindex_from ($$) {
 	my ($reindex, $last_commit) = @_;
 	return $last_commit unless $reindex;
 	ref($reindex) eq 'HASH' ? $reindex->{from} : '';
@@ -1094,7 +1092,7 @@ sub _index_sync {
 	local $SIG{TERM} = $quit;
 	my $xdb = $self->begin_txn_lazy;
 	$self->{oidx}->rethread_prepare($opt);
-	my $mm = _msgmap_init($self);
+	my $mm = v1_mm_init $self;
 	if ($sync->{reindex}) {
 		my $last = $mm->last_commit;
 		if ($last) {
@@ -1105,14 +1103,14 @@ sub _index_sync {
 			undef $sync->{reindex};
 		}
 	}
-	my $last_commit = _last_x_commit($self, $mm);
-	my $lx = reindex_from($sync->{reindex}, $last_commit);
+	my $last_commit = v1_last_x_commit $self, $mm;
+	my $lx = v1_reindex_from $sync->{reindex}, $last_commit;
 	my $range = $lx eq '' ? $tip : "$lx..$tip";
 	$pr->("counting changes\n\t$range ... ") if $pr;
 	my $stk = prepare_stack($self, $sync, $range);
 	$sync->{ntodo} = $stk ? $stk->num_records : 0;
 	$pr->("$sync->{ntodo}\n") if $pr; # continue previous line
-	process_stack($self, $sync, $stk) if !$sync->{quit};
+	v1_process_stack($self, $sync, $stk) if !$sync->{quit};
 }
 
 sub DESTROY {

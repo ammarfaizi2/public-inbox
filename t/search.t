@@ -1,6 +1,9 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
+#
+# FIXME: some is probably redundant with more round-trip PSGI tests
+# nowadays with run_script and TEST_RUN_MODE=2 spawn-avoidance speedups
 use strict;
 use v5.10;
 use PublicInbox::TestCommon;
@@ -419,8 +422,8 @@ $ibx->with_umask(sub {
 		$art = $ibx->over->next_by_mid($mid, \$id, \$prev);
 		ok($art, 'article exists in OVER DB');
 	}
-	$rw->_msgmap_init;
-	$rw->unindex_eml($oid, $amsg);
+	$rw->v1_mm_init;
+	$rw->v1_unindex_eml($oid, $amsg);
 	$rw->commit_txn_lazy;
 	SKIP: {
 		skip('$art not defined', 1) unless defined $art;
