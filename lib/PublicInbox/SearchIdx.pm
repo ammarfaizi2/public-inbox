@@ -914,7 +914,7 @@ sub v1_process_stack ($$$) {
 	local $self->{latest_cmt};
 
 	$self->{mm}->{dbh}->begin_work;
-	if (my @leftovers = keys %{delete($sync->{D}) // {}}) {
+	if (my @leftovers = keys %{delete($self->{D}) // {}}) {
 		warn('W: unindexing '.scalar(@leftovers)." leftovers\n");
 		for my $oid (@leftovers) {
 			last if $self->{quit};
@@ -945,7 +945,7 @@ sub v1_process_stack ($$$) {
 
 sub log2stack ($$$$) {
 	my ($self, $sync, $git, $range) = @_;
-	my $D = $sync->{D}; # OID_BIN => NR (if reindexing, undef otherwise)
+	my $D = $self->{D}; # OID_BIN => NR (if reindexing, undef otherwise)
 	my ($add, $del);
 	if ($sync->{ibx}->version == 1) {
 		my $path = $hex.'{2}/'.$hex.'{38}';
@@ -1006,7 +1006,7 @@ sub prepare_stack ($$$) {
 		$git->qx(qw(rev-parse -q --verify), "$range^0");
 		return PublicInbox::IdxStack->new->read_prepare if $?;
 	}
-	$sync->{D} = $sync->{reindex} ? {} : undef; # OID_BIN => NR
+	local $self->{D} = $sync->{reindex} ? {} : undef; # OID_BIN => NR
 	log2stack($self, $sync, $git, $range);
 }
 

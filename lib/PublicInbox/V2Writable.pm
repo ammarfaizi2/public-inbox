@@ -914,6 +914,7 @@ sub sync_prepare ($$) {
 	my $regen_max = 0;
 	my $head = $sync->{ibx}->{ref_head} || 'HEAD';
 	my $pfx;
+	local $self->{D}; # delete state
 	if ($pr) {
 		($pfx) = ($sync->{ibx}->{inboxdir} =~ m!([^/]+)\z!g);
 		$pfx //= $sync->{ibx}->{inboxdir};
@@ -958,7 +959,7 @@ sub sync_prepare ($$) {
 		# We intentionally do NOT use {D} in the non-reindex case
 		# because we want NNTP article number gaps from unindexed
 		# messages to show up in mirrors, too.
-		$sync->{D} //= $sync->{reindex} ? {} : undef; # OID_BIN => NR
+		$self->{D} //= $sync->{reindex} ? {} : undef; # OID_BIN => NR
 		my $stk = log2stack($self, $sync, $git, $range);
 		return 0 if $self->{quit};
 		my $nr = $stk ? $stk->num_records : 0;
@@ -971,7 +972,7 @@ sub sync_prepare ($$) {
 
 	# XXX this should not happen unless somebody bypasses checks in
 	# our code and blindly injects "d" file history into git repos
-	if (my @leftovers = keys %{delete($sync->{D}) // {}}) {
+	if (my @leftovers = keys %{delete($self->{D}) // {}}) {
 		warn('W: unindexing '.scalar(@leftovers)." leftovers\n");
 		local $self->{current_info} = 'leftover ';
 		my $unindex_oid = $self->can('unindex_oid');
