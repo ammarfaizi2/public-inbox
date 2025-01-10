@@ -403,6 +403,7 @@ sub _sync_inbox ($$$) {
 	local $self->{epoch_max};
 	my $v = $ibx->version;
 	local $self->{todo}; # set by sync_prepare
+	local $self->{unindexed};
 	if ($v == 2) {
 		$self->{epoch_max} = $ibx->max_git_epoch // return;
 		sync_prepare($self, $sync); # or return # TODO: once MiscIdx is stable

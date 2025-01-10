@@ -746,16 +746,14 @@ sub index_oid { # cat_async callback
 	}
 
 	# {unindexed} is unlikely
-	if (my $unindexed = $arg->{unindexed}) {
+	if (my $unindexed = $self->{unindexed}) {
 		my $oidbin = pack('H*', $oid);
 		my $u = $unindexed->{$oidbin};
 		($num, $mid0) = splice(@$u, 0, 2) if $u;
 		if (defined $num) {
 			$self->{mm}->mid_set($num, $mid0);
-			if (scalar(@$u) == 0) { # done with current OID
-				delete $unindexed->{$oidbin};
-				delete($arg->{unindexed}) if !keys(%$unindexed);
-			}
+			# done w/ current OID?
+			delete $unindexed->{$oidbin} if !@$u;
 		}
 	}
 	my $oidx = $self->{oidx};
@@ -1014,7 +1012,7 @@ sub unindex_oid ($$;$) { # git->cat_async callback
 		return index_finalize($arg, 0);
 	my $self = $arg->{self};
 	local $self->{current_info} = "$self->{current_info} $oid";
-	my $unindexed = $self->{in_unindex} ? $arg->{unindexed} : undef;
+	my $unindexed = $self->{in_unindex} ? $self->{unindexed} : undef;
 	my $mm = $self->{mm};
 	my $mids = mids(PublicInbox::Eml->new($bref));
 	undef $$bref;
@@ -1052,7 +1050,7 @@ sub git { $_[0]->{ibx}->git }
 sub unindex_todo ($$$) {
 	my ($self, $sync, $unit) = @_;
 	my $unindex_range = delete($unit->{unindex_range}) // return;
-	my $unindexed = $sync->{unindexed} //= {}; # $oidbin => [$num, $mid0]
+	my $unindexed = $self->{unindexed} //= {}; # $oidbin => [$num, $mid0]
 	my $before = scalar keys %$unindexed;
 	# order does not matter, here:
 	my $fh = $unit->{git}->popen(qw(log --raw -r --no-notes --no-color
@@ -1236,6 +1234,7 @@ sub index_sync {
 	local $self->{reindex} = $opt->{reindex};
 	local $self->{mm_tmp};
 	local $self->{todo}; # sync_prepare
+	local $self->{unindexed};
 	my $sync = { self => $self, ibx => $self->{ibx} };
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;
