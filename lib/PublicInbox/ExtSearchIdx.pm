@@ -1167,7 +1167,7 @@ sub eidx_sync { # main entry point
 
 sub update_last_commit { # overrides V2Writable
 	my ($self, $sync, $stk) = @_;
-	my $unit = $sync->{unit} // return;
+	my $unit = $self->{unit} // return;
 	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
 	my $ibx = $self->{ibx} or die 'BUG: {ibx} missing';

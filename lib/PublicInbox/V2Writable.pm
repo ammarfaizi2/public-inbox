@@ -818,7 +818,7 @@ sub index_oid { # cat_async callback
 # only update last_commit for $i on reindex iff newer than current
 sub update_last_commit {
 	my ($self, $sync, $stk) = @_;
-	my $unit = $sync->{unit} // return;
+	my $unit = $self->{unit} // return;
 	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
 	my $last = last_epoch_commit($self, $unit->{epoch});
@@ -1137,7 +1137,7 @@ sub index_todo ($$$) {
 	}
 	local $self->{current_info} = "$pfx ";
 	local $self->{latest_cmt};
-	local $sync->{unit} = $unit;
+	local $self->{unit} = $unit;
 	while (my ($f, $at, $ct, $oid, $cmt) = $stk->pop_rec) {
 		if ($self->{quit}) {
 			warn "waiting to quit...\n";
