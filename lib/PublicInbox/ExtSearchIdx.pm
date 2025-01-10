@@ -254,8 +254,8 @@ sub index_unseen ($) {
 	$self->{oidx}->add_overview($eml, $new_smsg);
 	my $oid = $new_smsg->{blob};
 	my $ibx = delete $req->{ibx} or die 'BUG: {ibx} unset';
-	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ibx->eidx_key);
-	$new_smsg->{eidx_key} = $ibx->eidx_key;
+	my $ekey = $new_smsg->{eidx_key} = $ibx->eidx_key;
+	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ekey);
 	$idx->index_eml($eml, $new_smsg);
 	update_checkpoint $self, $new_smsg->{bytes};
 }
