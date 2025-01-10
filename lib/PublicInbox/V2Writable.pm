@@ -487,8 +487,8 @@ W: $list
 			num => $smsg->{num},
 			mid => $smsg->{mid},
 		}, 'PublicInbox::Smsg';
-		my $sync = { autime => $smsg->{ds}, cotime => $smsg->{ts} };
-		$new_smsg->populate($new_mime, $sync);
+		my $cmt_info = { autime => $smsg->{ds}, cotime => $smsg->{ts} };
+		$new_smsg->populate($new_mime, $cmt_info);
 		$new_smsg->set_bytes($raw, $bytes);
 		do_idx($self, $new_mime, $new_smsg);
 	}

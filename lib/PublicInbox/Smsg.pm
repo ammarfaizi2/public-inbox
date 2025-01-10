@@ -90,7 +90,7 @@ sub parse_references ($$$) {
 
 # used for v2, Import and v1 non-SQLite WWW code paths
 sub populate {
-	my ($self, $hdr, $sync) = @_;
+	my ($self, $hdr, $cmt_info) = @_;
 	for my $f (qw(From To Cc Subject)) {
 		my @all = $hdr->header($f);
 		my $val = join(', ', @all);
@@ -111,9 +111,8 @@ sub populate {
 		}
 		$self->{$f} = $val if $val ne '';
 	}
-	$sync //= {};
-	my @ds = msg_datestamp($hdr, $sync->{autime} // $self->{ds});
-	my @ts = msg_timestamp($hdr, $sync->{cotime} // $self->{ts});
+	my @ds = msg_datestamp($hdr, $cmt_info->{autime} // $self->{ds});
+	my @ts = msg_timestamp($hdr, $cmt_info->{cotime} // $self->{ts});
 	$self->{-ds} = \@ds;
 	$self->{-ts} = \@ts;
 	$self->{ds} //= $ds[0]; # no zone
