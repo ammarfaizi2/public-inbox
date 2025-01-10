@@ -143,11 +143,10 @@ EOM
 	require PublicInbox::SearchIdx;
 	my $n = $ibx->max_git_epoch;
 	my @g = defined($n) ? map { $ibx->git_epoch($_) } (0..$n) : ($ibx->git);
-	my $sync = { D => {}, ibx => $ibx }; # D => {} filters out deletes
+	my $sidx = { D => {}, ibx => $ibx }; # D => {} filters out deletes
 	my ($f, $at, $ct, $oid, $cmt);
 	for my $git (grep defined, @g) {
-		my $s = PublicInbox::SearchIdx::log2stack($sync, $sync,
-							$git, 'HEAD');
+		my $s = PublicInbox::SearchIdx::log2stack($sidx, $git, 'HEAD');
 		while (($f, $at, $ct, $oid, $cmt) = $s->pop_rec) {
 			$git->cat_async($oid, \&oid2eml, $self) if $f eq 'm';
 		}

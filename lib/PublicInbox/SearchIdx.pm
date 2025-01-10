@@ -525,8 +525,8 @@ sub v1_mm_init ($) {
 	};
 }
 
-sub v1_index_mm ($$$$) {
-	my ($self, $eml, $oid, $sync) = @_;
+sub v1_index_mm ($$$) {
+	my ($self, $eml, $oid) = @_;
 	my $mids = mids($eml);
 	my $mm = $self->{mm};
 	if ($self->{reindex}) {
@@ -544,18 +544,18 @@ sub v1_index_mm ($$$$) {
 
 sub add_message {
 	# mime = PublicInbox::Eml or Email::MIME object
-	my ($self, $mime, $smsg, $sync) = @_;
+	my ($self, $mime, $smsg, $cmt_info) = @_;
 	begin_txn_lazy($self);
 	my $mids = mids_for_index($mime);
 	$smsg //= bless { blob => '' }, 'PublicInbox::Smsg'; # test-only compat
 	$smsg->{mid} //= $mids->[0]; # v1 compatibility
 	$smsg->{num} //= do { # v1
 		v1_mm_init $self;
-		v1_index_mm $self, $mime, $smsg->{blob}, $sync;
+		v1_index_mm $self, $mime, $smsg->{blob};
 	};
 
 	# v1 and tests only:
-	$smsg->populate($mime, $sync);
+	$smsg->populate($mime, $cmt_info);
 	$smsg->{bytes} //= length($mime->as_string);
 
 	eval {
@@ -798,31 +798,31 @@ sub update_checkpoint ($;$) {
 }
 
 sub v1_index_both { # git->cat_async callback
-	my ($bref, $oid, $type, $size, $sync) = @_;
-	return if is_bad_blob($oid, $type, $size, $sync->{oid});
+	my ($bref, $oid, $type, $size, $arg) = @_;
+	return if is_bad_blob($oid, $type, $size, $arg->{oid});
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
-	my $self = $sync->{self};
+	my $self = $arg->{self};
 	update_checkpoint $self, $smsg->{bytes};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
-	$smsg->{num} = v1_index_mm $self, $eml, $oid, $sync or
+	$smsg->{num} = v1_index_mm $self, $eml, $oid or
 		die "E: could not generate NNTP article number for $oid";
-	add_message($self, $eml, $smsg, $sync);
+	add_message($self, $eml, $smsg, $arg);
 	++$self->{nidx};
 	++$self->{nrec};
-	my $cur_cmt = $sync->{cur_cmt} // die 'BUG: {cur_cmt} missing';
+	my $cur_cmt = $arg->{cur_cmt} // die 'BUG: {cur_cmt} missing';
 	$self->{latest_cmt} = $cur_cmt;
 }
 
 sub v1_unindex_both { # git->cat_async callback
-	my ($bref, $oid, $type, $size, $sync) = @_;
-	return if is_bad_blob($oid, $type, $size, $sync->{oid});
-	my $self = $sync->{self};
+	my ($bref, $oid, $type, $size, $arg) = @_;
+	return if is_bad_blob($oid, $type, $size, $arg->{oid});
+	my $self = $arg->{self};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	v1_unindex_eml $self, $oid, PublicInbox::Eml->new($bref);
 	# may be undef if leftover
-	if (defined(my $cur_cmt = $sync->{cur_cmt})) {
+	if (defined(my $cur_cmt = $arg->{cur_cmt})) {
 		$self->{latest_cmt} = $cur_cmt;
 	}
 	++$self->{nidx};
@@ -859,8 +859,8 @@ sub check_size { # check_async cb for -index --max-size=...
 	}
 }
 
-sub v1_checkpoint ($$;$) {
-	my ($self, $sync, $stk) = @_;
+sub v1_checkpoint ($;$) {
+	my ($self, $stk) = @_;
 	$self->{ibx}->git->async_wait_all;
 	$self->{need_checkpoint} = 0;
 
@@ -868,7 +868,7 @@ sub v1_checkpoint ($$;$) {
 	my $newest = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	if (defined($newest)) {
 		my $cur = $self->{mm}->last_commit;
-		if (v1_need_update($self, $sync, $cur, $newest)) {
+		if (v1_need_update($self, $cur, $newest)) {
 			$self->{mm}->last_commit($newest);
 		}
 	}
@@ -876,7 +876,7 @@ sub v1_checkpoint ($$;$) {
 	my $xdb = $self->{xdb};
 	if ($newest && $xdb) {
 		my $cur = $xdb->get_metadata('last_commit');
-		if (v1_need_update($self, $sync, $cur, $newest)) {
+		if (v1_need_update($self, $cur, $newest)) {
 			$xdb->set_metadata('last_commit', $newest);
 		}
 	}
@@ -890,7 +890,7 @@ sub v1_checkpoint ($$;$) {
 		$self->{oidx}->rethread_done($self->{-opt}); # all done
 	}
 	commit_txn_lazy($self);
-	$sync->{ibx}->git->cleanup;
+	$self->{ibx}->git->cleanup;
 	my $nrec = $self->{nrec};
 	idx_release($self, $nrec);
 	# let another process do some work...
@@ -905,11 +905,10 @@ sub v1_checkpoint ($$;$) {
 	delete $self->{next_checkpoint};
 }
 
-sub v1_process_stack ($$$) {
-	my ($self, $sync, $stk) = @_;
-	my $git = $sync->{ibx}->git;
+sub v1_process_stack ($$) {
+	my ($self, $stk) = @_;
+	my $git = $self->{ibx}->git;
 	$self->{nrec} = 0;
-	$sync->{self} = $self;
 	local $self->{need_checkpoint} = 0;
 	local $self->{latest_cmt};
 
@@ -919,13 +918,14 @@ sub v1_process_stack ($$$) {
 		for my $oid (@leftovers) {
 			last if $self->{quit};
 			$oid = unpack('H*', $oid);
-			$git->cat_async($oid, \&v1_unindex_both, $sync);
+			my $arg = { oid => $oid, self => $self };
+			$git->cat_async($oid, \&v1_unindex_both, $arg);
 		}
 	}
 	$self->{max_size} = $self->{-opt}->{max_size} and
 		$self->{index_oid} = \&v1_index_both;
 	while (my ($f, $at, $ct, $oid, $cur_cmt) = $stk->pop_rec) {
-		my $arg = { %$sync, cur_cmt => $cur_cmt, oid => $oid };
+		my $arg = { self => $self, cur_cmt => $cur_cmt, oid => $oid };
 		last if $self->{quit};
 		if ($f eq 'm') {
 			$arg->{autime} = $at;
@@ -938,16 +938,16 @@ sub v1_process_stack ($$$) {
 		} elsif ($f eq 'd') {
 			$git->cat_async($oid, \&v1_unindex_both, $arg);
 		}
-		v1_checkpoint $self, $sync if $self->{need_checkpoint};
+		v1_checkpoint $self if $self->{need_checkpoint};
 	}
-	v1_checkpoint($self, $sync, $self->{quit} ? undef : $stk);
+	v1_checkpoint($self, $self->{quit} ? undef : $stk);
 }
 
-sub log2stack ($$$$) {
-	my ($self, $sync, $git, $range) = @_;
+sub log2stack ($$$) {
+	my ($self, $git, $range) = @_;
 	my $D = $self->{D}; # OID_BIN => NR (if reindexing, undef otherwise)
 	my ($add, $del);
-	if ($sync->{ibx}->version == 1) {
+	if ($self->{ibx}->version == 1) {
 		my $path = $hex.'{2}/'.$hex.'{38}';
 		$add = qr!\A:000000 100644 \S+ ($OID) A\t$path$!;
 		$del = qr!\A:100644 000000 ($OID) \S+ D\t$path$!;
@@ -996,9 +996,9 @@ sub log2stack ($$$$) {
 	$stk->read_prepare;
 }
 
-sub prepare_stack ($$$) {
-	my ($self, $sync, $range) = @_;
-	my $git = $sync->{ibx}->git;
+sub prepare_stack ($$) {
+	my ($self, $range) = @_;
+	my $git = $self->{ibx}->git;
 
 	if (index($range, '..') < 0) {
 		# don't show annoying git errors to users who run -index
@@ -1007,7 +1007,7 @@ sub prepare_stack ($$$) {
 		return PublicInbox::IdxStack->new->read_prepare if $?;
 	}
 	local $self->{D} = $self->{reindex} ? {} : undef; # OID_BIN => NR
-	log2stack($self, $sync, $git, $range);
+	log2stack $self, $git, $range;
 }
 
 # --is-ancestor requires git 1.8.0+
@@ -1018,8 +1018,8 @@ sub is_ancestor ($$$) {
 	run_wait($cmd) == 0;
 }
 
-sub v1_need_update ($$$$) {
-	my ($self, $sync, $cur, $new) = @_;
+sub v1_need_update ($$$) {
+	my ($self, $cur, $new) = @_;
 	my $git = $self->{ibx}->git;
 	$cur //= ''; # XS Search::Xapian ->get_metadata doesn't give undef
 
@@ -1085,7 +1085,6 @@ sub _index_sync {
 	my $pr = $opt->{-progress};
 	local $self->{-opt} = $opt;
 	local $self->{reindex} = $opt->{reindex};
-	my $sync = { ibx => $ibx };
 	my $quit = quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
@@ -1107,10 +1106,10 @@ sub _index_sync {
 	my $lx = v1_reindex_from $self->{reindex}, $last_commit;
 	my $range = $lx eq '' ? $tip : "$lx..$tip";
 	$pr->("counting changes\n\t$range ... ") if $pr;
-	my $stk = prepare_stack($self, $sync, $range);
+	my $stk = prepare_stack $self, $range;
 	local $self->{ntodo} = $stk ? $stk->num_records : 0;
 	$pr->("$self->{ntodo}\n") if $pr; # continue previous line
-	v1_process_stack($self, $sync, $stk) if !$self->{quit};
+	v1_process_stack($self, $stk) if !$self->{quit};
 }
 
 sub DESTROY {
