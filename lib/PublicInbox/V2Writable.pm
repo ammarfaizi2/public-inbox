@@ -935,9 +935,8 @@ sub sync_prepare ($$) {
 		# rerun index_sync without {reindex}
 		$reindex_heads = $self->last_commits($sync);
 	}
-	if ($sync->{max_size} = $self->{-opt}->{max_size}) {
-		$sync->{index_oid} = $self->can('index_oid');
-	}
+	$self->{max_size} = $self->{-opt}->{max_size} and
+		$self->{index_oid} = $self->can('index_oid');
 	my $git_pfx = "$sync->{ibx}->{inboxdir}/git";
 	for (my $i = $sync->{epoch_max}; $i >= 0; $i--) {
 		my $git_dir = "$git_pfx/$i.git";
@@ -1154,7 +1153,7 @@ sub index_todo ($$$) {
 			cur_cmt => $cmt
 		};
 		if ($f eq 'm') {
-			if ($sync->{max_size}) {
+			if ($self->{max_size}) {
 				$all->check_async($oid, \&check_size, $req);
 			} else {
 				$all->cat_async($oid, $index_oid, $req);

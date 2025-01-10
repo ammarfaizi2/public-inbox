@@ -849,12 +849,13 @@ sub index_sync {
 
 sub check_size { # check_async cb for -index --max-size=...
 	my (undef, $oid, $type, $size, $arg) = @_;
+	my $self = $arg->{self};
 	($type // '') eq 'blob' or
-		die "E: bad $oid in $arg->{ibx}->{git}->{git_dir}";
-	if ($size <= $arg->{max_size}) {
-		$arg->{ibx}->{git}->cat_async($oid, $arg->{index_oid}, $arg);
+		die "E: bad $oid in $self->{ibx}->{git}->{git_dir}";
+	if ($size <= $self->{max_size}) {
+		$self->{ibx}->{git}->cat_async($oid, $self->{index_oid}, $arg);
 	} else {
-		warn "W: skipping $oid ($size > $arg->{max_size})\n";
+		warn "W: skipping $oid ($size > $self->{max_size})\n";
 	}
 }
 
@@ -921,16 +922,15 @@ sub v1_process_stack ($$$) {
 			$git->cat_async($oid, \&v1_unindex_both, $sync);
 		}
 	}
-	if ($sync->{max_size} = $self->{-opt}->{max_size}) {
-		$sync->{index_oid} = \&v1_index_both;
-	}
+	$self->{max_size} = $self->{-opt}->{max_size} and
+		$self->{index_oid} = \&v1_index_both;
 	while (my ($f, $at, $ct, $oid, $cur_cmt) = $stk->pop_rec) {
 		my $arg = { %$sync, cur_cmt => $cur_cmt, oid => $oid };
 		last if $self->{quit};
 		if ($f eq 'm') {
 			$arg->{autime} = $at;
 			$arg->{cotime} = $ct;
-			if ($sync->{max_size}) {
+			if ($self->{max_size}) {
 				$git->check_async($oid, \&check_size, $arg);
 			} else {
 				$git->cat_async($oid, \&v1_index_both, $arg);

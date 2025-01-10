@@ -397,7 +397,8 @@ sub _sync_inbox ($$$) {
 	if (defined(my $err = _ibx_index_reject($ibx))) {
 		return "W: skipping $ekey ($err)";
 	}
-	$sync->{ibx} = $ibx;
+	$sync->{ibx} = $ibx; # FIXME: eliminate
+	local $self->{ibx} = $ibx;
 	$self->{nrec} = 0;
 	my $v = $ibx->version;
 	if ($v == 2) {
