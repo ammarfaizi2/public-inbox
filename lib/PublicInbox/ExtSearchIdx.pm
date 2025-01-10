@@ -417,10 +417,7 @@ sub _sync_inbox ($$$) {
 	} else {
 		return "E: $ekey unsupported inbox version (v$v)";
 	}
-	for my $unit (@{delete($self->{todo}) // []}) {
-		last if $self->{quit};
-		index_todo($self, $sync, $unit);
-	}
+	PublicInbox::V2Writable::process_todo $self, $sync;
 	$self->{midx}->index_ibx($ibx) unless $self->{quit};
 	$ibx->git->cleanup; # done with this inbox, now
 	undef;

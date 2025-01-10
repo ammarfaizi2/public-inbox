@@ -1122,7 +1122,6 @@ sub index_xap_step ($$$$;$) {
 
 sub index_todo ($$$) {
 	my ($self, $sync, $unit) = @_;
-	return if $self->{quit};
 	unindex_todo($self, $sync, $unit);
 	my $stk = delete($unit->{stack}) or return;
 	my $all = $self->git; # initialize self->{ibx}->{git}
@@ -1195,6 +1194,14 @@ sub xapian_only ($;$$) {
 	$self->done;
 }
 
+sub process_todo ($$) {
+	my ($self, $sync) = @_;
+	for my $unit (@{delete($self->{todo}) // []}) {
+		last if $self->{quit};
+		$self->index_todo($sync, $unit); # may be ExtSearchIdx
+	}
+}
+
 # public, called by public-inbox-index
 sub index_sync {
 	my ($self, $opt) = @_;
@@ -1252,7 +1259,7 @@ sub index_sync {
 		}
 	}
 	# work forwards through history
-	index_todo($self, $sync, $_) for @{delete($self->{todo}) // []};
+	process_todo $self, $sync;
 	$self->{oidx}->rethread_done($opt) unless $self->{quit};
 	$self->done;
 
