@@ -402,6 +402,7 @@ sub _sync_inbox ($$$) {
 	$self->{nrec} = 0;
 	local $self->{epoch_max};
 	my $v = $ibx->version;
+	local $self->{todo}; # set by sync_prepare
 	if ($v == 2) {
 		$self->{epoch_max} = $ibx->max_git_epoch // return;
 		sync_prepare($self, $sync); # or return # TODO: once MiscIdx is stable
@@ -412,11 +413,11 @@ sub _sync_inbox ($$$) {
 			return "E: $ibx->{inboxdir} is not indexed";
 		my $stk = prepare_stack $self, $lc ? "$lc..$head" : $head;
 		my $unit = { stack => $stk, git => $ibx->git };
-		push @{$sync->{todo}}, $unit;
+		push @{$self->{todo}}, $unit;
 	} else {
 		return "E: $ekey unsupported inbox version (v$v)";
 	}
-	for my $unit (@{delete($sync->{todo}) // []}) {
+	for my $unit (@{delete($self->{todo}) // []}) {
 		last if $self->{quit};
 		index_todo($self, $sync, $unit);
 	}

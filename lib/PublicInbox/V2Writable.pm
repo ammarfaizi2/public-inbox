@@ -965,7 +965,7 @@ sub sync_prepare ($$) {
 		my $nr = $stk ? $stk->num_records : 0;
 		$pr->("$nr\n") if $pr;
 		$unit->{stack} = $stk; # may be undef
-		unshift @{$sync->{todo}}, $unit;
+		unshift @{$self->{todo}}, $unit;
 		$regen_max += $nr;
 	}
 	return 0 if $self->{quit};
@@ -1228,10 +1228,8 @@ sub index_sync {
 	$self->{oidx}->rethread_prepare($opt);
 	local $self->{reindex} = $opt->{reindex};
 	local $self->{mm_tmp};
-	my $sync = {
-		self => $self,
-		ibx => $self->{ibx},
-	};
+	local $self->{todo}; # sync_prepare
+	my $sync = { self => $self, ibx => $self->{ibx} };
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
@@ -1254,7 +1252,7 @@ sub index_sync {
 		}
 	}
 	# work forwards through history
-	index_todo($self, $sync, $_) for @{delete($sync->{todo}) // []};
+	index_todo($self, $sync, $_) for @{delete($self->{todo}) // []};
 	$self->{oidx}->rethread_done($opt) unless $self->{quit};
 	$self->done;
 
