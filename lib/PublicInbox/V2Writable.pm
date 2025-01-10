@@ -701,7 +701,7 @@ sub reindex_checkpoint ($$) {
 	$self->git->async_wait_all;
 	$self->update_last_commit($sync);
 	$self->{need_checkpoint} = 0;
-	my $mm_tmp = $sync->{mm_tmp};
+	my $mm_tmp = $self->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
 	die 'BUG: {im} during reindex' if $self->{im};
 	if ($self->{ibx_map} && !$self->{checkpoint_unlocks}) {
@@ -766,7 +766,7 @@ sub index_oid { # cat_async callback
 		}
 	}
 	$mid0 //= do { # is this a number we got before?
-		$num = $arg->{mm_tmp}->num_for($mids->[0]);
+		$num = $self->{mm_tmp}->num_for($mids->[0]);
 
 		# don't clobber existing if Message-ID is reused:
 		if (my $x = defined($num) ? $oidx->get_art($num) : undef) {
@@ -776,7 +776,7 @@ sub index_oid { # cat_async callback
 	};
 	if (!defined($num)) {
 		for (my $i = $#$mids; $i >= 1; $i--) {
-			$num = $arg->{mm_tmp}->num_for($mids->[$i]);
+			$num = $self->{mm_tmp}->num_for($mids->[$i]);
 			if (defined($num)) {
 				$mid0 = $mids->[$i];
 				last;
@@ -784,7 +784,7 @@ sub index_oid { # cat_async callback
 		}
 	}
 	if (defined($num)) {
-		$arg->{mm_tmp}->num_delete($num);
+		$self->{mm_tmp}->num_delete($num);
 	} else { # never seen
 		$num = $self->{mm}->mid_insert($mids->[0]);
 		if (defined($num)) {
@@ -1228,6 +1228,7 @@ sub index_sync {
 	$self->{mg}->fill_alternates;
 	$self->{oidx}->rethread_prepare($opt);
 	local $self->{reindex} = $opt->{reindex};
+	local $self->{mm_tmp};
 	my $sync = {
 		self => $self,
 		ibx => $self->{ibx},
@@ -1245,12 +1246,12 @@ sub index_sync {
 		# only for batch performance.
 		$self->{mm}->{dbh}->rollback;
 		$self->{mm}->{dbh}->begin_work;
-		$sync->{mm_tmp} =
+		$self->{mm_tmp} =
 			$self->{mm}->tmp_clone($self->{ibx}->{inboxdir});
 
 		# xapian_only works incrementally w/o --reindex
 		if ($seq && !$opt->{reindex}) {
-			$art_beg = $sync->{mm_tmp}->max || -1;
+			$art_beg = $self->{mm_tmp}->max || -1;
 			$art_beg++;
 		}
 	}
@@ -1266,7 +1267,7 @@ sub index_sync {
 
 	my $quit_warn;
 	# deal with Xapian shards sequentially
-	if ($seq && delete($sync->{mm_tmp})) {
+	if ($seq && delete($self->{mm_tmp})) {
 		if ($self->{quit}) {
 			$quit_warn = 1;
 		} else {
