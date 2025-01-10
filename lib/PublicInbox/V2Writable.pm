@@ -912,12 +912,12 @@ sub sync_prepare ($$) {
 	$sync->{ranges} = sync_ranges($self, $sync);
 	my $pr = $self->{-opt}->{-progress};
 	my $regen_max = 0;
-	my $head = $sync->{ibx}->{ref_head} || 'HEAD';
+	my $head = $self->{ibx}->{ref_head} || 'HEAD';
 	my $pfx;
 	local $self->{D}; # delete state
 	if ($pr) {
-		($pfx) = ($sync->{ibx}->{inboxdir} =~ m!([^/]+)\z!g);
-		$pfx //= $sync->{ibx}->{inboxdir};
+		($pfx) = ($self->{ibx}->{inboxdir} =~ m!([^/]+)\z!g);
+		$pfx //= $self->{ibx}->{inboxdir};
 	}
 
 	my $reindex_heads;
@@ -927,7 +927,7 @@ sub sync_prepare ($$) {
 		# what's in the per-inbox index.
 		$reindex_heads = [];
 		my $v = PublicInbox::Search::SCHEMA_VERSION;
-		my $mm = $sync->{ibx}->mm;
+		my $mm = $self->{ibx}->mm;
 		for my $i (0..$sync->{epoch_max}) {
 			$reindex_heads->[$i] = $mm->last_commit_xap($v, $i);
 		}
@@ -938,7 +938,7 @@ sub sync_prepare ($$) {
 	}
 	$self->{max_size} = $self->{-opt}->{max_size} and
 		$self->{index_oid} = $self->can('index_oid');
-	my $git_pfx = "$sync->{ibx}->{inboxdir}/git";
+	my $git_pfx = "$self->{ibx}->{inboxdir}/git";
 	for (my $i = $sync->{epoch_max}; $i >= 0; $i--) {
 		my $git_dir = "$git_pfx/$i.git";
 		-d $git_dir or next; # missing epochs are fine

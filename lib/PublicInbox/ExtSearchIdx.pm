@@ -375,8 +375,8 @@ sub unindex_oid { # git->cat_async callback for 'd'
 sub last_commits {
 	my ($self, $sync) = @_;
 	my $heads = [];
-	my $ekey = $sync->{ibx}->eidx_key;
-	my $uv = $sync->{ibx}->uidvalidity;
+	my $ekey = $self->{ibx}->eidx_key;
+	my $uv = $self->{ibx}->uidvalidity;
 	for my $i (0..$sync->{epoch_max}) {
 		$heads->[$i] = $self->{oidx}->eidx_meta("lc-v2:$ekey//$uv;$i");
 	}
@@ -1170,7 +1170,7 @@ sub update_last_commit { # overrides V2Writable
 	my $unit = $sync->{unit} // return;
 	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
-	my $ibx = $sync->{ibx} or die 'BUG: {ibx} missing';
+	my $ibx = $self->{ibx} or die 'BUG: {ibx} missing';
 	my $ekey = $ibx->eidx_key;
 	my $uv = $ibx->uidvalidity;
 	my $epoch = $unit->{epoch};
