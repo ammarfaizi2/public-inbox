@@ -230,7 +230,7 @@ sub do_xpost ($$) {
 		$self->{oidx}->add_xref3($docid, $xnum, $oid, $eidx_key);
 		my $idx = $self->idx_shard($docid);
 		$idx->ipc_do('add_eidx_info', $docid, $eidx_key, $eml);
-		apply_boost($req, $smsg) if $req->{boost_in_use};
+		apply_boost($req, $smsg) if $self->{boost_in_use};
 	} else { # 'd' no {xnum}
 		$self->git->async_wait_all;
 		$oid = pack('H*', $oid);
@@ -1138,7 +1138,7 @@ sub eidx_sync { # main entry point
 
 	if (scalar(grep { defined($_->{boost}) } @{$self->{ibx_known}})) {
 		$sync->{id2pos} //= prep_id2pos($self);
-		$sync->{boost_in_use} = 1;
+		$self->{boost_in_use} = 1;
 	}
 
 	if (my $msgids = delete($opt->{dedupe})) {
@@ -1329,6 +1329,7 @@ sub eidx_reload { # -extindex --watch SIGHUP handler
 		delete $self->{-resync_queue};
 		delete $self->{-ibx_ary_known};
 		delete $self->{-ibx_ary_active};
+		delete $self->{boost_in_use};
 		$self->{ibx_known} = [];
 		$self->{ibx_active} = [];
 		%{$self->{ibx_map}} = ();
