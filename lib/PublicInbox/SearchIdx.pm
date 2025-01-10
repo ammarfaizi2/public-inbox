@@ -802,7 +802,7 @@ sub v1_index_both { # git->cat_async callback
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
 	my $smsg = bless { blob => $oid }, 'PublicInbox::Smsg';
 	$smsg->set_bytes($$bref, $size);
-	my $self = $sync->{sidx};
+	my $self = $sync->{self};
 	update_checkpoint $self, $smsg->{bytes};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	my $eml = PublicInbox::Eml->new($bref);
@@ -818,7 +818,7 @@ sub v1_index_both { # git->cat_async callback
 sub v1_unindex_both { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $sync) = @_;
 	return if is_bad_blob($oid, $type, $size, $sync->{oid});
-	my $self = $sync->{sidx};
+	my $self = $sync->{self};
 	local $self->{current_info} = "$self->{current_info}: $oid";
 	v1_unindex_eml $self, $oid, PublicInbox::Eml->new($bref);
 	# may be undef if leftover
@@ -908,7 +908,7 @@ sub v1_process_stack ($$$) {
 	my ($self, $sync, $stk) = @_;
 	my $git = $sync->{ibx}->git;
 	$self->{nrec} = 0;
-	$sync->{sidx} = $self;
+	$sync->{self} = $self;
 	local $self->{need_checkpoint} = 0;
 	local $self->{latest_cmt};
 
