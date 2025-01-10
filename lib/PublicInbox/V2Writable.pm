@@ -695,11 +695,11 @@ sub atfork_child {
 	die "BUG: unexpected mm" if $self->{mm};
 }
 
-sub reindex_checkpoint ($$) {
-	my ($self, $sync) = @_;
+sub reindex_checkpoint ($) {
+	my ($self) = @_;
 
 	$self->git->async_wait_all;
-	$self->update_last_commit($sync);
+	$self->update_last_commit;
 	$self->{need_checkpoint} = 0;
 	my $mm_tmp = $self->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
@@ -815,7 +815,7 @@ sub index_oid { # cat_async callback
 
 # only update last_commit for $i on reindex iff newer than current
 sub update_last_commit {
-	my ($self, $sync, $stk) = @_;
+	my ($self, $stk) = @_;
 	my $unit = $self->{unit} // return;
 	my $latest_cmt = $stk ? $stk->{latest_cmt} : $self->{latest_cmt};
 	defined($latest_cmt) or return;
@@ -834,7 +834,7 @@ sub update_last_commit {
 }
 
 sub last_commits {
-	my ($self, $sync) = @_;
+	my ($self) = @_;
 	my $heads = [];
 	for (my $i = $self->{epoch_max}; $i >= 0; $i--) {
 		$heads->[$i] = last_epoch_commit($self, $i);
@@ -844,8 +844,7 @@ sub last_commits {
 
 # returns a revision range for git-log(1)
 sub log_range ($$$) {
-	my ($sync, $unit, $tip) = @_;
-	my $self = $sync->{self};
+	my ($self, $unit, $tip) = @_;
 	my $opt = $self->{-opt};
 	my $pr = $opt->{-progress} if (($opt->{verbose} || 0) > 1);
 	my $i = $unit->{epoch};
@@ -863,7 +862,7 @@ sub log_range ($$$) {
 	my $range = "$cur..$tip";
 	$pr->("$i.git checking contiguity... ") if $pr;
 	my $git = $unit->{git};
-	if (is_ancestor($sync->{self}->git, $cur, $tip)) { # common case
+	if (is_ancestor($self->git, $cur, $tip)) { # common case
 		$pr->("OK\n") if $pr;
 		my $n = $git->qx(qw(rev-list --count), $range);
 		chomp($n);
@@ -906,9 +905,9 @@ starting at $range
 # overridden by ExtSearchIdx
 sub artnum_max { $_[0]->{mm}->num_highwater }
 
-sub sync_prepare ($$) {
-	my ($self, $sync) = @_;
-	$self->{ranges} = sync_ranges($self, $sync);
+sub sync_prepare ($) {
+	my ($self) = @_;
+	$self->{ranges} = sync_ranges($self);
 	my $pr = $self->{-opt}->{-progress};
 	my $regen_max = 0;
 	my $head = $self->{ibx}->{ref_head} || 'HEAD';
@@ -933,7 +932,7 @@ sub sync_prepare ($$) {
 	} elsif ($self->{reindex}) { # V2 inbox
 		# reindex stops at the current heads and we later
 		# rerun index_sync without {reindex}
-		$reindex_heads = $self->last_commits($sync);
+		$reindex_heads = $self->last_commits;
 	}
 	$self->{max_size} = $self->{-opt}->{max_size} and
 		$self->{index_oid} = $self->can('index_oid');
@@ -951,7 +950,7 @@ sub sync_prepare ($$) {
 			next if $?; # new repo
 			chomp $tip;
 		}
-		my $range = log_range($sync, $unit, $tip) or next;
+		my $range = log_range($self, $unit, $tip) or next;
 		# can't use 'rev-list --count' if we use --diff-filter
 		$pr->("$pfx $i.git counting $range ... ") if $pr;
 		# Don't bump num_highwater on --reindex by using {D}.
@@ -978,7 +977,7 @@ sub sync_prepare ($$) {
 		for my $oid (@leftovers) {
 			last if $self->{quit};
 			$oid = unpack('H*', $oid);
-			my $req = { %$sync, oid => $oid };
+			my $req = { self => $self, oid => $oid };
 			$self->git->cat_async($oid, $unindex_oid, $req);
 		}
 		$self->git->async_wait_all;
@@ -1048,8 +1047,8 @@ sub git { $_[0]->{ibx}->git }
 
 # this is rare, it only happens when we get discontiguous history in
 # a mirror because the source used -purge or -edit
-sub unindex_todo ($$$) {
-	my ($self, $sync, $unit) = @_;
+sub unindex_todo ($$) {
+	my ($self, $unit) = @_;
 	my $unindex_range = delete($unit->{unindex_range}) // return;
 	my $unindexed = $self->{unindexed} //= {}; # $oidbin => [$num, $mid0]
 	my $before = scalar keys %$unindexed;
@@ -1060,7 +1059,8 @@ sub unindex_todo ($$$) {
 	my $unindex_oid = $self->can('unindex_oid');
 	while (<$fh>) {
 		/\A:\d{6} 100644 $OID ($OID) [AM]\tm$/o or next;
-		$self->git->cat_async($1, $unindex_oid, { %$sync, oid => $1 });
+		$self->git->cat_async($1, $unindex_oid,
+					{ self => $self, oid => $1 });
 	}
 	$fh->close or die "git log failed: \$?=$?";
 	$self->git->async_wait_all;
@@ -1074,10 +1074,10 @@ sub unindex_todo ($$$) {
 				--prune=all --quiet)));
 }
 
-sub sync_ranges ($$) {
-	my ($self, $sync) = @_;
+sub sync_ranges ($) {
+	my ($self) = @_;
 	my $reindex = $self->{reindex};
-	return $self->last_commits($sync) unless $reindex;
+	return $self->last_commits unless $reindex;
 	return [] if ref($reindex) ne 'HASH';
 
 	my $ranges = $reindex->{from}; # arrayref;
@@ -1094,8 +1094,8 @@ sub index_xap_only { # git->cat_async callback
 	$idx->index_eml(PublicInbox::Eml->new($bref), $smsg);
 }
 
-sub index_xap_step ($$$$;$) {
-	my ($self, $sync, $beg, $end, $step) = @_;
+sub index_xap_step ($$$;$) {
+	my ($self, $beg, $end, $step) = @_;
 	return if $beg > $end; # nothing to do
 
 	$step //= $self->{shards};
@@ -1114,14 +1114,14 @@ sub index_xap_step ($$$$;$) {
 		my $n = $self->{transact_bytes} += $smsg->{bytes};
 		if ($n >= $self->{batch_bytes}) {
 			$self->{nrec} = $num;
-			reindex_checkpoint($self, $sync);
+			reindex_checkpoint $self;
 		}
 	}
 }
 
-sub index_todo ($$$) {
-	my ($self, $sync, $unit) = @_;
-	unindex_todo($self, $sync, $unit);
+sub index_todo ($$) {
+	my ($self, $unit) = @_;
+	unindex_todo($self, $unit);
 	my $stk = delete($unit->{stack}) or return;
 	my $all = $self->git; # initialize self->{ibx}->{git}
 	my $index_oid = $self->can('index_oid');
@@ -1140,11 +1140,11 @@ sub index_todo ($$$) {
 		if ($self->{quit}) {
 			warn "waiting to quit...\n";
 			$all->async_wait_all;
-			$self->update_last_commit($sync);
+			$self->update_last_commit;
 			return;
 		}
 		my $req = {
-			%$sync,
+			self => $self,
 			autime => $at,
 			cotime => $ct,
 			oid => $oid,
@@ -1159,33 +1159,31 @@ sub index_todo ($$$) {
 		} elsif ($f eq 'd') {
 			$all->cat_async($oid, $unindex_oid, $req);
 		}
-		reindex_checkpoint($self, $sync) if $self->{need_checkpoint};
+		reindex_checkpoint $self if $self->{need_checkpoint};
 	}
 	$all->async_wait_all;
-	$self->update_last_commit($sync, $stk);
+	$self->update_last_commit($stk);
 }
 
-sub xapian_only ($;$$) {
-	my ($self, $sync, $art_beg) = @_;
+sub xapian_only ($;$) {
+	my ($self, $art_beg) = @_;
 	my $seq = $self->{-opt}->{'sequential-shard'};
 	$art_beg //= 0;
 	local $self->{parallel} = 0 if $seq;
 	$self->idx_init($self->{-opt}); # acquire lock
 	if (my $art_end = $self->{ibx}->mm->max) {
 		$self->{-regen_fmt} //= "%u/?\n";
-		$sync //= { self => $self };
 		if ($seq || !$self->{parallel}) {
 			my $shard_end = $self->{shards} - 1;
 			for my $i (0..$shard_end) {
 				last if $self->{quit};
-				index_xap_step $self, $sync, $art_beg + $i,
-						$art_end;
+				index_xap_step $self, $art_beg + $i, $art_end;
 				if ($i != $shard_end) {
-					reindex_checkpoint($self, $sync);
+					reindex_checkpoint $self;
 				}
 			}
 		} else { # parallel (maybe)
-			index_xap_step $self, $sync, $art_beg, $art_end, 1;
+			index_xap_step $self, $art_beg, $art_end, 1;
 		}
 	}
 	$self->git->async_wait_all;
@@ -1193,11 +1191,11 @@ sub xapian_only ($;$$) {
 	$self->done;
 }
 
-sub process_todo ($$) {
-	my ($self, $sync) = @_;
+sub process_todo ($) {
+	my ($self) = @_;
 	for my $unit (@{delete($self->{todo}) // []}) {
 		last if $self->{quit};
-		$self->index_todo($sync, $unit); # may be ExtSearchIdx
+		$self->index_todo($unit); # may be ExtSearchIdx
 	}
 }
 
@@ -1237,13 +1235,12 @@ sub index_sync {
 	local $self->{todo}; # sync_prepare
 	local $self->{ranges};
 	local $self->{unindexed};
-	my $sync = { self => $self };
 	my $quit = PublicInbox::SearchIdx::quit_cb $self;
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
 	local $SIG{TERM} = $quit;
 
-	if (sync_prepare($self, $sync)) {
+	if (sync_prepare($self)) {
 		# tmp_clone seems to fail if inside a transaction, so
 		# we rollback here (because we opened {mm} for reading)
 		# Note: we do NOT rely on DBI transactions for atomicity;
@@ -1260,7 +1257,7 @@ sub index_sync {
 		}
 	}
 	# work forwards through history
-	process_todo $self, $sync;
+	process_todo $self;
 	$self->{oidx}->rethread_done($opt) unless $self->{quit};
 	$self->done;
 
@@ -1276,7 +1273,7 @@ sub index_sync {
 			$quit_warn = 1;
 		} else {
 			$self->{ibx}->{indexlevel} = $idxlevel;
-			xapian_only($self, $sync, $art_beg);
+			xapian_only $self, $art_beg;
 			$quit_warn = 1 if $self->{quit};
 		}
 	}
@@ -1298,7 +1295,6 @@ sub index_sync {
 	if ($opt->{reindex} && !$self->{quit} &&
 			!grep(defined, @$opt{qw(since until)})) {
 		my %again = %$opt;
-		$sync = undef;
 		delete @again{qw(rethread reindex -skip_lock)};
 		index_sync($self, \%again);
 	}
