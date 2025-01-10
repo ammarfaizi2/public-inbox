@@ -894,7 +894,7 @@ sub v1_checkpoint ($$;$) {
 	idx_release($self, $nrec);
 	# let another process do some work...
 	if (my $pr = $self->{-opt}->{-progress}) {
-		$pr->("indexed $nrec/$sync->{ntodo}\n") if $nrec;
+		$pr->("indexed $nrec/$self->{ntodo}\n") if $nrec;
 	}
 	if (!$stk && !$self->{quit}) { # more to come
 		begin_txn_lazy($self);
@@ -1107,8 +1107,8 @@ sub _index_sync {
 	my $range = $lx eq '' ? $tip : "$lx..$tip";
 	$pr->("counting changes\n\t$range ... ") if $pr;
 	my $stk = prepare_stack($self, $sync, $range);
-	$sync->{ntodo} = $stk ? $stk->num_records : 0;
-	$pr->("$sync->{ntodo}\n") if $pr; # continue previous line
+	local $self->{ntodo} = $stk ? $stk->num_records : 0;
+	$pr->("$self->{ntodo}\n") if $pr; # continue previous line
 	v1_process_stack($self, $sync, $stk) if !$self->{quit};
 }
 
