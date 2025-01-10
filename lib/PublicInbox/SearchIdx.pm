@@ -850,9 +850,10 @@ sub index_sync {
 
 sub check_size { # check_async cb for -index --max-size=...
 	my (undef, $oid, $type, $size, $arg) = @_;
-	($type // '') eq 'blob' or die "E: bad $oid in $arg->{git}->{git_dir}";
+	($type // '') eq 'blob' or
+		die "E: bad $oid in $arg->{ibx}->{git}->{git_dir}";
 	if ($size <= $arg->{max_size}) {
-		$arg->{git}->cat_async($oid, $arg->{index_oid}, $arg);
+		$arg->{ibx}->{git}->cat_async($oid, $arg->{index_oid}, $arg);
 	} else {
 		warn "W: skipping $oid ($size > $arg->{max_size})\n";
 	}
@@ -931,7 +932,6 @@ sub v1_process_stack ($$$) {
 			$arg->{autime} = $at;
 			$arg->{cotime} = $ct;
 			if ($sync->{max_size}) {
-				$arg->{git} = $git;
 				$git->check_async($oid, \&check_size, $arg);
 			} else {
 				$git->cat_async($oid, \&v1_index_both, $arg);

@@ -1126,7 +1126,7 @@ sub index_todo ($$$) {
 	return if $sync->{quit};
 	unindex_todo($self, $sync, $unit);
 	my $stk = delete($unit->{stack}) or return;
-	my $all = $self->git;
+	my $all = $self->git; # initialize self->{ibx}->{git}
 	my $index_oid = $self->can('index_oid');
 	my $unindex_oid = $self->can('unindex_oid');
 	my $pfx;
@@ -1155,7 +1155,6 @@ sub index_todo ($$$) {
 		};
 		if ($f eq 'm') {
 			if ($sync->{max_size}) {
-				$req->{git} = $all;
 				$all->check_async($oid, \&check_size, $req);
 			} else {
 				$all->cat_async($oid, $index_oid, $req);
