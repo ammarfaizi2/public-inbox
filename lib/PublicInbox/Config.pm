@@ -186,7 +186,10 @@ sub git_config_dump {
 	my %env;
 	my $opt = { 2 => $lei->{2} // 2 };
 	if (@opt_c) {
-		unshift(@opt_c, '-c', "include.path=$file") if defined($file);
+		if (defined $file) {
+			$file = rel2abs_collapsed($file); # for $opt->{-C}
+			unshift @opt_c, '-c', "include.path=$file";
+		}
 		tmp_cmd_opt(\%env, $opt);
 	}
 	my @cmd = (git_exe, @opt_c, qw(config -z -l --includes));
