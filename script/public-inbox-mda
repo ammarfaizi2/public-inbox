@@ -100,8 +100,7 @@ if ($spamc) {
 } else { # no spam checking configured:
 	$spam_ok = 1;
 	$emm = $ems;
-	my $fh = $emm->fh;
-	read($fh, $str, -s $fh);
+	PublicInbox::IO::read_all $emm->fh, undef, \$str;
 }
 $do_exit->(0) unless $spam_ok;
 
