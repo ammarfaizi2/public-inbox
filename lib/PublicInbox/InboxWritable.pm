@@ -16,14 +16,8 @@ use Fcntl qw(O_RDONLY O_NONBLOCK);
 
 sub new {
 	my ($class, $ibx, $creat_opt) = @_;
-	return $ibx if ref($ibx) eq $class;
-	my $self = bless $ibx, $class;
-
-	# TODO: maybe stop supporting this
-	if ($creat_opt) { # for { nproc => $N }
-		$self->{-creat_opt} = $creat_opt;
-		init_inbox($self) if $self->version == 1;
-	}
+	my $self = bless $ibx, $class; # idempotent
+	$self->{-creat_opt} = $creat_opt if $creat_opt; # for { nproc => $N }
 	$self;
 }
 
@@ -77,8 +71,8 @@ sub importer {
 		$v2w->{parallel} = $parallel if defined $parallel;
 		$v2w;
 	} elsif ($v == 1) {
-		my @arg = (undef, undef, undef, $self);
-		PublicInbox::Import->new(@arg);
+		init_inbox($self) if $self->{-creat_opt};
+		PublicInbox::Import->new(undef, undef, undef, $self);
 	} else {
 		$! = 78; # EX_CONFIG 5.3.5 local configuration error
 		die "unsupported inbox version: $v\n";
