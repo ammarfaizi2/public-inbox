@@ -20,7 +20,7 @@ use PublicInbox::LEI;
 use Fcntl qw(SEEK_SET F_SETFL O_APPEND O_RDWR);
 use PublicInbox::ContentHash qw(git_sha);
 use POSIX qw(strftime);
-use autodie qw(close open read seek truncate);
+use autodie qw(close open pipe read seek truncate);
 use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 use PublicInbox::OnDestroy;
 
@@ -544,16 +544,16 @@ sub do_query {
 				$l2m->{base_type} =~ /\A(?:maildir|mbox)\z/) {
 			# setup two barriers to coordinate ->has_entries
 			# between l2m workers
-			pipe(my ($a_r, $a_w)) or die "pipe: $!";
+			pipe my $a_r, my $a_w;
 			fcntl($a_r, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
-			pipe(my ($b_r, $b_w)) or die "pipe: $!";
+			pipe my $b_r, my $b_w;
 			fcntl($b_r, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 			$l2m->{au_peers} = [ $a_r, $a_w, $b_r, $b_w ];
 		}
 		$l2m->wq_workers_start('lei2mail', undef,
 					$lei->oldset, { lei => $lei },
 					\&xsearch_done_wait, $lei);
-		pipe($lei->{startq}, $lei->{au_done}) or die "pipe: $!";
+		pipe $lei->{startq}, $lei->{au_done};
 		fcntl($lei->{startq}, $F_SETPIPE_SZ, 4096) if $F_SETPIPE_SZ;
 		delete $l2m->{au_peers};
 		close(delete $l2m->{-wq_s2}); # share wq_s1 with lei_xsearch
