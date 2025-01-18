@@ -139,15 +139,15 @@ sub default_file {
 	$ENV{PI_CONFIG} // (config_dir() . '/config');
 }
 
-sub config_fh_parse ($$$) {
-	my ($fh, $rs, $fs) = @_;
+sub config_fh_parse ($) {
+	my ($fh) = @_;
 	my (%rv, %seen, @section_order, $line, $k, $v, $section, $cur, $i);
-	local $/ = $rs;
+	local $/ = "\0";
 	while (defined($line = <$fh>)) { # perf critical with giant configs
-		$i = index($line, $fs);
-		# $i may be -1 if $fs not found and it's a key-only entry
+		$i = index($line, "\n");
+		# $i may be -1 if "\n" isn't found and it's a key-only entry
 		# (meaning boolean true).  Either way the -1 will drop the
-		# $rs either from $k or $v.
+		# "\n" either from $k or $v.
 		$k = substr($line, 0, $i);
 		$v = $i >= 0 ? substr($line, $i + 1, -1) : 1;
 		$section = substr($k, 0, rindex($k, '.'));
@@ -195,7 +195,7 @@ sub git_config_dump {
 	my @cmd = (git_exe, @opt_c, qw(config -z -l --includes));
 	push(@cmd, '-f', $file) if !@opt_c && defined($file);
 	my $fh = popen_rd(\@cmd, \%env, $opt);
-	my $rv = config_fh_parse($fh, "\0", "\n");
+	my $rv = config_fh_parse $fh;
 	$fh->close or die "@cmd failed: \$?=$?\n";
 	$rv->{-opt_c} = \@opt_c if @opt_c; # for ->urlmatch
 	$rv->{-f} = $file;

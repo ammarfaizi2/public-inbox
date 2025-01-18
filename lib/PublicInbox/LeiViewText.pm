@@ -8,6 +8,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::MsgIter qw(msg_part_text);
 use PublicInbox::MID qw(references);
+use PublicInbox::Config;
 use PublicInbox::View;
 use PublicInbox::Hval;
 use PublicInbox::ViewDiff;
@@ -75,7 +76,7 @@ sub new {
 	return $self unless $self->{color} //= -t $lei->{1};
 	my @cmd = (git_exe, qw(config -z --includes -l)); # reuse normal git cfg
 	my $r = popen_rd(\@cmd, undef, { 2 => $lei->{2} });
-	my $cfg = PublicInbox::Config::config_fh_parse($r, "\0", "\n");
+	my $cfg = PublicInbox::Config::config_fh_parse $r;
 	if (!$r->close) {
 		warn "# @cmd failed, no color (non-fatal \$?=$?)\n";
 		return $self;
