@@ -93,9 +93,6 @@ sub init_inbox {
 
 sub idx_shard ($$) {
 	my ($self, $num) = @_;
-	# FIXME: lei_store bug somewhere..
-	confess 'BUG: {idx_shards} unset' if !$self->{idx_shards};
-	confess 'BUG: {idx_shards} empty' if !@{$self->{idx_shards}};
 	$self->{idx_shards}->[$num % scalar(@{$self->{idx_shards}})];
 }
 
