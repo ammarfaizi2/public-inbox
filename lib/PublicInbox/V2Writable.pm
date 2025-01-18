@@ -45,13 +45,11 @@ sub count_shards ($) {
 }
 
 sub new {
-	# $creat may be any true value, or 0/undef.  A hashref is true,
-	# and $creat->{nproc} may be set to an integer
-	my ($class, $v2ibx, $creat) = @_;
-	$v2ibx = PublicInbox::InboxWritable->new($v2ibx);
+	my ($class, $v2ibx, $creat_opt) = @_;
+	$v2ibx = PublicInbox::InboxWritable->new($v2ibx, $creat_opt);
 	my $dir = $v2ibx->assert_usable_dir;
 	unless (-d $dir) {
-		die "$dir does not exist\n" if !$creat;
+		die "$dir does not exist\n" if !$creat_opt;
 		require File::Path;
 		File::Path::mkpath($dir);
 	}
@@ -72,7 +70,7 @@ sub new {
 		last_commit => [], # git epoch -> commit
 	};
 	$self->{oidx}->{-no_fsync} = 1 if $v2ibx->{-no_fsync};
-	$self->{shards} = count_shards($self) || nproc_shards($creat);
+	$self->{shards} = count_shards($self) || nproc_shards($creat_opt);
 	bless $self, $class;
 }
 

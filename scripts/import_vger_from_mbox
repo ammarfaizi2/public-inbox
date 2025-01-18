@@ -34,7 +34,7 @@ $ibx = PublicInbox::Inbox->new($ibx);
 unless ($dry_run) {
 	if ($version >= 2) {
 		require PublicInbox::V2Writable;
-		PublicInbox::V2Writable->new($ibx, 1)->init_inbox(0);
+		PublicInbox::V2Writable->new($ibx, {})->init_inbox(0);
 	} else {
 		system(qw(git init --bare -q), $inboxdir) == 0 or die;
 	}

@@ -313,7 +313,7 @@ eval {
 ok($@, 'V2Writable fails on non-existent dir');
 
 {
-	my $v2w = PublicInbox::V2Writable->new($tmp, 1);
+	my $v2w = PublicInbox::V2Writable->new($tmp, { nproc => 1 });
 	ok($v2w, 'creat flag works');
 	$v2w->{parallel} = 0;
 	$v2w->init_inbox(0);

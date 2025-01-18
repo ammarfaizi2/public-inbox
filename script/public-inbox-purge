@@ -39,7 +39,7 @@ my $n_purged = 0;
 
 foreach my $ibx (@ibxs) {
 	my $eml = PublicInbox::Eml->new($data);
-	my $v2w = PublicInbox::V2Writable->new($ibx, 0);
+	my $v2w = PublicInbox::V2Writable->new($ibx);
 
 	my $commits = $v2w->purge($eml) || [];
 

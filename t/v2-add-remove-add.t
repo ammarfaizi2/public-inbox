@@ -26,7 +26,7 @@ Message-ID: <a-mid@b>
 
 hello world
 EOF
-my $im = PublicInbox::V2Writable->new($ibx, 1);
+my $im = PublicInbox::V2Writable->new($ibx, { nproc => 1 });
 $im->{parallel} = 0;
 ok($im->add($mime), 'message added');
 ok($im->remove($mime), 'message removed');
