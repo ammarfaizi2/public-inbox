@@ -6,6 +6,7 @@ package PublicInbox::InboxWritable;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Inbox PublicInbox::Umask Exporter);
+use autodie qw(open);
 use PublicInbox::Import;
 use PublicInbox::IO qw(read_all);
 use PublicInbox::Filter::Base qw(REJECT);
@@ -49,8 +50,7 @@ sub _init_v1 {
 		undef $mm; # ->created_at set
 		$sidx->commit_txn_lazy;
 	} else {
-		open my $fh, '>>', "$self->{inboxdir}/ssoma.lock" or
-			die "$self->{inboxdir}/ssoma.lock: $!\n";
+		open my $fh, '>>', "$self->{inboxdir}/ssoma.lock";
 	}
 }
 
