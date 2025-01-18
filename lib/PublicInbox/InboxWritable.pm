@@ -29,7 +29,8 @@ sub assert_usable_dir {
 }
 
 sub _init_v1 {
-	my ($self, $skip_artnum) = @_;
+	my ($self) = @_;
+	my $skip_artnum = ($self->{-creat_opt} // {})->{'skip-artnum'};
 	if (defined($self->{indexlevel}) || defined($skip_artnum)) {
 		require PublicInbox::SearchIdx;
 		require PublicInbox::Msgmap;
@@ -49,14 +50,13 @@ sub _init_v1 {
 }
 
 sub init_inbox {
-	my ($self, $shards, $skip_epoch, $skip_artnum) = @_;
+	my ($self, $shards, $skip_epoch) = @_;
 	if ($self->version == 1) {
 		my $dir = assert_usable_dir($self);
 		PublicInbox::Import::init_bare($dir);
-		$self->with_umask(\&_init_v1, $self, $skip_artnum);
+		$self->with_umask(\&_init_v1, $self);
 	} else {
-		my $v2w = importer($self);
-		$v2w->init_inbox($shards, $skip_epoch, $skip_artnum);
+		importer($self)->init_inbox($shards, $skip_epoch);
 	}
 }
 

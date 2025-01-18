@@ -34,15 +34,16 @@ EOF
 require PublicInbox::Admin;
 PublicInbox::Admin::require_or_die('-base');
 
-my ($version, $indexlevel, $skip_epoch, $skip_artnum, $jobs, $show_help);
+my ($version, $indexlevel, $skip_epoch, $jobs, $show_help);
 my $skip_docdata;
 my $ng = '';
 my (@c_extra, @chdir);
+my $creat_opt = {};
 my %opts = (
 	'V|version=i' => \$version,
 	'L|index-level|indexlevel=s' => \$indexlevel,
 	'S|skip|skip-epoch=i' => \$skip_epoch,
-	'skip-artnum=i' => \$skip_artnum,
+	'skip-artnum=i' => \($creat_opt->{'skip-artnum'}),
 	'j|jobs=i' => \$jobs,
 	'ng|newsgroup=s' => \$ng,
 	'skip-docdata' => \$skip_docdata,
@@ -195,7 +196,6 @@ my $ibx = PublicInbox::Inbox->new({
 	indexlevel => $indexlevel,
 });
 
-my $creat_opt = {};
 if (defined $jobs) {
 	die "--jobs is only supported for -V2 inboxes\n" if $version == 1;
 	die "--jobs=$jobs must be >= 1\n" if $jobs <= 0;
@@ -210,7 +210,7 @@ if ($skip_docdata) {
 		die "--skip-docdata ignored with --indexlevel=basic\n";
 	$ibx->{-skip_docdata} = $skip_docdata;
 }
-$ibx->init_inbox(0, $skip_epoch, $skip_artnum);
+$ibx->init_inbox(0, $skip_epoch);
 
 my $f = "$inboxdir/description";
 if (sysopen $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
