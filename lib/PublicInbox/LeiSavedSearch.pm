@@ -85,7 +85,6 @@ sub list {
 	print $fh "[include]\n";
 	opendir(my $dh, $lss_dir);
 	for my $d (sort(grep(!/\A\.\.?\z/, readdir($dh)))) {
-		next if $d eq '.' || $d eq '..';
 		my $p = "$lss_dir/$d/lei.saved-search";
 		say $fh "\tpath = ", cquote_val($p) if -f $p;
 	}
