@@ -91,7 +91,7 @@ sub list {
 	$fh->flush or die "flush: $fh";
 	my $cfg = $lei->cfg_dump($fh->filename);
 	my $out = $cfg ? $cfg->get_all('lei.q.output') : [];
-	s!$LOCAL_PFX!! for @$out;;
+	s!$LOCAL_PFX!! for @$out;
 	@$out;
 }
 

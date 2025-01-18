@@ -48,7 +48,7 @@ test_lei({ daemon_only => 1 }, sub {
 		is($pid, $pid_again, 'pid unchanged after failed reqs');
 		my @after = sort(glob("$d/*"));
 		is_deeply(\@before, \@after, 'open files unchanged') or
-			diag explain([\@before, \@after]);;
+			diag explain([\@before, \@after]);
 	}
 	lei_ok(qw(daemon-kill));
 	is($lei_out, '', 'no output from daemon-kill');
