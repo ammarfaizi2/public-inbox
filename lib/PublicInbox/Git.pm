@@ -11,8 +11,8 @@ use strict;
 use v5.10.1;
 use parent qw(Exporter PublicInbox::DS);
 use PublicInbox::DS qw(now);
-use autodie qw(socketpair read);
-use POSIX ();
+use autodie qw(socketpair sysread sysseek truncate);
+use POSIX qw(SEEK_SET);
 use Socket qw(AF_UNIX SOCK_STREAM);
 use PublicInbox::Syscall qw(EPOLLIN EPOLLET);
 use Errno qw(EAGAIN);
@@ -145,11 +145,13 @@ sub object_format {
 sub last_check_err {
 	my ($self) = @_;
 	my $fh = $self->{err_c} or return '';
-	sysseek($fh, 0, 0) or $self->fail("sysseek: $!");
 	my $size = -s $fh or return '';
-	sysread($fh, my $buf, $size) // $self->fail("sysread: $!");
-	truncate($fh, 0) or $self->fail("truncate: $!");
-	$buf;
+	eval {
+		sysseek $fh, 0, SEEK_SET;
+		sysread($fh, my $buf, $size);
+		truncate $fh, 0;
+		$buf;
+	} // $self->fail($@);
 }
 
 sub gcf_drain { # awaitpid cb
