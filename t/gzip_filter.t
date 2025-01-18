@@ -16,7 +16,7 @@ require_ok 'PublicInbox::GzipFilter';
 	ok($filter->write("hello"), 'wrote something');
 	ok($filter->write("world"), 'wrote more');
 	$filter->close;
-	seek($fh, 0, SEEK_SET) or die;
+	seek $fh, 0, SEEK_SET;
 	IO::Uncompress::Gunzip::gunzip($fh => \(my $buf));
 	is($buf, 'helloworld', 'buffer matches');
 }

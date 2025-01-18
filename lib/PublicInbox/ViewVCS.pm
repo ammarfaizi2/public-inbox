@@ -65,11 +65,10 @@ sub html_page ($$;@) {
 sub dbg_log ($) {
 	my ($ctx) = @_;
 	my $log = delete $ctx->{lh} // die 'BUG: already captured debug log';
-	if (!CORE::seek($log, 0, SEEK_SET)) {
-		warn "seek(log): $!";
-		return '<pre>debug log seek error</pre>';
-	}
-	$log = eval { PublicInbox::IO::read_all $log } // do {
+	$log = eval {
+		seek $log, 0, SEEK_SET;
+		PublicInbox::IO::read_all $log;
+	} // do {
 		warn "read(log): $@";
 		return '<pre>debug log read error</pre>';
 	};

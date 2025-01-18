@@ -4,7 +4,8 @@
 # Parallel WWW checker
 my $usage = "$0 [-j JOBS] [-s SLOW_THRESHOLD] URL_OF_INBOX\n";
 use strict;
-use warnings;
+use v5.10.1;
+use autodie qw(sysseek);
 use File::Temp qw(tempfile);
 use GDBM_File;
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);

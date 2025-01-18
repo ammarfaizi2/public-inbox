@@ -1,9 +1,9 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
-use Test::More;
+use autodie qw(seek);
 use PublicInbox::TestCommon;
 use List::Util qw(shuffle);
 use PublicInbox::Eml;
@@ -52,7 +52,7 @@ my $check_fmt = sub {
 		my $buf = $eml2mbox->($eml);
 		print $fh $$buf or BAIL_OUT "print $!";
 	}
-	seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
+	seek $fh, 0, SEEK_SET;
 	$reader->$fmt($fh, sub {
 		my ($eml) = @_;
 		$eml->header_set('Status');

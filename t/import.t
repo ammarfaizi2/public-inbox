@@ -3,6 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.10.1;
 use strict;
+use autodie qw(seek);
 use PublicInbox::Eml;
 use PublicInbox::Smsg;
 use PublicInbox::Git;
@@ -36,7 +37,7 @@ SKIP: {
 	open my $in, '+<', undef or BAIL_OUT "open(+<): $!";
 	print $in $mime->as_string or die "write failed: $!";
 	$in->flush or die "flush failed: $!";
-	seek($in, 0, SEEK_SET) or die "seek: $!";
+	seek $in, 0, SEEK_SET;
 	chomp(my $hashed_obj = xqx(\@cmd, undef, { 0 => $in }));
 	is($?, 0, 'hash-object');
 	is($hashed_obj, $smsg->{blob}, "blob object_id matches exp");

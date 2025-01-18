@@ -147,10 +147,7 @@ sub app_dispatch {
 		$host =~ s/:([0-9]+)\z// and $env->{SERVER_PORT} = $1 + 0;
 		$env->{SERVER_NAME} = $host;
 	}
-	if (defined $input) {
-		sysseek($input, 0, SEEK_SET) or
-			die "BUG: psgi.input seek failed: $!";
-	}
+	sysseek($input, 0, SEEK_SET) if defined $input;
 	# note: NOT $self->{sock}, we want our close (+ PublicInbox::DS::close),
 	# to do proper cleanup:
 	$env->{'psgix.io'} = $self; # for ->close or async_pass

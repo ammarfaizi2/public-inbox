@@ -55,7 +55,7 @@ EOM
 		close $w;
 		vec(my $rvec = '', fileno($r), 1) = 1;
 		if (!select($rvec, undef, undef, 30)) {
-			seek($errfh, 0, 0);
+			seek $errfh, 0, 0;
 			my $s = do { local $/; <$errfh> };
 			xbail "lei q had no output after 30s, stderr=$s";
 		}
@@ -64,7 +64,7 @@ EOM
 		$tp->join;
 		ok(WIFSIGNALED($?), "signaled @$out");
 		is(WTERMSIG($?), SIGPIPE, "got SIGPIPE @$out");
-		seek($errfh, 0, 0);
+		seek $errfh, 0, 0;
 		my $s = do { local $/; <$errfh> };
 		is($s, '', "quiet after sigpipe @$out");
 	}

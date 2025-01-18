@@ -9,6 +9,7 @@ use Sys::Hostname qw(hostname);
 use IO::Handle; # ->flush
 use Errno qw(EEXIST);
 use File::Path ();
+use autodie qw(seek sysseek);
 
 sub new {
 	my ($class, $dir) = @_;
@@ -57,8 +58,8 @@ sub abort {
 sub fh {
 	my ($self) = @_;
 	my $fh = $self->{fh} or die "BUG: {fh} not open";
-	seek($fh, 0, SEEK_SET) or die "seek: $!";
-	sysseek($fh, 0, SEEK_SET) or die "sysseek: $!";
+	seek $fh, 0, SEEK_SET;
+	sysseek $fh, 0, SEEK_SET;
 	$fh;
 }
 

@@ -2,6 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
+use autodie qw(seek);
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Search;
 my $addr = 'meta@public-inbox.org';
@@ -38,7 +39,7 @@ L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta/>
 		my $t = time;
 		utime($t, $t, $fh);
 	} else {
-		seek($fh, 0, SEEK_SET) or die "seek: $!";
+		seek $fh, 0, SEEK_SET;
 		truncate($fh, 0) or die "truncate: $!";
 		print $fh $s or die "print: $!";
 		close $fh or die "close: $!";

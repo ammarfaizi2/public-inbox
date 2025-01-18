@@ -1,8 +1,9 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
 use Fcntl qw(SEEK_SET);
+use autodie qw(seek);
 require_git 2.6;
 require_mods(qw(json DBD::SQLite Xapian));
 use POSIX qw(WTERMSIG WIFSIGNALED SIGPIPE);
@@ -200,7 +201,7 @@ test_lei(sub {
 		open my $fh, '+>', undef or BAIL_OUT $!;
 		$fh->autoflush(1);
 		print $fh 's:use d:..5.days.from.now' or BAIL_OUT $!;
-		seek($fh, 0, SEEK_SET) or BAIL_OUT $!;
+		seek $fh, 0, SEEK_SET;
 		lei_ok([qw(q -q --stdin)], undef, { %$lei_opt, 0 => $fh },
 				\'--stdin on regular file works');
 		like($lei_out, qr/use boolean/, '--stdin on regular file');

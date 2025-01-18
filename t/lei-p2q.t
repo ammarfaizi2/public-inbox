@@ -1,7 +1,8 @@
 #!perl -w
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
+use autodie qw(sysseek);
 require_git 2.6;
 require_mods(qw(json DBD::SQLite Xapian));
 
@@ -15,7 +16,7 @@ test_lei(sub {
 	lei_ok([qw(p2q -w dfpost -)], undef, { %$lei_opt, 0 => $fh });
 	is($lei_out, "dfpost:6e006fd73b1d\n", '--stdin') or diag $lei_err;
 
-	sysseek($fh, 0, 0) or xbail "lseek: $!";
+	sysseek $fh, 0, 0;
 	lei_ok([qw(p2q -w dfpost)], undef, { %$lei_opt, 0 => $fh });
 	is($lei_out, "dfpost:6e006fd73b1d\n", 'implicit --stdin');
 

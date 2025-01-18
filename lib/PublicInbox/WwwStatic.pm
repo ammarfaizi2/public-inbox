@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # This package can either be a PSGI response body for a static file
@@ -11,6 +11,7 @@ package PublicInbox::WwwStatic;
 use strict;
 use v5.10.1;
 use parent qw(Exporter);
+use autodie qw(sysseek);
 use Fcntl qw(SEEK_SET O_RDONLY O_NONBLOCK);
 use HTTP::Date qw(time2str);
 use HTTP::Status qw(status_message);
@@ -178,8 +179,7 @@ sub getline {
 	my $len = $self->{len} or return; # undef, tells server we're done
 	my $n = 8192;
 	$n = $len if $len < $n;
-	sysseek($self->{in}, $self->{off}, SEEK_SET) or
-			die "sysseek ($self->{path}): $!";
+	sysseek $self->{in}, $self->{off}, SEEK_SET;
 	my $r = sysread($self->{in}, my $buf, $n);
 	if (defined $r && $r > 0) { # success!
 		$self->{len} = $len - $r;

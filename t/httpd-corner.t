@@ -5,7 +5,7 @@
 # generic PSGI/Plack apps.
 use v5.12; use PublicInbox::TestCommon;
 use Time::HiRes qw(gettimeofday tv_interval);
-use autodie qw(getsockopt setsockopt);
+use autodie qw(getsockopt seek setsockopt);
 use PublicInbox::Spawn qw(spawn popen_rd);
 require_mods '-httpd';
 use PublicInbox::SHA qw(sha1_hex);
@@ -676,7 +676,7 @@ SKIP: {
 		$req = GET('http://example.com/psgi-yield-enoent');
 		$res = $cb->($req);
 		is($res->code, 500, 'got error on ENOENT');
-		seek($tmperr, 0, SEEK_SET) or die;
+		seek $tmperr, 0, SEEK_SET;
 		my $errbuf = do { local $/; <$tmperr> };
 		like($errbuf, qr/this-better-not-exist/,
 			'error logged about missing command');

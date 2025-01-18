@@ -11,7 +11,7 @@ package PublicInbox::SolverGit;
 use strict;
 use v5.10.1;
 use File::Temp 0.19 (); # 0.19 for ->newdir
-use autodie qw(mkdir);
+use autodie qw(mkdir sysseek);
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Git qw(git_unquote git_quote git_exe);
 use PublicInbox::IO qw(write_file);
@@ -342,7 +342,7 @@ sub prepare_index ($) {
 	my $in = tmpfile("update-index.$oid_full") or die "tmpfile: $!";
 	print $in "$mode_a $oid_full\t$path_a\0" or die "print: $!";
 	$in->flush or die "flush: $!";
-	sysseek($in, 0, SEEK_SET) or die "seek: $!";
+	sysseek $in, 0, SEEK_SET;
 
 	dbg($self, 'preparing index');
 	my $rdr = { 0 => $in };

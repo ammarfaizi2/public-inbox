@@ -2,6 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
+use autodie qw(seek);
 use PublicInbox::TestCommon;
 use Fcntl qw(SEEK_SET);
 use PublicInbox::SHA qw(sha1_hex);
@@ -176,7 +177,7 @@ SKIP: {
 $ipc->wq_close;
 SKIP: {
 	skip 'Socket::MsgHdr or Inline::C missing', 11 if !$ppids[0];
-	seek($warn, 0, SEEK_SET) or BAIL_OUT;
+	seek $warn, 0, SEEK_SET;
 	my @warn = <$warn>;
 	is(scalar(@warn), 2, 'warned 3 times');
 	like($warn[0], qr/ wq_worker: /, '2nd warned from wq_worker');

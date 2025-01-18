@@ -1,7 +1,9 @@
 #!perl -w
-# Copyright (C) 2020-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
+use v5.10.1;
+use autodie qw(seek);
 use PublicInbox::TestCommon;
 use Test::More;
 use Fcntl qw(:seek);
@@ -80,18 +82,18 @@ SKIP: {
 	$fh->autoflush(1);
 
 	ok(!$gcf2->cat_oid(fileno($fh), 'invalid'), 'invalid fails');
-	seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
+	seek $fh, 0, SEEK_SET;
 	is(do { local $/; <$fh> }, '', 'nothing written');
 
 	open $fh, '+>', undef or BAIL_OUT "open: $!";
 	ok(!$gcf2->cat_oid(fileno($fh), '0'x40), 'z40 fails');
-	seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
+	seek $fh, 0, SEEK_SET;
 	is(do { local $/; <$fh> }, '', 'nothing written for z40');
 
 	open $fh, '+>', undef or BAIL_OUT "open: $!";
 	my $ck_copying = sub {
 		my ($desc) = @_;
-		seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
+		seek $fh, 0, SEEK_SET;
 		is(<$fh>, "$COPYING blob 34520\n", "got expected header $desc");
 		my $buf = do { local $/; <$fh> };
 		is(chop($buf), "\n", 'got trailing \\n');
@@ -113,7 +115,7 @@ SKIP: {
 		fcntl($w, $F_SETPIPE_SZ, 4096) or
 			skip('Linux too old for F_SETPIPE_SZ', 14);
 		$w->blocking($blk);
-		seek($fh, 0, SEEK_SET) or BAIL_OUT "seek: $!";
+		seek $fh, 0, SEEK_SET;
 		truncate($fh, 0) or BAIL_OUT "truncate: $!";
 		my $pid = fork // BAIL_OUT "fork: $!";
 		if ($pid == 0) {
