@@ -39,7 +39,6 @@ sub prepare {
 	my ($tmp, $fh);
 	do {
 		$tmp = _fn_in($self, $pid, 'tmp');
-		$! = undef;
 	} while (!sysopen($fh, $tmp, O_CREAT|O_EXCL|O_RDWR) and $! == EEXIST);
 	print $fh $$strref or die "print: $!";
 	$fh->flush or die "flush: $!";
