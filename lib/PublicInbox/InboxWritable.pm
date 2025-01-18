@@ -50,13 +50,13 @@ sub _init_v1 {
 }
 
 sub init_inbox {
-	my ($self, $shards, $skip_epoch) = @_;
+	my ($self, $shards) = @_;
 	if ($self->version == 1) {
 		my $dir = assert_usable_dir($self);
 		PublicInbox::Import::init_bare($dir);
 		$self->with_umask(\&_init_v1, $self);
 	} else {
-		importer($self)->init_inbox($shards, $skip_epoch);
+		importer($self)->init_inbox($shards);
 	}
 }
 

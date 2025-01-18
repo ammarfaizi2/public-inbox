@@ -76,12 +76,13 @@ sub new {
 
 # public (for now?)
 sub init_inbox {
-	my ($self, $shards, $skip_epoch) = @_;
+	my ($self, $shards) = @_;
 	if (defined $shards) {
 		$self->{parallel} = 0 if $shards == 0;
 		$self->{shards} = $shards if $shards > 0;
 	}
 	my $max = $self->{ibx}->max_git_epoch;
+	my $skip_epoch = ($self->{ibx}->{-creat_opt} // {})->{'skip-epoch'};
 	$max = $skip_epoch if (defined($skip_epoch) && !defined($max));
 	$self->{mg}->add_epoch($max // 0);
 	$self->idx_init;

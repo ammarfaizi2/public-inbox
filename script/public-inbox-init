@@ -34,7 +34,7 @@ EOF
 require PublicInbox::Admin;
 PublicInbox::Admin::require_or_die('-base');
 
-my ($version, $indexlevel, $skip_epoch, $jobs, $show_help);
+my ($version, $indexlevel, $jobs, $show_help);
 my $skip_docdata;
 my $ng = '';
 my (@c_extra, @chdir);
@@ -42,7 +42,7 @@ my $creat_opt = {};
 my %opts = (
 	'V|version=i' => \$version,
 	'L|index-level|indexlevel=s' => \$indexlevel,
-	'S|skip|skip-epoch=i' => \$skip_epoch,
+	'S|skip|skip-epoch=i' => \($creat_opt->{'skip-epoch'}),
 	'skip-artnum=i' => \($creat_opt->{'skip-artnum'}),
 	'j|jobs=i' => \$jobs,
 	'ng|newsgroup=s' => \$ng,
@@ -184,7 +184,7 @@ if (-f "$inboxdir/inbox.lock") {
 
 $version = 1 unless defined $version;
 
-if ($version == 1 && defined $skip_epoch) {
+if ($version == 1 && defined $creat_opt->{'skip-epoch'}) {
 	die "--skip-epoch is only supported for -V2 inboxes\n";
 }
 
@@ -210,7 +210,7 @@ if ($skip_docdata) {
 		die "--skip-docdata ignored with --indexlevel=basic\n";
 	$ibx->{-skip_docdata} = $skip_docdata;
 }
-$ibx->init_inbox(0, $skip_epoch);
+$ibx->init_inbox(0);
 
 my $f = "$inboxdir/description";
 if (sysopen $fh, $f, O_CREAT|O_EXCL|O_WRONLY) {
