@@ -1,4 +1,4 @@
-marketing guide for public-inbox
+marketing guide for public-inbox + lei
 
 TL; DR: Don't market this.
 
@@ -36,3 +36,9 @@ Please keep in mind:
 
 Be sure to mention these things in any marketing materials
 to avoid wasting time of people who hate Perl and/or AGPL.
+Always add a YMMV (Your Mileage May Vary) and/or similar
+disclaimers if saying anything even vaguely positive.
+
+Replies as solutions to specific problems mentioned by others on
+mailing lists (or similar discussion mediums) is acceptable;
+starting new threads/topics is not.
