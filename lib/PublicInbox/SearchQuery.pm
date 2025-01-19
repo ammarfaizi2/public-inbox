@@ -22,7 +22,7 @@ sub new {
 	bless {
 		q => $q,
 		x => $qp->{x} || '',
-		o => $o,
+		o => $o // 0,
 		l => $l,
 		r => (defined $r && $r ne '0'),
 		t => (defined $t && $t ne '0'),
