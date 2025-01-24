@@ -648,6 +648,7 @@ sub start_solver ($) {
 	}
 	$ctx->{-next_solver} = on_destroy \&next_solver;
 	++$solver_nr;
+	# ->newdir and open may croak
 	$ctx->{-tmp} = File::Temp->newdir("solver.$ctx->{oid_b}-XXXX",
 						TMPDIR => 1);
 	$ctx->{lh} or open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log";
@@ -660,11 +661,14 @@ sub start_solver ($) {
 	$solver->solve(@$ctx{qw(env lh oid_b hints)});
 }
 
-# run the next solver job when done and DESTROY-ed
+# run the next solver job when done and DESTROY-ed (on_destroy cb)
 sub next_solver {
 	--$solver_nr;
+	my $ctx = shift(@solver_q) // return;
 	# XXX FIXME: client may've disconnected if it waited a long while
-	start_solver(shift(@solver_q) // return);
+	eval { start_solver($ctx) };
+	warn "W: start_solver: $@" if $@;
+	html_page($ctx, 500) if $ctx->{-wcb};
 }
 
 sub may_start_solver ($) {
