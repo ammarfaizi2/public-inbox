@@ -15,9 +15,6 @@ use PublicInbox::Tmpfile;
 use PublicInbox::WwwStatic qw(r @NO_CACHE);
 use Carp ();
 
-# 32 is same as the git-daemon connection limit
-my $default_limiter = PublicInbox::Limiter->new(32);
-
 # n.b. serving "description" and "cloneurl" should be innocuous enough to
 # not cause problems.  serving "config" might...
 my @text = qw[HEAD info/refs info/attributes
@@ -102,8 +99,7 @@ sub serve_smart ($$$;$) {
 		$env{$name} = $val if defined $val;
 	}
 	my $limiter = $git->{-httpbackend_limiter} //
-		($pi_cfg ? $pi_cfg->limiter('-httpbackend') : undef) //
-		$default_limiter;
+		($pi_cfg ? $pi_cfg->limiter('-httpbackend') : undef);
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git->{git_dir}/$path";
 	my $rdr = input_prepare($env) or return r(500);
