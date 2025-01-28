@@ -561,8 +561,11 @@ C<RLIMIT_*> keys may be set to enforce resource limits for
 a particular limiter (L<BSD::Resource(3pm)> is required).
 
 Default named-limiters are prefixed with "-".  Currently,
-the "-cgit" named limiter is reserved for instances spawning
-cgit via C<publicinbox.cgitrc>
+the C<-cgit> named limiter is reserved for instances spawning
+cgit via C<publicinbox.cgitrc>.  The C<-httpbackend> named
+limiter (in public-inbox 2.0+) governs all L<git-http-backend(1)>
+processes for inboxes and coderepos for a given public-inbox
+config file.
 
 =over 8
 

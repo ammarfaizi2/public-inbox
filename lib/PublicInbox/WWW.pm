@@ -487,10 +487,10 @@ sub msg_page {
 
 sub serve_git {
 	my ($ctx, $epoch, $path) = @_;
-	my $env = $ctx->{env};
 	my $ibx = $ctx->{ibx};
 	my $git = defined $epoch ? $ibx->git_epoch($epoch) : $ibx->git;
-	$git ? PublicInbox::GitHTTPBackend::serve($env, $git, $path) : r404();
+	$git ? PublicInbox::GitHTTPBackend::serve($ctx->{env},
+		$git, $path, $ctx->{www}->{pi_cfg}) : r404();
 }
 
 sub mbox_results {

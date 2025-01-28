@@ -93,7 +93,7 @@ sub call {
 	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!ox) {
 		my ($nick, $path) = ($1, $2);
 		if (my $git = $self->{pi_cfg}->get_coderepo($nick)) {
-			return serve($env, $git, $path);
+			return serve($env, $git, $path, $self->{pi_cfg});
 		}
 	} elsif ($path_info =~ m!$self->{static}! &&
 		 defined($cgit_data = $self->{cgit_data})) {

@@ -31,13 +31,13 @@ our $ANY = join('|', @binary, @text, 'git-upload-pack');
 my $TEXT = join('|', @text);
 
 sub serve {
-	my ($env, $git, $path) = @_;
+	my ($env, $git, $path, $pi_cfg) = @_;
 
 	# Documentation/technical/http-protocol.txt in git.git
 	# requires one and exactly one query parameter:
 	if ($env->{QUERY_STRING} =~ /\Aservice=git-[A-Za-z0-9_]+-pack\z/ ||
 				$path =~ /\Agit-[A-Za-z0-9_]+-pack\z/) {
-		my $ok = serve_smart($env, $git, $path);
+		my $ok = serve_smart($env, $git, $path, $pi_cfg);
 		return $ok if $ok;
 	}
 
@@ -86,8 +86,8 @@ sub ghb_parse_hdr { # header parser for Qspawn
 }
 
 # returns undef if 403 so it falls back to dumb HTTP
-sub serve_smart {
-	my ($env, $git, $path) = @_;
+sub serve_smart ($$$;$) {
+	my ($env, $git, $path, $pi_cfg) = @_;
 	my %env = %ENV;
 	# GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
 	# may be set in the server-process and are passed as-is
@@ -101,7 +101,9 @@ sub serve_smart {
 		my $val = $env->{$name};
 		$env{$name} = $val if defined $val;
 	}
-	my $limiter = $git->{-httpbackend_limiter} || $default_limiter;
+	my $limiter = $git->{-httpbackend_limiter} //
+		($pi_cfg ? $pi_cfg->limiter('-httpbackend') : undef) //
+		$default_limiter;
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git->{git_dir}/$path";
 	my $rdr = input_prepare($env) or return r(500);

@@ -335,7 +335,8 @@ sub srv { # endpoint called by PublicInbox::WWW
 	my $pi_cfg = $self->{pi_cfg};
 	if ($path_info =~ m!\A/(.+?)/($PublicInbox::GitHTTPBackend::ANY)\z!x and
 		($git = $pi_cfg->get_coderepo($1))) {
-			PublicInbox::GitHTTPBackend::serve($ctx->{env},$git,$2);
+			PublicInbox::GitHTTPBackend::serve($ctx->{env},
+							$git, $2, $pi_cfg);
 	} elsif ($path_info =~ m!\A/(.+?)/\z! and
 			($ctx->{git} = $pi_cfg->get_coderepo($1))) {
 		$ctx->{wcr} = $self;
