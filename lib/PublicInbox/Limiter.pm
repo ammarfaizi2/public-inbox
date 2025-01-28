@@ -29,7 +29,8 @@ sub setup_rlimit {
 		if (scalar(@rlimit) == 1) {
 			push @rlimit, $rlimit[0];
 		} elsif (scalar(@rlimit) != 2) {
-			warn "could not parse $k: $v\n";
+			warn "W: could not parse $k: $v (ignored)\n";
+			next;
 		}
 		my $inf = $v =~ /\binfinity\b/i ?
 			$PublicInbox::Spawn::RLIMITS{RLIM_INFINITY} // eval {
