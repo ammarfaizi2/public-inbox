@@ -45,8 +45,6 @@ sub env_for ($$$) {
 		'pi-httpd.async' => 1,
 		'pi-httpd.app' => $self->{app},
 		'pi-httpd.warn_cb' => $self->{warn_cb},
-		'pi-httpd.ckhup' => $port ? \&PublicInbox::Daemon::tcp_hup :
-				\&PublicInbox::Daemon::stream_hup,
 	}
 }
 

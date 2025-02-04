@@ -11,7 +11,6 @@ use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use IO::Socket;
 use File::Spec;
-use IO::Poll qw(POLLIN POLLHUP);
 use POSIX qw(WNOHANG :signal_h F_SETFD);
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 STDOUT->autoflush(1);
@@ -754,33 +753,5 @@ sub write_pid ($) {
 	Net::Server::Daemonize::create_pid_file($path);
 	do_chown($path);
 }
-
-sub stream_hup ($) {
-	my $ev = POLLIN | POLLHUP;
-	my $n = IO::Poll::_poll(0, fileno($_[0]) // return, $ev) or return;
-	return 1 if $ev & POLLHUP;
-
-	# n.b. POLLHUP isn't reliably detected, so check FIONREAD on POLLIN
-	if (defined(PublicInbox::Syscall::FIONREAD) && ($ev & POLLIN)) {
-		ioctl($_[0], PublicInbox::Syscall::FIONREAD, $n = "") //
-			return;
-		return 1 if unpack('i', $n) == 0;
-	}
-	undef;
-}
-
-if (PublicInbox::Syscall->can('TCP_ESTABLISHED')) {
-	eval <<EOM;
-sub tcp_hup (\$) {
-	my \$buf = getsockopt(\$_[0], Socket::IPPROTO_TCP, Socket::TCP_INFO)
-		or return;
-	unpack('C', \$buf) != PublicInbox::Syscall::TCP_ESTABLISHED
-}
-EOM
-	warn "E: $@" if $@;
-}
-
-no warnings 'once';
-*tcp_hup = \&stream_hup if !__PACKAGE__->can('tcp_hup');
 
 1;

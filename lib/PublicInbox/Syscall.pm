@@ -304,8 +304,6 @@ BEGIN {
 	if ($^O eq 'linux') {
 		%CONST = (
 			MSG_MORE => 0x8000,
-			FIONREAD => 0x541b,
-			TCP_ESTABLISHED => 1,
 			TMPL_cmsg_len => TMPL_size_t,
 			# cmsg_len, cmsg_level, cmsg_type
 			SIZEOF_cmsghdr => SIZEOF_int * 2 + SIZEOF_size_t,
@@ -320,7 +318,6 @@ BEGIN {
 	} elsif ($^O =~ /\A(?:freebsd|openbsd|netbsd|dragonfly)\z/) {
 		%CONST = (
 			TMPL_cmsg_len => 'L', # socklen_t
-			FIONREAD => 0x4004667f,
 			SIZEOF_cmsghdr => SIZEOF_int * 3,
 			CMSG_DATA_off => SIZEOF_ptr == 8 ? '@16' : '',
 			TMPL_msghdr => 'PL' . # msg_name, msg_namelen
@@ -330,11 +327,7 @@ BEGIN {
 				TMPL_size_t. # msg_controllen
 				'i', # msg_flags
 
-		);
-		# *BSD uses `TCPS_ESTABLISHED', not `TCP_ESTABLISHED'
-		# dragonfly uses TCPS_ESTABLISHED==5, but it lacks TCP_INFO,
-		# so leave it unset on dfly
-		$CONST{TCP_ESTABLISHED} = 4 if $^O ne 'dragonfly';
+		)
 	}
 	$CONST{CMSG_ALIGN_size} = SIZEOF_size_t;
 	$CONST{SIZEOF_cmsghdr} //= 0;
@@ -342,7 +335,6 @@ BEGIN {
 	$CONST{CMSG_DATA_off} //= undef;
 	$CONST{TMPL_msghdr} //= undef;
 	$CONST{MSG_MORE} //= 0;
-	$CONST{FIONREAD} //= undef;
 }
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too

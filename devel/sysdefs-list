@@ -24,14 +24,6 @@ my $x = "$tmp/sysdefs";
 open my $fh, '>', $f or die "open $f $!";
 print $fh $str or die "print $f $!";
 close $fh or die "close $f $!";
-for (qw(sys/ioctl sys/filio)) {
-	my $cfg_name = $_;
-	my $cpp_name = uc $_;
-	$cfg_name =~ tr!/!!d;
-	$cpp_name =~ tr!/!_!;
-	($Config{"i_$cfg_name"} // '') eq 'define' and
-		push @cflags, "-DHAVE_${cpp_name}_H";
-}
 system($cc, '-o', $x, $f, @cflags) == 0 or die "$cc failed \$?=$?";
 print STDERR '# %Config',
 	(map { " $_=$Config{$_}" } qw(ptrsize sizesize lseeksize)), "\n";
@@ -45,12 +37,7 @@ __DATA__
 #include <stddef.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
-#ifdef HAVE_SYS_IOCTL_H
-#	include <sys/ioctl.h>
-#endif
-#ifdef HAVE_SYS_FILIO_H
-#	include <sys/filio.h>
-#endif
+#include <sys/ioctl.h>
 #ifdef __linux__
 #	include <linux/fs.h>
 #	include <sys/epoll.h>
@@ -157,7 +144,6 @@ int main(void)
 #endif /* Linux, any other OSes with stable syscalls? */
 
 	D(SIGWINCH);
-	X(FIONREAD);
 	MAYBE D(SO_ACCEPTFILTER);
 	MAYBE D(_SC_NPROCESSORS_ONLN);
 	MAYBE D(_SC_AVPHYS_PAGES);
