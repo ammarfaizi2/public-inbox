@@ -522,6 +522,25 @@ EOM
 			is $counts{499} + $counts{200}, 31,
 				'all 1.0 connections logged for disconnects';
 		}
+		undef $c0;
+		kill 'STOP', $td_pid;
+		@c = map {
+			my $c = tcp_connect($lis);
+			print $c $req[0];
+			$c;
+		}  (0..66);
+		print $_ $req[1] for @c;
+		kill 'CONT', $td_pid;
+		my %codes;
+		for (@c) {
+			read $_, $buf, 16384;
+			my $code = $buf =~ m!\AHTTP/1\.0 (\d+) ! ? $1 : '';
+			++$codes{$code};
+		}
+		is $codes{''}, undef, 'all valid '.scalar(@c).' HTTP responses';
+		ok $codes{503}, 'got some 503 too busy errors';
+		is $codes{503} + $codes{200},
+			scalar(@c), 'only got 200 and 503 codes';
 
 		require_cmd('curl', 1) or skip 'no curl', 1;
 		mkdir "$tmpdir/ext";

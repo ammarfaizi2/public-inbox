@@ -50,10 +50,6 @@ my %GIT_MODE = (
 	'160000' => 'g', # commit (gitlink)
 );
 
-# TODO: not fork safe, but we don't fork w/o exec in PublicInbox::WWW
-my (@solver_q, $solver_lim);
-my $solver_nr = 0;
-
 sub html_page ($$;@) {
 	my ($ctx, $code) = @_[0, 1];
 	my $wcb = delete $ctx->{-wcb};
@@ -640,10 +636,10 @@ sub show_blob { # git->cat_async callback
 		'</code></pre></td></tr></table>'.dbg_log($ctx), @def);
 }
 
-sub start_solver ($) {
-	my ($ctx) = @_;
-	$ctx->{-next_solver} = on_destroy \&next_solver;
-	++$solver_nr;
+sub start_solver ($$) {
+	my ($ctx, $limiter) = @_;
+	$ctx->{-next_solver} = on_destroy \&next_solver, $limiter;
+	++$limiter->{running};
 	if (my $ck = $ctx->{env}->{'pi-httpd.ckhup'}) {
 		$ck->($ctx->{env}->{'psgix.io'}->{sock}) and
 			return html_page $ctx, 499, 'client disconnected';
@@ -659,7 +655,7 @@ sub start_solver ($) {
 	$ctx->{lh} or open $ctx->{lh}, '+>>', "$ctx->{-tmp}/solve.log";
 	my $solver = PublicInbox::SolverGit->new($ctx->{ibx},
 						\&solve_result, $ctx);
-	$solver->{limiter} = $solver_lim;
+	$solver->{limiter} = $ctx->{www}->{solver_limiter};
 	$solver->{gits} //= [ $ctx->{git} ];
 	$solver->{tmp} = $ctx->{-tmp}; # share tmpdir
 	# PSGI server will call this immediately and give us a callback (-wcb)
@@ -668,9 +664,10 @@ sub start_solver ($) {
 
 # run the next solver job when done and DESTROY-ed (on_destroy cb)
 sub next_solver {
-	--$solver_nr;
-	my $ctx = shift(@solver_q) // return;
-	eval { start_solver($ctx) };
+	my ($limiter) = @_;
+	--$limiter->{running};
+	my $ctx = shift(@{$limiter->{run_queue}}) // return;
+	eval { start_solver $ctx, $limiter };
 	return unless $@;
 	warn "W: start_solver: $@";
 	html_page($ctx, 500) if $ctx->{-wcb};
@@ -678,12 +675,22 @@ sub next_solver {
 
 sub may_start_solver ($) {
 	my ($ctx) = @_;
-	$solver_lim //= $ctx->{www}->{pi_cfg}->limiter('codeblob');
-	if ($solver_nr >= $solver_lim->{max}) {
-		@solver_q > 128 ? html_page($ctx, 503, 'too busy')
-				: push(@solver_q, $ctx);
+	my $limiter = $ctx->{www}->{pi_cfg}->limiter('-codeblob');
+
+	# {solver_limiter} just inherits rlimits from the configurable
+	# -codeblob limiter.  The parallelism and depth management is
+	# redundant since -codeblob $limiter encompasses {solver_limiter}.
+	$ctx->{www}->{solver_limiter} //= do {
+		my $l = PublicInbox::Limiter->new;
+		$l->{$_} = $limiter->{$_} for grep /^RLIMIT_/, keys %$limiter;
+		$l;
+	};
+	if ($limiter->{running} < $limiter->{max}) {
+		start_solver $ctx, $limiter;
+	} elsif ($limiter->is_too_busy) {
+		html_page $ctx, 503, 'too busy';
 	} else {
-		start_solver($ctx);
+		push @{$limiter->{run_queue}}, $ctx;
 	}
 }
 

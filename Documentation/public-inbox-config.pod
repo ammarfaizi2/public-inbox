@@ -560,18 +560,31 @@ the default limiter.
 C<RLIMIT_*> keys may be set to enforce resource limits for
 a particular limiter (L<BSD::Resource(3pm)> is required).
 
-Default named-limiters are prefixed with "-".  Currently,
+Default named-limiters are prefixed with C<->.  Currently,
 the C<-cgit> named limiter is reserved for instances spawning
 cgit via C<publicinbox.cgitrc>.  The C<-httpbackend> named
 limiter (in public-inbox 2.0+) governs all L<git-http-backend(1)>
 processes for inboxes and coderepos for a given public-inbox
-config file.
+config file.  The C<-codeblob> limiter (in 2.0+) governs the
+entire series of git commands used for blob reconstruction from
+patches.
 
 =over 8
 
 =item publicinboxlimiter.<name>.max
 
 The maximum number of parallel processes for the given limiter.
+
+Default: 32 for C<-httpbackend>, 1 for everything else
+
+=item publicinboxlimiter.<name>.depth
+
+The maximum queue depth for the given limiter.  HTTP C<503> errors
+will be returned when the queue depth is exceeded.
+
+Default: 32
+
+New in public-inbox 2.0+ (PENDING)
 
 =item publicinboxlimiter.<name>.rlimitCore
 

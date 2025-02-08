@@ -78,18 +78,8 @@ sub psgi_status_err { # Qspawn itself is useful w/o PSGI
 	PublicInbox::WwwStatic::r($_[0] // 500);
 }
 
-sub finalize ($) {
+sub _finalize ($) {
 	my ($self) = @_;
-
-	# process is done, spawn whatever's in the queue
-	my $limiter = delete $self->{limiter} or return;
-	my $running = --$limiter->{running};
-
-	if ($running < $limiter->{max}) {
-		if (my $next = shift(@{$limiter->{run_queue}})) {
-			_do_spawn(@$next, $limiter);
-		}
-	}
 	if (my $err = $self->{_err}) { # set by finish or waitpid_err
 		utf8::decode($err);
 		if (my $dst = $self->{qsp_err}) {
@@ -110,6 +100,21 @@ sub finalize ($) {
 		# have we started writing, yet?
 		$wcb->(psgi_status_err($env->{'qspawn.fallback'}));
 	}
+}
+
+sub finalize ($) {
+	my ($self) = @_;
+
+	# process is done, spawn whatever's in the queue
+	my $limiter = delete $self->{limiter} or return;
+	my $running = --$limiter->{running};
+
+	if ($running < $limiter->{max}) {
+		if (my $next = shift(@{$limiter->{run_queue}})) {
+			_do_spawn(@$next, $limiter);
+		}
+	}
+	_finalize $self;
 }
 
 sub waitpid_err { # callback for awaitpid
@@ -159,6 +164,10 @@ sub start ($$$) {
 	my ($self, $limiter, $start_cb) = @_;
 	if ($limiter->{running} < $limiter->{max}) {
 		_do_spawn($self, $start_cb, $limiter);
+	} elsif ($limiter->is_too_busy) {
+		$self->{psgi_env}->{'qspawn.fallback'} //= 503 if
+			$self->{psgi_env};
+		_finalize $self;
 	} else {
 		push @{$limiter->{run_queue}}, [ $self, $start_cb ];
 	}

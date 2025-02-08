@@ -8,7 +8,8 @@ use PublicInbox::Spawn;
 sub new {
 	my ($class, $max) = @_;
 	bless {
-		# 32 is same as the git-daemon connection limit
+		# 32 is same as the git-daemon connection limit, but
+		# -cgit and -codeblob internal limiters default to 1
 		max => $max || 32,
 		running => 0,
 		run_queue => [],
@@ -18,16 +19,25 @@ sub new {
 	}, $class;
 }
 
-sub setup_rlimit {
+sub setup_limiter {
 	my ($self, $name, $cfg) = @_;
+	my $k = "publicinboxlimiter.$name.depth";
+	my $v = $cfg->{$k};
+	if (defined $v) {
+		if ($v =~ /\A[1-9][0-9]*\z/) {
+			$self->{depth} = $v + 0;
+		} else {
+			warn "W: `$v' not a positive integer in $cfg->{-f}\n";
+		}
+	}
 	for my $rlim (@PublicInbox::Spawn::RLIMITS) {
-		my $k = lc($rlim);
+		$k = lc($rlim);
 		$k =~ tr/_//d;
 		$k = "publicinboxlimiter.$name.$k";
-		my $v = $cfg->{$k} // next;
+		$v = $cfg->{$k} // next;
 		my @rlimit = split(/\s*,\s*/, $v);
 		if (scalar(@rlimit) == 1) {
-			push @rlimit, $rlimit[0];
+			$rlimit[1] = $rlimit[0];
 		} elsif (scalar(@rlimit) != 2) {
 			warn "W: could not parse $k: $v (ignored)\n";
 			next;
@@ -40,12 +50,16 @@ sub setup_rlimit {
 				warn "BSD::Resource missing for $rlim";
 				next;
 			} : undef;
-		for my $i (0..$#rlimit) {
-			next if $rlimit[$i] ne 'INFINITY';
-			$rlimit[$i] = $inf;
+		for (@rlimit) {
+			$_ = $inf if $_ eq 'INFINITY';
 		}
 		$self->{$rlim} = \@rlimit;
 	}
+}
+
+sub is_too_busy {
+	my ($self) = @_;
+	scalar(@{$self->{run_queue}}) > ($self->{depth} // 32)
 }
 
 1;
