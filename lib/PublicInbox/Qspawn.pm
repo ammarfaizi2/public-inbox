@@ -172,7 +172,7 @@ sub psgi_qx {
 	my ($self, $env, $limiter, @qx_cb_arg) = @_;
 	$self->{psgi_env} = $env;
 	$self->{qx_cb_arg} = \@qx_cb_arg;
-	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
+	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new;
 	start($self, $limiter, undef);
 }
 
@@ -280,7 +280,7 @@ sub psgi_yield {
 	my ($self, $env, $limiter, @parse_hdr_arg)= @_;
 	$self->{psgi_env} = $env;
 	$self->{yield_parse_hdr} = [ \(my $buf = ''), @parse_hdr_arg ];
-	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new(32);
+	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new;
 
 	# the caller already captured the PSGI write callback from
 	# the PSGI server, so we can call ->start, here:
