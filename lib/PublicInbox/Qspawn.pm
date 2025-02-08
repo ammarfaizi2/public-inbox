@@ -107,13 +107,9 @@ sub finalize ($) {
 
 	# process is done, spawn whatever's in the queue
 	my $limiter = delete $self->{limiter} or return;
-	my $running = --$limiter->{running};
-
-	if ($running < $limiter->{max}) {
-		if (my $next = shift(@{$limiter->{run_queue}})) {
-			_do_spawn(@$next, $limiter);
-		}
-	}
+	--$limiter->{running};
+	my $next = shift @{$limiter->{run_queue}};
+	_do_spawn(@$next, $limiter) if $next;
 	_finalize $self;
 }
 
