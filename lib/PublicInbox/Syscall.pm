@@ -18,6 +18,7 @@
 package PublicInbox::Syscall;
 use v5.12;
 use parent qw(Exporter);
+use bytes qw(length substr);
 use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
@@ -544,7 +545,6 @@ require PublicInbox::CmdIPC4;
 };
 
 *sendmsg_more = sub ($@) {
-	use bytes qw(length substr);
 	my $sock = shift;
 	my $iov = join('', map { pack 'P'.TMPL_size_t, $_, length } @_);
 	my $mh = pack(TMPL_msghdr,
@@ -563,7 +563,6 @@ require PublicInbox::CmdIPC4;
 if (defined($SYS_writev)) {
 *writev = sub {
 	my $fh = shift;
-	use bytes qw(length substr);
 	my $iov = join('', map { pack 'P'.TMPL_size_t, $_, length } @_);
 	my $w;
 	do {
