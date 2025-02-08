@@ -123,13 +123,13 @@ sub lookup_newsgroup {
 }
 
 sub limiter {
-	my ($self, $name) = @_;
+	my ($self, $name, $max_default) = @_;
 	$self->{-limiters}->{$name} //= do {
 		require PublicInbox::Limiter;
-		my $max = $self->{"publicinboxlimiter.$name.max"} || 1;
-		my $limiter = PublicInbox::Limiter->new($max);
-		$limiter->setup_rlimit($name, $self);
-		$limiter;
+		my $max = $self->{"publicinboxlimiter.$name.max"};
+		my $l = PublicInbox::Limiter->new($max || $max_default || 1);
+		$l->setup_rlimit($name, $self);
+		$l;
 	};
 }
 

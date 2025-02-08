@@ -98,8 +98,9 @@ sub serve_smart ($$$;$) {
 		my $val = $env->{$name};
 		$env{$name} = $val if defined $val;
 	}
+	# 32 is the default connection limit for git-daemon, so match that
 	my $limiter = $git->{-httpbackend_limiter} //
-		($pi_cfg ? $pi_cfg->limiter('-httpbackend') : undef);
+		($pi_cfg ? $pi_cfg->limiter('-httpbackend', 32) : undef);
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git->{git_dir}/$path";
 	my $rdr = input_prepare($env) or return r(500);
