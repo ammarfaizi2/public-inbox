@@ -21,25 +21,29 @@ sub new {
 
 sub setup_limiter {
 	my ($self, $name, $cfg) = @_;
-	my $k = "publicinboxlimiter.$name.depth";
-	my $v = $cfg->{$k};
-	if (defined $v) {
+	for my $f (qw(max depth)) {
+		my $k = "publicinboxlimiter.$name.$f";
+		my $v = $cfg->{$k} // next;
 		if ($v =~ /\A[1-9][0-9]*\z/) {
-			$self->{depth} = $v + 0;
+			$self->{$f} = $v + 0;
 		} else {
-			warn "W: `$v' not a positive integer in $cfg->{-f}\n";
+			warn <<EOM
+W: `$k=$v' is not a positive integer in $cfg->{-f}
+EOM
 		}
 	}
 	for my $rlim (@PublicInbox::Spawn::RLIMITS) {
-		$k = lc($rlim);
+		my $k = lc($rlim);
 		$k =~ tr/_//d;
 		$k = "publicinboxlimiter.$name.$k";
-		$v = $cfg->{$k} // next;
+		my $v = $cfg->{$k} // next;
 		my @rlimit = split(/\s*,\s*/, $v);
 		if (scalar(@rlimit) == 1) {
 			$rlimit[1] = $rlimit[0];
 		} elsif (scalar(@rlimit) != 2) {
-			warn "W: could not parse $k: $v (ignored)\n";
+			warn <<EOM;
+W: could not parse `$k=$v' in $cfg->{-f} (ignored)
+EOM
 			next;
 		}
 		my $inf = $v =~ /\binfinity\b/i ?

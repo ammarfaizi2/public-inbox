@@ -126,8 +126,7 @@ sub limiter {
 	my ($self, $name, $max_default) = @_;
 	$self->{-limiters}->{$name} //= do {
 		require PublicInbox::Limiter;
-		my $n = $self->{"publicinboxlimiter.$name.max"};
-		my $l = PublicInbox::Limiter->new($n || $max_default || 1);
+		my $l = PublicInbox::Limiter->new($max_default || 1);
 		$l->setup_limiter($name, $self);
 		$l;
 	};
