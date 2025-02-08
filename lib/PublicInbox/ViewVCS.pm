@@ -642,12 +642,17 @@ sub show_blob { # git->cat_async callback
 
 sub start_solver ($) {
 	my ($ctx) = @_;
+	$ctx->{-next_solver} = on_destroy \&next_solver;
+	++$solver_nr;
+	if (my $ck = $ctx->{env}->{'pi-httpd.ckhup'}) {
+		$ck->($ctx->{env}->{'psgix.io'}->{sock}) and
+			return html_page $ctx, 499, 'client disconnected';
+	}
+
 	while (my ($from, $to) = each %QP_MAP) {
 		my $v = $ctx->{qp}->{$from} // next;
 		$ctx->{hints}->{$to} = $v if $v ne '';
 	}
-	$ctx->{-next_solver} = on_destroy \&next_solver;
-	++$solver_nr;
 	# ->newdir and open may croak
 	$ctx->{-tmp} = File::Temp->newdir("solver.$ctx->{oid_b}-XXXX",
 						TMPDIR => 1);
@@ -665,9 +670,9 @@ sub start_solver ($) {
 sub next_solver {
 	--$solver_nr;
 	my $ctx = shift(@solver_q) // return;
-	# XXX FIXME: client may've disconnected if it waited a long while
 	eval { start_solver($ctx) };
-	warn "W: start_solver: $@" if $@;
+	return unless $@;
+	warn "W: start_solver: $@";
 	html_page($ctx, 500) if $ctx->{-wcb};
 }
 

@@ -21,7 +21,7 @@ $ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
 $ENV{GIT_TEST_FSYNC} = 0; # hopefully reduce wear
 
 $_ = File::Spec->rel2abs($_) for (grep(!m!^/!, @INC));
-our $CURRENT_DAEMON;
+our ($CURRENT_DAEMON, $CURRENT_LISTENER);
 BEGIN {
 	@EXPORT = qw(tmpdir tcp_server tcp_connect require_git require_mods
 		run_script start_script key2sub xsys xsys_e xqx eml_load tick
@@ -989,6 +989,7 @@ sub test_httpd ($$;$$) {
 		my $ua = LWP::UserAgent->new;
 		$ua->max_redirect(0);
 		local $CURRENT_DAEMON = $td;
+		local $CURRENT_LISTENER = $sock;
 		Plack::Test::ExternalServer::test_psgi(client => $client,
 							ua => $ua);
 		$cb->() if $cb;

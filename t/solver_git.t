@@ -8,8 +8,8 @@ require_git v2.6;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::Spawn qw(run_qx which);
 use File::Path qw(remove_tree);
-use PublicInbox::IO qw(write_file);
-use autodie qw(close mkdir open rename symlink unlink);
+use PublicInbox::IO qw(write_file try_cat);
+use autodie qw(close kill mkdir open read rename symlink unlink);
 require_mods qw(DBD::SQLite Xapian);
 require PublicInbox::SolverGit;
 my $rdr = { 2 => \(my $null) };
@@ -476,8 +476,53 @@ EOF
 	my $env = { PI_CONFIG => $cfgpath, TMPDIR => $tmpdir };
 
 	xsys_e $cp, qw(-Rp), $binfoo, $gone_repo; # for test_httpd $client
+	my $has_log;
+	SKIP: { # some distros may split out this middleware
+		require_mods 'Plack::Middleware::AccessLog::Timed', 1;
+		$has_log = $env->{psgi_file} = 't/psgi_log.psgi';
+	}
 	test_httpd($env, $client, 7, sub {
 	SKIP: {
+		my $td_pid = $PublicInbox::TestCommon::CURRENT_DAEMON->{pid};
+		my $lis = $PublicInbox::TestCommon::CURRENT_LISTENER;
+		kill 'STOP', $td_pid;
+		my @req = ("GET /$name/69df7d5/s/ HTTP/1.0\r\n", "\r\n");
+		my $c0 = tcp_connect($lis);
+		print $c0 $req[0];
+		my @c = map {
+			my $c = tcp_connect($lis);
+			print $c @req;
+			$c;
+		} (1..30);
+		close $_ for @c[(1..29)]; # premature disconnects
+		kill 'CONT', $td_pid;
+		read $c[0], my $buf, 16384;
+		print $c0 $req[1];
+		read $c0, $buf, 16384;
+
+		if ($has_log) {
+			# kick server to ensure all CBs are handled, first
+			$c0 = tcp_connect($lis);
+			print $c0 <<EOM;
+GUH /$name/69df7d5/s/ HTTP/1.1\r
+Connection: close\r
+\r
+EOM
+			read $c0, $buf, 16384;
+			my %counts;
+			my @n = map {
+					my $code = (split ' ', $_)[5];
+					$counts{$code}++;
+					$code;
+				} grep m! HTTP/1\.0\b!,
+					try_cat("$tmpdir/stdout.log");
+			ok $counts{499}, 'got some 499s from disconnects';
+			ok $counts{200} >= 2, 'got at least two 200 codes' or
+				diag explain(\%counts);
+			is $counts{499} + $counts{200}, 31,
+				'all 1.0 connections logged for disconnects';
+		}
+
 		require_cmd('curl', 1) or skip 'no curl', 1;
 		mkdir "$tmpdir/ext";
 		my $rurl = "$ENV{PLACK_TEST_EXTERNALSERVER_URI}/$name";

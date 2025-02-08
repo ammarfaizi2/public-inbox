@@ -448,6 +448,7 @@ t/config.t
 t/config_limiter.t
 t/content_hash.t
 t/convert-compact.t
+t/daemon.t
 t/data-gen/.gitignore
 t/data/0001.patch
 t/data/attached-mbox-with-utf8.eml
@@ -587,6 +588,7 @@ t/precheck.t
 t/psgi_attach.eml
 t/psgi_attach.t
 t/psgi_bad_mids.t
+t/psgi_log.psgi
 t/psgi_mount.t
 t/psgi_multipart_not.t
 t/psgi_scan_all.t

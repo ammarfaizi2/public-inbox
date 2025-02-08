@@ -165,11 +165,14 @@ sub app_dispatch {
 	}
 }
 
+# we use the non-standard 499 code for client disconnects (matching nginx)
+sub status_msg ($) { status_message($_[0]) // 'error' }
+
 sub response_header_write ($$$) {
 	my ($self, $env, $res) = @_;
 	my $proto = $env->{SERVER_PROTOCOL} or return; # HTTP/0.9 :P
 	my $status = $res->[0];
-	my $h = "$proto $status " . status_message($status) . "\r\n";
+	my $h = "$proto $status " . status_msg($status) . "\r\n";
 	my ($len, $chunked);
 	my $headers = $res->[1];
 
@@ -428,7 +431,7 @@ sub read_input_chunked { # unlikely...
 
 sub quit {
 	my ($self, $status) = @_;
-	my $h = "HTTP/1.1 $status " . status_message($status) . "\r\n\r\n";
+	my $h = "HTTP/1.1 $status " . status_msg($status) . "\r\n\r\n";
 	$self->write(\$h);
 	$self->close;
 	undef; # input_prepare expects this
