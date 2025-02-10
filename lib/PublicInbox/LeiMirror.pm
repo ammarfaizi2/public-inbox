@@ -447,21 +447,17 @@ sub fgrp_fetch_all {
 			# update the config atomically via O_APPEND while
 			# respecting git-config locking
 			sysopen(my $lk, "$f.lock", O_CREAT|O_EXCL|O_WRONLY);
-			open my $fh, '>>', $f;
-			$fh->autoflush(1);
-			my $buf = '';
+			my @buf;
 			if (@$old) {
-				$buf = "[fetch]\n\thideRefs = refs\n";
-				$buf .= join('', map {
+				@buf = ("[fetch]\n\thideRefs = refs\n", map {
 					"\thideRefs = !refs/remotes/" .
 						"$_->{-remote}/\n";
 				} @$old);
 			}
-			$buf .= join('', "[remotes]\n",
+			push @buf, "[remotes]\n",
 				(map { "\t$grp = $_->{-remote}\n" } @$old),
-				(map { "\t$grp = $_->{-remote}\n" } @$new));
-			print $fh $buf or die "print($f): $!";
-			close $fh;
+				(map { "\t$grp = $_->{-remote}\n" } @$new);
+			write_file '>>', $f, @buf;
 			unlink("$f.lock");
 		}
 		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
