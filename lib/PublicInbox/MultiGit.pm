@@ -34,7 +34,7 @@ sub read_alternates {
 			qr!\A\Q../../$self->{epfx}\E/([0-9]+)\.git/objects\z! :
 			undef;
 		$$moderef = (stat($fh))[2] & 07777;
-		for my $rel (split(/^/m, read_all($fh, -s _))) {
+		for my $rel (read_all($fh, -s _)) {
 			chomp(my $dir = $rel);
 			my $score;
 			if (defined($is_edir) && $dir =~ $is_edir) {
@@ -67,10 +67,10 @@ sub write_alternates {
 	my ($self, $mode, $alt, @new) = @_;
 	my $all_dir = "$self->{topdir}/$self->{all}";
 	PublicInbox::Import::init_bare($all_dir);
-	my $out = join('', sort { $alt->{$b} <=> $alt->{$a} } keys %$alt);
+	my @out = sort { $alt->{$b} <=> $alt->{$a} } keys %$alt;
 	my $info_dir = "$all_dir/objects/info";
 	my $fh = File::Temp->new(TEMPLATE => 'alt-XXXX', DIR => $info_dir);
-	print $fh $out, @new;
+	print $fh @out, @new;
 	chmod($mode, $fh);
 	close $fh;
 	rename($fh->filename, "$info_dir/alternates");
