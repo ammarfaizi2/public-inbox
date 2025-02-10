@@ -125,7 +125,7 @@ sysopen($lockfh, $lockfile, O_RDWR|O_CREAT|O_EXCL) or do {
 require PublicInbox::OnDestroy;
 my $auto_unlink = PublicInbox::OnDestroy::on_destroy(sub { unlink $lockfile });
 my $perm = 0644 & ~umask;
-my %seen;
+my (%seen, $old_ibx);
 if (-e $pi_config) {
 	require PublicInbox::IO;
 	open(my $oh, '<', $pi_config);
@@ -156,8 +156,8 @@ if (-e $pi_config) {
 
 	exit(1) if $conflict;
 
-	my $ibx = $cfg->lookup_name($name);
-	$indexlevel //= $ibx->{indexlevel} if $ibx;
+	$old_ibx = $cfg->lookup_name($name);
+	$indexlevel //= $old_ibx->{indexlevel} if $old_ibx;
 }
 my $pi_config_tmp = $fh->filename;
 close($fh);
@@ -224,17 +224,17 @@ umask(0077);
 require PublicInbox::Spawn;
 PublicInbox::Spawn->import(qw(run_die));
 
-foreach my $addr (@address) {
-	next if $seen{lc($addr)};
+for my $addr (grep { !$seen{lc $_} } @address) {
 	run_die([@x, "--add", "$pfx.address", $addr]);
 }
-run_die([@x, "$pfx.url", $http_url]);
-run_die([@x, "$pfx.inboxdir", $inboxdir]);
-
-if (defined($indexlevel)) {
-	run_die([@x, "$pfx.indexlevel", $indexlevel]);
-}
-run_die([@x, "$pfx.newsgroup", $ng]) if $ng ne '';
+run_die([@x, "$pfx.url", $http_url]) if
+	(!$old_ibx || !grep(/\Q$http_url\E/, @{$old_ibx->{url} // []}));
+run_die([@x, "$pfx.inboxdir", $inboxdir]) if
+	(!$old_ibx || ($old_ibx->{inboxdir} ne $inboxdir));
+run_die([@x, "$pfx.indexlevel", $indexlevel]) if defined($indexlevel) &&
+	(!$old_ibx || (($old_ibx->{indexlevel} // '') ne $indexlevel));
+run_die([@x, "$pfx.newsgroup", $ng]) if $ng ne '' &&
+	(!$old_ibx || (($old_ibx->{newsgroup} // '') ne $ng));
 
 for my $kv (@c_extra) {
 	my ($k, $v) = split(/=/, $kv, 2);
