@@ -105,7 +105,7 @@ sub call {
 	@cgi_env{@PASS_ENV} = @$env{@PASS_ENV}; # spawn ignores undef vals
 	$cgi_env{HTTPS} = 'on' if $env->{'psgi.url_scheme'} eq 'https';
 
-	my $rdr = input_prepare($env) or return r(500);
+	my $rdr = { 0 => input_prepare($env) };
 	my $qsp = PublicInbox::Qspawn->new($self->{cmd}, \%cgi_env, $rdr);
 	my $limiter = $self->{pi_cfg}->limiter('-cgit');
 	$qsp->psgi_yield($env, $limiter, $parse_cgi_headers, $ctx);

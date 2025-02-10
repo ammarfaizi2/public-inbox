@@ -7,6 +7,7 @@ package PublicInbox::GitHTTPBackend;
 use strict;
 use v5.10.1;
 use Fcntl qw(:seek);
+use autodie qw(sysseek);
 use IO::Handle; # ->flush
 use HTTP::Date qw(time2str);
 use PublicInbox::Limiter;
@@ -40,8 +41,6 @@ sub serve {
 
 	serve_dumb($env, $git, $path);
 }
-
-sub ucarp { Carp::carp(@_); undef }
 
 my $prev = 0;
 my $exp;
@@ -103,8 +102,7 @@ sub serve_smart ($$$;$) {
 		($pi_cfg ? $pi_cfg->limiter('-httpbackend', 32) : undef);
 	$env{GIT_HTTP_EXPORT_ALL} = '1';
 	$env{PATH_TRANSLATED} = "$git->{git_dir}/$path";
-	my $rdr = input_prepare($env) or return r(500);
-	$rdr->{quiet} = 1;
+	my $rdr = { 0 => input_prepare($env), quiet => 1 };
 	my $cmd = $git->cmd('http-backend');
 	splice @$cmd, 1, 0, '-c', 'safe.directory=*';
 	my $qsp = PublicInbox::Qspawn->new($cmd, \%env, $rdr);
@@ -116,19 +114,19 @@ sub input_prepare {
 
 	my $input = $env->{'psgi.input'};
 	my $fd = eval { fileno($input) };
-	return { 0 => $fd } if (defined $fd && $fd >= 0);
+	return $fd if (defined $fd && $fd >= 0);
 	my $id = "git-http.input.$env->{REMOTE_ADDR}:$env->{REMOTE_PORT}";
-	my $in = tmpfile($id) // return ucarp("tmpfile: $!");
+	my $in = tmpfile($id) // die "tmpfile: $!";
 	my $buf;
 	while (1) {
-		my $r = $input->read($buf, 8192) // return ucarp("read $!");
+		my $r = $input->read($buf, 8192) // die "read: $!";
 		last if $r == 0;
-		print $in $buf // return ucarp("print: $!");
+		print $in $buf;
 	}
 	# ensure it's visible to git-http-backend(1):
-	$in->flush // return ucarp("flush: $!");
-	sysseek($in, 0, SEEK_SET) // return ucarp($env, "seek: $!");
-	{ 0 => $in };
+	$in->flush // die "flush: $!";
+	sysseek $in, 0, SEEK_SET;
+	$in;
 }
 
 sub parse_cgi_headers { # {parse_hdr} for Qspawn
