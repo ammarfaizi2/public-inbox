@@ -8,8 +8,7 @@
 #
 # This is maintained by ::SearchIdx (v1) and ::V2Writable (v2)
 package PublicInbox::Msgmap;
-use strict;
-use v5.10.1;
+use v5.12;
 use DBI;
 use DBD::SQLite;
 use DBD::SQLite::Constants qw(SQLITE_CONSTRAINT);
