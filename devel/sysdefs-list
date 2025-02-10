@@ -6,6 +6,7 @@
 eval 'exec perl -S $0 ${1+"$@"}' # no shebang
 	if 0; # running under some shell
 use v5.12;
+# no autodie here since some CFarm machines don't have it :<
 use File::Temp 0.19;
 use POSIX qw(uname);
 use Config;
