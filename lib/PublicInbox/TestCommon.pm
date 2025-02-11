@@ -15,7 +15,7 @@ use Carp ();
 our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 our $tail_cmd = $ENV{TAIL};
-our ($lei_opt, $lei_out, $lei_err);
+our ($lei_opt, $lei_out, $lei_err, $find_xh_pid);
 use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
 $ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
 $ENV{GIT_TEST_FSYNC} = 0; # hopefully reduce wear
@@ -32,7 +32,7 @@ BEGIN {
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd no_httpd_errors xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
-		strace strace_inject lsof_pid oct_is);
+		strace strace_inject lsof_pid oct_is $find_xh_pid);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
 	eval(join('', map { "*$_=\\&Test::More::$_;" } @methods));
@@ -1085,6 +1085,23 @@ sub oct_is ($$$) {
 	@_ = (sprintf('0%03o', $got), sprintf('0%03o', $exp), $msg);
 	goto &is; # tail recursion to get lineno from callers on failure
 }
+
+$find_xh_pid = $^O eq 'linux' && -r "/proc/$$/stat" ? sub {
+	my ($ppid) = @_;
+	my ($cmdline, $fh, @s);
+	for (glob('/proc/*/stat')) {
+		CORE::open $fh, '<', $_ or next;
+		@s = split /\s+/, readline($fh) // next;
+		next if $s[3] ne $ppid; # look for matching PPID
+		CORE::open $fh, '<', "/proc/$s[0]/cmdline" or next;
+		$cmdline = readline($fh) // next;
+		if ($cmdline =~ /\0-MPublicInbox::XapHelper\0-e\0/ ||
+				$cmdline =~ m!/xap_helper\0!) {
+			return $s[0];
+		}
+	}
+	undef;
+} : 'xap_helper PID lookup currently depends on Linux /proc';
 
 package PublicInbox::TestCommon::InboxWakeup;
 use strict;

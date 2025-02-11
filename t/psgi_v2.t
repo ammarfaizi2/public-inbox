@@ -393,23 +393,9 @@ my $client3 = sub {
 test_psgi(sub { $www->call(@_) }, $client3);
 test_httpd($env, $client3, 4);
 
-if ($^O eq 'linux' && -r "/proc/$$/stat") {
+SKIP: {
+	ref($find_xh_pid) or skip $find_xh_pid, 1;
 	my $args;
-	my $search_xh_pid = sub {
-		my ($pid) = @_;
-		for my $f (glob('/proc/*/stat')) {
-			open my $fh, '<', $f or next;
-			my @s = split /\s+/, readline($fh) // next;
-			next if $s[3] ne $pid; # look for matching PPID
-			open $fh, '<', "/proc/$s[0]/cmdline" or next;
-			my $cmdline = readline($fh) // next;
-			if ($cmdline =~ /\0-MPublicInbox::XapHelper\0-e\0/ ||
-					$cmdline =~ m!/xap_helper\0!) {
-				return $s[0];
-			}
-		}
-		undef;
-	};
 	my $usr1_test = sub {
 		my ($cb) = @_;
 		my $td = $PublicInbox::TestCommon::CURRENT_DAEMON;
@@ -417,8 +403,7 @@ if ($^O eq 'linux' && -r "/proc/$$/stat") {
 		my $res = $cb->(GET('/v2test/?q=m:a-mid@b'));
 		is $res->code, 200, '-httpd is running w/ search';
 
-		$search_xh_pid->($pid);
-		my $xh_pid = $search_xh_pid->($pid) or
+		my $xh_pid = $find_xh_pid->($pid) or
 			BAIL_OUT "can't find XH pid with $args";
 		my $xh_err = readlink "/proc/$xh_pid/fd/2";
 		is $xh_err, "$env->{TMPDIR}/stderr.log",
@@ -432,7 +417,7 @@ if ($^O eq 'linux' && -r "/proc/$$/stat") {
 		tick;
 		$res = $cb->(GET('/v2test/?q=m:a-mid@b'));
 		is $res->code, 200, '-httpd still running w/ search';
-		my $new_xh_pid = $search_xh_pid->($pid) or
+		my $new_xh_pid = $find_xh_pid->($pid) or
 			BAIL_OUT "can't find new XH pid with $args";
 		is $new_xh_pid, $xh_pid, "XH pid unchanged ($args)";
 		$xh_err = readlink "/proc/$new_xh_pid/fd/2";

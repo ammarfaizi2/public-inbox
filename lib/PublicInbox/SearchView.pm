@@ -16,6 +16,11 @@ use PublicInbox::SearchThread;
 use PublicInbox::SearchQuery;
 use PublicInbox::Search qw(get_pct);
 my %rmap_inc;
+use Errno ();
+
+# possible busy errors from async_mset (via pipe, sendmsg, epoll_ctl)
+my %BUSY = map { (Errno->$_, 1) } qw(EAGAIN ENOBUFS ENOMEM ETOOMANYREFS
+					EMFILE ENFILE ENOSPC);
 
 sub mbox_results {
 	my ($ctx) = @_;
@@ -60,12 +65,21 @@ sub sres_top_html {
 sub sres_html_cb { # async_mset cb
 	my ($ctx, $opt, $q, $mset, $err) = @_;
 	my $code = 200;
+	if ($err) {
+		if ($BUSY{$! + 0}) {
+			warn "W: query failed: $!";
+			$code = 503;
+		} else { # bad query by user
+			$code = 400;
+		}
+	}
 	my $total = $mset ? $mset->get_matches_estimated : undef;
 	ctx_prepare($q, $ctx);
 	my ($res, $html);
-	if ($err) {
-		$code = 400;
+	if ($code == 400) {
 		$html = '<pre>'.err_txt($ctx, $err).'</pre><hr>';
+	} elsif ($code == 503) {
+		$html = "<pre>\ntoo busy</pre><hr>";
 	} elsif ($total == 0) {
 		if (defined($ctx->{-uxs_retried})) { # undo retry damage:
 			$q->{'q'} = $ctx->{-uxs_retried};

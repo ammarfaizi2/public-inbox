@@ -400,9 +400,12 @@ sub spawn_xh () {
 		local $ENV{STDOUT_PATH} = $stdout;
 		PublicInbox::XapClient::start_helper('-j', $xh_workers)
 	};
-	warn "E: $@" if $@;
-	awaitpid($PublicInbox::Search::XHC->{io}->attached_pid, \&respawn_xh)
-		if $PublicInbox::Search::XHC;
+	if ($@) {
+		warn "E: $@";
+	} elsif (my $xhc = $PublicInbox::Search::XHC) {
+		$xhc->{io}->blocking(0);
+		awaitpid($xhc->{io}->attached_pid, \&respawn_xh);
+	}
 }
 
 sub reopen_logs {

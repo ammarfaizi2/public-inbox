@@ -678,5 +678,6 @@ xt/perf-msgview.t
 xt/perf-nntpd.t
 xt/perf-threading.t
 xt/pop3d-mpop.t
+xt/slow-xh-search.t
 xt/solver.t
 xt/stress-sharedkv.t
