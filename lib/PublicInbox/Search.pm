@@ -493,8 +493,8 @@ sub async_mset {
 		$cb->(@args, undef, $@) if $@;
 		$ret;
 	} else { # synchronous
-		my $mset = $self->mset($qry_str, $opt);
-		$cb->(@args, $mset);
+		my $mset = eval { $self->mset($qry_str, $opt) };
+		$@ ? $cb->(@args, undef, $@) : $cb->(@args, $mset);
 		undef;
 	}
 }
