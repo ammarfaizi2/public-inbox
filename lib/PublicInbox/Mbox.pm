@@ -181,6 +181,7 @@ my $refill_ids_cb = sub { # async_mset cb
 	$http = undef unless $ctx->{-really_async};
 	if ($err) {
 		warn "E: $err";
+		$ctx->{-mbox_done} = 1;
 		$ctx->close if $http; # our async httpd
 		return;
 	}
