@@ -170,9 +170,6 @@ sub impossible {
 	$$sql .= ' AND num < 0';
 }
 
-# XXX not sure suppessing RD_* is needed here, but t/imap_searchqp.t
-# sporadically fails
-local ($::RD_ERRORS, $::RD_WARN);
 my $prd = Parse::RecDescent->new(<<'EOG');
 <nocheck>
 { my $q = $PublicInbox::IMAPsearchqp::q; }
@@ -281,8 +278,8 @@ sub parse {
 	my ($imap, $query) = @_;
 	my $sql = '';
 	%$q = (sql => \$sql, imap => $imap); # imap = PublicInbox::IMAP obj
-	# XXX not always effective for t/imap_searchqp.t
-	local ($::RD_ERRORS, $::RD_WARN);
+	# Inline::C::Parser::RecDescent may set RD_HINT
+	local ($::RD_ERRORS, $::RD_WARN, $::RD_HINT);
 	my $res = eval { $prd->search_key(uc($query)) };
 	return $@ if $@ && $@ =~ /\A(?:BAD|NO) /;
 	return 'BAD unexpected result' if !$res || $res != $q;

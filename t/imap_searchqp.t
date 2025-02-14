@@ -39,12 +39,7 @@ like($q, qr/\ANO \[/, 'bad charset rejected');
 	open STDERR, '>&', $olderr;
 	seek $tmperr, 0, SEEK_SET;
 	read($tmperr, my $buf, -s $tmperr);
-	is($buf, '', 'nothing spewed to STDERR on bad query') or warn <<'EOM';
-FIXME: this sometimes fails despite setting $::RD_ERRORS + $::RD_WARN to
-undef in PublicInbox::IMAPsearchqp::parse and I don't understand why.
-It usually suceeds.  Let us know if you can help us understand this
-occasional failure at meta@public-inbox.org
-EOM
+	is $buf, '', 'nothing spewed to STDERR on bad query';
 }
 
 like($q, qr/\ABAD /, 'bad charset rejected');
