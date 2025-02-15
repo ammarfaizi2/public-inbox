@@ -1,9 +1,8 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
-# backend for a git-cat-file-workalike based on libgit2,
-# other libgit2 stuff may go here, too.
-package PublicInbox::Gcf2;
+# including backend for a git-cat-file-workalike based on libgit2,
+package PublicInbox::Lg2;
 use v5.12;
 use PublicInbox::Spawn qw(which run_qx); # may set PERL_INLINE_DIRECTORY
 use Fcntl qw(SEEK_SET);
@@ -35,7 +34,7 @@ BEGIN {
 		die "E: libgit2 not installed: $err\n" if $?;
 		$vals->{$k} = $val;
 	}
-	my $f = "$dir/gcf2_libgit2.h";
+	my $f = "$dir/lg2.h";
 	$c_src = PublicInbox::IO::try_cat $f or die "cat $f: $!";
 	# append pkg-config results to the source to ensure Inline::C
 	# can rebuild if there's changes (it doesn't seem to detect
@@ -62,7 +61,7 @@ EOM
 		seek($fh, 0, SEEK_SET);
 		my @msg = <$fh>;
 		truncate($fh, 0);
-		die "Inline::C Gcf2 build failed:\n", $err, "\n", @msg;
+		die "Inline::C Lg2 build failed:\n", $err, "\n", @msg;
 	}
 }
 
@@ -86,9 +85,9 @@ sub add_alt ($$) {
 	1;
 }
 
-# Usage: $^X -MPublicInbox::Gcf2 -e PublicInbox::Gcf2::loop [EXPIRE-TIMEOUT]
+# Usage: $^X -MPublicInbox::Lg2 -e PublicInbox::Lg2::gcf2_loop [EXPIRE-TIMEOUT]
 # (see lib/PublicInbox/Gcf2Client.pm)
-sub loop (;$) {
+sub gcf2_loop (;$) {
 	my $exp = $_[0] || $ARGV[0] || 60; # seconds
 	my $gcf2 = new();
 	my (%seen, $check_at);

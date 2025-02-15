@@ -10,14 +10,14 @@ use Fcntl qw(:seek);
 use IO::Handle ();
 use POSIX qw(_exit);
 use Cwd qw(abs_path);
-require_mods('PublicInbox::Gcf2');
-use_ok 'PublicInbox::Gcf2';
+require_mods('PublicInbox::Lg2');
+use_ok 'PublicInbox::Lg2';
 use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 use PublicInbox::Import;
 my ($tmpdir, $for_destroy) = tmpdir();
 
-my $gcf2 = PublicInbox::Gcf2::new();
-is(ref($gcf2), 'PublicInbox::Gcf2', '::new works');
+my $gcf2 = PublicInbox::Lg2::new();
+is(ref($gcf2), 'PublicInbox::Lg2', '::new works');
 my $COPYING = 'dba13ed2ddf783ee8118c6a581dbf75305f816a3';
 open my $agpl, '<', 'COPYING' or BAIL_OUT "AGPL-3 missing: $!";
 $agpl = do { local $/; <$agpl> };
@@ -102,7 +102,7 @@ SKIP: {
 	ok($gcf2->cat_oid(fileno($fh), $COPYING), 'cat_oid normal');
 	$ck_copying->('regular file');
 
-	$gcf2 = PublicInbox::Gcf2::new();
+	$gcf2 = PublicInbox::Lg2::new();
 	$gcf2->add_alternate("$tmpdir/objects");
 	open $fh, '+>', undef or BAIL_OUT "open: $!";
 	ok($gcf2->cat_oid(fileno($fh), $COPYING), 'cat_oid alternate');
@@ -150,7 +150,7 @@ if ($nr) {
 	close $r;
 	my $broken = fileno($w);
 	for (1..$nr) {
-		my $obj = PublicInbox::Gcf2::new();
+		my $obj = PublicInbox::Lg2::new();
 		if (defined($objdir)) {
 			$obj->add_alternate($objdir);
 			for (1..$cat) {

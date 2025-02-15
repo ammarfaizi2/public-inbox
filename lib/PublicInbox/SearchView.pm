@@ -169,7 +169,7 @@ sub path2inc ($) {
 	if (my $short = $rmap_inc{$full}) {
 		return $short;
 	} elsif (!scalar(keys %rmap_inc) && -e $full) {
-		# n.b. $INC{'PublicInbox::Gcf2'} is undef if libgit2-dev
+		# n.b. $INC{'PublicInbox::Lg2'} is undef if libgit2-dev
 		# doesn't exist
 		my $f;
 		%rmap_inc = map {;

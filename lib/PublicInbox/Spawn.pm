@@ -330,7 +330,7 @@ EOM
 			$all_libc = undef;
 		}
 	}
-	if (defined $all_libc) { # set for Gcf2
+	if (defined $all_libc) { # set for Lg2
 		$ENV{PERL_INLINE_DIRECTORY} = $inline_dir;
 		%RLIMITS = rlimit_map();
 		*send_cmd4 = sub ($$$$;$) {

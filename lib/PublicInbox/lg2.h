@@ -29,7 +29,7 @@ SV *new()
 
 	ref = newSViv((IV)odb);
 	self = newRV_noinc(ref);
-	sv_bless(self, gv_stashpv("PublicInbox::Gcf2", GV_ADD));
+	sv_bless(self, gv_stashpv("PublicInbox::Lg2", GV_ADD));
 	SvREADONLY_on(ref);
 
 	return self;

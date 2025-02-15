@@ -71,7 +71,7 @@ public-inbox processes.
 If libgit2 development files are installed and L<Inline::C>
 is enabled (described above), per-inbox C<git cat-file --batch>
 processes are replaced with a single L<perl(1)> process running
-C<PublicInbox::Gcf2::loop> in read-only daemons.  libgit2 use
+C<PublicInbox::Lg2::gcf2_loop> in read-only daemons.  libgit2 use
 will be available in public-inbox 1.7.0+
 
 More (optional) L<Inline::C> use will be introduced in the future

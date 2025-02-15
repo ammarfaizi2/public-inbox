@@ -8,7 +8,7 @@ use autodie qw(open close);
 use PublicInbox::Import;
 use PublicInbox::DS;
 
-require_mods('PublicInbox::Gcf2');
+require_mods('PublicInbox::Lg2');
 use_ok 'PublicInbox::Gcf2Client';
 my ($tmpdir, $for_destroy) = tmpdir();
 my $git_a = "$tmpdir/a.git";

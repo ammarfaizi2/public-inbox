@@ -129,7 +129,7 @@ sub cmt_title { # git->cat_async callback
 
 sub do_cat_async {
 	my ($arg, $cb, @req) = @_;
-	# favor git(1) over Gcf2 (libgit2) for SHA-256 support
+	# favor git(1) over Lg2 (libgit2) for SHA-256 support
 	my $ctx = ref $arg eq 'ARRAY' ? $arg->[0] : $arg;
 	$ctx->{git}->cat_async($_, $cb, $arg) for @req;
 	if ($ctx->{env}->{'pi-httpd.async'}) {
