@@ -9,6 +9,7 @@ use PublicInbox::InboxIdle;
 use PublicInbox::DS qw(now);
 use PublicInbox::IO qw(write_file);
 use PublicInbox::Eml;
+use PublicInbox::Config;
 my $tmpdir = tmpdir;
 local $ENV{HOME} = "$tmpdir";
 local $ENV{PI_CONFIG} = "$tmpdir/.public-inbox/config";
