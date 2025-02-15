@@ -5,7 +5,8 @@
 # Used for editing messages in a public-inbox.
 # Supports v2 inboxes only, for now.
 use strict;
-use warnings;
+use v5.10.1; # TODO: check unicode_strings compat
+use autodie qw(open);
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use PublicInbox::AdminEdit;
 use File::Temp 0.19 (); # 0.19 for TMPDIR
@@ -142,7 +143,6 @@ my %tmpopt = (
 
 foreach my $to_edit (values %$found) {
 	my $edit_fh = File::Temp->new(%tmpopt);
-	$edit_fh->autoflush(1);
 	my $edit_fn = $edit_fh->filename;
 	my ($ibx, $smsg) = @{$to_edit->[0]};
 	my $old_raw = $ibx->msg_by_smsg($smsg);
@@ -151,12 +151,11 @@ foreach my $to_edit (values %$found) {
 	my $tmp = $$old_raw;
 	if (!$opt->{raw}) {
 		my $oid = $smsg->{blob};
-		print $edit_fh "From mboxrd\@$oid Thu Jan  1 00:00:00 1970\n"
-			or die "failed to write From_ line: $!";
+		print $edit_fh "From mboxrd\@$oid Thu Jan  1 00:00:00 1970\n";
 		$tmp =~ s/^(>*From )/>$1/gm;
 	}
-	print $edit_fh $tmp or
-		die "failed to write tempfile for editing: $!";
+	print $edit_fh $tmp;
+	$edit_fh->flush or die "E: flush($edit_fn): $!";
 
 	# run the editor, respecting spaces/quote
 retry_edit:
@@ -183,8 +182,7 @@ retry_edit:
 
 	# reread the edited file, not using $edit_fh since $EDITOR may
 	# rename/relink $edit_fn
-	open my $new_fh, '<', $edit_fn or
-		die "can't read edited file ($edit_fn): $!\n";
+	open my $new_fh, '<', $edit_fn;
 	my $new_raw = PublicInbox::IO::read_all $new_fh;
 
 	if (!$opt->{raw}) {
