@@ -371,6 +371,7 @@ sub main {
 }
 1;
 EOF
+		die "E: $f failed: $@" if $@;
 		$pkg->can('main');
 	}
 }
