@@ -24,7 +24,7 @@ use File::Glob qw(bsd_glob GLOB_NOSORT);
 use PublicInbox::SQLiteUtil;
 use PublicInbox::Isearch;
 use PublicInbox::MultiGit;
-use PublicInbox::Spawn ();
+use PublicInbox::Spawn qw(run_wait);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(prepare_stack is_ancestor is_bad_blob
 	update_checkpoint);
@@ -1266,8 +1266,9 @@ sub idx_init { # similar to V2Writable
 	if ($git_midx && ($opt->{'multi-pack-index'} // 1)) {
 		my $cmd = $self->git->cmd('multi-pack-index');
 		push @$cmd, '--no-progress' if ($opt->{quiet}//0) > 1;
+		push @$cmd, 'write';
 		my $lk = $self->lock_for_scope;
-		system(@$cmd, 'write');
+		run_wait $cmd;
 		# ignore errors, fairly new command, may not exist
 	}
 	$self->parallel_init($self->{indexlevel});

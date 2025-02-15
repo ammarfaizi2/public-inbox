@@ -15,6 +15,7 @@ PublicInbox::Admin::check_require('-index');
 use PublicInbox::Eml;
 use PublicInbox::InboxWritable qw(eml_from_path);
 use PublicInbox::Import;
+use PublicInbox::Spawn qw(run_wait);
 
 my $help = <<'EOF';
 usage: public-inbox-edit -m MESSAGE-ID [--all] [INBOX_DIRS]
@@ -159,7 +160,7 @@ foreach my $to_edit (values %$found) {
 
 	# run the editor, respecting spaces/quote
 retry_edit:
-	if (system(qw(sh -c), $editor.' "$@"', $editor, $edit_fn)) {
+	if (run_wait [qw(sh -c), $editor.' "$@"', $editor, $edit_fn]) {
 		if (!(-t STDIN) && !$opt->{force}) {
 			die "E: $editor failed: $?\n";
 		}
