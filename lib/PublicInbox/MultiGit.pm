@@ -116,6 +116,7 @@ sub epoch_cfg_set {
 	if (-r $f) {
 		chomp(my $x = run_qx(\@cmd));
 		return if $x eq $v;
+		$? = 0; # don't influence _wq_done_wait in -clone
 	}
 	PublicInbox::CfgWr->new($f)->set('include.path', $v)->commit;
 }

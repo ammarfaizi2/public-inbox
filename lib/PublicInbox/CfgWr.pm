@@ -6,6 +6,10 @@ package PublicInbox::CfgWr;
 use v5.12;
 use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(run_die run_wait);
+my $cfgwr_commit = eval {
+	require PublicInbox::Lg2;
+	PublicInbox::Lg2->can('cfgwr_commit');
+};
 
 sub new {
 	my ($cls, $f) = @_;
@@ -38,6 +42,8 @@ sub unset_all {
 
 sub commit {
 	my ($self, $opt) = @_;
+	my $todo = delete $self->{todo} // return;
+	return $cfgwr_commit->($self->{-f}, $todo) if $cfgwr_commit;
 	my @x = (git_exe, 'config', '-f', $self->{-f});
 	for my $c (@{delete $self->{todo} // []}) {
 		unshift @$c, @x;

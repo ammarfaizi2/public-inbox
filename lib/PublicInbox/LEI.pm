@@ -20,6 +20,7 @@ use Fcntl qw(SEEK_SET);
 use PublicInbox::Config;
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::Spawn qw(run_wait popen_rd run_qx);
+eval { require PublicInbox::Lg2 }; # placate FindBin
 use PublicInbox::Lock;
 use PublicInbox::Eml;
 use PublicInbox::Git qw(git_exe);

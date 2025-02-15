@@ -14,6 +14,7 @@ use v5.12;
 use IO::Handle; # ->autoflush
 use PublicInbox::TestCommon;
 use PublicInbox::Spawn;
+eval { require PublicInbox::Lg2 }; # placate FindBin
 use PublicInbox::DS; # already loaded by Spawn via PublicInbox::IO
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use Errno qw(EINTR);

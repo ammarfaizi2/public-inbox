@@ -550,6 +550,7 @@ t/lei_saved_search.t
 t/lei_store.t
 t/lei_to_mail.t
 t/lei_xsearch.t
+t/lg2_cfg.t
 t/linkify.t
 t/main-bin/spamc
 t/mbox_lock.t
