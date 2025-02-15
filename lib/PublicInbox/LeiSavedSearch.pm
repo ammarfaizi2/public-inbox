@@ -10,6 +10,7 @@ use PublicInbox::Git qw(git_exe);
 use PublicInbox::OverIdx;
 use PublicInbox::LeiSearch;
 use PublicInbox::Config;
+use PublicInbox::CfgWr;
 use PublicInbox::Spawn qw(run_die);
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::MID qw(mids_for_index);
@@ -179,9 +180,9 @@ EOM
 sub description { $_[0]->{qstr} } # for WWW
 
 sub cfg_set { # called by LeiXSearch
-	my ($self, @args) = @_;
+	my ($self, $k, $v) = @_;
 	my $lk = $self->lock_for_scope; # git-config doesn't wait
-	run_die([git_exe, qw(config -f), $self->{'-f'}, @args]);
+	PublicInbox::CfgWr->new($self->{-f})->set($k, $v)->commit;
 }
 
 # drop-in for LeiDedupe API

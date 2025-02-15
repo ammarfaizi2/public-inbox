@@ -19,6 +19,7 @@ use PublicInbox::Config qw(glob2re);
 use PublicInbox::Inbox;
 use PublicInbox::LeiCurl;
 use PublicInbox::OnDestroy;
+use PublicInbox::CfgWr;
 use PublicInbox::SHA qw(sha256_hex sha_all);
 use POSIX qw(strftime);
 use PublicInbox::Admin qw(fmt_localtime);
@@ -415,16 +416,13 @@ sub fgrp_fetch_all {
 		my ($old, $new) = @$fgrp_old_new;
 		@$old = sort { $b->{-sort} <=> $a->{-sort} } @$old;
 		# $new is ordered by {references}
-		my $cmd = [ git_exe, "--git-dir=$osdir", qw(config -f), $f ];
+		my $cfgwr = PublicInbox::CfgWr->new($f);
 
 		# clobber settings from previous run atomically
 		for ("remotes.$grp", 'fetch.hideRefs') {
-			my $c = [ @$cmd, '--unset-all', $_ ];
-			$self->{lei}->qerr("# @$c");
-			next if $self->{dry_run};
-			run_wait($c, undef, $opt);
-			die "E: @$c \$?=$?" if ($? && ($? >> 8) != 5);
+			$cfgwr->unset_all($_) if !$self->{dry_run};
 		}
+		$cfgwr->commit($opt);
 
 		# permanent configs:
 		my $cfg = PublicInbox::Config->git_config_dump($f);
@@ -436,12 +434,10 @@ sub fgrp_fetch_all {
 				my ($k, $v) = split(/=/, $_, 2);
 				$k = "remote.$rn.$k";
 				next if ($cfg->{$k} // '') eq $v;
-				my $c = [@$cmd, $k, $v];
-				$fgrp->{lei}->qerr("# @$c");
-				next if $fgrp->{dry_run};
-				run_die($c, undef, $opt);
+				$cfgwr->set($k, $v) if !$fgrp->{dry_run};
 			}
 		}
+		$cfgwr->commit($opt);
 
 		if (!$self->{dry_run}) {
 			# update the config atomically via O_APPEND while
@@ -460,7 +456,7 @@ sub fgrp_fetch_all {
 			write_file '>>', $f, @buf;
 			unlink("$f.lock");
 		}
-		$cmd  = [ @git, "--git-dir=$osdir", @fetch, $grp ];
+		my $cmd = [ @git, "--git-dir=$osdir", @fetch, $grp ];
 		push @$old, @$new;
 		my $end = on_destroy \&fgrpv_done, $old;
 		start_cmd($self, $cmd, $opt, $end);
@@ -809,9 +805,8 @@ sub update_ent {
 	$cur = $self->{-local_manifest}->{$key}->{owner} // "\0";
 	return if $cur eq $new;
 	utf8::encode($new); # to octets
-	my $cmd = [ git_exe, qw(config -f), "$dst/config",
-			'gitweb.owner', $new ];
-	start_cmd($self, $cmd, { 2 => $self->{lei}->{2} });
+	PublicInbox::CfgWr->new(
+		"$dst/config")->set('gitweb.owner', $new)->commit;
 }
 
 sub v1_done { # called via OnDestroy

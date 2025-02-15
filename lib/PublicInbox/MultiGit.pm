@@ -7,6 +7,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::Spawn qw(run_die run_qx);
 use PublicInbox::Import;
+use PublicInbox::CfgWr;
 use PublicInbox::Git qw(git_exe);
 use File::Temp 0.19;
 use List::Util qw(max);
@@ -116,7 +117,7 @@ sub epoch_cfg_set {
 		chomp(my $x = run_qx(\@cmd));
 		return if $x eq $v;
 	}
-	run_die [@cmd, $v];
+	PublicInbox::CfgWr->new($f)->set('include.path', $v)->commit;
 }
 
 sub add_epoch {

@@ -163,7 +163,8 @@ my $pi_config_tmp = $fh->filename;
 close($fh);
 
 my $pfx = "publicinbox.$name";
-my @x = (qw/git config/, "--file=$pi_config_tmp");
+require PublicInbox::CfgWr;
+my $cfgwr = PublicInbox::CfgWr->new($pi_config_tmp);
 
 $inboxdir = PublicInbox::Config::rel2abs_collapsed($inboxdir);
 die "`\\n' not allowed in `$inboxdir'\n" if index($inboxdir, "\n") >= 0;
@@ -225,15 +226,15 @@ require PublicInbox::Spawn;
 PublicInbox::Spawn->import(qw(run_die));
 
 for my $addr (grep { !$seen{lc $_} } @address) {
-	run_die([@x, "--add", "$pfx.address", $addr]);
+	$cfgwr->add("$pfx.address", $addr);
 }
-run_die([@x, "$pfx.url", $http_url]) if
+$cfgwr->set("$pfx.url", $http_url) if
 	(!$old_ibx || !grep(/\Q$http_url\E/, @{$old_ibx->{url} // []}));
-run_die([@x, "$pfx.inboxdir", $inboxdir]) if
+$cfgwr->set("$pfx.inboxdir", $inboxdir) if
 	(!$old_ibx || ($old_ibx->{inboxdir} ne $inboxdir));
-run_die([@x, "$pfx.indexlevel", $indexlevel]) if defined($indexlevel) &&
+$cfgwr->set("$pfx.indexlevel", $indexlevel) if defined($indexlevel) &&
 	(!$old_ibx || (($old_ibx->{indexlevel} // '') ne $indexlevel));
-run_die([@x, "$pfx.newsgroup", $ng]) if $ng ne '' &&
+$cfgwr->set("$pfx.newsgroup", $ng) if $ng ne '' &&
 	(!$old_ibx || (($old_ibx->{newsgroup} // '') ne $ng));
 
 for my $kv (@c_extra) {
@@ -242,8 +243,9 @@ for my $kv (@c_extra) {
 	# but that's too new to depend on in 2021.  Perl quotemeta
 	# seems compatible enough for POSIX ERE which git uses
 	my $re = '^'.quotemeta($v).'$';
-	run_die([@x, qw(--replace-all), "$pfx.$k", $v, $re]);
+	$cfgwr->replace_all("$pfx.$k", $v, $re);
 }
+$cfgwr->commit;
 
 # needed for git prior to v2.1.0
 chmod($perm & 07777, $pi_config_tmp);
