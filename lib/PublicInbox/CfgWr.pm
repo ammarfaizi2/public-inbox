@@ -45,7 +45,7 @@ sub commit {
 	my $todo = delete $self->{todo} // return;
 	return $cfgwr_commit->($self->{-f}, $todo) if $cfgwr_commit;
 	my @x = (git_exe, 'config', '-f', $self->{-f});
-	for my $c (@{delete $self->{todo} // []}) {
+	for my $c (@$todo) {
 		unshift @$c, @x;
 		if ($c->[scalar(@x)] eq '--unset-all') {
 			run_wait $c, undef, $opt;
