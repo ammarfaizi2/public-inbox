@@ -285,7 +285,7 @@ sub index_diff ($$$) {
 				push @$xnq, shift(@l);
 
 				# skip base85 and empty lines
-				while (@l && ($l[0] =~ /\A$BASE85\h*\z/o ||
+				while (@l && ($l[0] =~ /\A$BASE85\s*\z/o ||
 						$l[0] !~ /\S/)) {
 					shift @l;
 				}
@@ -386,8 +386,8 @@ sub index_body_text {
 			if ($txt =~ /^[>\t ]+GIT binary patch\r?/sm) {
 				# get rid of Base-85 noise
 				$txt =~ s/^([>\h]+(?:literal|delta)
-						\x20[0-9]+\r?\n)
-					(?:[>\h]+$BASE85\h*\r?\n)+/$1/gsmx;
+						\x20[0-9]+\h*\r*\n)
+					(?:[>\h]+$BASE85\h*\r*\n)+/$1/gsmx;
 			}
 			index_text($self, $txt, 0, 'XQUOT');
 		} else { # does it look like a diff?
