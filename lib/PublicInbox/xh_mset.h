@@ -1,5 +1,5 @@
 // Copyright (C) all contributors <meta@public-inbox.org>
-// License: GPL-2.0+ <https://www.gnu.org/licenses/gpl-2.0.txt>
+// License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 // This file is only intended to be included by xap_helper.h
 // it implements pieces used by WWW, IMAP and lei
 
