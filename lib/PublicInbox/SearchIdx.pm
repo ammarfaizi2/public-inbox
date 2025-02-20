@@ -543,7 +543,7 @@ sub v1_index_mm ($$$) {
 	}
 }
 
-sub add_message {
+sub add_message { # v1 + tests only
 	# mime = PublicInbox::Eml or Email::MIME object
 	my ($self, $mime, $smsg, $cmt_info) = @_;
 	begin_txn_lazy($self);
