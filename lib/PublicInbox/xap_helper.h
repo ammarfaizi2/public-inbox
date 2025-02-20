@@ -139,6 +139,7 @@ static int srch_eq(const struct srch *a, const struct srch *b)
 KHASHL_CSET_INIT(KH_LOCAL, srch_set, srch_set, struct srch *,
 		srch_hash, srch_eq)
 static srch_set *srch_cache;
+static struct srch *cur_srch; // for ThreadFieldProcessor
 static long my_fd_max, shard_nfd;
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
@@ -580,6 +581,8 @@ static void srch_cache_renew(struct srch *keep)
 	}
 }
 
+#include "xh_thread_fp.h" // ThreadFieldProcessor
+
 static void srch_init(struct req *req)
 {
 	int i;
@@ -634,10 +637,16 @@ static void srch_init(struct req *req)
 	srch->qp->set_stemming_strategy(Xapian::QueryParser::STEM_SOME);
 	srch->qp->SET_MAX_EXPANSION(100);
 
-	if (req->code_search)
+	if (req->code_search) {
 		qp_init_code_search(srch->qp); // CodeSearch.pm
-	else
+	} else {
+		Xapian::FieldProcessor *fp;
+
 		qp_init_mail_search(srch->qp); // Search.pm
+		// n.b. ->release() starts Xapian refcounting
+		fp = (new ThreadFieldProcessor(*srch->qp))->release();
+		srch->qp->add_boolean_prefix("thread", fp);
+	}
 }
 
 // setup query parser for altid and arbitrary headers
@@ -773,6 +782,7 @@ static void dispatch(struct req *req)
 	if (req->timeout_sec)
 		alarm(req->timeout_sec > UINT_MAX ?
 			UINT_MAX : (unsigned)req->timeout_sec);
+	cur_srch = req->srch; // set global for *FieldProcessor
 	try {
 		if (!req->fn(req))
 			warnx("`%s' failed", req->argv[0]);
@@ -834,6 +844,7 @@ static void req_cleanup(void *ptr)
 {
 	struct req *req = (struct req *)ptr;
 	free(req->lenv);
+	cur_srch = NULL;
 }
 
 static void reopen_logs(void)

@@ -40,6 +40,41 @@ my $v2 = create_inbox 'v2', indexlevel => 'medium', version => 2,
 	}
 };
 
+my $thr = create_inbox 'thr', indexlevel => 'medium', version => 2,
+			tmpdir => "$tmp/thr", sub {
+	my ($im) = @_;
+	my $common = <<EOM;
+From: <BOFH\@YHBT.net>
+To: meta\@public-inbox.org
+Date: Mon, 1 Apr 2019 08:15:21 +0000
+EOM
+	$im->add(PublicInbox::Eml->new(<<EOM));
+${common}Subject: root message
+Message-ID: <thread-root\@example>
+
+hi
+EOM
+	my @t = qw(wildfires earthquake flood asteroid drought plague);
+	my $nr = 0;
+	for my $x (@t) {
+		++$nr;
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail;
+${common}Subject: Re: root reply
+References: <thread-root\@example>
+Message-ID: <thread-hit-$nr\@example>
+
+$x
+EOM
+		$im->add(PublicInbox::Eml->new(<<EOM)) or xbail;
+${common}Subject: broken thread from $x
+References: <ghost-root\@example>
+Message-ID: <thread-miss-$nr\@example>
+
+$x
+EOM
+	}
+};
+
 my @ibx_idx = glob("$v2->{inboxdir}/xap*/?");
 my @ibx_shard_args = map { ('-d', $_) } @ibx_idx;
 my (@int) = glob("$crepo/public-inbox-cindex/cidx*/?");
@@ -268,6 +303,53 @@ for my $n (@NO_CXX) {
 	my @oids = (join('', @res) =~ /^([a-f0-9]{7}) /gms);
 	is $nr_out, scalar(@oids), "output count matches $xhc->{impl}" or
 		diag explain(\@res, \@err);
+
+	SKIP: {
+		$xhc->{impl} =~ /cxx/i or
+			skip "`thread:' field processor requires C++", 1;
+		require PublicInbox::XhcMset;
+		my $over = $thr->over;
+		my @thr_idx = glob("$thr->{inboxdir}/xap*/?");
+		my @thr_shard_args = map { ('-d', $_) } @thr_idx;
+		my (@art, $mset, $err);
+		my $capture = sub { ($mset, $err) = @_ };
+		my $retrieve = sub {
+			my ($qstr) = @_;
+			$r = $xhc->mkreq(undef, 'mset', @thr_shard_args, $qstr);
+			PublicInbox::XhcMset->maybe_new($r, undef, $capture);
+			map { $over->get_art($_->get_docid) } $mset->items;
+		};
+		@art = $retrieve->('thread:thread-root@example wildfires');
+		is scalar(@art), 1, 'got 1 result';
+		is scalar(grep { $_->{mid} =~ /thread-miss/ } @art), 0,
+			'no thread misses in result';
+		ok !$err, 'no error from thread:MSGID search';
+
+		@art = $retrieve->('thread:thread-root@example');
+		is scalar(@art), 7,
+			'expected number of results for thread:MSGID';
+		is scalar(grep {
+				$_->{mid} eq 'thread-root@example' ||
+				$_->{references} =~ /<thread-root\@example>/
+			} @art),
+			scalar(@art),
+			'got all matching results for thread:MSGID';
+
+		@art = $retrieve->('thread:"{ s:broken }"');
+		is scalar(@art), 6,
+			'expected number of results for thread:"{ SUBQUERY }"';
+		is scalar(grep { $_->{subject} =~ /broken/ } @art),
+			scalar(@art),
+			'expected matches for thread:"{ SUBQUERY }"';
+
+		my $nr = $ENV{TEST_LEAK_NR} or skip 'TEST_LEAK_NR unset', 1;
+		$ENV{VALGRIND} or diag
+"W: `VALGRIND=' unset w/ TEST_LEAK_NR (using -fsanitize?)";
+		for (1..$nr) {
+			$retrieve->('thread:thread-root@example wildfires');
+			$retrieve->('thread:"{ s:broken }" wildfires');
+		}
+	}
 
 	if ($ENV{TEST_XH_TIMEOUT}) {
 		diag 'testing timeouts...';
