@@ -40,7 +40,7 @@ my $v2 = create_inbox 'v2', indexlevel => 'medium', version => 2,
 	}
 };
 
-my $thr = create_inbox 'thr', indexlevel => 'medium', version => 2,
+my $thr = create_inbox 'thr-ref+', indexlevel => 'medium', version => 2,
 			tmpdir => "$tmp/thr", sub {
 	my ($im) = @_;
 	my $common = <<EOM;
@@ -341,6 +341,13 @@ for my $n (@NO_CXX) {
 		is scalar(grep { $_->{subject} =~ /broken/ } @art),
 			scalar(@art),
 			'expected matches for thread:"{ SUBQUERY }"';
+
+		@art = $retrieve->('thread:ghost-root@example');
+		is scalar(@art), 6,
+			'expected number of results for thread:GHOST-MSGID';
+		is scalar(grep { $_->{references} =~ /ghost-root/ } @art),
+			scalar(@art),
+			'thread:MSGID works on ghosts';
 
 		my $nr = $ENV{TEST_LEAK_NR} or skip 'TEST_LEAK_NR unset', 1;
 		$ENV{VALGRIND} or diag

@@ -135,6 +135,16 @@ my $query = sub {
 	my $second = $res->[0];
 
 	isnt($first, $second, "offset returned different result from limit");
+
+	for my $f (qw(references)) {
+		$res = $query->($f . ':root@s');
+		@res = filter_mids($res);
+		is_deeply \@res, [ 'last@s' ],
+			  "got expected results for $f: match";
+			 diag explain(\@res);
+		$res = $query->($f . ':root');
+		is scalar(@$res), 0, "no partial mid match";
+	}
 }
 
 # ghost vivication

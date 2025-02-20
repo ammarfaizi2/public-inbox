@@ -64,7 +64,9 @@ Xapian::Query ThreadFieldProcessor::operator()(const std::string &str)
 	Xapian::Query qry;
 
 	if (str.at(0) != '{') { // thread:$MSGID (no `{'/`}' encasement)
-		qry = Xapian::Query("Q" + str);
+		qry = Xapian::Query(Xapian::Query::OP_OR,
+				Xapian::Query("Q" + str),
+				Xapian::Query("XRF" + str));
 	} else if (str.size() <= 1 || str.at(str.size() - 1) != '}') {
 		throw Xapian::QueryParserError("missing } in '" + str + "'");
 	} else { // thread:"{hello world}"

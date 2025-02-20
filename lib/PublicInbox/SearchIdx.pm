@@ -481,6 +481,9 @@ sub eml2doc ($$$;$) {
 	$doc->add_boolean_term('O'.$ekey) if ($ekey // '.') ne '.';
 	msg_iter($eml, \&index_xapian, [ $self, $doc ]);
 	index_ids($self, $doc, $eml, $mids);
+	for (@{$smsg->parse_references($eml, $mids)}) {
+		$doc->add_boolean_term('XRF'.$_)
+	}
 
 	# by default, we maintain compatibility with v1.5.0 and earlier
 	# by writing to docdata.glass, users who never expect to downgrade can
@@ -488,9 +491,7 @@ sub eml2doc ($$$;$) {
 	if (!$self->{-skip_docdata}) {
 		# WWW doesn't need {to} or {cc}, only NNTP
 		$smsg->{to} = $smsg->{cc} = '';
-		$smsg->parse_references($eml, $mids);
-		my $data = $smsg->to_doc_data;
-		$doc->set_data($data);
+		$doc->set_data($smsg->to_doc_data);
 	}
 	my $xtra = defined $ekey ? $self->{"-extra\t$ekey"} : undef;
 	$xtra //= $self->{-extra};

@@ -36,7 +36,7 @@ use constant {
 	# 4 - change "Re: " normalization, avoid circular Reference ghosts
 	# 5 - subject_path drops trailing '.'
 	# 6 - preserve References: order in document data
-	# 7 - remove references and inreplyto terms
+	# 7 - remove references and inreplyto terms (restored in 15 (v2.0))
 	# 8 - remove redundant/unneeded document data
 	# 9 - disable Message-ID compression (SHA-1)
 	# 10 - optimize doc for NNTP overviews
@@ -53,6 +53,7 @@ use constant {
 	#      * "lid:" and "l:" for List-Id searches
 	#
 	#      v1.6.0 adds BYTES, UID and THREADID values
+	#      v2.0.0 re-adds "references:"
 	SCHEMA_VERSION => 15,
 
 	# we may have up to 8 FDs per shard (depends on Xapian *shrug*)
@@ -151,6 +152,7 @@ our %PATCH_BOOL_COMMON = (
 my %bool_pfx_external = (
 	mid => 'Q', # Message-ID (full/exact), this is mostly uniQue
 	lid => 'G', # newsGroup (or similar entity), just inside <>
+	references => 'XRF',
 	%PATCH_BOOL_COMMON
 );
 
