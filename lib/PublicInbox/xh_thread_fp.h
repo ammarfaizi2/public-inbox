@@ -17,10 +17,10 @@ static enum exc_iter xpand_col_iter(Xapian::Query *xqry,
 	try {
 		Xapian::Document doc = i->get_document();
 		std::string val = doc.get_value(column);
-		*xqry = Xapian::Query(Xapian::Query::OP_OR, *xqry,
-				Xapian::Query(
-					Xapian::Query::OP_VALUE_RANGE,
-					column, val, val));
+		// n.b. Xapian 1.4.10+ optimizes `|=' to reduce allocation.
+		// operator overloading is confusing, yes :<
+		*xqry |= Xapian::Query(Xapian::Query::OP_VALUE_RANGE,
+					column, val, val);
 	} catch (const Xapian::DatabaseModifiedError &e) {
 		cur_srch->db->reopen();
 		return ITER_RETRY;
