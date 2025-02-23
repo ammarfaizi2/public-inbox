@@ -20,6 +20,7 @@ use Carp qw(croak);
 my $X = \%PublicInbox::Search::X;
 our (%SRCH, %WORKERS, $nworker, $workerset, $in, $SHARD_NFD, $MY_FD_MAX);
 our $stderr = \*STDERR;
+my $QP_FLAGS = $PublicInbox::Search::QP_FLAGS;
 
 sub cmd_test_inspect {
 	my ($req) = @_;
@@ -194,7 +195,7 @@ sub dispatch {
 	$key .= "\0".join("\0", map { ('-Q', $_) } @{$req->{Q}}) if $req->{Q};
 	my $new;
 	$req->{srch} = $SRCH{$key} // do {
-		$new = { qp_flags => $PublicInbox::Search::QP_FLAGS };
+		$new = { qp_flags => $QP_FLAGS };
 		my $nfd = scalar(@$dirs) * PublicInbox::Search::SHARD_COST;
 		$SHARD_NFD += $nfd;
 		if ($SHARD_NFD > $MY_FD_MAX) {
@@ -337,6 +338,7 @@ sub start (@) {
 		die "E: unable to get RLIMIT_NOFILE: $!";
 	warn "W: RLIMIT_NOFILE=$MY_FD_MAX too low\n" if $MY_FD_MAX < 72;
 	$MY_FD_MAX -= 64;
+	$QP_FLAGS |= PublicInbox::Search::FLAG_PURE_NOT();
 
 	local $nworker = $opt->{j};
 	return recv_loop() if $nworker == 0;

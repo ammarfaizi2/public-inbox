@@ -590,6 +590,7 @@ static void srch_init(struct req *req)
 	const unsigned FLAG_PHRASE = Xapian::QueryParser::FLAG_PHRASE;
 	srch->qp_flags = Xapian::QueryParser::FLAG_BOOLEAN |
 			Xapian::QueryParser::FLAG_LOVEHATE |
+			Xapian::QueryParser::FLAG_PURE_NOT |
 			Xapian::QueryParser::FLAG_WILDCARD;
 	long nfd = req->dirc * SHARD_COST;
 
