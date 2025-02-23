@@ -10,13 +10,17 @@ public:
 	Xapian::Query operator()(const std::string &str);
 };
 
-static enum exc_iter xpand_col_iter(std::set<std::string> &vals,
+static enum exc_iter xpand_col_iter(Xapian::Query *xqry,
 					Xapian::MSetIterator *i,
 					unsigned column)
 {
 	try {
 		Xapian::Document doc = i->get_document();
-		vals.insert(doc.get_value(column));
+		std::string val = doc.get_value(column);
+		*xqry = Xapian::Query(Xapian::Query::OP_OR, *xqry,
+				Xapian::Query(
+					Xapian::Query::OP_VALUE_RANGE,
+					column, val, val));
 	} catch (const Xapian::DatabaseModifiedError &e) {
 		cur_srch->db->reopen();
 		return ITER_RETRY;
@@ -29,9 +33,7 @@ static enum exc_iter xpand_col_iter(std::set<std::string> &vals,
 static Xapian::Query qry_xpand_col(Xapian::Query qry, unsigned column)
 {
 	Xapian::Query xqry = Xapian::Query::MatchNothing;
-
 	Xapian::Enquire enq(*cur_srch->db);
-	std::set<std::string> vals; // serialised Xapian column
 
 	enq.set_weighting_scheme(Xapian::BoolWeight());
 	enq.set_query(qry);
@@ -41,19 +43,12 @@ static Xapian::Query qry_xpand_col(Xapian::Query qry, unsigned column)
 
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++)  {
 		for (int t = 10; t > 0; --t)
-			switch (xpand_col_iter(vals, &i, column)) {
+			switch (xpand_col_iter(&xqry, &i, column)) {
 			case ITER_OK: t = 0; break; // leave inner loop
 			case ITER_RETRY: break; // continue for-loop
 			case ITER_ABORT: return xqry; // impossible
 			}
 	}
-
-	std::set<std::string>::const_iterator tid;
-	for (tid = vals.begin(); tid != vals.end(); tid++)
-		xqry = Xapian::Query(Xapian::Query::OP_OR, xqry,
-				Xapian::Query(
-					Xapian::Query::OP_VALUE_RANGE,
-					column, *tid, *tid));
 	return xqry;
 }
 
