@@ -92,10 +92,12 @@ our @XH_SPEC = (
 	'o=i', # offset
 	'r', # 1=relevance then column
 	't', # collapse threads
+	'u=i', # IMAP UID min
 	'A=s@', # prefixes
 	'K=i', # timeout kill after i seconds
 	'O=s', # eidx_key
 	'T=i', # threadid
+	'U=i', # IMAP UID max
 	'Q=s@', # query prefixes "$user_prefix[:=]$XPREFIX"
 );
 
@@ -471,6 +473,9 @@ sub xh_opt ($$) {
 	push @ret, '-t' if $opt->{threads};
 	push @ret, '-T', $opt->{threadid} if defined $opt->{threadid};
 	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
+	if (my $uid = $opt->{uid_range}) {
+		push @ret, '-u', $uid->[0], '-U', $uid->[1];
+	}
 	@ret;
 }
 

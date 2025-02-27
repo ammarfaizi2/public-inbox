@@ -1091,6 +1091,18 @@ sub parse_imap_query ($$) {
 	$q;
 }
 
+sub mset_cb { # async_mset cb
+	my ($self, $tag, $want_msn, $srch, $opt, $mset, $err) = @_;
+	$self->write($err ? do {
+		warn "IMAP search error: $err\n";
+		\"$tag BAD program fault - command not performed\r\n"
+	} : do {
+		my $uids = $srch->mset_to_artnums($mset, $opt);
+		msn_convert($self, $uids) if scalar(@$uids) && $want_msn;
+		\"* SEARCH @$uids\r\n$tag OK Search done\r\n"
+	});
+}
+
 sub search_common {
 	my ($self, $tag, $query, $want_msn) = @_;
 	my $ibx = $self->{ibx} or return "$tag BAD No mailbox selected\r\n";
@@ -1109,10 +1121,9 @@ sub search_common {
 			limit => UID_SLICE,
 			uid_range => $range_info
 		};
-		my $mset = $srch->mset($q, $opt);
-		my $uids = $srch->mset_to_artnums($mset, $opt);
-		msn_convert($self, $uids) if scalar(@$uids) && $want_msn;
-		"* SEARCH @$uids\r\n$tag OK Search done\r\n";
+		$srch->async_mset($q, $opt, \&mset_cb,
+					$self, $tag, $want_msn, $srch, $opt) ?
+				undef : '';
 	} else {
 		"$tag BAD Error\r\n";
 	}

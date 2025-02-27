@@ -185,6 +185,7 @@ struct req { // argv and pfxv point into global rbuf
 	unsigned long long max;
 	unsigned long long off;
 	unsigned long long threadid;
+	unsigned long long uid_min, uid_max;
 	unsigned long timeout_sec;
 	size_t nr_out;
 	long sort_col; // value column, negative means BoolWeight
@@ -277,7 +278,14 @@ static Xapian::MSet mail_mset(struct req *req, const char *qry_str)
 		qry = Xapian::Query(Xapian::Query::OP_FILTER, qry,
 					Xapian::Query(req->Oeidx_key));
 	}
-	// TODO: uid_range
+	// THREADID and UID are CPP macros defined by XapHelperCxx.pm
+	if (req->uid_min != ULLONG_MAX && req->uid_max != ULLONG_MAX) {
+		Xapian::Query range = Xapian::Query(
+				Xapian::Query::OP_VALUE_RANGE, UID,
+				Xapian::sortable_serialise(req->uid_min),
+				Xapian::sortable_serialise(req->uid_max));
+		qry = Xapian::Query(Xapian::Query::OP_FILTER, qry, range);
+	}
 	if (req->threadid != ULLONG_MAX) {
 		std::string tid = Xapian::sortable_serialise(req->threadid);
 		qry = Xapian::Query(Xapian::Query::OP_FILTER, qry,
@@ -286,7 +294,6 @@ static Xapian::MSet mail_mset(struct req *req, const char *qry_str)
 	}
 	Xapian::Enquire enq = prep_enquire(req);
 	enq.set_query(qry);
-	// THREADID is a CPP macro defined on CLI (see) XapHelperCxx.pm
 	if (req->collapse_threads && has_threadid(srch))
 		enq.set_collapse_key(THREADID);
 
@@ -675,6 +682,11 @@ static void srch_init_extra(struct req *req)
 	req->srch->qp_extra_done = true;
 }
 
+#define OPT_U(ch, var, fn, max) do { \
+	var = fn(optarg, &end, 10); \
+	if (*end || var == max) ABORT("-"#ch" %s", optarg); \
+} while (0)
+
 static void dispatch(struct req *req)
 {
 	int c;
@@ -685,7 +697,7 @@ static void dispatch(struct req *req)
 	} kbuf;
 	char *end;
 	FILE *kfp;
-	req->threadid = ULLONG_MAX;
+	req->threadid = req->uid_min = req->uid_max = ULLONG_MAX;
 	for (c = 0; c < (int)MY_ARRAY_SIZE(cmds); c++) {
 		if (cmds[c].fn_len == size &&
 			!memcmp(cmds[c].fn_name, req->argv[0], size)) {
@@ -723,34 +735,20 @@ static void dispatch(struct req *req)
 			case LONG_MAX: case LONG_MIN: ABORT("-k %s", optarg);
 			}
 			break;
-		case 'm':
-			req->max = strtoull(optarg, &end, 10);
-			if (*end || req->max == ULLONG_MAX)
-				ABORT("-m %s", optarg);
-			break;
-		case 'o':
-			req->off = strtoull(optarg, &end, 10);
-			if (*end || req->off == ULLONG_MAX)
-				ABORT("-o %s", optarg);
-			break;
+		case 'm': OPT_U(m, req->max, strtoull, ULLONG_MAX); break;
+		case 'o': OPT_U(o, req->off, strtoull, ULLONG_MAX); break;
 		case 'r': req->relevance = true; break;
 		case 't': req->collapse_threads = true; break;
+		case 'u': OPT_U(u, req->uid_min, strtoull, ULLONG_MAX); break;
 		case 'A':
 			req->pfxv[req->pfxc++] = optarg;
 			if (MY_ARG_MAX == req->pfxc)
 				ABORT("too many -A");
 			break;
-		case 'K':
-			req->timeout_sec = strtoul(optarg, &end, 10);
-			if (*end || req->timeout_sec == ULONG_MAX)
-				ABORT("-K %s", optarg);
-			break;
+		case 'K': OPT_U(K, req->timeout_sec, strtoul, ULONG_MAX); break;
 		case 'O': req->Oeidx_key = optarg - 1; break; // pad "O" prefix
-		case 'T':
-			req->threadid = strtoull(optarg, &end, 10);
-			if (*end || req->threadid == ULLONG_MAX)
-				ABORT("-T %s", optarg);
-			break;
+		case 'T': OPT_U(T, req->threadid, strtoull, ULLONG_MAX); break;
+		case 'U': OPT_U(U, req->uid_max, strtoull, ULLONG_MAX); break;
 		case 'Q':
 			req->qpfxv[req->qpfxc++] = optarg;
 			if (MY_ARG_MAX == req->qpfxc) ABORT("too many -Q");

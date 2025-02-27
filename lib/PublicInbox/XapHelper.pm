@@ -162,6 +162,8 @@ sub cmd_mset { # to be used by WWW + IMAP
 	$opt->{threads} = 1 if defined $req->{t};
 	$opt->{git_dir} = $req->{g} if defined $req->{g};
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
+	my @uid_range = @$req{qw(u U)};
+	$opt->{uid_range} = \@uid_range if grep(defined, @uid_range) == 2;
 	$opt->{threadid} = $req->{T} if defined $req->{T};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
 	say { $req->{0} } 'mset.size=', $mset->size,
