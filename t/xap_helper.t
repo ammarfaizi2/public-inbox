@@ -189,7 +189,10 @@ SKIP: {
 		require PublicInbox::XapHelperCxx;
 		PublicInbox::XapHelperCxx::cmd();
 	};
-	skip "XapHelperCxx build: $@", 1 if $@;
+	if ($@) {
+		xbail "C++ build failed: $@" if $ENV{TEST_XH_CXX_ONLY};
+		skip "XapHelperCxx build: $@", 1;
+	}
 
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
 	my $ar = $test->(@$cmd, '-j0');
