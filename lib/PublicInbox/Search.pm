@@ -446,13 +446,6 @@ sub mset {
 	do_enquire($self, $qry, $opt, TS);
 }
 
-sub xhc_start_maybe (@) {
-	require PublicInbox::XapClient;
-	my $xhc = PublicInbox::XapClient::start_helper(@_);
-	require PublicInbox::XhcMset if $xhc;
-	$xhc;
-}
-
 my %QPMETHOD_2_SYM = (add_prefix => ':', add_boolean_prefix => '=');
 
 sub xh_opt ($$) {
