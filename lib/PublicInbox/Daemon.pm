@@ -390,19 +390,19 @@ sub worker_quit { # $_[0] = signal name or number (unused)
 
 sub spawn_xh () {
 	$xh_workers // return;
-	require PublicInbox::XhcMset;
 	local $) = $gid if defined $gid;
 	local $( = $gid if defined $gid;
 	local $> = $uid if defined $uid;
 	local $< = $uid if defined $uid;
-	$PublicInbox::Search::XHC = eval {
+	my $xhc = $PublicInbox::Search::XHC = eval {
 		local $ENV{STDERR_PATH} = $stderr;
 		local $ENV{STDOUT_PATH} = $stdout;
 		PublicInbox::XapClient::start_helper('-j', $xh_workers)
 	};
 	if ($@) {
-		warn "E: $@";
-	} elsif (my $xhc = $PublicInbox::Search::XHC) {
+		warn "E: $@ (will attempt to continue w/o xapian-helpers)\n";
+	} elsif ($xhc) {
+		require PublicInbox::XhcMset;
 		$xhc->{io}->blocking(0);
 		awaitpid($xhc->{io}->attached_pid, \&respawn_xh);
 	}
@@ -746,7 +746,7 @@ sub run {
 	local $SIG{__WARN__} = PublicInbox::Eml::warn_ignore_cb();
 	local %WORKER_SIG = %WORKER_SIG;
 	local $PublicInbox::XapClient::tries = 0;
-	local $PublicInbox::Search::XHC if defined($xh_workers);
+	local $PublicInbox::Search::XHC;
 
 	daemon_loop();
 	# $unlink_on_leave runs
