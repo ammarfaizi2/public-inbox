@@ -34,6 +34,7 @@ sub start_helper (@) {
 	my $env;
 	my $cmd = eval "require $cls; ${cls}::cmd()";
 	if ($@) { # fall back to Perl + XS|SWIG
+		return if "@argv" =~ /\b-l\b/; # no point w/o C++ in lei
 		$cls = 'PublicInbox::XapHelper';
 		# ensure the child process has the same @INC we do:
 		$env = { PERL5LIB => join(':', @INC) };

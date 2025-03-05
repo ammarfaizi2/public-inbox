@@ -146,6 +146,7 @@ static long my_fd_max, shard_nfd;
 static volatile int sock_fd = STDIN_FILENO;
 static sigset_t fullset, workerset;
 static bool alive = true;
+static bool lei; // support kw: and L: prefixes, FLAG_PHRASE always
 #if STDERR_ASSIGNABLE
 static FILE *orig_err = stderr;
 #endif
@@ -614,11 +615,11 @@ static void srch_init(struct req *req)
 		i = 0;
 		try {
 			srch->db = new Xapian::Database(req->dirv[i]);
-			if (is_chert(req->dirv[0]))
+			if (!lei && is_chert(req->dirv[0]))
 				srch->qp_flags &= ~FLAG_PHRASE;
 			for (i = 1; i < req->dirc; i++) {
 				const char *dir = req->dirv[i];
-				if (srch->qp_flags & FLAG_PHRASE &&
+				if (!lei && srch->qp_flags & FLAG_PHRASE &&
 						is_chert(dir))
 					srch->qp_flags &= ~FLAG_PHRASE;
 				srch->db->add_database(Xapian::Database(dir));
@@ -653,6 +654,10 @@ static void srch_init(struct req *req)
 	} else {
 		qp_init_mail_search(srch->qp); // Search.pm
 		srch->qp->add_boolean_prefix("thread", thread_fp);
+		if (lei) {
+			srch->qp->add_boolean_prefix("kw", "K");
+			srch->qp->add_boolean_prefix("L", "L");
+		}
 	}
 }
 
@@ -1101,7 +1106,7 @@ int main(int argc, char *argv[])
 	if (my_setlinebuf(stderr))
 		err(EXIT_FAILURE, "setlinebuf(stderr)");
 	// not using -W<workers> like Daemon.pm, since -W is reserved (glibc)
-	while ((c = getopt(argc, argv, "j:")) != -1) {
+	while ((c = getopt(argc, argv, "lj:")) != -1) {
 		char *end;
 
 		switch (c) {
@@ -1109,6 +1114,9 @@ int main(int argc, char *argv[])
 			nworker = strtoul(optarg, &end, 10);
 			if (*end != 0 || nworker > WORKER_MAX)
 				errx(EXIT_FAILURE, "-j %s invalid", optarg);
+			break;
+		case 'l':
+			lei = true;
 			break;
 		case ':':
 			errx(EXIT_FAILURE, "missing argument: `-%c'", optopt);

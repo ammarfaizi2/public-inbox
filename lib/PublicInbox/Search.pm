@@ -750,7 +750,7 @@ sub xh_args { # prep getopt args to feed to xap_helper.h socket
 		# TODO: arbitrary header indexing goes here
 		[ sort keys %dedupe ];
 	};
-	((map { ('-d', $_) } shard_dirs($self)), map { ('-Q', $_) } @$apfx);
+	((map { ('-d', $_) } $self->shard_dirs), map { ('-Q', $_) } @$apfx);
 }
 
 sub docids_by_postlist ($$) {

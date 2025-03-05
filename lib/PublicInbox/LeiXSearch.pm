@@ -40,6 +40,8 @@ sub attach_external {
 		return warn("$desc not indexed for Xapian ($@ $!)\n");
 	my @shards = $srch->xdb_shards_flat or
 		return warn("$desc has no Xapian shards\n");
+	my @dirs = $srch->shard_dirs or
+		return warn("$desc has no Xapian shard dirs\n");
 
 	if (delete $self->{xdb}) { # XXX: do we need this?
 		# clobber existing {xdb} if amending
@@ -60,8 +62,11 @@ sub attach_external {
 			"BUG: reloaded $nr shards, expected $expect"
 	}
 	push @{$self->{shards_flat}}, @shards;
+	push @{$self->{shard_dirs}}, @dirs;
 	push(@{$self->{shard2ibx}}, $ibxish) for (@shards);
 }
+
+sub shard_dirs { @{$_[0]->{shard_dirs}} }
 
 # returns a list of local inboxes (or count in scalar context)
 sub locals { @{$_[0]->{locals} // []} }
@@ -73,7 +78,7 @@ sub xdb_shards_flat { @{$_[0]->{shards_flat} // []} }
 
 sub _mitem_kw { # retry_reopen callback
 	my ($srch, $smsg, $mitem, $flagged) = @_;
-	my $doc = $mitem->get_document;
+	my $doc = $srch->{xdb}->get_document($mitem->get_docid);
 	my $kw = xap_terms('K', $doc);
 	$kw->{flagged} = 1 if $flagged;
 	my @L = xap_terms('L', $doc);
@@ -147,6 +152,20 @@ sub mset_progress {
 	}
 }
 
+sub sync_mset_cb { # async_mset cb
+	my ($ret, $mset, $err) = @_;
+	@$ret = ($mset, $err);
+}
+
+sub sync_mset ($$) {
+	my ($srch, $mo) = @_;
+	local $PublicInbox::DS::in_loop; # force synchronous
+	$srch->async_mset($mo->{qstr}, $mo, \&sync_mset_cb, my $ret = []);
+	my ($mset, $err) = @$ret;
+	die $err if $err;
+	$mset;
+}
+
 sub query_one_mset { # for --threads and l2m w/o sort
 	my ($self, $ibxish) = @_;
 	my $lei = $self->{lei};
@@ -170,8 +189,9 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	ref($min) and return warn("$maxk=$min has multiple values\n");
 	($min =~ /[^0-9]/) and return warn("$maxk=$min not numeric\n");
 	my $first_ids;
+	$lei->spawn_tmp_xh; # per-worker
 	do {
-		$mset = eval { $srch->mset($mo->{qstr}, $mo) };
+		$mset = eval { sync_mset $srch, $mo };
 		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
 		mset_progress($lei, $dir, $mo->{offset} + $mset->size,
 				$mset->get_matches_estimated);
@@ -232,8 +252,9 @@ sub query_combined_mset { # non-parallel for non-"--threads" users
 		attach_external($self, $loc);
 	}
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
+	$lei->spawn_tmp_xh; # per-worker
 	do {
-		$mset = eval { $self->mset($mo->{qstr}, $mo) };
+		$mset = eval { sync_mset $self, $mo };
 		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
 		mset_progress($lei, 'xsearch', $mo->{offset} + $mset->size,
 				$mset->get_matches_estimated);

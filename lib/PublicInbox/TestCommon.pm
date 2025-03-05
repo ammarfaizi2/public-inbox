@@ -747,9 +747,9 @@ SKIP: {
 	require PublicInbox::Spawn;
 	require PublicInbox::Config;
 	require File::Path;
-	eval { # use XDG_CACHE_HOME, first:
+	state $xh_cmd = eval { # use XDG_CACHE_HOME, first:
 		require PublicInbox::XapHelperCxx;
-		PublicInbox::XapHelperCxx::check_build();
+		PublicInbox::XapHelperCxx::cmd();
 	};
 	local %ENV = %ENV;
 	delete $ENV{XDG_DATA_HOME};
@@ -773,6 +773,13 @@ SKIP: {
 		my $home = "$tmpdir/lei-daemon";
 		mkdir($home, 0700);
 		local $ENV{HOME} = $home;
+		if ($xh_cmd && $xh_cmd->[0] =~ m!\A(.+)/+[^/]+\z!) {
+			# avoid repeated rebuilds by copying
+			my $src = $1;
+			my $dst = "$home/.cache/public-inbox/jaot";
+			File::Path::make_path($dst);
+			xsys_e([qw(/bin/cp -Rp), $src, $dst ]);
+		}
 		my $persist;
 		if ($persist_xrd && !$test_opt->{daemon_only}) {
 			$persist = $daemon_xrd = $persist_xrd;

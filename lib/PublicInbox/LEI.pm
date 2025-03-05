@@ -20,6 +20,7 @@ use Fcntl qw(SEEK_SET);
 use PublicInbox::Config;
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::Spawn qw(run_wait popen_rd run_qx);
+use PublicInbox::DS qw(awaitpid);
 eval { require PublicInbox::Lg2 }; # placate FindBin
 use PublicInbox::Lock;
 use PublicInbox::Eml;
@@ -28,7 +29,9 @@ use PublicInbox::Import;
 use PublicInbox::ContentHash qw(git_sha);
 use PublicInbox::OnDestroy;
 use PublicInbox::IPC;
+use PublicInbox::Search;
 use PublicInbox::IO qw(poll_in);
+use PublicInbox::XapHelperCxx;
 use Time::HiRes qw(stat); # ctime comparisons for config cache
 use File::Path ();
 use File::Spec;
@@ -1330,10 +1333,35 @@ sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
 	$n + scalar(keys(%PublicInbox::DS::AWAIT_PIDS));
 }
 
+sub clear_tmp_xh { # awaitpid cb, called in lei worker
+	my ($pid) = @_;
+	my ($e, $s, @m) = ($? >> 8, $? & 127);
+	push @m, " status=$e" if $e && $e != 66; # EX_NOINPUT ok
+	push @m, " signal=$s" if $s;
+	warn "W: xap_helper PID:$pid died: ", @m, "\n" if @m;
+	undef $PublicInbox::Search::XHC;
+}
+
+sub spawn_tmp_xh { # called in lei worker processes
+	$PublicInbox::Search::XHC //= eval {
+		my $xhc = PublicInbox::XapClient::start_helper(qw(-l -j0));
+		awaitpid($xhc->{io}->attached_pid, \&clear_tmp_xh) if $xhc;
+		$xhc;
+	} || warn("E: $@ (will attempt to continue w/o Xapian helper)\n");
+}
+
 # lei(1) calls this when it can't connect
 sub lazy_start {
 	my ($path, $errno, $narg) = @_;
-	local ($errors_log, $listener);
+	local ($errors_log, $listener, $PublicInbox::Search::XHC);
+
+	# no point in using xap_helper w/o C++ features for local clients
+	my $xh_cmd = eval { PublicInbox::XapHelperCxx::cmd() };
+	$PublicInbox::Search::XHC = $xh_cmd ? undef : 0;
+	if ($xh_cmd) {
+		require PublicInbox::XapClient;
+		require PublicInbox::XhcMset;
+	}
 	my ($sock_dir) = ($path =~ m!\A(.+?)/[^/]+\z!);
 	$errors_log = "$sock_dir/errors.log";
 	my $addr = pack_sockaddr_un($path);
