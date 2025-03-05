@@ -176,7 +176,8 @@ sub mset {
 	$qry = $PublicInbox::Search::X{Query}->new(
 				PublicInbox::Search::OP_FILTER(),
 				$qry, 'T'.'c');
-	$self->do_enquire($qry, $opt, CT);
+	$opt->{sort_col} = CT;
+	$self->do_enquire($qry, $opt);
 }
 
 sub roots2paths { # for diagnostics

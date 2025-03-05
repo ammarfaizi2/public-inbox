@@ -454,7 +454,8 @@ sub mset {
 		$qry = $X{Query}->new(OP_FILTER(), $qry,
 			$X{Query}->new(OP_VALUE_RANGE(), THREADID, $tid, $tid));
 	}
-	do_enquire($self, $qry, $opt, TS);
+	$opt->{sort_col} //= TS;
+	do_enquire($self, $qry, $opt);
 }
 
 my %QPMETHOD_2_SYM = (add_prefix => ':', add_boolean_prefix => '=');
@@ -508,10 +509,11 @@ sub async_mset {
 	}
 }
 
-sub do_enquire { # shared with CodeSearch
-	my ($self, $qry, $opt, $col) = @_;
+sub do_enquire { # shared with CodeSearch and MiscSearch
+	my ($self, $qry, $opt) = @_;
 	my $enq = $X{Enquire}->new(xdb($self));
 	$enq->set_query($qry);
+	my $col = $opt->{sort_col} // TS;
 	my $rel = $opt->{relevance} // 0;
 	if ($rel == -2) { # ORDER BY docid/UID (highest first)
 		$enq->set_weighting_scheme($X{BoolWeight}->new);

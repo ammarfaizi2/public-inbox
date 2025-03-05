@@ -55,23 +55,6 @@ sub mi_qp_new ($) {
 	$qp;
 }
 
-sub misc_enquire_once { # retry_reopen callback
-	my ($self, $qr, $opt) = @_;
-	my $eq = $PublicInbox::Search::X{Enquire}->new($self->{xdb});
-	$eq->set_query($qr);
-        my $desc = !$opt->{asc};
-	my $rel = $opt->{relevance} // 0;
-	if ($rel == -1) { # ORDER BY docid
-		$eq->set_docid_order($PublicInbox::Search::ENQ_ASCENDING);
-		$eq->set_weighting_scheme($PublicInbox::Search::X{BoolWeight}->new);
-	} elsif ($rel) {
-		$eq->set_sort_by_relevance_then_value($MODIFIED, $desc);
-	} else {
-		$eq->set_sort_by_value_then_relevance($MODIFIED, $desc);
-	}
-	$eq->get_mset($opt->{offset} || 0, $opt->{limit} || 200);
-}
-
 sub mset {
 	my ($self, $qs, $opt) = @_;
 	$opt ||= {};
@@ -80,7 +63,9 @@ sub mset {
 	$qs = 'type:inbox' if $qs eq '';
 	my $qr = $qp->parse_query($qs, $PublicInbox::Search::QP_FLAGS);
 	$opt->{relevance} = 1 unless exists $opt->{relevance};
-	retry_reopen($self, \&misc_enquire_once, $qr, $opt);
+	$opt->{sort_col} = $MODIFIED;
+	$opt->{limit} ||= 200;
+	PublicInbox::Search::do_enquire($self, $qr, $opt);
 }
 
 sub ibx_data_once {
