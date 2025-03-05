@@ -28,8 +28,8 @@ $idir //= $ENV{PERL_INLINE_DIRECTORY} //
 substr($dir, 0, 0) = "$idir/";
 my $bin = "$dir/xap_helper";
 my ($srcpfx) = (__FILE__ =~ m!\A(.+/)[^/]+\z!);
-my @srcs = map { $srcpfx.$_ }
-	qw(xh_mset.h xh_cidx.h xh_thread_fp.h xap_helper.h);
+my @srcs = map { $srcpfx.$_ } qw(approxidate.h
+	xh_mset.h xh_cidx.h xh_date.h xh_thread_fp.h xap_helper.h);
 my @pm_dep = map { $srcpfx.$_ } qw(Search.pm CodeSearch.pm);
 my $ldflags = '-Wl,-O1';
 $ldflags .= ' -Wl,--compress-debug-sections=zlib' if $^O ne 'openbsd';

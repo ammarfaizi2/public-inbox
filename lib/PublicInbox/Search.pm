@@ -72,10 +72,10 @@ our $NVRP; # '$Xap::'.('NumberValueRangeProcessor' or 'NumberRangeProcessor')
 our $ENQ_DESCENDING = 0;
 our $ENQ_ASCENDING = 1;
 our @MAIL_VMAP = (
-	[ YYYYMMDD, 'd:'],
-	[ TS, 'rt:' ],
+	[ YYYYMMDD, 'd:', 'YYYYmmdd' ], # enum date_fmt
+	[ TS, 'rt:', 'epoch_sec' ],
 	# these are undocumented for WWW, but lei and IMAP use them
-	[ DT, 'dt:' ],
+	[ DT, 'dt:', 'YYYYmmddHHMMSS' ],
 	[ BYTES, 'z:' ],
 	[ UID, 'uid:' ]
 );
@@ -132,7 +132,7 @@ sub load_xapian () {
 		# or make indexlevel=medium as default
 		$QP_FLAGS = FLAG_PHRASE() | FLAG_BOOLEAN() | FLAG_LOVEHATE() |
 				FLAG_WILDCARD();
-		@MAIL_NRP = map { $NVRP->new(@$_) } @MAIL_VMAP;
+		@MAIL_NRP = map { $NVRP->new(@$_[0, 1]) } @MAIL_VMAP;
 		return 1;
 	}
 	undef;
@@ -329,8 +329,8 @@ sub reopen {
 # Convert git "approxidate" ranges to something usable with our
 # Xapian indices.  At the moment, Xapian only offers a C++-only API
 # and neither the SWIG nor XS bindings allow us to use custom code
-# to parse dates (and libgit2 doesn't expose git__date_parse, either,
-# so we're running git-rev-parse(1)).
+# to parse dates (and libgit2 doesn't expose git_date_parse publicly,
+# either, so we're running git-rev-parse(1)).
 # This replaces things we need to send to $git->date_parse with
 # "\0".$strftime_format.['+'|$idx]."\0" placeholders
 sub date_parse_prepare {
@@ -616,15 +616,28 @@ sub qparse_new {
 }
 
 sub generate_cxx () { # generates snippet for xap_helper.h
+	my $gdfp_size = grep { @$_ == 3 } @MAIL_VMAP;
+	my @gdfp_pfx;
 	my $ret = <<EOM;
 # line ${\__LINE__} "${\__FILE__}"
-static NRP *mail_nrp[${\scalar(@MAIL_VMAP)}];
-static void mail_nrp_init(void)
+static RP *mail_rp[${\scalar(@MAIL_VMAP)}];
+static GitDateFieldProcessor *mail_gdfp[$gdfp_size];
+static void mail_rp_init(void)
 {
 EOM
 	for (0..$#MAIL_VMAP) {
 		my $x = $MAIL_VMAP[$_];
-		$ret .= qq{\tmail_nrp[$_] = new NRP($x->[0], "$x->[1]");\n}
+		if (@$x == 3) {
+			push @gdfp_pfx, $x->[1];
+			$ret .= <<"";
+	mail_rp[$_] = new GitDateRangeProcessor($x->[0], "$x->[1]", $x->[2]);
+	mail_gdfp[$#gdfp_pfx] = new GitDateFieldProcessor($x->[0], $x->[2]);
+
+		} else {
+			$ret .= <<"";
+	mail_rp[$_] = new NRP($x->[0], "$x->[1]");
+
+		}
 	}
 $ret .= <<EOM;
 }
@@ -632,13 +645,18 @@ $ret .= <<EOM;
 # line ${\__LINE__} "${\__FILE__}"
 static void qp_init_mail_search(Xapian::QueryParser *qp)
 {
-	for (size_t i = 0; i < MY_ARRAY_SIZE(mail_nrp); i++)
-		qp->ADD_RP(mail_nrp[i]);
+	for (size_t i = 0; i < MY_ARRAY_SIZE(mail_rp); i++)
+		qp->ADD_RP(mail_rp[i]);
 EOM
 	for my $name (sort keys %bool_pfx_external) {
 		for (split(/ /, $bool_pfx_external{$name})) {
 			$ret .= qq{\tqp->add_boolean_prefix("$name", "$_");\n}
 		}
+	}
+	my $i = 0;
+	for (@gdfp_pfx) {
+		$ret .= qq{\tqp->add_boolean_prefix("$_", mail_gdfp[$i]);\n};
+		++$i;
 	}
 	# altid support is handled in xh_opt and srch_init_extra in XH
 	for my $name (sort keys %prob_prefix) {

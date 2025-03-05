@@ -52,6 +52,7 @@
 
 #if XAP_VER >= MY_VER(1,3,6)
 #	define NRP Xapian::NumberRangeProcessor
+#	define RP Xapian::RangeProcessor
 #	define ADD_RP add_rangeprocessor
 #	define SET_MAX_EXPANSION set_max_expansion // technically 1.3.3
 #else
@@ -157,7 +158,7 @@ static const char *stdout_path, *stderr_path; // for SIGUSR1
 static sig_atomic_t worker_needs_reopen;
 
 // PublicInbox::Search and PublicInbox::CodeSearch generate these:
-static void mail_nrp_init(void);
+static void mail_rp_init(void);
 static void code_nrp_init(void);
 static void qp_init_mail_search(Xapian::QueryParser *);
 static void qp_init_code_search(Xapian::QueryParser *);
@@ -588,6 +589,7 @@ static void srch_cache_renew(struct srch *keep)
 	}
 }
 
+#include "xh_date.h" // GitDateRangeProcessor + GitDateFieldProcessor
 #include "xh_thread_fp.h" // ThreadFieldProcessor
 
 static void srch_init(struct req *req)
@@ -1084,7 +1086,8 @@ int main(int argc, char *argv[])
 		warnx("W: RLIMIT_NOFILE=%ld too low\n", my_fd_max);
 	my_fd_max -= 64;
 
-	mail_nrp_init();
+	xh_date_init();
+	mail_rp_init();
 	code_nrp_init();
 	srch_cache = srch_set_init();
 	atexit(cleanup_all);

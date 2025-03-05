@@ -114,7 +114,7 @@ my $test = sub {
 	is($cinfo{has_threadid}, '0', 'has_threadid false for cindex');
 	is($cinfo{pid}, $info{pid}, 'PID unchanged for cindex');
 
-	my @dump = (qw(dump_ibx -A XDFID), @ibx_shard_args, qw(13 rt:0..));
+	my @dump = (qw(dump_ibx -A XDFID), @ibx_shard_args, qw(13 z:0..));
 	$r = $doreq->($s, @dump);
 	my @res;
 	while (sysread($r, my $buf, 512) != 0) { push @res, $buf }

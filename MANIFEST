@@ -388,10 +388,12 @@ lib/PublicInbox/XapHelperCxx.pm
 lib/PublicInbox/Xapcmd.pm
 lib/PublicInbox/XhcMset.pm
 lib/PublicInbox/XhcMsetIterator.pm
+lib/PublicInbox/approxidate.h
 lib/PublicInbox/khashl.h
 lib/PublicInbox/lg2.h
 lib/PublicInbox/xap_helper.h
 lib/PublicInbox/xh_cidx.h
+lib/PublicInbox/xh_date.h
 lib/PublicInbox/xh_mset.h
 lib/PublicInbox/xh_thread_fp.h
 sa_config/Makefile
