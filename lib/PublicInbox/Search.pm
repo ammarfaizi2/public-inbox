@@ -402,6 +402,7 @@ sub date_parse_finalize {
 # if this $argv isn't from a command execution
 sub query_argv_to_string {
 	my (undef, $git, $argv) = @_;
+	return "@$argv" if $XHC && $XHC->{impl} eq 'PublicInbox::XapHelperCxx';
 	my $to_parse;
 	my $tmp = join(' ', map {;
 		if (s!\b(d|rt|dt):(\S+)\z!date_parse_prepare(
@@ -420,6 +421,7 @@ sub query_argv_to_string {
 # this is for the WWW "q=" query parameter and "lei q --stdin"
 # it can't do d:"5 days ago", but it will do d:5.days.ago
 sub query_approxidate {
+	return if $XHC && $XHC->{impl} eq 'PublicInbox::XapHelperCxx';
 	my (undef, $git) = @_; # $_[2] = $query_string (modified in-place)
 	my $DQ = qq<"\x{201c}\x{201d}>; # Xapian can use curly quotes
 	$_[2] =~ tr/\x00/ /; # Xapian doesn't do NUL, we use it as a placeholder
