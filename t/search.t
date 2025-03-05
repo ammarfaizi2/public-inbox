@@ -584,13 +584,10 @@ SKIP: {
 		skip 'too close to midnight, time is tricky', 6;
 	}
 	$q = $s->query_argv_to_string($g, [qw(d:20101002 blah)]);
-	is($q, 'dt:20101002000000..20101003000000 blah',
-		'YYYYMMDD expanded to range');
+	is $q, 'd:20101002..20101003 blah', 'YYYYMMDD expanded to range';
 	$q = $s->query_argv_to_string($g, [qw(d:2010-10-02)]);
-	is($q, 'dt:20101002000000..20101003000000',
-		'YYYY-MM-DD expanded to range');
+	is $q, 'd:20101002..20101003', 'YYYY-MM-DD expanded to range';
 	$q = $s->query_argv_to_string($g, [qw(rt:2010-10-02.. yy)]);
-	diag "q=$q";
 	$q =~ /\Art:(\d+)\.\. yy/ or fail("rt: expansion failed: $q");
 	is(strftime('%Y-%m-%d', gmtime($1//0)), '2010-10-02', 'rt: beg expand');
 	$q = $s->query_argv_to_string($g, [qw(rt:..2010-10-02 zz)]);
@@ -637,8 +634,8 @@ SKIP: {
 
 	$orig = $qs = qq[f:bob "hello world" d:1993-10-02..2010-10-02];
 	$s->query_approxidate($g, $qs);
-	is($qs, qq[f:bob "hello world" dt:19931002000000..20101002000000],
-		'post-phrase date corrected');
+	is $qs, qq[f:bob "hello world" d:19931002..20101002],
+		'post-phrase date corrected';
 
 	# Xapian uses "" to escape " inside phrases, we don't explictly
 	# handle that, but are able to pass the result through unchanged
@@ -649,28 +646,28 @@ SKIP: {
 		is($qs, $orig, 'phrases unchanged \x'.ord($x).'-\x'.ord($y));
 
 		$s->query_approxidate($g, my $tmp = "$qs d:..2010-10-02");
-		is($tmp, "$orig dt:..20101002000000",
-			'two phrases did not throw off date parsing');
+		is $tmp, "$orig d:..20101002",
+			'two phrases did not throw off date parsing';
 
 		$orig = $qs = qq[${x}hello d:1993-10-02..$y$x world$y];
 		$s->query_approxidate($g, $qs);
 		is($qs, $orig, 'phrases unchanged \x'.ord($x).'-\x'.ord($y));
 
 		$s->query_approxidate($g, $tmp = "$qs d:..2010-10-02");
-		is($tmp, "$orig dt:..20101002000000",
-			'two phrases did not throw off date parsing');
+		is $tmp, "$orig d:..20101002",
+			'two phrases did not throw off date parsing';
 	}
 
 	my $x_days_ago = strftime('%Y%m%d', gmtime(time - (5 * 86400)));
 	$orig = $qs = qq[broken d:5.days.ago..];
 	$s->query_approxidate($g, $qs);
-	like($qs, qr/\Abroken dt:$x_days_ago[0-9]{6}\.\./,
+	like($qs, qr/\Abroken d:$x_days_ago\.\./,
 		'date.phrase.with.dots');
 
 	$orig = $qs = 'd:20101002..now';
 	$s->query_approxidate($g, $qs);
-	like($qs, qr/\Adt:20101002000000\.\.[0-9]{14}\z/,
-		'approxidate on range-end only');
+	like $qs, qr/\Ad:20101002\.\.[0-9]{8}\z/,
+		'approxidate on range-end only';
 
 	$ENV{TEST_EXPENSIVE} or
 		skip 'TEST_EXPENSIVE not set for argv overflow check', 1;

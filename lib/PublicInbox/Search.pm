@@ -341,16 +341,23 @@ sub date_parse_prepare {
 
 	# expand "dt:2010-10-02" => "dt:2010-10-02..2010-10-03" and like
 	# n.b. git doesn't do YYYYMMDD w/o '-', it needs YYYY-MM-DD
-	# We upgrade "d:" to "dt:" unconditionally
 	if ($pfx eq 'd') {
-		$pfx = 'dt';
-		# upgrade YYYYMMDD to YYYYMMDDHHMMSS
-		$_ .= ' 00:00:00' for (grep(m!\A[0-9]{4}[^[:alnum:]]
-					[0-9]{2}[^[:alnum:]]
-					[0-9]{2}\z!x, @r));
-		$_ .= '000000' for (grep(m!\A[0-9]{8}\z!, @r));
-	}
-	if ($pfx eq 'dt') {
+		if (!defined($r[1])) { # git needs gaps and not /\d{14}/
+			if ($r[0] =~ /\A([0-9]{4})([0-9]{2})([0-9]{2})\z/) {
+				push @$to_parse, "$1-$2-$3 00:00:00";
+			} else {
+				push @$to_parse, $r[0];
+			}
+			$r[0] = "\0%Y%m%d$#$to_parse\0";
+			$r[1] = "\0%Y%m%d+\0";
+		} else {
+			for (@r) {
+				next if $_ eq '' || /\A[0-9]{8}\z/;
+				push @$to_parse, $_;
+				$_ = "\0%Y%m%d$#$to_parse\0";
+			}
+		}
+	} elsif ($pfx eq 'dt') {
 		if (!defined($r[1])) { # git needs gaps and not /\d{14}/
 			if ($r[0] =~ /\A([0-9]{4})([0-9]{2})([0-9]{2})
 					([0-9]{2})([0-9]{2})([0-9]{2})\z/x) {
