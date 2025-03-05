@@ -9,7 +9,7 @@ package PublicInbox::LEI;
 use v5.12;
 use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
-use autodie qw(bind chdir open pipe socket socketpair syswrite unlink);
+use autodie qw(bind chdir listen open pipe socket socketpair syswrite unlink);
 use Getopt::Long ();
 use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET EINTR);
@@ -1371,6 +1371,7 @@ sub lazy_start {
 	local (%PATH2CFG, $MDIR2CFGPATH);
 	local $daemon_pid = $$;
 	$listener->blocking(0);
+	listen $listener, 2**31 - 1; # kernel will clamp
 	my $exit_code;
 	my $pil = PublicInbox::Listener->new($listener, \&accept_dispatch);
 	local $quit = do {

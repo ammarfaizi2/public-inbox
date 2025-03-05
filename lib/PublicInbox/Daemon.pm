@@ -264,7 +264,7 @@ EOF
 			die $@ if $@;
 			%o = (LocalAddr => $l, ReuseAddr => 1, Proto => 'tcp');
 		}
-		$o{Listen} = 1024;
+		$o{Listen} = 2**31 - 1; # kernel will clamp
 		my $prev = umask 0000;
 		my $s = eval { $sock_pkg->new(%o) } or
 			warn "error binding $l: $! ($@)\n";
