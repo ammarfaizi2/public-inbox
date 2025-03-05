@@ -3,10 +3,7 @@
 // Disclaimer: Eric doesn't know C++
 
 class ThreadFieldProcessor : public Xapian::FieldProcessor {
-protected:
-	Xapian::QueryParser &qp;
 public:
-	ThreadFieldProcessor(Xapian::QueryParser &qp_) : qp(qp_) {};
 	Xapian::Query operator()(const std::string &str);
 };
 

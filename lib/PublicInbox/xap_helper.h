@@ -156,6 +156,7 @@ static unsigned long nworker, nworker_hwm;
 static int pipefds[2];
 static const char *stdout_path, *stderr_path; // for SIGUSR1
 static sig_atomic_t worker_needs_reopen;
+static Xapian::FieldProcessor *thread_fp;
 
 // PublicInbox::Search and PublicInbox::CodeSearch generate these:
 static void mail_rp_init(void);
@@ -650,12 +651,8 @@ static void srch_init(struct req *req)
 	if (req->code_search) {
 		qp_init_code_search(srch->qp); // CodeSearch.pm
 	} else {
-		Xapian::FieldProcessor *fp;
-
 		qp_init_mail_search(srch->qp); // Search.pm
-		// n.b. ->release() starts Xapian refcounting
-		fp = (new ThreadFieldProcessor(*srch->qp))->release();
-		srch->qp->add_boolean_prefix("thread", fp);
+		srch->qp->add_boolean_prefix("thread", thread_fp);
 	}
 }
 
@@ -1086,6 +1083,7 @@ int main(int argc, char *argv[])
 		warnx("W: RLIMIT_NOFILE=%ld too low\n", my_fd_max);
 	my_fd_max -= 64;
 
+	thread_fp = new ThreadFieldProcessor();
 	xh_date_init();
 	mail_rp_init();
 	code_nrp_init();
