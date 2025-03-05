@@ -50,7 +50,7 @@ sub sres_top_html {
 	my $opt = {
 		limit => $q->{l},
 		offset => $o,
-		relevance => $q->{r},
+		relevance => !!$q->{r},
 		threads => $q->{t},
 		asc => $asc,
 	};

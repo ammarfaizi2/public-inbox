@@ -466,20 +466,9 @@ sub xh_opt ($$) {
 	my @ret;
 	push @ret, '-o', $opt->{offset} if $opt->{offset};
 	push @ret, '-m', $lim;
-	my $rel = $opt->{relevance} // 0;
-	if ($rel == -2) { # ORDER BY docid/UID (highest first)
-		push @ret, '-k', '-1';
-	} elsif ($rel == -1) { # ORDER BY docid/UID (lowest first)
-		push @ret, '-k', '-1';
-		push @ret, '-a';
-	} elsif ($rel == 0) {
-		push @ret, '-k', $opt->{sort_col} // TS;
-		push @ret, '-a' if $opt->{asc};
-	} else { # rel > 0
-		push @ret, '-r';
-		push @ret, '-k', $opt->{sort_col} // TS;
-		push @ret, '-a' if $opt->{asc};
-	}
+	push @ret, '-r' if $opt->{relevance};
+	push @ret, '-k', $opt->{sort_col} // TS;
+	push @ret, '-a' if $opt->{asc};
 	push @ret, '-t' if $opt->{threads};
 	push @ret, '-T', $opt->{threadid} if defined $opt->{threadid};
 	push @ret, '-O', $opt->{eidx_key} if defined $opt->{eidx_key};
@@ -514,19 +503,15 @@ sub do_enquire { # shared with CodeSearch and MiscSearch
 	my $enq = $X{Enquire}->new(xdb($self));
 	$enq->set_query($qry);
 	my $col = $opt->{sort_col} // TS;
-	my $rel = $opt->{relevance} // 0;
-	if ($rel == -2) { # ORDER BY docid/UID (highest first)
+	if ($col < 0) {
 		$enq->set_weighting_scheme($X{BoolWeight}->new);
-		$enq->set_docid_order($ENQ_DESCENDING);
-	} elsif ($rel == -1) { # ORDER BY docid/UID (lowest first)
-		$enq->set_weighting_scheme($X{BoolWeight}->new);
-		$enq->set_docid_order($ENQ_ASCENDING);
-	} elsif ($rel == 0) {
-		$enq->set_sort_by_value_then_relevance($col, !$opt->{asc});
-	} else { # rel > 0
+		$enq->set_docid_order(
+			$opt->{asc} ? $ENQ_ASCENDING : $ENQ_DESCENDING);
+	} elsif ($opt->{relevance}) {
 		$enq->set_sort_by_relevance_then_value($col, !$opt->{asc});
+	} else {
+		$enq->set_sort_by_value_then_relevance($col, !$opt->{asc});
 	}
-
 	# `lei q -t / --threads' or JMAP collapseThreads; but don't collapse
 	# on `-tt' ({threads} > 1) which sets the Flagged|Important keyword
 	(($opt->{threads} // 0) == 1 && has_threadid($self)) and

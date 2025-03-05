@@ -83,7 +83,7 @@ sub mset_to_artnums {
 	my $docids = PublicInbox::Search::mset_to_artnums($self->{es}, $mset);
 	my $ibx_id = $self->{-ibx_id} //= _ibx_id($self);
 	my $qmarks = join(',', map { '?' } @$docids);
-	if ($opt && ($opt->{relevance} // 0) == -1) { # -1 => ENQ_ASCENDING
+	if ($opt->{asc} && ($opt->{sort_col} // 0) < 0) { # docid ascending
 		my $range = '';
 		my @r;
 		if (my $r = $opt->{uid_range}) {

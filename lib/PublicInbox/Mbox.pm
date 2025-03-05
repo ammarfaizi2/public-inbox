@@ -249,7 +249,7 @@ sub mbox_all {
 	return mbox_all_ids($ctx) if $qstr !~ /\S/;
 	my $srch = $ctx->{srch} = $ctx->{ibx}->isrch or
 		return PublicInbox::WWW::need($ctx, 'Search');
-	my $opt = $ctx->{qopts} = { relevance => -2 }; # ORDER BY docid DESC
+	my $opt = $ctx->{qopts} = { sort_col => -1 }; # ORDER BY docid DESC
 
 	# {threadid} limits results to a given thread
 	# {threads} collapses results from messages in the same thread,

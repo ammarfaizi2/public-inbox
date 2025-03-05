@@ -25,7 +25,7 @@ sub up1 ($$) {
 	my $cli_exclude = delete $lei->{opt}->{exclude};
 	my $lss = PublicInbox::LeiSavedSearch->up($lei, $out) or return;
 	my $f = $lss->{'-f'};
-	my $mset_opt = $lei->{mset_opt} = { relevance => -2 };
+	my $mset_opt = $lei->{mset_opt} = { sort_col => -1 };
 	my $q = $lss->{-cfg}->get_all('lei.q') //
 				die("lei.q unset in $f (out=$out)\n");
 	my $lse = $lei->{lse} // die 'BUG: {lse} missing';

@@ -116,7 +116,7 @@ sub ibx_cache_load {
 
 sub _nntpd_cache_load { # retry_reopen callback
 	my ($self) = @_;
-	my $opt = { limit => $self->{xdb}->get_doccount * 10, relevance => -1 };
+	my $opt = { limit => $self->{xdb}->get_doccount * 10, sort_col => -1 };
 	my $mset = mset($self, 'type:newsgroup type:inbox', $opt);
 	my $cache = {};
 	for my $it ($mset->items) {

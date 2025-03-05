@@ -45,7 +45,7 @@ sub _start_query { # used by "lei q" and "lei up"
 	};
 
 	# descending docid order is cheapest, MUA controls sorting order
-	$self->{mset_opt}->{relevance} //= -2 if $l2m || $opt->{threads};
+	$self->{mset_opt}->{sort_col} = -1 if $l2m || $opt->{threads};
 
 	my $tot = $self->{mset_opt}->{total} //= $self->{opt}->{limit} // 10000;
 	$self->{mset_opt}->{limit} = $tot > 10000 ? 10000 : $tot;
@@ -138,7 +138,7 @@ sub lei_q {
 		if ($sort eq 'relevance') {
 			$mset_opt{relevance} = 1;
 		} elsif ($sort eq 'docid') {
-			$mset_opt{relevance} = $mset_opt{asc} ? -1 : -2;
+			$mset_opt{sort_col} = -1;
 		} elsif ($sort =~ /\Areceived(?:-?[aA]t)?\z/) {
 			# the default
 		} else {

@@ -80,7 +80,12 @@ sub cmd_dump_ibx {
 	$req->{A} or die 'dump_ibx requires -A PREFIX';
 	term_length_extract $req;
 	my $max = $req->{'m'} // $req->{srch}->{xdb}->get_doccount;
-	my $opt = { relevance => -1, limit => $max, offset => $req->{o} // 0 };
+	my $opt = {
+		sort_col => -1,
+		asc => 1,
+		limit => $max,
+		offset => $req->{o} // 0
+	};
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
 	$req->{0}->autoflush(1);
@@ -131,8 +136,12 @@ sub cmd_dump_roots {
 	while (defined(my $oidhex = shift @x)) {
 		$root2off->{$oidhex} = shift @x;
 	}
-	my $opt = { relevance => -1, limit => $req->{'m'},
-			offset => $req->{o} // 0 };
+	my $opt = {
+		sort_col => -1,
+		asc => 1,
+		limit => $req->{'m'},
+		offset => $req->{o} // 0
+	};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
 	$req->{0}->autoflush(1);
 	$req->{wbuf} = '';
@@ -159,8 +168,10 @@ sub cmd_mset { # to be used by WWW + IMAP
 	$qry_str // die 'usage: mset [OPTIONS] QRY_STR';
 	my $opt = { limit => $req->{'m'}, offset => $req->{o} // 0 };
 	$opt->{relevance} = 1 if $req->{r};
+	$opt->{asc} = 1 if $req->{a};
 	$opt->{threads} = 1 if defined $req->{t};
 	$opt->{git_dir} = $req->{g} if defined $req->{g};
+	$opt->{sort_col} = $req->{k} if defined $req->{k};
 	$opt->{eidx_key} = $req->{O} if defined $req->{O};
 	my @uid_range = @$req{qw(u U)};
 	$opt->{uid_range} = \@uid_range if grep(defined, @uid_range) == 2;

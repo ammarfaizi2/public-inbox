@@ -93,7 +93,7 @@ sub add_misc_ibx { # MiscSearch->retry_reopen callback
 		$asc = 1;
 		$o = -($o + 1); # so [-1] is the last element, like Perl lists
 	}
-	my $r = $q->{r};
+	my $r = !!$q->{r};
 	my $opt = {
 		offset => $o,
 		asc => $asc,
