@@ -186,16 +186,15 @@ sub cmd_mset { # to be used by WWW + IMAP
 	}
 }
 
-sub srch_init_extra ($) {
-	my ($req) = @_;
-	my $qp = $req->{srch}->{qp};
+sub srch_init_extra ($$) {
+	my ($srch, $req) = @_;
+	my $qp = $srch->{qp};
 	for (@{$req->{Q}}) {
 		my ($upfx, $m, $xpfx) = split /([:=])/;
 		$xpfx // die "E: bad -Q $_";
 		$m = $m eq '=' ? 'add_boolean_prefix' : 'add_prefix';
 		$qp->$m($upfx, $xpfx);
 	}
-	$req->{srch}->{qp_extra_done} = 1;
 }
 
 sub dispatch {
@@ -205,7 +204,7 @@ sub dispatch {
 		or return;
 	my $dirs = delete $req->{d} or die 'no -d args';
 	my $key = "-d\0".join("\0-d\0", @$dirs);
-	$key .= "\0".join("\0", map { ('-Q', $_) } @{$req->{Q}}) if $req->{Q};
+	$key .= "\0-Q\0".join("\0-Q\0", @{$req->{Q}}) if $req->{Q};
 	my $new;
 	$req->{srch} = $SRCH{$key} // do {
 		$new = { qp_flags => $QP_FLAGS };
@@ -240,11 +239,10 @@ sub dispatch {
 		bless $new, $req->{c} ? 'PublicInbox::CodeSearch' :
 					'PublicInbox::Search';
 		$new->qparse_new;
+		srch_init_extra $new, $req;
 		$SRCH{$key} = $new;
 	};
 	$req->{srch}->{xdb}->reopen unless $new;
-	$req->{Q} && !$req->{srch}->{qp_extra_done} and
-		srch_init_extra $req;
 	my $timeo = $req->{K};
 	alarm($timeo) if $timeo;
 	$fn->($req, @argv);

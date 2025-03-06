@@ -120,7 +120,6 @@ static void *xreallocarray(void *ptr, size_t nmemb, size_t size)
 struct srch {
 	int ckey_len; // int for comparisons
 	unsigned qp_flags;
-	bool qp_extra_done;
 	Xapian::Database *db;
 	Xapian::QueryParser *qp;
 	unsigned char ckey[]; // $shard_path0\0$shard_path1\0...
@@ -594,6 +593,30 @@ static void srch_cache_renew(struct srch *keep)
 #include "xh_date.h" // GitDateRangeProcessor + GitDateFieldProcessor
 #include "xh_thread_fp.h" // ThreadFieldProcessor
 
+// setup query parser for altid and arbitrary headers
+static void srch_init_extra(struct srch *srch, struct req *req)
+{
+	const char *XPFX;
+	for (int i = 0; i < req->qpfxc; i++) {
+		size_t len = strlen(req->qpfxv[i]);
+		char *c = (char *)memchr(req->qpfxv[i], '=', len);
+
+		if (c) { // it's boolean "gmane=XGMANE"
+			XPFX = c + 1;
+			*c = 0;
+			srch->qp->add_boolean_prefix(req->qpfxv[i], XPFX);
+			continue;
+		}
+		// maybe it's a non-boolean prefix "blob:XBLOBID"
+		c = (char *)memchr(req->qpfxv[i], ':', len);
+		if (!c)
+			errx(EXIT_FAILURE, "bad -Q %s", req->qpfxv[i]);
+		XPFX = c + 1;
+		*c = 0;
+		srch->qp->add_prefix(req->qpfxv[i], XPFX);
+	}
+}
+
 static void srch_init(struct req *req)
 {
 	int i;
@@ -659,31 +682,7 @@ static void srch_init(struct req *req)
 			srch->qp->add_boolean_prefix("L", "L");
 		}
 	}
-}
-
-// setup query parser for altid and arbitrary headers
-static void srch_init_extra(struct req *req)
-{
-	const char *XPFX;
-	for (int i = 0; i < req->qpfxc; i++) {
-		size_t len = strlen(req->qpfxv[i]);
-		char *c = (char *)memchr(req->qpfxv[i], '=', len);
-
-		if (c) { // it's boolean "gmane=XGMANE"
-			XPFX = c + 1;
-			*c = 0;
-			req->srch->qp->add_boolean_prefix(req->qpfxv[i], XPFX);
-			continue;
-		}
-		// maybe it's a non-boolean prefix "blob:XBLOBID"
-		c = (char *)memchr(req->qpfxv[i], ':', len);
-		if (!c)
-			errx(EXIT_FAILURE, "bad -Q %s", req->qpfxv[i]);
-		XPFX = c + 1;
-		*c = 0;
-		req->srch->qp->add_prefix(req->qpfxv[i], XPFX);
-	}
-	req->srch->qp_extra_done = true;
+	srch_init_extra(req->srch, req);
 }
 
 #define OPT_U(ch, var, fn, max) do { \
@@ -764,7 +763,6 @@ static void dispatch(struct req *req)
 	ERR_CLOSE(kfp, EXIT_FAILURE); // may ENOMEM, sets kbuf.srch
 	kbuf.srch->db = NULL;
 	kbuf.srch->qp = NULL;
-	kbuf.srch->qp_extra_done = false;
 	kbuf.srch->ckey_len = size - offsetof(struct srch, ckey);
 	if (kbuf.srch->ckey_len <= 0 || !req->dirc)
 		ABORT("no -d args (or too many)");
@@ -780,8 +778,6 @@ static void dispatch(struct req *req)
 		srch_free(kbuf.srch);
 		req->srch->db->reopen();
 	}
-	if (req->qpfxc && !req->srch->qp_extra_done)
-		srch_init_extra(req);
 	if (req->timeout_sec)
 		alarm(req->timeout_sec > UINT_MAX ?
 			UINT_MAX : (unsigned)req->timeout_sec);
