@@ -20,7 +20,7 @@ use Carp qw(croak);
 my $X = \%PublicInbox::Search::X;
 our (%SRCH, %WORKERS, $nworker, $workerset, $in, $SHARD_NFD, $MY_FD_MAX);
 our $stderr = \*STDERR;
-my $QP_FLAGS = $PublicInbox::Search::QP_FLAGS;
+my $QP_FLAGS;
 
 sub cmd_test_inspect {
 	my ($req) = @_;
@@ -338,6 +338,8 @@ sub start (@) {
 
 	local (%SRCH, %WORKERS, $SHARD_NFD, $MY_FD_MAX);
 	PublicInbox::Search::load_xapian();
+	$QP_FLAGS = $PublicInbox::Search::QP_FLAGS |
+		PublicInbox::Search::FLAG_PURE_NOT();
 	$GLP->getoptionsfromarray(\@argv, my $opt = { j => 1 }, 'j=i') or
 		die 'bad args';
 	local $workerset = POSIX::SigSet->new;
@@ -349,7 +351,6 @@ sub start (@) {
 		die "E: unable to get RLIMIT_NOFILE: $!";
 	warn "W: RLIMIT_NOFILE=$MY_FD_MAX too low\n" if $MY_FD_MAX < 72;
 	$MY_FD_MAX -= 64;
-	$QP_FLAGS |= PublicInbox::Search::FLAG_PURE_NOT();
 
 	local $nworker = $opt->{j};
 	return recv_loop() if $nworker == 0;
