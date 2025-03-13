@@ -253,10 +253,11 @@ sub invalid_inbox_mid {
 
 	my $mid = $ctx->{mid} = uri_unescape($mid_ue);
 	my $ibx = $ctx->{ibx};
-	if ($mid =~ m!\A([a-f0-9]{2})([a-f0-9]{38})\z!) {
+	if ($ibx->can('version') && $ibx->version == 1 &&
+			$mid =~ m!\A([a-f0-9]{2})([a-f0-9]{38})\z!) {
 		my ($x2, $x38) = ($1, $2);
 		# this is horrifically wasteful for legacy URLs:
-		my $str = $ctx->{ibx}->msg_by_path("$x2/$x38") or return;
+		my $str = $ibx->msg_by_path("$x2/$x38") or return;
 		my $s = PublicInbox::Eml->new($str);
 		$mid = PublicInbox::MID::mid_clean($s->header_raw('Message-ID'));
 		return r301($ctx, $inbox, mid_escape($mid));
