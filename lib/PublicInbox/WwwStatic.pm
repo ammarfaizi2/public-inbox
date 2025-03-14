@@ -220,7 +220,7 @@ sub path_info_raw ($) {
 	my $re = $path_re_cache{$sn} //= do {
 		$sn = '/'.$sn unless index($sn, '/') == 0;
 		$sn =~ s!/\z!!;
-		qr!\A(?:https?://[^/]+)?\Q$sn\E(/[^\?\#]+)!;
+		qr!\A(?:[^:]+://[^/]+)?\Q$sn\E(/[^\?\#]+)!;
 	};
 	$env->{REQUEST_URI} =~ $re ? $1 : $env->{PATH_INFO};
 }
