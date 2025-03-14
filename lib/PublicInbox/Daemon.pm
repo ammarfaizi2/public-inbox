@@ -37,7 +37,8 @@ my ($uid, $gid);
 my ($default_cert, $default_key);
 my %KNOWN_TLS = (443 => 'https', 563 => 'nntps', 993 => 'imaps', 995 =>'pop3s');
 my %KNOWN_STARTTLS = (110 => 'pop3', 119 => 'nntp', 143 => 'imap');
-my %SCHEME2PORT = map { $KNOWN_TLS{$_} => $_ + 0 } keys %KNOWN_TLS;
+my %TLS_ONLY = map { $KNOWN_TLS{$_} => $_ + 0 } keys %KNOWN_TLS;
+my %SCHEME2PORT = %TLS_ONLY;
 for (keys %KNOWN_STARTTLS) { $SCHEME2PORT{$KNOWN_STARTTLS{$_}} = $_ + 0 }
 $SCHEME2PORT{http} = 80;
 
@@ -233,7 +234,7 @@ EOF
 			$tls_opt{"$scheme://$l"} = accept_tls_opt($opt);
 		} elsif (defined($default_cert)) {
 			$tls_opt{"$scheme://$l"} = accept_tls_opt('');
-		} elsif ($scheme =~ /\A(?:https|imaps|nntps|pop3s)\z/) {
+		} elsif (defined($TLS_ONLY{$scheme})) {
 			die "$orig specified w/o cert=\n";
 		}
 		if ($listener_names->{$l}) { # already inherited
@@ -689,7 +690,7 @@ sub daemon_loop () {
 		my ($scheme, $l) = split(m!://!, $k, 2);
 		my $xn = $XNETD{$l} // die "BUG: no xnetd for $k";
 		$xn->{tlsd}->{ssl_ctx_opt} //= $ctx_opt;
-		$scheme =~ m!\A(?:https|imaps|nntps|pop3s)! and
+		defined($TLS_ONLY{$scheme}) and
 			$POST_ACCEPT{$l} = tls_cb(@$xn{qw(post_accept tlsd)});
 	}
 	undef %tls_opt;
