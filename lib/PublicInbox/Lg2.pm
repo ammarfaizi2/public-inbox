@@ -48,11 +48,14 @@ BEGIN {
 	STDOUT->autoflush(1);
 	$CFG{CCFLAGSEX} = $vals->{cflags};
 	$CFG{LIBS} = $vals->{libs};
-
-	# we use Capitalized and ALLCAPS for compatibility with old Inline::C
-	CORE::eval <<'EOM';
-use Inline C => Config => %CFG, BOOT => q[git_libgit2_init();];
-use Inline C => $c_src, BUILD_NOISY => 1;
+	my $boot = 'git_libgit2_init();';
+	eval("v$vals->{modversion}") ge v0.26 and
+		$boot .= <<EOM;
+git_libgit2_opts(GIT_OPT_ENABLE_STRICT_HASH_VERIFICATION, 0);
+EOM
+	eval <<EOM;
+use Inline C => Config => \%CFG, BOOT => \$boot;
+use Inline C => \$c_src . "/* boot: $boot */\n", BUILD_NOISY => 1;
 EOM
 	$err = $@;
 	open(STDERR, '>&', $olderr);
