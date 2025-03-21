@@ -4,6 +4,7 @@
 package PublicInbox::Limiter;
 use v5.12;
 use PublicInbox::Spawn;
+use PublicInbox::OnDestroy;
 
 sub new {
 	my ($class, $max) = @_;
@@ -61,9 +62,40 @@ EOM
 	}
 }
 
-sub is_too_busy {
+sub _do_start ($$$$) {
+	my ($self, $start_cb, $ctx, $fail_cb) = @_;
+	$ctx->{"limiter.next.$self"} = on_destroy \&_start_next, $self;
+	++$self->{running};
+	eval { $start_cb->($ctx, $self) };
+	if ($@) {
+		print { $ctx->{env}->{'psgi.errors'} } "E: $@\n";
+		$fail_cb->($ctx, 500, 'internal error');
+	}
+}
+
+sub _start_next { # on_destroy cb
 	my ($self) = @_;
-	scalar(@{$self->{run_queue}}) > ($self->{depth} // 32)
+	--$self->{running};
+	my ($rec, $ck, $start_cb, $ctx, $fail_cb);
+	while (1) {
+		$rec = shift @{$self->{run_queue}} or return;
+		($start_cb, $ctx, $fail_cb) = @$rec;
+		$ck = $ctx->{env}->{'pi-httpd.ckhup'} or last;
+		$ck->($ctx->{env}->{'psgix.io'}->{sock}) or last;
+		$fail_cb->($ctx, 499, 'client disconnected');
+	}
+	_do_start $self, $start_cb, $ctx, $fail_cb;
+}
+
+sub may_start {
+	my ($self, $start_cb, $ctx, $fail_cb) = @_;
+	if ($self->{running} < $self->{max}) {
+		_do_start $self, $start_cb, $ctx, $fail_cb;
+	} elsif (@{$self->{run_queue}} > ($self->{depth} // 32)) {
+		$fail_cb->($ctx, 503, 'too busy');
+	} else {
+		push @{$self->{run_queue}}, [ $start_cb, $ctx, $fail_cb ];
+	}
 }
 
 1;

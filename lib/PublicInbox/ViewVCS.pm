@@ -636,15 +636,8 @@ sub show_blob { # git->cat_async callback
 		'</code></pre></td></tr></table>'.dbg_log($ctx), @def);
 }
 
-sub start_solver ($$) {
-	my ($ctx, $limiter) = @_;
-	$ctx->{-next_solver} = on_destroy \&next_solver, $limiter;
-	++$limiter->{running};
-	if (my $ck = $ctx->{env}->{'pi-httpd.ckhup'}) {
-		$ck->($ctx->{env}->{'psgix.io'}->{sock}) and
-			return html_page $ctx, 499, 'client disconnected';
-	}
-
+sub start_solver {
+	my ($ctx) = @_;
 	while (my ($from, $to) = each %QP_MAP) {
 		my $v = $ctx->{qp}->{$from} // next;
 		$ctx->{hints}->{$to} = $v if $v ne '';
@@ -662,19 +655,11 @@ sub start_solver ($$) {
 	$solver->solve(@$ctx{qw(env lh oid_b hints)});
 }
 
-# run the next solver job when done and DESTROY-ed (on_destroy cb)
-sub next_solver {
-	my ($limiter) = @_;
-	--$limiter->{running};
-	my $ctx = shift(@{$limiter->{run_queue}}) // return;
-	eval { start_solver $ctx, $limiter };
-	return unless $@;
-	warn "W: start_solver: $@";
-	html_page($ctx, 500) if $ctx->{-wcb};
-}
-
-sub may_start_solver ($) {
-	my ($ctx) = @_;
+# GET /$INBOX/$GIT_OBJECT_ID/s/
+# GET /$INBOX/$GIT_OBJECT_ID/s/$FILENAME
+sub show ($$;$) {
+	my ($ctx, $oid_b, $fn) = @_;
+	@$ctx{qw(oid_b fn)} = ($oid_b, $fn);
 	my $limiter = $ctx->{www}->{pi_cfg}->limiter('-codeblob');
 
 	# {solver_limiter} just inherits rlimits from the configurable
@@ -685,23 +670,9 @@ sub may_start_solver ($) {
 		$l->{$_} = $limiter->{$_} for grep /^RLIMIT_/, keys %$limiter;
 		$l;
 	};
-	if ($limiter->{running} < $limiter->{max}) {
-		start_solver $ctx, $limiter;
-	} elsif ($limiter->is_too_busy) {
-		html_page $ctx, 503, 'too busy';
-	} else {
-		push @{$limiter->{run_queue}}, $ctx;
-	}
-}
-
-# GET /$INBOX/$GIT_OBJECT_ID/s/
-# GET /$INBOX/$GIT_OBJECT_ID/s/$FILENAME
-sub show ($$;$) {
-	my ($ctx, $oid_b, $fn) = @_;
-	@$ctx{qw(oid_b fn)} = ($oid_b, $fn);
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP write callback
-		may_start_solver $ctx;
+		$limiter->may_start(\&start_solver, $ctx, \&html_page);
 	};
 }
 

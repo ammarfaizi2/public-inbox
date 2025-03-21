@@ -82,7 +82,11 @@ foreach my $cmd ([qw(sleep 1)], [qw(sh -c), 'sleep 1; false']) {
 		ok(!finish_err($s), 'no error on sleep');
 		is_deeply([], \@err, 'no warnings');
 	}
-	ok(!finish_err($_->[0]), "true $_->[1] succeeded") foreach @t;
+	undef $s;
+	for (@t) { # DESTROY in order
+		my ($qsp, $i) = (shift(@$_), shift(@$_));
+		ok !finish_err($qsp), "true $i succeeded";
+	}
 	is_deeply([qw(sleep 0 1 2)], \@run, 'ran in order');
 }
 

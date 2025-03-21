@@ -51,16 +51,10 @@ sub new {
 }
 
 sub _do_spawn {
-	my ($self, $start_cb, $limiter) = @_;
+	my ($self) = @_;
 	my ($cmd, $cmd_env, $opt) = @{$self->{args}};
-	my %o = %{$opt || {}};
-	$self->{limiter} = $limiter;
-	for my $k (@PublicInbox::Spawn::RLIMITS) {
-		$opt->{$k} = $limiter->{$k} // next;
-	}
-	$self->{-quiet} = 1 if $o{quiet};
-	$limiter->{running}++;
-	if ($start_cb) {
+	$self->{-quiet} = 1 if $opt->{quiet};
+	if (my $start_cb = delete $self->{-start_cb}) {
 		eval { # popen_rd may die on EMFILE, ENFILE
 			$self->{rpipe} = popen_rd($cmd, $cmd_env, $opt,
 							\&waitpid_err, $self);
@@ -78,7 +72,7 @@ sub psgi_status_err { # Qspawn itself is useful w/o PSGI
 	PublicInbox::WwwStatic::r($_[0] // 500);
 }
 
-sub _finalize ($) {
+sub finalize ($) {
 	my ($self) = @_;
 	if (my $err = $self->{_err}) { # set by finish or waitpid_err
 		utf8::decode($err);
@@ -100,17 +94,6 @@ sub _finalize ($) {
 		# have we started writing, yet?
 		$wcb->(psgi_status_err($env->{'qspawn.fallback'}));
 	}
-}
-
-sub finalize ($) {
-	my ($self) = @_;
-
-	# process is done, spawn whatever's in the queue
-	my $limiter = delete $self->{limiter} or return;
-	--$limiter->{running};
-	my $next = shift @{$limiter->{run_queue}};
-	_do_spawn(@$next, $limiter) if $next;
-	_finalize $self;
 }
 
 sub waitpid_err { # callback for awaitpid
@@ -156,17 +139,21 @@ sub finish ($;$) {
 	finalize($self) if $closed_before || defined($self->{_err});
 }
 
-sub start ($$$) {
+sub _qsp_fail { # limiter fail_cb
+	my ($self, $code, $msg) = @_;
+	$self->{env}->{'qspawn.fallback'} //= $code; # likely 503
+	finalize $self;
+}
+
+sub start ($$;$) {
 	my ($self, $limiter, $start_cb) = @_;
-	if ($limiter->{running} < $limiter->{max}) {
-		_do_spawn($self, $start_cb, $limiter);
-	} elsif ($limiter->is_too_busy) {
-		$self->{env}->{'qspawn.fallback'} //= 503 if
-			$self->{env};
-		_finalize $self;
-	} else {
-		push @{$limiter->{run_queue}}, [ $self, $start_cb ];
+	$self->{-start_cb} = $start_cb if $start_cb;
+	my %opt;
+	for (@PublicInbox::Spawn::RLIMITS) {
+		$opt{$_} = $limiter->{$_} // next;
 	}
+	%{$self->{args}->[2]} = (%{$self->{args}->[2]}, %opt) if keys %opt;
+	$limiter->may_start(\&_do_spawn, $self, \&_qsp_fail);
 }
 
 # Similar to `backtick` or "qx" ("perldoc -f qx"), it calls @qx_cb_arg with
@@ -177,8 +164,7 @@ sub psgi_qx {
 	my ($self, $env, $limiter, @qx_cb_arg) = @_;
 	$self->{env} = $env;
 	$self->{qx_cb_arg} = \@qx_cb_arg;
-	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new;
-	start($self, $limiter, undef);
+	start($self, $limiter ||= $def_limiter ||= PublicInbox::Limiter->new);
 }
 
 sub yield_pass {

@@ -4,7 +4,7 @@
 package PublicInbox::PlackLimiter;
 use v5.12;
 use parent qw(Plack::Middleware);
-use PublicInbox::OnDestroy;
+use PublicInbox::Limiter;
 
 sub prepare_app { # called via Plack::Component (used by Plack::Middleware)
 	my ($self) = @_;
@@ -12,25 +12,12 @@ sub prepare_app { # called via Plack::Component (used by Plack::Middleware)
 	$self->{max} //= 2;
 	$self->{run_queue} = [];
 	$self->{running} = 0;
-	$self->{rejected} = 0;
-	$self->{message} //= "too busy\n";
 }
 
-sub r503 ($) {
-	my @body = ($_[0]->{message});
-	++$_[0]->{rejected};
-	[ 503, [ 'Content-Type' => 'text/plain',
-		'Content-Length' => length($body[0]) ], \@body ]
-}
-
-sub next_req { # on_destroy cb
-	my ($self) = @_;
-	--$self->{running};
-	my $env = shift @{$self->{run_queue}} or return;
-	my $wcb = delete $env->{'p-i.limiter.wcb'} // die 'BUG: no wcb';
-	my $res = eval { call($self, $env) };
-	return warn("W: $@") if $@;
-	ref($res) eq 'CODE' ? $res->($wcb) : $wcb->($res);
+sub lim_fail { # limiter->may_start fail_cb
+	my ($ctx, $code, $msg) = @_;
+	delete($ctx->{psgi_wcb})->([ $code, [ 'Content-Type' => 'text/plain',
+		'Content-Length' => length($msg) ], [ $msg ] ]);
 }
 
 sub stats ($) {
@@ -39,11 +26,20 @@ sub stats ($) {
 	my $res = <<EOM;
 running: $self->{running}
 queued: $nq
-rejected: $self->{rejected}
 max: $self->{max}
 EOM
 	[ 200, [ 'Content-Type' => 'text/plain',
 		'Content-Length' => length($res) ], [ $res ] ]
+}
+
+sub app_call { # limiter->may_start start_cb
+	my ($ctx, $self) = @_;
+	my $wcb = delete $ctx->{psgi_wcb};
+	my $env = delete $ctx->{env}; # avoid cyclic ref
+	push @{$env->{'limiter.ctx'}}, $ctx; # handoff limiter.next.$self
+	my $res = eval { $self->app->($env) };
+	return warn("W: $@") if $@;
+	ref($res) eq 'CODE' ? $res->($wcb) : $wcb->($res);
 }
 
 sub call {
@@ -52,16 +48,10 @@ sub call {
 		return stats $self if $self->{stats_match_cb}->($env);
 	}
 	return $self->app->($env) if !$self->{match_cb}->($env);
-	return r503($self) if @{$self->{run_queue}} > ($self->{depth} // 32);
-	if ($self->{running} < $self->{max}) {
-		++$self->{running};
-		$env->{'p-i.limiter.next'} = on_destroy \&next_req, $self;
-		$self->app->($env);
-	} else { # capture write cb from PSGI server and queue up
-		sub {
-			$env->{'p-i.limiter.wcb'} = $_[0];
-			push @{$self->{run_queue}}, $env;
-		};
+	sub { # capture write cb from PSGI server
+		my $ctx = { env => $env, psgi_wcb => $_[0] };
+		PublicInbox::Limiter::may_start(
+				$self, \&app_call, $ctx, \&lim_fail);
 	}
 }
 
