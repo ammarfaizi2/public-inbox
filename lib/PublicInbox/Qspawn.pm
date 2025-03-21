@@ -88,7 +88,7 @@ sub _finalize ($) {
 		warn "E: @{$self->{args}->[0]}: $err\n" if !$self->{-quiet};
 	}
 
-	my ($env, $qx_cb_arg) = delete @$self{qw(psgi_env qx_cb_arg)};
+	my ($env, $qx_cb_arg) = delete @$self{qw(env qx_cb_arg)};
 	if ($qx_cb_arg) {
 		my $cb = shift @$qx_cb_arg;
 		eval { $cb->($self->{args}->[2]->{1}, @$qx_cb_arg) };
@@ -161,8 +161,8 @@ sub start ($$$) {
 	if ($limiter->{running} < $limiter->{max}) {
 		_do_spawn($self, $start_cb, $limiter);
 	} elsif ($limiter->is_too_busy) {
-		$self->{psgi_env}->{'qspawn.fallback'} //= 503 if
-			$self->{psgi_env};
+		$self->{env}->{'qspawn.fallback'} //= 503 if
+			$self->{env};
 		_finalize $self;
 	} else {
 		push @{$limiter->{run_queue}}, [ $self, $start_cb ];
@@ -175,7 +175,7 @@ sub start ($$$) {
 # and safe to slurp.
 sub psgi_qx {
 	my ($self, $env, $limiter, @qx_cb_arg) = @_;
-	$self->{psgi_env} = $env;
+	$self->{env} = $env;
 	$self->{qx_cb_arg} = \@qx_cb_arg;
 	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new;
 	start($self, $limiter, undef);
@@ -183,7 +183,7 @@ sub psgi_qx {
 
 sub yield_pass {
 	my ($self, $ipipe, $res) = @_; # $ipipe = InputPipe
-	my $env = $self->{psgi_env};
+	my $env = $self->{env};
 	my $wcb = delete $env->{'qspawn.wcb'} // confess('BUG: no qspawn.wcb');
 	if (ref($res) eq 'CODE') { # chain another command
 		delete $self->{rpipe};
@@ -232,7 +232,7 @@ sub parse_hdr_done ($$) {
 		$ret = psgi_status_err();
 	}
 	carp <<EOM if $err;
-E: $err @{$self->{args}->[0]} ($self->{psgi_env}->{REQUEST_URI})
+E: $err @{$self->{args}->[0]} ($self->{env}->{REQUEST_URI})
 EOM
 	$ret; # undef if headers incomplete
 }
@@ -248,7 +248,7 @@ sub ipipe_cb { # InputPipe callback
 
 sub _yield_start { # may run later, much later...
 	my ($self) = @_;
-	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+	if ($self->{env}->{'pi-httpd.async'}) {
 		my $rpipe = $self->{rpipe};
 		PublicInbox::InputPipe::consume($rpipe, \&ipipe_cb, $self);
 	} else {
@@ -283,7 +283,7 @@ sub _yield_start { # may run later, much later...
 
 sub psgi_yield {
 	my ($self, $env, $limiter, @parse_hdr_arg)= @_;
-	$self->{psgi_env} = $env;
+	$self->{env} = $env;
 	$self->{yield_parse_hdr} = [ \(my $buf = ''), @parse_hdr_arg ];
 	$limiter ||= $def_limiter ||= PublicInbox::Limiter->new;
 
