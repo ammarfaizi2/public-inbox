@@ -161,9 +161,10 @@ sub require_git ($;$) {
 
 	return 1 if $cur_vstr ge $req;
 	state $cur_ver = sprintf('%vd', $cur_vstr);
-	return plan skip_all => "git $req+ required, have $cur_ver" if !$nr;
+	my $vreq = sprintf('%vd', $req);
+	return plan skip_all => "git $vreq+ required, have $cur_ver" if !$nr;
 	defined(wantarray) ? undef :
-		skip("git $req+ required (have $cur_ver)", $nr)
+		skip("git $vreq+ required (have $cur_ver)", $nr)
 }
 
 sub require_git_http_backend (;$) {
