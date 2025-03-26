@@ -7,8 +7,7 @@
 package PublicInbox::LeiSelfSocket;
 use v5.12;
 use parent qw(PublicInbox::DS);
-use Data::Dumper;
-$Data::Dumper::Useqq = 1; # should've been the Perl default :P
+use PublicInbox::Git qw(git_quote);
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::IPC;
 
@@ -30,7 +29,7 @@ sub event_step {
 		for (@fds) { open my $fh, '+<&=', $_ };
 	}
 	return $self->close if $buf eq '';
-	warn Dumper({ 'unexpected self msg' => $buf, fds => \@fds });
+	warn 'W: unexpected self msg: ', git_quote($buf), " fds=(@fds)\n";
 	# TODO: figure out what to do with these messages...
 }
 

@@ -8,15 +8,11 @@ use parent qw(Exporter PublicInbox::IPC);
 use PublicInbox::Eml;
 use PublicInbox::Config;
 use PublicInbox::DS;
+use PublicInbox::Git qw(git_quote);
 our %IMAPflags2kw = map {; "\\\u$_" => $_ } qw(seen answered flagged draft);
 $IMAPflags2kw{'$Forwarded'} = 'forwarded';  # RFC 5550
 
 our @EXPORT = qw(uri_section imap_uri nntp_uri);
-
-sub ndump {
-	require Data::Dumper;
-	Data::Dumper->new([ $_[-1] ])->Useqq(1)->Terse(1)->Dump;
-}
 
 # returns the git config section name, e.g [imap "imaps://user@example.com"]
 # without the mailbox, so we can share connections between different inboxes
@@ -243,19 +239,20 @@ sub nn_new ($$$$) {
 				try_starttls($nn_arg->{Host})) {
 			# soft fail by default
 			$nn->starttls or warn <<"";
-W: <$uri> STARTTLS tried and failed (not requested): ${\(ndump($nn->message))}
+W: <$uri> STARTTLS tried and failed (not requested): ${\(
+git_quote($nn->message))}
 
 		} elsif ($nntp_cfg->{starttls}) {
 			# hard fail if explicitly configured
 			$nn->starttls or die <<"";
-E: <$uri> STARTTLS requested and failed: ${\(ndump($nn->message))}
+E: <$uri> STARTTLS requested and failed: ${\(git_quote($nn->message))}
 
 		}
 	} elsif ($nntp_cfg->{starttls}) {
 		$nn->can('starttls') or
 			die "E: <$uri> Net::NNTP too old for STARTTLS\n";
 		$nn->starttls or die <<"";
-E: <$uri> STARTTLS requested and failed: ${\(ndump($nn->message))}
+E: <$uri> STARTTLS requested and failed: ${\(git_quote($nn->message))}
 
 	}
 	$nn;
@@ -302,7 +299,7 @@ sub nn_for ($$$$) { # nn = Net::NNTP
 			push @{$nntp_cfg->{-postconn}}, [ 'authinfo', $u, $p ];
 		} else {
 			warn <<EOM;
-E: <$uri> AUTHINFO $u XXXX: ${\(ndump($nn->message))}
+E: <$uri> AUTHINFO $u XXXX: ${\(git_quote($nn->message))}
 EOM
 			$nn = undef;
 		}
@@ -314,7 +311,7 @@ EOM
 				push @{$nntp_cfg->{-postconn}}, [ 'compress' ];
 			} else {
 				warn <<EOM;
-W: <$uri> COMPRESS: ${\(ndump($nn->message))}
+W: <$uri> COMPRESS: ${\(git_quote($nn->message))}
 EOM
 			}
 		} else {
@@ -809,7 +806,7 @@ sub _nntp_fetch_all ($$$) {
 	my $restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 	my ($nr, $beg, $end) = $nn->group($group);
 	unless (defined($nr)) {
-		my $msg = ndump($nn->message);
+		my $msg = git_quote($nn->message);
 		return "E: GROUP $group <$sec> $msg";
 	}
 	undef $restore;
@@ -848,7 +845,7 @@ sub _nntp_fetch_all ($$$) {
 		$restore = PublicInbox::DS::allow_sigs qw(INT QUIT TERM);
 		my $raw = $nn->article($art);
 		unless (defined($raw)) {
-			my $msg = ndump($nn->message);
+			my $msg = git_quote($nn->message);
 			if ($nn->code == 421) { # pseudo response from Net::Cmd
 				$err = "E: $msg";
 				last;

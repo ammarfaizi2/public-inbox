@@ -5,8 +5,7 @@
 package PublicInbox::MboxReader;
 use strict;
 use v5.10.1; # check regexps before v5.12
-use Data::Dumper;
-$Data::Dumper::Useqq = 1; # should've been the default, for bad data
+use PublicInbox::Git qw(git_quote);
 
 my $from_strict =
 	qr/^From \S+ +\S+ \S+ +\S+ [^\n:]+:[^\n:]+:[^\n:]+ [^\n:]+\n/sm;
@@ -94,18 +93,18 @@ sub _mbox_cl ($$$;@) {
 		}
 		while (my $hdr = _extract_hdr(\$buf)) {
 			PublicInbox::Eml::strip_from($$hdr) or
-				die "E: no 'From ' line in:\n", Dumper($hdr);
+				die "E: no 'From ' line in:\n", git_quote($hdr);
 			my $eml = PublicInbox::Eml->new($hdr);
 			next unless $eml->raw_size;
 			my @cl = $eml->header_raw('Content-Length');
 			my $n = scalar(@cl);
 			$n == 0 and die "E: Content-Length missing in:\n",
-					Dumper($eml->as_string);
+					git_quote($eml->as_string);
 			$n == 1 or die "E: multiple ($n) Content-Length in:\n",
-					Dumper($eml->as_string);
+					git_quote($eml->as_string);
 			$cl[0] =~ /\A[0-9]+\z/ or die
 				"E: Content-Length `$cl[0]' invalid\n",
-					Dumper($eml->as_string);
+					git_quote($eml->as_string);
 			if (($eml->{bdy} = _cl_body($mbfh, \$buf, $cl[0]))) {
 				$uxs_from and
 					${$eml->{bdy}} =~ s/^>From /From /sgm;
@@ -115,7 +114,7 @@ sub _mbox_cl ($$$;@) {
 		if ($r == 0) {
 			$buf =~ /[^ \r\n\t]/ and
 				warn "W: leftover at end of mboxcl/mboxcl2:\n",
-					Dumper(\$buf);
+					git_quote(\$buf);
 			return;
 		}
 	}

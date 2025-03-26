@@ -8,6 +8,7 @@ package PublicInbox::LeiLsMailSource;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
+use PublicInbox::Git qw(git_quote);
 
 sub input_path_url { # overrides LeiInput version
 	my ($self, $url) = @_;
@@ -44,7 +45,7 @@ sub input_path_url { # overrides LeiInput version
 			return $lei->err("E: $uri");
 		# $l = name => description
 		my $l = $nn->newsgroups($uri->group) // return $lei->err(<<EOM);
-E: $uri LIST NEWSGROUPS: ${\($lei->{net}->ndump($nn->message))}
+E: $uri LIST NEWSGROUPS: ${\(git_quote($nn->message))}
 E: login may be required, try adding `-c nntp.debug' to your command
 EOM
 		my $sec = $lei->{net}->can('uri_section')->($uri);
