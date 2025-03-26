@@ -27,7 +27,8 @@ use PublicInbox::View;
 use PublicInbox::Eml;
 use PublicInbox::OnDestroy;
 use Text::Wrap qw(wrap);
-use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe);
+use PublicInbox::Hval qw(ascii_html to_filename prurl utf8_maybe
+	sanitize_local_paths);
 use POSIX qw(strftime);
 use autodie qw(open seek truncate);
 use Fcntl qw(SEEK_SET);
@@ -70,6 +71,7 @@ sub dbg_log ($) {
 	};
 	return '' if $log eq '';
 	$ctx->{-linkify} //= PublicInbox::Linkify->new;
+	sanitize_local_paths $log;
 	"<hr><pre>debug log:\n\n".
 		$ctx->{-linkify}->to_html($log).'</pre>';
 }

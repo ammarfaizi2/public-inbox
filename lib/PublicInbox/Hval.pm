@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 #
 # represents a header value in various forms.  Used for HTML generation
@@ -9,11 +9,13 @@ use strict;
 use Encode qw(find_encoding);
 use PublicInbox::MID qw/mid_clean mid_escape/;
 use base qw/Exporter/;
-our @EXPORT_OK = qw/ascii_html obfuscate_addrs to_filename src_escape
-		to_attr prurl mid_href fmt_ts ts2str utf8_maybe/;
+our @EXPORT_OK = qw(ascii_html obfuscate_addrs to_filename src_escape
+		to_attr prurl mid_href fmt_ts ts2str utf8_maybe
+		sanitize_local_paths);
 use POSIX qw(strftime);
 my $enc_ascii = find_encoding('us-ascii');
 use File::Spec::Functions qw(abs2rel);
+my %rmap_inc;
 
 # safe-ish acceptable filename pattern for portability
 our $FN = '[a-zA-Z0-9][a-zA-Z0-9_\-\.]+[a-zA-Z0-9]'; # needs \z anchor
@@ -154,6 +156,35 @@ sub fmt_ts ($) {
 sub utf8_maybe ($) {
 	utf8::decode($_[0]);
 	utf8::valid($_[0]) or utf8::encode($_[0]); # non-UTF-8 data exists
+}
+
+# shorten "/full/path/to/Foo/Bar.pm" to "Foo/Bar.pm" so error
+# messages don't reveal FS layout info in case people use non-standard
+# installation paths
+sub path2inc ($) {
+	my $full = $_[0];
+	if (my $short = $rmap_inc{$full}) {
+		return $short;
+	} elsif (!scalar(keys %rmap_inc) && -e $full) {
+		# n.b. $INC{'PublicInbox::Lg2'} is undef if libgit2-dev
+		# doesn't exist
+		my $f;
+		%rmap_inc = map {;
+			$f = $INC{$_};
+			defined $f ? ($f, $_) : ();
+		} keys %INC;
+		# fall back to basename as last resort
+		$rmap_inc{$full} // (split(m'/', $full))[-1];
+	} else {
+		$full;
+	}
+}
+
+# changes avoids giving out PERL5LIB absolute path info to the public:
+# - something bad at /foo/bar/PublicInbox/Foo.pm line 666.
+# + something bad at PublicInbox/Foo.pm line 666.
+sub sanitize_local_paths (@) {
+	s! at (.+) line !' at '.path2inc($1).' line '!sge for @_
 }
 
 1;

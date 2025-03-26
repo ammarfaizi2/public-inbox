@@ -8,14 +8,14 @@ use v5.10.1;
 use List::Util qw(min max);
 use URI::Escape qw(uri_unescape);
 use PublicInbox::Smsg;
-use PublicInbox::Hval qw(ascii_html obfuscate_addrs mid_href fmt_ts);
+use PublicInbox::Hval qw(ascii_html obfuscate_addrs mid_href fmt_ts
+	sanitize_local_paths);
 use PublicInbox::View;
 use PublicInbox::WwwAtomStream;
 use PublicInbox::WwwStream qw(html_oneshot);
 use PublicInbox::SearchThread;
 use PublicInbox::SearchQuery;
 use PublicInbox::Search qw(get_pct);
-my %rmap_inc;
 use Errno ();
 
 # possible busy errors from async_mset (via pipe, sendmsg, epoll_ctl)
@@ -161,33 +161,11 @@ sub mset_summary {
 	undef;
 }
 
-# shorten "/full/path/to/Foo/Bar.pm" to "Foo/Bar.pm" so error
-# messages don't reveal FS layout info in case people use non-standard
-# installation paths
-sub path2inc ($) {
-	my $full = $_[0];
-	if (my $short = $rmap_inc{$full}) {
-		return $short;
-	} elsif (!scalar(keys %rmap_inc) && -e $full) {
-		# n.b. $INC{'PublicInbox::Lg2'} is undef if libgit2-dev
-		# doesn't exist
-		my $f;
-		%rmap_inc = map {;
-			$f = $INC{$_};
-			defined $f ? ($f, $_) : ();
-		} keys %INC;
-		# fall back to basename as last resort
-		$rmap_inc{$full} // (split(m'/', $full))[-1];
-	} else {
-		$full;
-	}
-}
-
 sub err_txt {
 	my ($ctx, $err) = @_;
 	my $u = $ctx->{ibx}->base_url($ctx->{env}) . '_/text/help/';
 	$err =~ s/^\s*Exception:\s*//; # bad word to show users :P
-	$err =~ s!(\S+)!path2inc($1)!sge;
+	sanitize_local_paths $err;
 	$err = ascii_html($err);
 	"\nBad query: <b>$err</b>\n" .
 		qq{See <a\nhref="$u">$u</a> for help on using search};
