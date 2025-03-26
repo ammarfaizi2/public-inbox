@@ -197,7 +197,7 @@ sub srch_init_extra ($$) {
 	}
 }
 
-sub dispatch {
+sub dispatch (@) {
 	my ($req, $cmd, @argv) = @_;
 	my $fn = $req->can("cmd_$cmd") or return;
 	$GLP->getoptionsfromarray(\@argv, $req, @PublicInbox::Search::XH_SPEC)
@@ -269,11 +269,15 @@ sub recv_loop {
 		my $req = bless {}, __PACKAGE__;
 		my $i = 0;
 		open($req->{$i++}, '+<&=', $_) for @fds;
+		$req->{1}->autoflush(1) if $req->{1};
 		local $stderr = $req->{1} // \*STDERR;
 		die "not NUL-terminated" if chop($rbuf) ne "\0";
-		my @argv = split(/\0/, $rbuf);
+		my ($cmd, @argv) = split(/\0/, $rbuf);
 		$req->{nr_out} = 0;
-		$req->dispatch(@argv) if @argv;
+		if (defined $cmd) {
+			eval { dispatch $req, $cmd, @argv };
+			warn "$cmd: $@" if $@;
+		}
 	}
 }
 

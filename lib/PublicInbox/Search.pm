@@ -10,6 +10,7 @@ use parent qw(Exporter);
 our @EXPORT_OK = qw(retry_reopen int_val get_pct xap_terms);
 use List::Util qw(max);
 use POSIX qw(strftime);
+use autodie qw(open pipe);
 use Carp ();
 our $XHC = 0; # defined but false
 
@@ -486,8 +487,13 @@ sub async_mset {
 		xdb($self); # populate {nshards}
 		my @margs = ($self->xh_args, xh_opt($self, $opt), '--');
 		my $ret = eval {
-			my $rd = $XHC->mkreq(undef, 'mset', @margs, $qry_str);
-			PublicInbox::XhcMset->maybe_new($rd, $self, $cb, @args);
+			pipe my $out_rd, my $out_wr;
+			open my $err_rw, '+>', undef;
+			$XHC->mkreq([ $out_wr, $err_rw ],
+					'mset', @margs, $qry_str);
+			undef $out_wr;
+			PublicInbox::XhcMset->maybe_new($out_rd, $err_rw,
+							$self, $cb, @args);
 		};
 		$cb->(@args, undef, $@) if $@;
 		$ret;

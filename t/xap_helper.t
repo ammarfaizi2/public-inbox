@@ -222,20 +222,25 @@ for my $n (@NO_CXX) {
 	# git patch-id --stable <t/data/0001.patch | awk '{print $1}'
 	my $dfid = '91ee6b761fc7f47cad9f2b09b10489f313eb5b71';
 	my $mid = '20180720072141.GA15957@example';
-	my $r = $xhc->mkreq([ undef, $err_w ], qw(dump_ibx -A XDFID -A Q),
+
+	pipe my $r, my $w;
+	$xhc->mkreq([ $w, $err_w ], qw(dump_ibx -A XDFID -A Q),
 				(map { ('-d', $_) } @ibx_idx),
 				9, "mid:$mid");
 	close $err_w;
+	close $w;
 	my $res = do { local $/; <$r> };
 	is($res, "$dfid 9\n$mid 9\n", "got expected result ($xhc->{impl})");
 	my $err = do { local $/; <$err_r> };
 	is($err, "mset.size=1 nr_out=2\n", "got expected status ($xhc->{impl})");
 
 	pipe($err_r, $err_w);
-	$r = $xhc->mkreq([ undef, $err_w ], qw(dump_roots -c -A XDFID),
+	pipe $r, $w;
+	$xhc->mkreq([ $w, $err_w ], qw(dump_roots -c -A XDFID),
 			(map { ('-d', $_) } @int),
 			$root2id_file, 'dt:19700101'.'000000..');
 	close $err_w;
+	close $w;
 	my @res = <$r>;
 	is(scalar(@res), 5, 'got expected rows');
 	is(scalar(@res), scalar(grep(/\A[0-9a-f]{40,} [0-9]+\n\z/, @res)),
@@ -243,8 +248,10 @@ for my $n (@NO_CXX) {
 	$err = do { local $/; <$err_r> };
 	is $err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})";
 
-	$r = $xhc->mkreq([], qw(mset), @ibx_shard_args,
+	pipe $r, $w;
+	$xhc->mkreq([$w], qw(mset), @ibx_shard_args,
 				'dfn:lib/PublicInbox/Search.pm');
+	close $w;
 	chomp((my $hdr, @res) = readline($r));
 	like $hdr, qr/\bmset\.size=1\b/,
 		"got expected header via mset ($xhc->{impl}";
@@ -259,8 +266,10 @@ for my $n (@NO_CXX) {
 	ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
 	is scalar(@res), 3, 'only 3 columns in result';
 
-	$r = $xhc->mkreq([], qw(mset), @ibx_shard_args,
+	pipe $r, $w;
+	$xhc->mkreq([$w], qw(mset), @ibx_shard_args,
 				'dt:19700101'.'000000..');
+	close $w;
 	chomp(($hdr, @res) = readline($r));
 	like $hdr, qr/\bmset\.size=6\b/,
 		"got expected header via multi-result mset ($xhc->{impl}";
@@ -276,10 +285,12 @@ for my $n (@NO_CXX) {
 	my $nr;
 	for my $i (7, 8, 39, 40) {
 		pipe($err_r, $err_w);
-		$r = $xhc->mkreq([ undef, $err_w ], qw(dump_roots -c -A),
+		pipe($r, $w);
+		$xhc->mkreq([ $w, $err_w ], qw(dump_roots -c -A),
 				"XDFPOST$i", (map { ('-d', $_) } @int),
 				$root2id_file, 'dt:19700101'.'000000..');
 		close $err_w;
+		close $w;
 		@res = <$r>;
 		my @err = <$err_r>;
 		if (defined $nr) {
@@ -297,9 +308,11 @@ for my $n (@NO_CXX) {
 			or diag explain(\@res, \@err);
 	}
 	pipe($err_r, $err_w);
-	$r = $xhc->mkreq([ undef, $err_w ], qw(dump_ibx -A XDFPOST7),
+	pipe $r, $w;
+	$xhc->mkreq([ $w, $err_w ], qw(dump_ibx -A XDFPOST7),
 			@ibx_shard_args, qw(13 rt:0..));
 	close $err_w;
+	close $w;
 	@res = <$r>;
 	my @err = <$err_r>;
 	my ($nr_out) = ("@err" =~ /nr_out=(\d+)/);
@@ -318,8 +331,12 @@ for my $n (@NO_CXX) {
 		my $capture = sub { ($mset, $err) = @_ };
 		my $retrieve = sub {
 			my ($qstr) = @_;
-			$r = $xhc->mkreq(undef, 'mset', @thr_shard_args, $qstr);
-			PublicInbox::XhcMset->maybe_new($r, undef, $capture);
+			pipe $r, $w;
+			$xhc->mkreq([ $w ], 'mset', @thr_shard_args, $qstr);
+			close $w;
+			open my $err_rw, '+>', undef;
+			PublicInbox::XhcMset->maybe_new($r, $err_rw,
+							undef, $capture);
 			map { $over->get_art($_->get_docid) } $mset->items;
 		};
 		@art = $retrieve->('thread:thread-root@example wildfires');
@@ -365,8 +382,10 @@ for my $n (@NO_CXX) {
 		diag 'testing timeouts...';
 		for my $j (qw(0 1)) {
 			my $t0 = now;
-			$r = $xhc->mkreq(undef, qw(test_sleep -K 1 -d),
+			pipe $r, $w;
+			$xhc->mkreq([ $w ], qw(test_sleep -K 1 -d),
 					$ibx_idx[0]);
+			close $w;
 			is readline($r), undef, 'got EOF';
 			my $diff = now - $t0;
 			ok $diff < 3, "timeout didn't take too long -j$j";
@@ -387,8 +406,10 @@ SKIP: {
 	my $exp;
 	for (0..(PublicInbox::Search::ulimit_n() * $nr)) {
 		for my $xhc (@xhc) {
-			my $r = $xhc->mkreq([], qw(mset -Q), "tst$n=XTST$n",
+			pipe my $r, my $w;
+			$xhc->mkreq([$w], qw(mset -Q), "tst$n=XTST$n",
 					@ibx_shard_args, qw(rt:0..));
+			close $w;
 			chomp(my @res = readline($r));
 			$exp //= $res[0];
 			$exp eq $res[0] or

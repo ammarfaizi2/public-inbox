@@ -14,7 +14,6 @@
 static bool cmd_mset(struct req *req)
 {
 	if (optind >= req->argc) ABORT("usage: mset [OPTIONS] WANT QRY_STR");
-	if (req->fp[1]) ABORT("mset only accepts 1 FD");
 	const char *qry_str = req->argv[optind];
 	CLEANUP_FBUF struct fbuf wbuf = {};
 	Xapian::MSet mset = req->code_search ? commit_mset(req, qry_str) :

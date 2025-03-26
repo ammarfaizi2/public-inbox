@@ -5,7 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 use Cwd qw(getcwd);
 use List::Util qw(sum);
-use autodie qw(close mkdir open rename);
+use autodie qw(close mkdir open pipe rename);
 require_mods(qw(json Xapian +SCM_RIGHTS DBD::SQLite));
 use_ok 'PublicInbox::CodeSearchIdx';
 use PublicInbox::Import;
@@ -149,8 +149,10 @@ my $test_xhc = sub {
 	my ($xhc) = @_;
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/ext");
 	my $impl = $xhc->{impl};
-	my ($r, @l);
-	$r = $xhc->mkreq([], qw(mset -c -g), $zp_git, @xh_args, 'NUL');
+	my ($r, $w, @l);
+	pipe $r, $w;
+	$xhc->mkreq([$w], qw(mset -c -g), $zp_git, @xh_args, 'NUL');
+	close $w;
 	chomp(@l = <$r>);
 	like shift(@l), qr/\bmset\.size=2\b/, "got expected header $impl";
 	my %docid2data;
@@ -164,7 +166,9 @@ my $test_xhc = sub {
 	} @l;
 	is_deeply(\@got, $exp, "expected doc_data $impl");
 
-	$r = $xhc->mkreq([], qw(mset -c -g), "$tmp/wt0/.git", @xh_args, 'NUL');
+	pipe $r, $w;
+	$xhc->mkreq([$w], qw(mset -c -g), "$tmp/wt0/.git", @xh_args, 'NUL');
+	close $w;
 	chomp(@l = <$r>);
 	like shift(@l), qr/\bmset.size=0\b/, "got miss in wrong dir $impl";
 	is_deeply(\@l, [], "no extra lines $impl");

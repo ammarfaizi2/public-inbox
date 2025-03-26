@@ -16,14 +16,11 @@ our $tries = -1; # set to zero by read-only daemon
 
 sub mkreq {
 	my ($self, $ios, @arg) = @_;
-	my ($r, $n);
-	pipe($r, $ios->[0]) if !defined($ios->[0]);
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
-	$n = $PublicInbox::IPC::send_cmd->($self->{io}, \@fds, $buf, 0, $tries)
-		// die "send_cmd: $!";
+	my $n = $PublicInbox::IPC::send_cmd->($self->{io},
+				\@fds, $buf, 0, $tries) // die "send_cmd: $!";
 	$n == length($buf) or die "send_cmd: $n != ".length($buf);
-	$r;
 }
 
 sub start_helper (@) {

@@ -164,7 +164,7 @@ sub mset_summary {
 sub err_txt {
 	my ($ctx, $err) = @_;
 	my $u = $ctx->{ibx}->base_url($ctx->{env}) . '_/text/help/';
-	$err =~ s/^\s*Exception:\s*//; # bad word to show users :P
+	$err =~ s/\s*\bException:\s*/ /; # bad word to show users :P
 	sanitize_local_paths $err;
 	$err = ascii_html($err);
 	"\nBad query: <b>$err</b>\n" .
