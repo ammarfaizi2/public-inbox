@@ -472,15 +472,16 @@ sub parse_ls_files ($$) {
 	my $di = $self->{-cur_di};
 	my @ls = split(/\0/, $$bref);
 	my ($line, @extra) = grep(/\t\Q$di->{path_b}\E\z/, @ls);
-	scalar(@extra) and die "BUG: extra files in index: <",
-				join('> <', $line, @extra), ">";
-	$line // die "no \Q$di->{path_b}\E in <",join('> <', @ls), '>';
+	scalar(@extra) and die 'BUG? extra files in index:',
+				(map { "\n\t".git_quote($_) } ($line, @extra));
+	$line // die 'BUG? no ', git_quote($di->{path_b}), ' in',
+				(map { "\n\t".git_quote($_) } @ls);
 	my ($info, $file) = split(/\t/, $line, 2);
 	my ($mode_b, $oid_b_full, $stage) = split(/ /, $info);
-	$file eq $di->{path_b} or die
-"BUG: index mismatch: file=$file != path_b=$di->{path_b}";
+	$file eq $di->{path_b} or die "BUG? index mismatch: file=",
+		git_quote($file), ' != path_b=', git_quote($di->{path_b});
 
-	dbg($self, "index at:\n$mode_b $oid_b_full\t$file");
+	dbg($self, "index at:\n$mode_b $oid_b_full\t".git_quote($file));
 	my $tmp_git = $self->{tmp_git} or die 'no git working tree';
 	if ($self->{psgi_env}->{'pi-httpd.async'}) {
 		async_check { git => $tmp_git }, $oid_b_full,
