@@ -119,6 +119,13 @@ sub names2ibx ($;$) {
 	}
 }
 
+sub _list_groups (@) {
+	my ($cb, $self, $wildmat) = @_;
+	wildmat2re($wildmat);
+	my @names = grep /$wildmat/, @{$self->{nntpd}->{groupnames}};
+	$self->long_response($cb, names2ibx($self, \@names));
+}
+
 sub list_active_i { # "LIST ACTIVE" and also just "LIST" (no args)
 	my ($self, $ibxs) = @_;
 	my @window = splice(@$ibxs, 0, 1000);
@@ -127,10 +134,7 @@ sub list_active_i { # "LIST ACTIVE" and also just "LIST" (no args)
 }
 
 sub list_active ($;$) { # called by cmd_list
-	my ($self, $wildmat) = @_;
-	wildmat2re($wildmat);
-	my @names = grep(/$wildmat/, @{$self->{nntpd}->{groupnames}});
-	$self->long_response(\&list_active_i, names2ibx($self, \@names));
+	_list_groups \&list_active_i, @_;
 }
 
 sub list_active_times_i {
@@ -144,10 +148,7 @@ sub list_active_times_i {
 }
 
 sub list_active_times ($;$) { # called by cmd_list
-	my ($self, $wildmat) = @_;
-	wildmat2re($wildmat);
-	my @names = grep(/$wildmat/, @{$self->{nntpd}->{groupnames}});
-	$self->long_response(\&list_active_times_i, names2ibx($self, \@names));
+	_list_groups \&list_active_times_i, @_;
 }
 
 sub list_newsgroups_i {
@@ -160,10 +161,7 @@ sub list_newsgroups_i {
 }
 
 sub list_newsgroups ($;$) { # called by cmd_list
-	my ($self, $wildmat) = @_;
-	wildmat2re($wildmat);
-	my @names = grep(/$wildmat/, @{$self->{nntpd}->{groupnames}});
-	$self->long_response(\&list_newsgroups_i, names2ibx($self, \@names));
+	_list_groups \&list_newsgroups_i, @_;
 }
 
 # LIST SUBSCRIPTIONS, DISTRIB.PATS are not supported
