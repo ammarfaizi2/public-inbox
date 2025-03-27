@@ -12,15 +12,15 @@ use POSIX qw(strftime);
 	my $wm_prepare = sub {
 		my ($wm) = @_;
 		my $orig = qq{'$wm'};
-		PublicInbox::NNTP::wildmat2re($_[0]);
-		my $new = explain($_[0]);
-		($orig, $new);
+		my $re = PublicInbox::NNTP::wildmat2re($wm);
+		my $new = explain($re);
+		($orig, $new, $re);
 	};
 
 	my $wildmat_like = sub {
 		my ($str, $wm) = @_;
-		my ($orig, $new) = $wm_prepare->($wm);
-		like($str, $wm, "$orig matches '$str' using $new");
+		my ($orig, $new, $re) = $wm_prepare->($wm);
+		like($str, $re, "$orig matches '$str' using $new");
 	};
 
 	my $wildmat_unlike = sub {
@@ -30,8 +30,8 @@ use POSIX qw(strftime);
 			my $re = qr/$wm/;
 			like($str, $re, "normal re with $wm matches, but ...");
 		}
-		my ($orig, $new) = $wm_prepare->($wm);
-		unlike($str, $wm, "$orig does not match '$str' using $new");
+		my ($orig, $new, $re) = $wm_prepare->($wm);
+		unlike($str, $re, "$orig does not match '$str' using $new");
 	};
 
 	$wildmat_like->('[foo]', '[\[foo\]]');
@@ -47,8 +47,8 @@ use POSIX qw(strftime);
 	my $ngpat_like = sub {
 		my ($str, $pat) = @_;
 		my $orig = $pat;
-		PublicInbox::NNTP::ngpat2re($pat);
-		like($str, $pat, "'$orig' matches '$str' using $pat");
+		my $re = PublicInbox::NNTP::ngpat2re($pat);
+		like($str, $re, "'$orig' matches '$str' using $re");
 	};
 
 	$ngpat_like->('any', '*');

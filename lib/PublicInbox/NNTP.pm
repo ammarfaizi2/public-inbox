@@ -121,8 +121,8 @@ sub names2ibx ($;$) {
 
 sub _list_groups (@) {
 	my ($cb, $self, $wildmat) = @_;
-	wildmat2re($wildmat);
-	my @names = grep /$wildmat/, @{$self->{nntpd}->{groupnames}};
+	my $re = wildmat2re($wildmat);
+	my @names = grep /$re/, @{$self->{nntpd}->{groupnames}};
 	$self->long_response($cb, names2ibx($self, \@names));
 }
 
@@ -274,11 +274,11 @@ sub cmd_newgroups ($$$;$$) {
 	$self->long_response(\&newgroups_i, $ts, names2ibx($self));
 }
 
-sub wildmat2re (;$) {
-	return $_[0] = qr/.*/ if (!defined $_[0] || $_[0] eq '*');
+sub wildmat2re ($) {
+	my $tmp = $_[0] // '*';
+	return qr/.*/ if $tmp eq '*';
 	my %keep;
 	my $salt = rand;
-	my $tmp = $_[0];
 
 	$tmp =~ s#(?<!\\)\[(.+)(?<!\\)\]#
 		my $orig = $1;
@@ -295,14 +295,14 @@ sub wildmat2re (;$) {
 			defined $orig ? $orig : $1;
 			#ge;
 	}
-	$_[0] = qr/\A$tmp\z/;
+	qr/\A$tmp\z/;
 }
 
-sub ngpat2re (;$) {
-	return $_[0] = qr/\A\z/ unless defined $_[0];
+sub ngpat2re ($) {
+	my $tmp = $_[0] // return qr/\A\z/;
 	my %map = ('*' => '.*', ',' => '|');
-	$_[0] =~ s!(.)!$map{$1} || "\Q$1"!ge;
-	$_[0] = qr/\A(?:$_[0])\z/;
+	$tmp =~ s!(.)!$map{$1} || "\Q$1\E"!ge;
+	qr/\A(?:$tmp)\z/;
 }
 
 sub newnews_i {
@@ -332,8 +332,8 @@ sub cmd_newnews ($$$$;$$) {
 	return r501 if $@;
 	$self->msg_more("230 list of new articles by message-id follows\r\n");
 	my ($keep, $skip) = split(/!/, $newsgroups, 2);
-	ngpat2re($keep);
-	ngpat2re($skip);
+	$keep = ngpat2re $keep;
+	$skip = ngpat2re $skip;
 	my @names = grep(/$keep/, @{$self->{nntpd}->{groupnames}});
 	@names = grep(!/$skip/, @names);
 	return \".\r\n" unless scalar(@names);
