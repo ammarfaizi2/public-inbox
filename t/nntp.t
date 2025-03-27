@@ -7,22 +7,13 @@ require_mods(qw(DBD::SQLite));
 use_ok 'PublicInbox::NNTP';
 use PublicInbox::Config;
 use POSIX qw(strftime);
-use Data::Dumper;
 
 {
-	my $quote_str = sub {
-		my ($orig) = @_;
-		my (undef, $s) = split(/ = /, Dumper($orig), 2);
-		$s // diag explain(['$s undefined, $orig = ', $orig]);
-		$s =~ s/;\n//;
-		$s;
-	};
-
 	my $wm_prepare = sub {
 		my ($wm) = @_;
 		my $orig = qq{'$wm'};
 		PublicInbox::NNTP::wildmat2re($_[0]);
-		my $new = $quote_str->($_[0]);
+		my $new = explain($_[0]);
 		($orig, $new);
 	};
 

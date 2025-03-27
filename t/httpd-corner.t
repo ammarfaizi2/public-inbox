@@ -221,9 +221,8 @@ sub check_400 {
 	# and intentionally bad commas (e.g. "Content-Length: 3, 3")
 	if (0) {
 		require Plack::HTTPParser; # XS or pure Perl
-		require Data::Dumper;
 		Plack::HTTPParser::parse_http_request($req, my $env = {});
-		diag Data::Dumper::Dumper($env); # "Content-Length: 3, 3"
+		diag explain($env); # "Content-Length: 3, 3"
 	}
 	my $conn = conn_for($sock, '1.1 Content-Length dupe');
 	$conn->write($req);

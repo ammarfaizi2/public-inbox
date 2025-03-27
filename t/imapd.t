@@ -202,7 +202,7 @@ for my $r ('1:*', '1', '*') {
 	is($envelope->{messageid}, '<testmessage@example.com>', 'messageid');
 	is(scalar @{$envelope->{to}}, 1, 'one {to} header');
 	# *sigh* too much to verify...
-	#use Data::Dumper; diag Dumper($envelope);
+	# explain($envelope);
 
 	$ret = $mic->fetch_hash($r, 'FLAGS') or BAIL_OUT "FETCH $@";
 	is_deeply($ret->{1}->{FLAGS}, '', 'no flags');
