@@ -1,4 +1,4 @@
-# Copyright (C) 2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # command for listing NNTP groups and IMAP folders,
@@ -21,7 +21,7 @@ sub input_path_url { # overrides LeiInput version
 		my $uri = PublicInbox::URIimap->new($url);
 		my $sec = $lei->{net}->can('uri_section')->($uri);
 		my $mic = $lei->{net}->mic_get($uri) or
-			return $lei->err("E: $uri");
+			die "E: <$uri> can't get IMAP client";
 		my $l = $mic->folders_hash($uri->path); # server-side filter
 		@$l = map { $_->[2] } # undo Schwartzian transform below:
 			sort { $a->[0] cmp $b->[0] || $a->[1] <=> $b->[1] }
@@ -42,9 +42,9 @@ sub input_path_url { # overrides LeiInput version
 	} elsif ($url =~ m!\A(?:nntps?|s?news)://!i) {
 		my $uri = PublicInbox::URInntps->new($url);
 		my $nn = $lei->{net}->nn_get($uri) or
-			return $lei->err("E: $uri");
+			die "E: <$uri> can't get NNTP client";
 		# $l = name => description
-		my $l = $nn->newsgroups($uri->group) // return $lei->err(<<EOM);
+		my $l = $nn->newsgroups($uri->group) // die <<EOM;
 E: $uri LIST NEWSGROUPS: ${\(git_quote($nn->message))}
 E: login may be required, try adding `-c nntp.debug' to your command
 EOM
