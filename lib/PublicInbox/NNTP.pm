@@ -126,7 +126,7 @@ sub _list_groups (@) {
 	$self->long_response($cb, names2ibx($self, \@names));
 }
 
-sub list_active_i { # "LIST ACTIVE" and also just "LIST" (no args)
+sub _list_active_i { # "LIST ACTIVE" and also just "LIST" (no args)
 	my ($self, $ibxs) = @_;
 	my @window = splice(@$ibxs, 0, 1000);
 	emit_group_lines($self, \@window);
@@ -134,10 +134,10 @@ sub list_active_i { # "LIST ACTIVE" and also just "LIST" (no args)
 }
 
 sub list_active ($;$) { # called by cmd_list
-	_list_groups \&list_active_i, @_;
+	_list_groups \&_list_active_i, @_;
 }
 
-sub list_active_times_i {
+sub _list_active_times_i {
 	my ($self, $ibxs) = @_;
 	my @window = splice(@$ibxs, 0, 1000);
 	$self->msg_more(join('', map {
@@ -148,10 +148,10 @@ sub list_active_times_i {
 }
 
 sub list_active_times ($;$) { # called by cmd_list
-	_list_groups \&list_active_times_i, @_;
+	_list_groups \&_list_active_times_i, @_;
 }
 
-sub list_newsgroups_i {
+sub _list_newsgroups_i {
 	my ($self, $ibxs) = @_;
 	my @window = splice(@$ibxs, 0, 1000);
 	$self->msg_more(join('', map {
@@ -161,7 +161,7 @@ sub list_newsgroups_i {
 }
 
 sub list_newsgroups ($;$) { # called by cmd_list
-	_list_groups \&list_newsgroups_i, @_;
+	_list_groups \&_list_newsgroups_i, @_;
 }
 
 # LIST SUBSCRIPTIONS, DISTRIB.PATS are not supported
@@ -178,7 +178,7 @@ sub cmd_list ($;$$) {
 		$arg->($self, @args);
 	} else {
 		$self->msg_more("215 list of newsgroups follows\r\n");
-		$self->long_response(\&list_active_i, names2ibx($self));
+		$self->long_response(\&_list_active_i, names2ibx($self));
 	}
 }
 

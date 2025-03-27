@@ -137,6 +137,16 @@ close $cfgfh or BAIL_OUT;
 	syswrite($s, "NEWGROUPS\t19990424 000000 \033GMT\007\r\n");
 	is(0, sysread($s, $buf, 4096), 'GOT EOF on cntrl');
 
+	# attempt to call _list_*_i subs directly
+	$s = tcp_connect($sock);
+	$buf = readline $s // xbail "readline: $!";
+	like $buf, qr/\A201 .*? ready.*?\r\n/s, 'got greeting';
+	for my $scmd (qw(ACTIVE ACTIVE.TIMES NEWSGROUPS)) {
+		print $s "LIST $scmd.I\r\n" or xbail "print $!";
+		$buf = readline $s // xbail "readline: $!";
+		like $buf, qr/\A501 /, "got 501 on bad command (LIST $scmd.I)";
+	}
+
 	$s = tcp_connect($sock);
 	sysread($s, $buf, 4096);
 	is($buf, "201 " . hostname . " ready - post via email\r\n",
@@ -395,6 +405,7 @@ Date: Fri, 02 Oct 1993 00:00:00 +0000
 		<$fh>;
 	};
 	unlike($eout, qr/wide/i, 'no Wide character warnings');
+	unlike $eout, qr/uninitialized/i, 'no uninitialized warnings';
 }
 
 $td = undef;
