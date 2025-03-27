@@ -19,6 +19,7 @@ use PublicInbox::SHA qw(sha1_hex);
 use Time::Local qw(timegm timelocal);
 use PublicInbox::GitAsyncCat;
 use PublicInbox::Address;
+my $SALT = rand . ''; # stringify early for CoW sharing
 
 use constant {
 	LINE_MAX => 512, # RFC 977 section 2.3
@@ -278,11 +279,10 @@ sub wildmat2re ($) {
 	my $tmp = $_[0] // '*';
 	return qr/.*/ if $tmp eq '*';
 	my %keep;
-	my $salt = rand;
 
 	$tmp =~ s#(?<!\\)\[(.+)(?<!\\)\]#
 		my $orig = $1;
-		my $key = sha1_hex($orig . $salt);
+		my $key = sha1_hex($orig . $SALT);
 		$orig =~ s/([^\w\-])+/\Q$1/g;
 		$keep{$key} = $orig;
 		$key
