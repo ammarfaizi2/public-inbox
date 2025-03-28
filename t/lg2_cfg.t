@@ -24,6 +24,9 @@ my $cfgwr_commit = $ENV{TEST_VALIDATE_GIT_BEHAVIOR} ? sub {
 	}
 } : PublicInbox::Lg2->can('cfgwr_commit');
 
+SKIP: {
+$cfgwr_commit or skip 'libgit2 '.PublicInbox::Lg2->modversion.
+		' < 1.8 too old for multiline configs', 1;
 my $cfg; # for explain() if needed
 my $get = sub {
 	my (@key) = @_;
@@ -56,5 +59,17 @@ ok !$@, 'no exception or errors on empty todo';
 $cfgwr_commit->($f, [ [ qw(x.b d) ], [ qw(--add x.b e) ],
 	[ qw(--add x.b f) ] ]);
 is_xdeeply $get->('x.b'), [ qw(d e f) ], 'multiple changes chained';
+
+use PublicInbox::IO qw(write_file try_cat);
+my $src = <<EOM;
+[foo]
+	bar = some \\
+very \\
+long line
+EOM
+write_file '>', $f, $src;
+$cfgwr_commit->($f, [ [ qw(x.b d) ], [ qw(--add x.b e) ] ]);
+like try_cat($f), qr/^\Q$src\E$/sm, 'newlines preserved';
+} # SKIP
 
 done_testing;

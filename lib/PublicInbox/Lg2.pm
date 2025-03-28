@@ -34,8 +34,17 @@ BEGIN {
 		die "E: libgit2 not installed: $err\n" if $?;
 		$vals->{$k} = $val;
 	}
+	my $modversion = $vals->{modversion};
+	*modversion = sub { $modversion };
+	my $lg2_ver = eval("v$modversion");
 	my $f = "$dir/lg2.h";
 	$c_src = PublicInbox::IO::try_cat $f or die "cat $f: $!";
+	# old versions were broken w/ multi-line, and also lacked the
+	# LIBGIT2_VERSION_CHECK macro (and Inline::C won't let us hide
+	# functions via CPP #if blocks)
+	if ($lg2_ver ge v1.8) {
+		$c_src .= PublicInbox::IO::try_cat "$dir/lg2_cfg.h";
+	}
 	# append pkg-config results to the source to ensure Inline::C
 	# can rebuild if there's changes (it doesn't seem to detect
 	# $CFG{CCFLAGSEX} nor $CFG{CPPFLAGS} changes)
@@ -49,8 +58,7 @@ BEGIN {
 	$CFG{CCFLAGSEX} = $vals->{cflags};
 	$CFG{LIBS} = $vals->{libs};
 	my $boot = 'git_libgit2_init();';
-	eval("v$vals->{modversion}") ge v0.26 and
-		$boot .= <<EOM;
+	$boot .= <<EOM if $lg2_ver ge v0.26;
 git_libgit2_opts(GIT_OPT_ENABLE_STRICT_HASH_VERIFICATION, 0);
 EOM
 	eval <<EOM;
