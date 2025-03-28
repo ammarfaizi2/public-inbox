@@ -18,6 +18,7 @@ sub new {
 		out => \*STDOUT,
 		# pi_cfg => $pi_cfg,
 		# ssl_ctx_opt => { SSL_cert_file => ..., SSL_key_file => ... }
+		# servername => str
 		# idler => PublicInbox::InboxIdle
 	}, $class;
 }
@@ -25,16 +26,11 @@ sub new {
 sub refresh_groups {
 	my ($self, $sig) = @_;
 	my $pi_cfg = PublicInbox::Config->new;
-	my $name = $pi_cfg->{'publicinbox.nntpserver'};
-	if (!defined($name) or $name eq '') {
-		$name = hostname;
-	} elsif (ref($name) eq 'ARRAY') {
-		$name = $name->[0];
-	}
-	if ($name ne ($self->{servername} // '')) {
-		$self->{servername} = $name;
-		$self->{greet} = \"201 $name ready - post via email\r\n";
-	}
+	$self->{servername} //= $pi_cfg->{'publicinbox.nntpserver'} // '';
+	ref($self->{servername}) eq 'ARRAY' and
+		$self->{servername} = $self->{servername}->[0];
+	$self->{servername} = hostname if $self->{servername} eq '';
+	$self->{greet} = \"201 $self->{servername} ready - post via email\r\n";
 	my $groups = $pi_cfg->{-by_newsgroup}; # filled during each_inbox
 	my $cache = eval { $pi_cfg->ALL->misc->nntpd_cache_load } // {};
 	$pi_cfg->each_inbox(sub {

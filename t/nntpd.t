@@ -5,10 +5,10 @@ use strict; use v5.10.1; use PublicInbox::TestCommon;
 require_mods(qw(DBD::SQLite Net::NNTP));
 use PublicInbox::Eml;
 use Socket qw(IPPROTO_TCP TCP_NODELAY);
-use Sys::Hostname;
 use POSIX qw(_exit);
 use PublicInbox::SHA;
 use PublicInbox::DS;
+my $hostname = 'bogus-test.example.com';
 
 # t/nntpd-v2.t wraps this for v2
 my $version = $ENV{PI_TEST_VERSION} || 1;
@@ -84,7 +84,8 @@ EOF
 close $cfgfh or BAIL_OUT;
 
 {
-	my $cmd = [ '-nntpd', '-W0', "--stdout=$out", "--stderr=$err" ];
+	my $cmd = [ '-nntpd', '-W0', "--stdout=$out", "--stderr=$err",
+		"-lnntp://$host_port?servername=$hostname" ];
 	$td = start_script($cmd, undef, { 3 => $sock });
 	my $n = Net::NNTP->new($host_port);
 	my $list = $n->list;
@@ -95,7 +96,7 @@ close $cfgfh or BAIL_OUT;
 	# TODO: Net::NNTP::listgroup does not support range at the moment
 	my $s = tcp_connect($sock);
 	sysread($s, my $buf, 4096);
-	is($buf, "201 " . hostname . " ready - post via email\r\n",
+	is($buf, "201 " . $hostname . " ready - post via email\r\n",
 		'got greeting');
 	syswrite($s, "LISTGROUP $group 1-1\r\n");
 	$buf = read_til_dot($s);
@@ -123,13 +124,13 @@ close $cfgfh or BAIL_OUT;
 		'from' => "El\xc3\xa9anor <me\@example.com>",
 		'to' => "El\xc3\xa9anor <you\@example.com>",
 		'cc' => $addr,
-		'xref' => hostname . " $group:1",
+		'xref' => $hostname . " $group:1",
 		'references' => '<reftabsqueezed>',
 	);
 
 	$s = tcp_connect($sock);
 	sysread($s, $buf, 4096);
-	is($buf, "201 " . hostname . " ready - post via email\r\n",
+	is($buf, "201 " . $hostname . " ready - post via email\r\n",
 		'got greeting');
 
 	ok(syswrite($s, "   \r\n"), 'wrote spaces');
@@ -149,7 +150,7 @@ close $cfgfh or BAIL_OUT;
 
 	$s = tcp_connect($sock);
 	sysread($s, $buf, 4096);
-	is($buf, "201 " . hostname . " ready - post via email\r\n",
+	is($buf, "201 " . $hostname . " ready - post via email\r\n",
 		'got greeting');
 
 	syswrite($s, "CAPABILITIES\r\n");
@@ -199,7 +200,7 @@ close $cfgfh or BAIL_OUT;
 			'<reftabsqueezed>',
 			$len,
 			'1',
-			'Xref: '. hostname . ' test-nntpd:1'] },
+			'Xref: '. $hostname . ' test-nntpd:1'] },
 		"XOVER range works");
 
 	is_deeply($n->xover('1'), {
@@ -210,7 +211,7 @@ close $cfgfh or BAIL_OUT;
 			'<reftabsqueezed>',
 			$len,
 			'1',
-			'Xref: '. hostname . ' test-nntpd:1'] },
+			'Xref: '. $hostname . ' test-nntpd:1'] },
 		"XOVER by article works");
 
 	is_deeply($n->head(1), $n->head('<nntp@example.com>'), 'HEAD OK');
@@ -233,7 +234,7 @@ close $cfgfh or BAIL_OUT;
 			"El\xc3\xa9anor <me\@example.com>\t" .
 			"Thu, 01 Jan 1970 06:06:06 +0000\t" .
 			"$mid\t<reftabsqueezed>\t$len\t1" .
-			"\tXref: " . hostname . " test-nntpd:0",
+			"\tXref: " . $hostname . " test-nntpd:0",
 			'OVER by Message-ID works');
 		is($r[2], '.', 'correctly terminated response');
 	}

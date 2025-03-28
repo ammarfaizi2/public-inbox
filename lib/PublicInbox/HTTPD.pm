@@ -21,8 +21,8 @@ sub env_for ($$$) {
 	my $n = getsockname($srv) or die "not a socket: $srv $!\n";
 	my ($host, $port) = PublicInbox::Daemon::host_with_port($n);
 	{
-		SERVER_NAME => $host,
-		SERVER_PORT => $port,
+		SERVER_NAME => $self->{servername} // $host,
+		SERVER_PORT => ($self->{serverport} // $port) + 0,
 		SCRIPT_NAME => '',
 		'psgi.version' => [ 1, 1 ],
 		'psgi.errors' => $self->{err},

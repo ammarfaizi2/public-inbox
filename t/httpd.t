@@ -5,6 +5,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::TestCommon;
 use PublicInbox::Eml;
+use PublicInbox::IO;
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 require_mods '-httpd';
 require_git_http_backend;
@@ -18,7 +19,9 @@ my $inboxdir = "$tmpdir/i.git";
 my $group = 'test-httpd';
 my $addr = $group . '@example.com';
 my $sock = tcp_server();
+my $hostname = 'bogus-test.example.com';
 my $td;
+my $msgid = 'httpd-test@example.com';
 {
 	create_inbox 'test', tmpdir => $inboxdir, sub {
 		my ($im, $ibx) = @_;
@@ -26,7 +29,7 @@ my $td;
 From: Me <me\@example.com>
 To: You <you\@example.com>
 Cc: $addr
-Message-Id: <nntp\@example.com>
+Message-Id: <$msgid>
 Subject: hihi
 Date: Thu, 01 Jan 1970 06:06:06 +0000
 
@@ -40,9 +43,10 @@ EOF
 	local $ENV{HOME} = $home;
 	my $cmd = [ '-init', $group, $inboxdir, 'http://example.com/', $addr ];
 	ok(run_script($cmd), 'init ran properly');
-	$cmd = [ '-httpd', '-W0', "--stdout=$out", "--stderr=$err" ];
-	$td = start_script($cmd, undef, { 3 => $sock });
 	my $http_pfx = 'http://'.tcp_host_port($sock);
+	$cmd = [ '-httpd', '-W0', "--stdout=$out", "--stderr=$err",
+		"-l$http_pfx?servername=$hostname&serverport=80" ];
+	$td = start_script($cmd, undef, { 3 => $sock });
 	{
 		my $bad = tcp_connect($sock);
 		print $bad "GETT / HTTP/1.0\r\n\r\n" or die;
@@ -56,6 +60,12 @@ EOF
 		like($buf, qr!\AHTTP/1\.[01] 404\b!, 'got 404 response');
 		is($conn->read($buf, 1), 0, "EOF");
 	}
+
+	$conn = tcp_connect($sock);
+	print $conn "GET /$group/$msgid HTTP/1.0\r\n\r\n" or xbail $!;
+	my $buf = PublicInbox::IO::read_all($conn);
+	like $buf, qr!\nLocation:\x20http://\Q$hostname\E/$group/$msgid/\r\n!s,
+		'redirect used SERVER_{NAME,PORT} from CLI overrides';
 
 	is(xsys(qw(git clone -q --mirror),
 			"$http_pfx/$group", "$tmpdir/clone.git"),
@@ -81,7 +91,7 @@ EOM
 	close $fh or xbail "close $!";
 	$td->kill('HUP') or BAIL_OUT "failed to kill -httpd: $!";
 	tick; # wait for HUP to take effect
-	my $buf = do {
+	$buf = do {
 		my $c2 = tcp_connect($sock);
 		$c2->write("GET /test-2/qp\@example.com/raw HTTP/1.0\r\n\r\n")
 					or xbail "c2 write: $!";

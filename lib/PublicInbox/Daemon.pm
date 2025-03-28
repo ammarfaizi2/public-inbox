@@ -149,6 +149,15 @@ sub load_mod ($;$$) {
 		$tlsd->{$f} = $logs{$p} //= open_log_path(my $fh, $p);
 		warn "# $scheme://$addr $f=$p\n";
 	}
+	for my $f (qw(servername serverport)) {
+		my $p = $opt->{$f} or next;
+		die "multiple $f= options specified\n" if @$p > 1;
+		if ($p->[0] eq '') {
+			warn "W: empty $f= ignored\n";
+		} else {
+			$tlsd->{$f} = $p->[0];
+		}
+	}
 	# for per-listener $SIG{__WARN__}:
 	my $err = $tlsd->{err};
 	$tlsd->{warn_cb} = sub {
