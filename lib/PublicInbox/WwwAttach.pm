@@ -6,6 +6,7 @@ package PublicInbox::WwwAttach; # internal package
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::GzipFilter);
+use PublicInbox::Hval qw(psgi_base_url);
 use PublicInbox::Eml;
 
 sub referer_match ($) {
@@ -19,9 +20,7 @@ sub referer_match ($) {
 	# n.b.: $ctx->{ibx}->base_url($env) with INBOX_URL won't work
 	# with dillo, we can only match "$url_scheme://$HTTP_HOST/" without
 	# path components
-	my $base_url = lc($env->{'psgi.url_scheme'} . '://' .
-			($env->{HTTP_HOST} //
-			 "$env->{SERVER_NAME}:$env->{SERVER_PORT}") . '/');
+	my $base_url = psgi_base_url($env).'/';
 	index($referer, $base_url) == 0;
 }
 

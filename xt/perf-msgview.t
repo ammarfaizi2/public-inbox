@@ -35,7 +35,11 @@ if ($fh) {
 }
 
 my $ctx = bless {
-	env => { HTTP_HOST => 'example.com', 'psgi.url_scheme' => 'https' },
+	env => {
+		HTTP_HOST => 'example.com',
+		'psgi.url_scheme' => 'https',
+		SCRIPT_NAME => ''
+	},
 	ibx => $ibx,
 	www => Plack::Util::inline_object(style => sub {''}),
 	gz => PublicInbox::GzipFilter::gzip_or_die(),

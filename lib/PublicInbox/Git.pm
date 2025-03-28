@@ -509,10 +509,8 @@ sub local_nick ($) {
 sub host_prefix_url ($$) {
 	my ($env, $url) = @_;
 	return $url if index($url, '//') >= 0;
-	my $host_port = $env->{HTTP_HOST} //
-		"$env->{SERVER_NAME}:$env->{SERVER_PORT}";
-	my $sn = $env->{SCRIPT_NAME} // '';
-	"$env->{'psgi.url_scheme'}://\L$host_port\E$sn/$url";
+	require PublicInbox::Hval;
+	PublicInbox::Hval::psgi_base_url($env) . '/' . $url;
 }
 
 sub base_url { # for coderepos, PSGI-only

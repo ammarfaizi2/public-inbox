@@ -156,7 +156,7 @@ my $res;
 my $solver = PublicInbox::SolverGit->new($ibx, sub { $res = $_[0] });
 open my $log, '+>>', "$tmpdir/solve.log";
 my $psgi_env = { 'psgi.errors' => \*STDERR, 'psgi.url_scheme' => 'http',
-		'HTTP_HOST' => 'example.com' };
+		'HTTP_HOST' => 'example.com', SCRIPT_NAME => '' };
 $solver->solve($psgi_env, $log, '69df7d5', {});
 ok($res, 'solved a blob!');
 my $wt_git = $res->[0];

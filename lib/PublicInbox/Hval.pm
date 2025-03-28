@@ -11,7 +11,7 @@ use PublicInbox::MID qw/mid_clean mid_escape/;
 use base qw/Exporter/;
 our @EXPORT_OK = qw(ascii_html obfuscate_addrs to_filename src_escape
 		to_attr prurl mid_href fmt_ts ts2str utf8_maybe
-		sanitize_local_paths);
+		sanitize_local_paths psgi_base_url);
 use POSIX qw(strftime);
 my $enc_ascii = find_encoding('us-ascii');
 use File::Spec::Functions qw(abs2rel);
@@ -82,6 +82,18 @@ sub prurl ($$) {
 	} else {
 		$u;
 	}
+}
+
+sub psgi_base_url ($) {
+	my ($env) = @_;
+	my $scheme = $env->{'psgi.url_scheme'};
+	my $host_port = $env->{HTTP_HOST} // do {
+		my @h = ($env->{SERVER_NAME}, $env->{SERVER_PORT});
+		pop(@h) if (($h[1] == 443 && $scheme eq 'https') ||
+				($h[1] == 80 && $scheme eq 'http'));
+		join ':', @h;
+	};
+	$scheme . '://' . $host_port . $env->{SCRIPT_NAME};
 }
 
 # for misguided people who believe in this stuff, give them a

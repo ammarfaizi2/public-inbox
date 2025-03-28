@@ -37,7 +37,11 @@ $ibx->{url} = [ 'http://example.com/test' ];
 $ibx->{feedmax} = 3;
 my $ctx = {
 	ibx => $ibx,
-	env => { HTTP_HOST => 'example.com', 'psgi.url_scheme' => 'http' },
+	env => {
+		HTTP_HOST => 'example.com',
+		'psgi.url_scheme' => 'http',
+		SCRIPT_NAME => '',
+	},
 };
 my $string_feed = sub {
 	my $res = PublicInbox::Feed::generate($ctx);

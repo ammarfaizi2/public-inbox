@@ -18,7 +18,7 @@ use HTTP::Status qw(status_message);
 use Errno qw(EACCES ENOTDIR ENOENT);
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::GzipFilter qw(gzf_maybe);
-use PublicInbox::Hval qw(ascii_html fmt_ts);
+use PublicInbox::Hval qw(ascii_html fmt_ts psgi_base_url);
 use Plack::MIME;
 our @EXPORT_OK = qw(@NO_CACHE r path_info_raw);
 
@@ -227,10 +227,7 @@ sub path_info_raw ($) {
 
 sub redirect_slash ($) {
 	my ($env) = @_;
-	my $url = $env->{'psgi.url_scheme'} . '://';
-	my $host_port = $env->{HTTP_HOST} //
-		"$env->{SERVER_NAME}:$env->{SERVER_PORT}";
-	$url .= $host_port . path_info_raw($env) . '/';
+	my $url = psgi_base_url($env) . path_info_raw($env) . '/';
 	my $body = "Redirecting to $url\n";
 	[ 302, [ qw(Content-Type text/plain), 'Location', $url,
 		'Content-Length', length($body) ], [ $body ] ]
