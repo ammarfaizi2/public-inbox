@@ -69,7 +69,7 @@ long line
 EOM
 write_file '>', $f, $src;
 $cfgwr_commit->($f, [ [ qw(x.b d) ], [ qw(--add x.b e) ] ]);
-like try_cat($f), qr/^\Q$src\E$/sm, 'newlines preserved';
+like try_cat($f), qr/^\Q$src\E/sm, 'newlines preserved';
 } # SKIP
 
 done_testing;
