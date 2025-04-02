@@ -91,17 +91,15 @@ sub event_step { # called by PublicInbox::DS
 	my %env = %{$self->{srv_env}}; # full hash copy
 	my $r;
 	while (($r = parse_http_request($$rbuf, \%env)) < 0) {
-		# We do not support Trailers in chunked requests, for
-		# now (they are rarely-used and git (as of 2.7.2) does
-		# not use them).
 		# this length-check is necessary for PURE_PERL=1:
-		if ($r == -1 || $env{HTTP_TRAILER} ||
-				($r == -2 && length($$rbuf) > 0x4000)) {
+		($r == -1 || ($r == -2 && length($$rbuf) > 0x4000)) and
 			return quit($self, 400);
-		}
 		$self->do_read($rbuf, 8192, length($$rbuf)) or return;
 	}
-	return quit($self, 400) if grep(/\s/, keys %env); # stop smugglers
+	# We do not support Trailers in chunked requests, for now.
+	# They're rarely-used and git (as of 2.7.2) does not use them.
+	return quit($self, 400) if exists($env{HTTP_TRAILER}) ||
+					grep(/\s/, keys %env); # stop smugglers
 	$$rbuf = substr($$rbuf, $r);
 	my $len = input_prepare($self, \%env) //
 		return write_err($self, undef); # EMFILE/ENFILE

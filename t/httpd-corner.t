@@ -136,6 +136,14 @@ if ('test worker death') {
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on bad request');
 }
 {
+	my $conn = $mkreq->($sock, 'Trailer rejected (for now)', <<EOM);
+PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Content-MD5\r\n\r
+EOM
+	sysread $conn, my $buf, 4096;
+	like $buf, qr!\AHTTP/1\.[0-9] 400 !,
+		'got 400 response on Trailer (for now)';
+}
+{
 	my $conn = $mkreq->($sock, 'streaming callback',
 		"GET /callback HTTP/1.0\r\n\r\n");
 	read $conn, my $buf, 8192;
