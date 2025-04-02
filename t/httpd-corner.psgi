@@ -5,15 +5,16 @@
 use v5.12;
 use Plack::Builder;
 require PublicInbox::SHA;
+use autodie qw(close open);
 if (defined(my $f = $ENV{TEST_OPEN_FIFO})) {
-	open my $fh, '>', $f or die "open($f): $!";
+	open my $fh, '>', $f;
 	say $fh 'hi';
 	close $fh;
 }
 
 END {
 	if (defined(my $f = $ENV{TEST_EXIT_FIFO})) {
-		open my $fh, '>', $f or die "open($f): $!";
+		open my $fh, '>', $f;
 		say $fh "bye from $$";
 		close $fh;
 	}
@@ -42,8 +43,7 @@ my $app = sub {
 	} elsif (my $fifo = $env->{HTTP_X_CHECK_FIFO}) {
 		if ($path eq '/slow-header') {
 			return sub {
-				open my $f, '<', $fifo or
-						die "open $fifo: $!\n";
+				open my $f, '<', $fifo;
 				local $/ = "\n";
 				my @r = <$f>;
 				$_[0]->([200, $h, \@r ]);
@@ -51,8 +51,7 @@ my $app = sub {
 		} elsif ($path eq '/slow-body') {
 			return sub {
 				my $fh = $_[0]->([200, $h]);
-				open my $f, '<', $fifo or
-						die "open $fifo: $!\n";
+				open my $f, '<', $fifo;
 				local $/ = "\n";
 				while (defined(my $l = <$f>)) {
 					$fh->write($l);
@@ -88,7 +87,7 @@ my $app = sub {
 		);
 	} elsif ($path eq '/async-big') {
 		require PublicInbox::Qspawn;
-		open my $null, '>', '/dev/null' or die;
+		open my $null, '>', '/dev/null';
 		my $rdr = { 2 => fileno($null) };
 		my $cmd = [qw(dd if=/dev/zero count=30 bs=1024k)];
 		my $qsp = PublicInbox::Qspawn->new($cmd, undef, $rdr);

@@ -4,8 +4,9 @@
 # note: our HTTP server should be standalone and capable of running
 # generic PSGI/Plack apps.
 use v5.12; use PublicInbox::TestCommon;
-use Time::HiRes qw(gettimeofday tv_interval);
-use autodie qw(getsockopt seek setsockopt);
+use autodie qw(close getsockopt open pipe read seek setsockopt sysread
+	syswrite truncate unlink);
+use PublicInbox::DS qw(now);
 use PublicInbox::Spawn qw(spawn popen_rd);
 require_mods '-httpd';
 use PublicInbox::SHA qw(sha1_hex);
@@ -15,7 +16,7 @@ use Fcntl qw(:seek);
 use Socket qw(IPPROTO_TCP TCP_NODELAY SOL_SOCKET);
 use POSIX qw(mkfifo);
 use Carp ();
-my ($tmpdir, $for_destroy) = tmpdir();
+my $tmpdir = tmpdir;
 my $fifo = "$tmpdir/fifo";
 ok(defined mkfifo($fifo, 0777), 'created FIFO');
 my $err = "$tmpdir/stderr.log";
@@ -44,18 +45,12 @@ SKIP: {
 	setsockopt($sock, SOL_SOCKET, $var, $accf_arg);
 }
 
-sub unix_server ($) {
-	my $s = IO::Socket::UNIX->new(
-		Listen => 1024,
-		Type => Socket::SOCK_STREAM(),
-		Local => $_[0],
-	) or BAIL_OUT "bind + listen $_[0]: $!";
-	$s->blocking(0);
-	$s;
-}
-
 my $upath = "$tmpdir/s";
-my $unix = unix_server($upath);
+my $unix = IO::Socket::UNIX->new(Listen => 1024,
+		Type => Socket::SOCK_STREAM(),
+		Local => $upath,
+	) or BAIL_OUT "bind + listen $upath: $!";
+$unix->blocking(0);
 my $alt = tcp_server();
 my $td;
 my $spawn_httpd = sub {
@@ -68,22 +63,40 @@ my $spawn_httpd = sub {
 	$td = start_script($cmd, $env, { 3 => $sock, 4 => $unix, 5 => $alt });
 };
 
+my $capture = sub {
+	my ($f) = @_;
+	open my $fh, '+<', $f;
+	local $/ = "\n";
+	my @r = <$fh>;
+	truncate $fh, 0;
+	\@r
+};
+
+my $mkreq = sub ($$@) {
+	my $srv = shift;
+	my $msg = shift;
+	my $c = tcp_connect $srv;
+	setsockopt($c, IPPROTO_TCP, TCP_NODELAY, 1) if @_ > 1;
+	for (@_) {
+		print $c $_ or Carp::croak "print ($msg) $!";
+	}
+	$c;
+};
+
 $spawn_httpd->();
 {
-	my $conn = conn_for($alt, 'alt PSGI path');
-	$conn->write("GET / HTTP/1.0\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($alt, 'alt PSGI path', "GET / HTTP/1.0\r\n\r\n");
+	read $conn, my $buf, 4096;
 	like($buf, qr!^/path/to/alt\z!sm,
 		'alt.psgi loaded on alt socket with correct env');
 
-	$conn = conn_for($sock, 'default PSGI path');
-	$conn->write("GET /PI_CONFIG HTTP/1.0\r\n\r\n");
-	$conn->read($buf, 4096);
-	like($buf, qr!^/dev/null\z!sm,
-		'default PSGI on original socket');
-	my $log = capture("$tmpdir/alt.err");
+	$conn = $mkreq->($sock, 'default PSGI path',
+		"GET /PI_CONFIG HTTP/1.0\r\n\r\n");
+	read $conn, $buf, 4096;
+	like $buf, qr!^/dev/null\z!sm, 'default PSGI on original socket';
+	my $log = $capture->("$tmpdir/alt.err");
 	ok(grep(/ALT/, @$log), 'alt psgi.errors written to');
-	$log = capture($err);
+	$log = $capture->($err);
 	ok(!grep(/ALT/, @$log), 'STDERR not written to');
 	is(unlink($err, "$tmpdir/alt.err"), 2, 'unlinked stderr and alt.err');
 
@@ -91,24 +104,25 @@ $spawn_httpd->();
 }
 
 if ('test worker death') {
-	my $conn = conn_for($sock, 'killed worker');
-	$conn->write("GET /pid HTTP/1.1\r\nHost:example.com\r\n\r\n");
+	my $conn = $mkreq->($sock, 'killed worker',
+		"GET /pid HTTP/1.1\r\nHost:example.com\r\n\r\n");
 	my $pid;
-	while (defined(my $line = $conn->getline)) {
+	while (defined(my $line = <$conn>)) {
 		next unless $line eq "\r\n";
-		chomp($pid = $conn->getline);
+		chomp($pid = <$conn>);
 		last;
 	}
 	like($pid, qr/\A[0-9]+\z/, '/pid response');
 	is(kill('KILL', $pid), 1, 'killed worker');
-	is($conn->getline, undef, 'worker died and EOF-ed client');
+	is <$conn>, undef, 'worker died and EOF-ed client';
 
-	$conn = conn_for($sock, 'respawned worker');
-	$conn->write("GET /pid HTTP/1.0\r\n\r\n");
-	ok($conn->read(my $buf, 8192), 'read response');
+	$conn = $mkreq->($sock, 'respawned worker',
+		"GET /pid HTTP/1.0\r\n\r\n");
+	read $conn, my $buf, 8192;
 	my ($head, $body) = split(/\r\n\r\n/, $buf);
 	chomp($body);
 	like($body, qr/\A[0-9]+\z/, '/pid response');
+	ok kill(0, $body), 'valid PID for new worker';
 	isnt($body, $pid, 'respawned worker');
 }
 { # check on prior USR1 signal
@@ -116,46 +130,46 @@ if ('test worker death') {
 	ok(-e "$tmpdir/alt.err", 'alt.err recreated after USR1');
 }
 {
-	my $conn = conn_for($sock, 'Header spaces bogus');
-	$conn->write("GET /empty HTTP/1.1\r\nSpaced-Out : 3\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, 'Header spaces bogus',
+		"GET /empty HTTP/1.1\r\nSpaced-Out : 3\r\n\r\n");
+	sysread $conn, my $buf, 4096;
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on bad request');
 }
 {
-	my $conn = conn_for($sock, 'streaming callback');
-	$conn->write("GET /callback HTTP/1.0\r\n\r\n");
-	ok($conn->read(my $buf, 8192), 'read response');
+	my $conn = $mkreq->($sock, 'streaming callback',
+		"GET /callback HTTP/1.0\r\n\r\n");
+	read $conn, my $buf, 8192;
 	my ($head, $body) = split(/\r\n\r\n/, $buf);
 	is($body, "hello world\n", 'callback body matches expected');
 }
 
 {
-	my $conn = conn_for($sock, 'getline-die');
-	$conn->write("GET /getline-die HTTP/1.1\r\nHost: example.com\r\n\r\n");
-	ok($conn->read(my $buf, 8192), 'read some response');
+	my $conn = $mkreq->($sock, 'getline-die',
+		"GET /getline-die HTTP/1.1\r\nHost: example.com\r\n\r\n");
+	read $conn, my $buf, 8192;
 	like($buf, qr!HTTP/1\.1 200\b[^\r]*\r\n!, 'got some sort of header');
-	is($conn->read(my $nil, 8192), 0, 'read EOF');
+	is read($conn, my $nil, 8192), 0, 'read EOF';
 	$conn = undef;
-	my $after = capture($err);
+	my $after = $capture->($err);
 	is(scalar(grep(/GETLINE FAIL/, @$after)), 1, 'failure logged');
 	is(scalar(grep(/CLOSE FAIL/, @$after)), 1, 'body->close not called');
 }
 
 {
-	my $conn = conn_for($sock, 'close-die');
-	$conn->write("GET /close-die HTTP/1.1\r\nHost: example.com\r\n\r\n");
-	ok($conn->read(my $buf, 8192), 'read some response');
+	my $conn = $mkreq->($sock, 'close-die',
+		"GET /close-die HTTP/1.1\r\nHost: example.com\r\n\r\n");
+	read $conn, my $buf, 8192;
 	like($buf, qr!HTTP/1\.1 200\b[^\r]*\r\n!, 'got some sort of header');
-	is($conn->read(my $nil, 8192), 0, 'read EOF');
+	is read($conn, my $nil, 8192), 0, 'read EOF';
 	$conn = undef;
-	my $after = capture($err);
+	my $after = $capture->($err);
 	is(scalar(grep(/GETLINE FAIL/, @$after)), 0, 'getline not failed');
 	is(scalar(grep(/CLOSE FAIL/, @$after)), 1, 'body->close not called');
 }
 
-sub check_400 {
+my $check_400 = sub {
 	my ($conn) = @_;
-	my $r = $conn->read(my $buf, 8192);
+	my $r = CORE::sysread $conn, my $buf, 8192;
 	# ECONNRESET and $r==0 are both observed on FreeBSD 11.2
 	if (!defined($r)) {
 		ok($!{ECONNRESET}, 'ECONNRESET on read (BSD sometimes)');
@@ -164,51 +178,52 @@ sub check_400 {
 	} else {
 		is($r, 0, 'got EOF (BSD sometimes)');
 	}
-	close($conn); # ensure we don't get SIGPIPE later
-}
+	CORE::close($conn); # ensure we don't get SIGPIPE later
+};
 
 {
 	local $SIG{PIPE} = 'IGNORE';
-	my $conn = conn_for($sock, 'excessive header');
-	$conn->write("GET /callback HTTP/1.0\r\n");
-	foreach my $i (1..500000) {
-		last unless $conn->write("X-xxxxxJunk-$i: omg\r\n");
+	my $conn = $mkreq->($sock, 'excessive header',
+		"GET /callback HTTP/1.0\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	for my $i (1..500000) {
+		print $conn "X-xxxxxJunk-$i: omg\r\n" or last;
 	}
-	ok(!$conn->write("\r\n"), 'broken request');
-	check_400($conn);
+	ok !(print $conn "\r\n"), 'broken request';
+	$check_400->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'excessive body Content-Length');
 	my $n = (10 * 1024 * 1024) + 1;
-	$conn->write("PUT /sha1 HTTP/1.0\r\nContent-Length: $n\r\n\r\n");
-	my $r = $conn->read(my $buf, 8192);
+	my $conn = $mkreq->($sock, 'excessive body Content-Length',
+		"PUT /sha1 HTTP/1.0\r\nContent-Length: $n\r\n\r\n");
+	my $r = read $conn, my $buf, 8192;
 	ok($r > 0, 'read response');
 	my ($head, $body) = split(/\r\n\r\n/, $buf);
 	like($head, qr/\b413\b/, 'got 413 response');
 }
 
 {
-	my $conn = conn_for($sock, 'excessive body chunked');
 	my $n = (10 * 1024 * 1024) + 1;
-	$conn->write("PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n");
-	$conn->write("\r\n".sprintf("%x\r\n", $n));
-	my $r = $conn->read(my $buf, 8192);
+	my $conn = $mkreq->($sock, 'excessive body chunked',
+		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n",
+		"\r\n".sprintf("%x\r\n", $n));
+	my $r = read $conn, my $buf, 8192;
 	ok($r > 0, 'read response');
 	my ($head, $body) = split(/\r\n\r\n/, $buf);
 	like($head, qr/\b413\b/, 'got 413 response');
 }
 
 {
-	my $conn = conn_for($sock, '1.1 Transfer-Encoding bogus');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: bogus\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, '1.1 Transfer-Encoding bogus',
+		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: bogus\r\n\r\n");
+	sysread $conn, my $buf, 4096;
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on bogus TE');
 }
 {
-	my $conn = conn_for($sock, '1.1 Content-Length bogus');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nContent-Length: 3.3\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, '1.1 Content-Length bogus',
+		"PUT /sha1 HTTP/1.1\r\nContent-Length: 3.3\r\n\r\n");
+	sysread $conn, my $buf, 4096;
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on bad length');
 }
 
@@ -224,22 +239,21 @@ sub check_400 {
 		Plack::HTTPParser::parse_http_request($req, my $env = {});
 		diag explain($env); # "Content-Length: 3, 3"
 	}
-	my $conn = conn_for($sock, '1.1 Content-Length dupe');
-	$conn->write($req);
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, '1.1 Content-Length dupe', $req);
+	sysread $conn, my $buf, 4096;
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on dupe length');
 }
 
 {
-	my $conn = conn_for($sock, 'chunk with pipeline');
 	my $n = 10;
 	my $payload = 'b'x$n;
-	$conn->write("PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n");
-	$conn->write("\r\n".sprintf("%x\r\n", $n));
-	$conn->write($payload . "\r\n0\r\n\r\nGET /empty HTTP/1.0\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, 'chunk with pipeline',
+		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n",
+		"\r\n".sprintf("%x\r\n", $n),
+		$payload . "\r\n0\r\n\r\nGET /empty HTTP/1.0\r\n\r\n");
+	sysread $conn, my $buf, 4096;
 	my $lim = 0;
-	$lim++ while ($conn->read($buf, 4096, length($buf)) && $lim < 9);
+	$lim++ while (sysread($conn, $buf, 4096, length($buf)) && $lim < 9);
 	my $exp = sha1_hex($payload);
 	like($buf, qr!\r\n\r\n${exp}HTTP/1\.0 200 OK\r\n!s,
 		'chunk parser can handled pipelined requests');
@@ -249,24 +263,16 @@ sub check_400 {
 {
 	my $u = IO::Socket::UNIX->new(Type => SOCK_STREAM, Peer => $upath);
 	ok($u, 'unix socket connected');
-	$u->write("GET /host-port HTTP/1.0\r\n\r\n");
-	$u->read(my $buf, 4096);
+	print $u "GET /host-port HTTP/1.0\r\n\r\n";
+	read $u, my $buf, 4096;
 	like($buf, qr!\r\n\r\n127\.0\.0\.1 0\z!,
 		'set REMOTE_ADDR and REMOTE_PORT for Unix socket');
 }
 
-sub conn_for {
-	my ($dest, $msg) = @_;
-	my $conn = tcp_connect($dest);
-	ok($conn, "connected for $msg");
-	setsockopt($conn, IPPROTO_TCP, TCP_NODELAY, 1);
-	return $conn;
-}
-
 {
-	my $conn = conn_for($sock, 'host-port');
-	$conn->write("GET /host-port HTTP/1.0\r\n\r\n");
-	$conn->read(my $buf, 4096);
+	my $conn = $mkreq->($sock, 'host-port',
+		"GET /host-port HTTP/1.0\r\n\r\n");
+	read $conn, my $buf, 4096;
 	my ($head, $body) = split(/\r\n\r\n/, $buf);
 	my ($addr, $port) = split(/ /, $body);
 	is($addr, (tcp_host_port($conn))[0], 'host matches addr');
@@ -275,16 +281,16 @@ sub conn_for {
 
 # graceful termination
 {
-	my $conn = conn_for($sock, 'graceful termination via slow header');
-	$conn->write("GET /slow-header HTTP/1.0\r\n" .
+	my $conn = $mkreq->($sock, 'graceful termination via slow header',
+			"GET /slow-header HTTP/1.0\r\n" .
 			"X-Check-Fifo: $fifo\r\n\r\n");
-	open my $f, '>', $fifo or die "open $fifo: $!\n";
+	open my $f, '>', $fifo;
 	$f->autoflush(1);
 	ok(print($f "hello\n"), 'wrote something to fifo');
 	is($td->kill, 1, 'started graceful shutdown');
 	ok(print($f "world\n"), 'wrote else to fifo');
-	close $f or die "close fifo: $!\n";
-	$conn->read(my $buf, 8192);
+	close $f;
+	read $conn, my $buf, 8192; # read until EOF (no sysread)
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr!\AHTTP/1\.[01] 200 OK!, 'got 200 for slow-header');
 	is($body, "hello\nworld\n", 'read expected body');
@@ -294,34 +300,32 @@ sub conn_for {
 }
 
 {
-	my $conn = conn_for($sock, 'graceful termination via slow-body');
-	$conn->write("GET /slow-body HTTP/1.0\r\n" .
-			"X-Check-Fifo: $fifo\r\n\r\n");
-	open my $f, '>', $fifo or die "open $fifo: $!\n";
+	my $conn = $mkreq->($sock, 'graceful termination via slow-body',
+		"GET /slow-body HTTP/1.0\r\nX-Check-Fifo: $fifo\r\n\r\n");
+	open my $f, '>', $fifo;
 	$f->autoflush(1);
-	my $buf;
-	$conn->sysread($buf, 8192);
+	sysread $conn, my $buf, 8192;
 	like($buf, qr!\AHTTP/1\.[01] 200 OK!, 'got 200 for slow-body');
 	like($buf, qr!\r\n\r\n!, 'finished HTTP response header');
 
 	foreach my $c ('a'..'c') {
 		$c .= "\n";
 		ok(print($f $c), 'wrote line to fifo');
-		$conn->sysread($buf, 8192);
+		sysread $conn, $buf, 8192;
 		is($buf, $c, 'got trickle for reading');
 	}
 	is($td->kill, 1, 'started graceful shutdown');
 	ok(print($f "world\n"), 'wrote else to fifo');
-	close $f or die "close fifo: $!\n";
-	$conn->sysread($buf, 8192);
+	close $f;
+	sysread $conn, $buf, 8192;
 	is($buf, "world\n", 'read expected body');
-	is($conn->sysread($buf, 8192), 0, 'got EOF from server');
+	is(sysread($conn, $buf, 8192), 0, 'got EOF from server');
 	$td->join;
 	is($?, 0, 'no error');
 	$spawn_httpd->('-W0');
 }
 
-sub delay { tick(shift || rand(0.02)) }
+my $delay = sub { tick(shift || rand(0.02)) };
 
 my $str = 'abcdefghijklmnopqrstuvwxyz';
 my $len = length $str;
@@ -330,7 +334,7 @@ my $check_self = sub {
 	my ($conn) = @_;
 	vec(my $rbits = '', fileno($conn), 1) = 1;
 	select($rbits, undef, undef, 30) or Carp::confess('timed out');
-	$conn->read(my $buf, 4096);
+	read $conn, my $buf, 4096;
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
 	is($body, sha1_hex($str), 'read expected body');
@@ -341,18 +345,18 @@ SKIP: {
 	my $base = 'http://'.tcp_host_port($sock);
 	my $url = "$base/sha1";
 	my ($r, $w);
-	pipe($r, $w) or die "pipe: $!";
+	pipe $r, $w;
 	my $cmd = [$curl, qw(--tcp-nodelay -T- -HExpect: -gsSN), $url];
-	open my $cout, '+>', undef or die;
-	open my $cerr, '>', undef or die;
+	open my $cout, '+>', undef;
+	open my $cerr, '>', undef;
 	my $rdr = { 0 => $r, 1 => $cout, 2 => $cerr };
 	my $pid = spawn($cmd, undef, $rdr);
-	close $r or die "close read pipe: $!";
+	close $r;
 	foreach my $c ('a'..'z') {
 		print $w $c or die "failed to write to curl: $!";
-		delay();
+		$delay->();
 	}
-	close $w or die "close write pipe: $!";
+	close $w;
 	waitpid($pid, 0);
 	is($?, 0, 'curl exited successfully');
 	is(-s $cerr, 0, 'no errors from curl');
@@ -387,22 +391,21 @@ SKIP: {
 }
 
 {
-	my $conn = conn_for($sock, 'psgi_yield ENOENT');
-	print $conn "GET /psgi-yield-enoent HTTP/1.1\r\n\r\n" or die;
+	my $conn = $mkreq->($sock, 'psgi_yield ENOENT',
+		"GET /psgi-yield-enoent HTTP/1.1\r\n\r\n");
 	my $buf = '';
 	sysread($conn, $buf, 16384, length($buf)) until $buf =~ /\r\n\r\n/;
 	like($buf, qr!HTTP/1\.[01] 500\b!, 'got 500 error on ENOENT');
 }
 
 {
-	my $conn = conn_for($sock, '1.1 pipeline together');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nUser-agent: hello\r\n\r\n" .
+	my $conn = $mkreq->($sock, '1.1 pipeline together',
+		"PUT /sha1 HTTP/1.1\r\nUser-agent: hello\r\n\r\n" .
 			"PUT /sha1 HTTP/1.1\r\n\r\n");
 	my $buf = '';
 	my @r;
 	until (scalar(@r) >= 2) {
-		my $r = $conn->sysread(my $tmp, 4096);
-		die $! unless defined $r;
+		my $r = sysread $conn, my $tmp, 4096;
 		die "EOF <$buf>" unless $r;
 		$buf .= $tmp;
 		@r = ($buf =~ /\r\n\r\n([a-f0-9]{40})/g);
@@ -416,32 +419,31 @@ SKIP: {
 }
 
 {
-	my $conn = conn_for($sock, 'no TCP_CORK on empty body');
-	$conn->write("GET /empty HTTP/1.1\r\nHost:example.com\r\n\r\n");
+	my $conn = $mkreq->($sock, 'no TCP_CORK on empty body',
+		"GET /empty HTTP/1.1\r\nHost:example.com\r\n\r\n");
 	my $buf = '';
-	my $t0 = [ gettimeofday ];
+	my $t0 = now;
 	until ($buf =~ /\r\n\r\n/s) {
-		$conn->sysread($buf, 4096, length($buf));
+		sysread $conn, $buf, 4096, length($buf);
 	}
-	my $elapsed = tv_interval($t0, [ gettimeofday ]);
+	my $elapsed = now - $t0;
 	ok($elapsed < 0.190, 'no 200ms TCP cork delay on empty body');
 }
 
 {
-	my $conn = conn_for($sock, 'graceful termination during slow request');
-	$conn->write("PUT /sha1 HTTP/1.0\r\nContent-Length: $len\r\n\r\n");
+	my $conn = $mkreq->($sock, 'graceful termination during slow request',
+		"PUT /sha1 HTTP/1.0\r\nContent-Length: $len\r\n\r\n");
 
 	# XXX ugh, want a reliable and non-intrusive way to detect
 	# that the server has started buffering our partial request so we
 	# can reliably test graceful termination.  Maybe making this and
 	# similar tests dependent on Linux strace is a possibility?
-	delay(0.1);
+	$delay->(0.1);
 
 	is($td->kill, 1, 'start graceful shutdown');
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
 	my $n = 0;
-	foreach my $c ('a'..'z') {
-		$n += $conn->write($c);
-	}
+	$n += syswrite($conn, $_) for ('a'..'z');
 	ok(kill(0, $td->{pid}), 'graceful shutdown did not kill httpd');
 	is($n, $len, 'wrote alphabet');
 	$check_self->($conn);
@@ -453,170 +455,156 @@ SKIP: {
 # various DoS attacks against the chunk parser:
 {
 	local $SIG{PIPE} = 'IGNORE';
-	my $conn = conn_for($sock, '1.1 chunk header excessive');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n");
+	my $conn = $mkreq->($sock, '1.1 chunk header excessive',
+		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
 	my $n = 0;
 	my $w;
-	while ($w = $conn->write('ffffffff')) {
+	while ($w = print $conn 'ffffffff') {
 		$n += $w;
 	}
 	ok($!, 'got error set in $!');
 	is($w, undef, 'write error happened');
 	ok($n > 0, 'was able to write');
-	check_400($conn);
-	$conn = conn_for($sock, '1.1 chunk trailer excessive');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n");
-	is($conn->syswrite("1\r\na"), 4, 'wrote first header + chunk');
-	delay();
+	$check_400->($conn);
+	$conn = $mkreq->($sock, '1.1 chunk trailer excessive',
+		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n");
+
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	is(syswrite($conn, "1\r\na"), 4, 'wrote first header + chunk');
+	$delay->();
 	$n = 0;
-	while ($w = $conn->write("\r")) {
+	while ($w = print $conn "\r") {
 		$n += $w;
 	}
 	ok($!, 'got error set in $!');
 	ok($n > 0, 'wrote part of chunk end (\r)');
-	check_400($conn);
+	$check_400->($conn);
 }
 
 {
-	my $conn = conn_for($sock, '1.1 chunked close trickle');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
-	$conn->write("Transfer-encoding: chunked\r\n\r\n");
+	my $conn = $mkreq->($sock, '1.1 chunked close trickle',
+		"PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	print $conn "Transfer-encoding: chunked\r\n\r\n";
 	foreach my $x ('a'..'z') {
-		delay();
-		$conn->write('1');
-		delay();
-		$conn->write("\r");
-		delay();
-		$conn->write("\n");
-		delay();
-		$conn->write($x);
-		delay();
-		$conn->write("\r");
-		delay();
-		$conn->write("\n");
+		for (split //, "1\r\n$x\r\n") {
+			$delay->();
+			print $conn $_;
+		}
 	}
-	$conn->write('0');
-	delay();
-	$conn->write("\r");
-	delay();
-	$conn->write("\n");
-	delay();
-	$conn->write("\r");
-	delay();
-	$conn->write("\n");
-	delay();
+	for (split //, "0\r\n\r\n") {
+		$delay->();
+		print $conn $_;
+	}
+	$delay->();
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, '1.1 chunked close');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
+	my $conn = $mkreq->($sock, '1.1 chunked close',
+		"PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
 	my $xlen = sprintf('%x', $len);
-	$conn->write("Transfer-Encoding: chunked\r\n\r\n$xlen\r\n" .
-		"$str\r\n0\r\n\r\n");
+	print $conn "Transfer-Encoding: chunked\r\n\r\n$xlen\r\n",
+			$str, "\r\n0\r\n\r\n";
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'chunked body + pipeline');
-	$conn->write("PUT /sha1 HTTP/1.1\r\n" .
-			"Transfer-Encoding: chunked\r\n");
-	delay();
-	$conn->write("\r\n1\r\n");
-	delay();
-	$conn->write('a');
-	delay();
-	$conn->write("\r\n0\r\n\r\nPUT /sha1 HTTP/1.1\r\n");
-	delay();
+	my $conn = $mkreq->($sock, 'chunked body + pipeline',
+		"PUT /sha1 HTTP/1.1\r\n"."Transfer-Encoding: chunked\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	for ("\r\n1\r\n", 'a', "\r\n0\r\n\r\nPUT /sha1 HTTP/1.1\r\n") {
+		$delay->();
+		print $conn $_;
+	}
+	$delay->();
 
 	my $buf = '';
 	until ($buf =~ /\r\n\r\n[a-f0-9]{40}\z/) {
-		$conn->sysread(my $tmp, 4096);
-		$buf .= $tmp;
+		sysread $conn, $buf, 4096, length($buf);
 	}
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
 	is($body, sha1_hex('a'), 'read expected body');
 
-	$conn->write("Connection: close\r\n");
-	$conn->write("Content-Length: $len\r\n\r\n$str");
+	print $conn "Connection: close\r\n";
+	print $conn "Content-Length: $len\r\n\r\n$str";
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'trickle header, one-shot body + pipeline');
-	$conn->write("PUT /sha1 HTTP/1.0\r\n" .
-			"Connection: keep-alive\r\n");
-	delay();
-	$conn->write("Content-Length: $len\r\n\r\n${str}PUT");
+	my $conn = $mkreq->($sock, 'trickle header, one-shot body + pipeline',
+		"PUT /sha1 HTTP/1.0\r\n"."Connection: keep-alive\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	$delay->();
+	print $conn "Content-Length: $len\r\n\r\n", $str, 'PUT';
 	my $buf = '';
 	until ($buf =~ /\r\n\r\n[a-f0-9]{40}\z/) {
-		$conn->sysread(my $tmp, 4096);
-		$buf .= $tmp;
+		sysread $conn, $buf, 4096, length($buf);
 	}
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
 	is($body, sha1_hex($str), 'read expected body');
 
-	$conn->write(" /sha1 HTTP/1.0\r\nContent-Length: $len\r\n\r\n$str");
+	print $conn " /sha1 HTTP/1.0\r\nContent-Length: $len\r\n\r\n", $str;
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'trickle body');
-	$conn->write("PUT /sha1 HTTP/1.0\r\n");
-	$conn->write("Content-Length: $len\r\n\r\n");
+	my $conn = $mkreq->($sock, 'trickle body',
+		"PUT /sha1 HTTP/1.0\r\n", "Content-Length: $len\r\n\r\n");
 	my $beg = substr($str, 0, 10);
 	my $end = substr($str, 10);
 	is($beg . $end, $str, 'substr setup correct');
-	delay();
-	$conn->write($beg);
-	delay();
-	$conn->write($end);
+	$delay->();
+	print $conn $beg;
+	$delay->();
+	print $conn $end;
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'one-shot write');
-	$conn->write("PUT /sha1 HTTP/1.0\r\n" .
-			"Content-Length: $len\r\n\r\n$str");
+	my $conn = $mkreq->($sock, 'one-shot write',
+		"PUT /sha1 HTTP/1.0\r\n" . "Content-Length: $len\r\n\r\n$str");
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, 'trickle header, one-shot body');
-	$conn->write("PUT /sha1 HTTP/1.0\r\n");
-	delay();
-	$conn->write("Content-Length: $len\r\n\r\n$str");
+	my $conn = $mkreq->($sock, 'trickle header, one-shot body',
+		"PUT /sha1 HTTP/1.0\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	$delay->();
+	print $conn "Content-Length: $len\r\n\r\n", $str;
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, '1.1 Connection: close');
-	$conn->write("PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
-	delay();
-	$conn->write("Content-Length: $len\r\n\r\n$str");
+	my $conn = $mkreq->($sock, '1.1 Connection: close',
+		"PUT /sha1 HTTP/1.1\r\nConnection:close\r\n");
+	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
+	$delay->();
+	print $conn "Content-Length: $len\r\n\r\n$str";
 	$check_self->($conn);
 }
 
 {
-	my $conn = conn_for($sock, '1.1 pipeline start');
-	$conn->write("PUT /sha1 HTTP/1.1\r\n\r\nPUT");
+	my $conn = $mkreq->($sock, '1.1 pipeline start',
+		"PUT /sha1 HTTP/1.1\r\n\r\nPUT");
 	my $buf = '';
 	until ($buf =~ /\r\n\r\n[a-f0-9]{40}\z/) {
-		$conn->sysread(my $tmp, 4096);
-		$buf .= $tmp;
+		sysread $conn, $buf, 4096, length($buf);
 	}
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
 	is($body, sha1_hex(''), 'read expected body');
 
-	# 2nd request
-	$conn->write(" /sha1 HTTP/1.1\r\n\r\n");
+	# finish 2nd request
+	print $conn " /sha1 HTTP/1.1\r\n\r\n";
 	$buf = '';
 	until ($buf =~ /\r\n\r\n[a-f0-9]{40}\z/) {
-		$conn->sysread(my $tmp, 4096);
-		$buf .= $tmp;
+		sysread $conn, $buf, 4096, length($buf);
 	}
 	($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
@@ -659,9 +647,9 @@ SKIP: {
 SKIP: {
 	require_mods @zmods, 'psgi', 3;
 	STDERR->flush;
-	open my $olderr, '>&', \*STDERR or die "dup stderr: $!";
-	open my $tmperr, '+>', undef or die;
-	open STDERR, '>&', $tmperr or die;
+	open my $olderr, '>&', \*STDERR;
+	open my $tmperr, '+>', undef;
+	open STDERR, '>&', $tmperr;
 	STDERR->autoflush(1);
 	my $app = require $psgi;
 	test_psgi($app, sub {
@@ -680,18 +668,7 @@ SKIP: {
 		like($errbuf, qr/this-better-not-exist/,
 			'error logged about missing command');
 	});
-	open STDERR, '>&', $olderr or die "restore stderr: $!";
+	open STDERR, '>&', $olderr;
 }
 
 done_testing();
-
-sub capture {
-	my ($f) = @_;
-	open my $fh, '+<', $f or die "failed to open $f: $!\n";
-	local $/ = "\n";
-	my @r = <$fh>;
-	truncate($fh, 0) or die "truncate failed on $f: $!\n";
-	\@r
-}
-
-1;
