@@ -436,6 +436,7 @@ scripts/slrnspool2maildir
 scripts/ssoma-replay
 scripts/xhdr-num2mid
 t/.gitconfig
+t/.gitignore
 t/address.t
 t/admin.t
 t/alt.psgi
@@ -630,6 +631,7 @@ t/tail_notify.t
 t/thread-cycle.t
 t/thread-index-gap.t
 t/time.t
+t/trailer-up.h
 t/uri_imap.t
 t/uri_nntps.t
 t/utf8.eml

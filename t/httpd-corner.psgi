@@ -40,6 +40,24 @@ my $app = sub {
 		}
 		$code = 200;
 		push @$body, $sha1->hexdigest;
+	} elsif ($path eq '/env') {
+		$code = 200;
+		require Data::Dumper;
+		my %env;
+		while (my ($k, $v) = each %$env) {
+			$env{$k} = $v if !ref $v;
+		}
+		my $in = $env->{'psgi.input'};
+		my $buf = '';
+		while (1) {
+			my $r = $in->read($buf, 0x4000, length($buf)) //
+				die "psgi read: $!";
+			last if $r == 0;
+		}
+		$env{'test.input_data'} = $buf;
+		push @$body, Data::Dumper->new([\%env])->
+			Useqq(1)->Terse(1)->Sortkeys(1)->Dump;
+		push @$body, "\n.\n"; # for readline w/ $/;
 	} elsif (my $fifo = $env->{HTTP_X_CHECK_FIFO}) {
 		if ($path eq '/slow-header') {
 			return sub {

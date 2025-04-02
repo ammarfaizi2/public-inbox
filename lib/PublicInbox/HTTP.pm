@@ -34,11 +34,22 @@ use PublicInbox::Tmpfile;
 use constant {
 	CHUNK_START => -1,   # [a-f0-9]+\r\n
 	CHUNK_END => -2,     # \r\n
-	CHUNK_ZEND => -3,    # \r\n
+	CHUNK_TLR_END => -3, # (trailers*)?\r\n
 	CHUNK_MAX_HDR => 256,
 };
 use Errno qw(EAGAIN);
 use PublicInbox::Compat qw(sum0);
+my $NOT_TRAILER = join '|', (qw(Content-Length Content-Type),
+	qw(Trailer Transfer-Encoding Content-Encoding Content-Range),
+	# RFC 7231 5.1 controls:
+	qw(Cache-Control Expect Host Max-Forwards Pragma Range TE),
+	# RFC 7231 5.2 conditionals
+	qw(If-Match If-None-Match
+		If-Modified-Since If-Unmodified-Since If-Range),
+	qw(Authorization Proxy-Authorization), # RFC 7235
+	'Cookie' # RFC 6265
+	# ignoring 7231 7.1 control data since those are for responses
+);
 
 # Use the same configuration parameter as git since this is primarily
 # a slow-client sponge for git-http-backend
@@ -96,10 +107,7 @@ sub event_step { # called by PublicInbox::DS
 			return quit($self, 400);
 		$self->do_read($rbuf, 8192, length($$rbuf)) or return;
 	}
-	# We do not support Trailers in chunked requests, for now.
-	# They're rarely-used and git (as of 2.7.2) does not use them.
-	return quit($self, 400) if exists($env{HTTP_TRAILER}) ||
-					grep(/\s/, keys %env); # stop smugglers
+	return quit($self, 400) if grep(/\s/, keys %env); # stop smugglers
 	$$rbuf = substr($$rbuf, $r);
 	my $len = input_prepare($self, \%env) //
 		return write_err($self, undef); # EMFILE/ENFILE
@@ -315,17 +323,23 @@ sub input_prepare {
 
 	# rfc 7230 3.3.2, 3.3.3,: favor Transfer-Encoding over Content-Length
 	my $hte = $env->{HTTP_TRANSFER_ENCODING};
+	my $tlr = $env->{HTTP_TRAILER};
 	if (defined $hte) {
 		# rfc7230 3.3.3, point 3 says only chunked is accepted
 		# as the final encoding.  Since neither public-inbox-httpd,
 		# git-http-backend, or our WWW-related code uses "gzip",
 		# "deflate" or "compress" as the Transfer-Encoding, we'll
 		# reject them:
-		return quit($self, 400) if $hte !~ /\Achunked\z/i;
-
+		return quit($self, 400) if $hte !~ /\Achunked\z/i ||
+				(defined($tlr) && grep(/\A($NOT_TRAILER)\z/,
+						       split /\s*,\s*/s, $tlr));
 		$len = CHUNK_START;
 		$input = tmpfile('http.input', $self->{sock});
 	} else {
+		# while (AFAIK) no RFC says Trailer: is explicitly disallowed
+		# w/o `Transfer-Encoding: chunked', allowing it makes no sense
+		# and it could be a confusion attack to downstream proxies
+		return quit($self, 400) if defined $tlr;
 		$len = $env->{CONTENT_LENGTH};
 		if (defined $len) {
 			# rfc7230 3.3.3.4
@@ -363,6 +377,33 @@ sub recv_err {
 	}
 }
 
+sub merge_trailers ($$) {
+	my ($self, $tlr_buf) = @_;
+	my $env = $self->{env};
+	my $exp_tlr = $env->{HTTP_TRAILER};
+	return quit($self, 400) if !!$tlr_buf ne !!$exp_tlr;
+	$exp_tlr // return 1;
+	# copy expected entries from existing $env for append, if any
+	my @k = map { tr/-/_/; "HTTP_\U$_" } split /\s*,\s*/s, $exp_tlr;
+	# there's no public API in Plack to parse w/o the request line,
+	# so we make it look like a new request and avoid clobbering $env
+	my %tenv = map { defined($env->{$_}) ? ($_ => $env->{$_}) : () } @k;
+	substr($tlr_buf, 0, 0) = "GET / HTTP/1.0\r\n";
+	my $r = parse_http_request($tlr_buf .= "\r\n", \%tenv);
+	if ($r <= 0 || scalar @tenv{qw(CONTENT_TYPE CONTENT_LENGTH)}) {
+		warn 'BUG: incomplete trailer (non-fatal)' if $r == -2;
+		return quit($self, 400);
+	}
+	my %need = map { $_ => 1 } @k;
+	for my $k (grep /^HTTP_/, keys %tenv) {
+		# maybe the client sent more than promised:
+		delete $need{$k} // return quit($self, 400);
+		$env->{$k} = delete $tenv{$k};
+	}
+	# maybe the client sent less than promised...
+	keys %need ? quit($self, 400) : 1;
+}
+
 sub read_input_chunked { # unlikely...
 	my ($self, $rbuf) = @_;
 	$rbuf //= $self->{rbuf} // (\(my $x = ''));
@@ -370,11 +411,17 @@ sub read_input_chunked { # unlikely...
 	my $len = delete $self->{input_left};
 
 	while (1) { # chunk start
-		if ($len == CHUNK_ZEND) {
-			$$rbuf =~ s/\A\r\n//s and
+		if ($len == CHUNK_TLR_END) {
+			# $1: all trailers minus final CRLF
+			if ($$rbuf =~ s/\A((?:
+					(?:[a-z][a-z0-9\-]*:[ \t]* # key: LWS
+						| [ \t]+ # continuation LWS
+					)[^\n]* # trailer value
+					\n)* )\r\n//ismx) {
+				return if !merge_trailers($self, $1);
 				return app_dispatch($self, $input, $rbuf);
-
-			return quit($self, 400) if length($$rbuf) > 2;
+			}
+			return quit($self, 400) if length($$rbuf) > 0x4000;
 		}
 		if ($len == CHUNK_END) {
 			if ($$rbuf =~ s/\A\r\n//s) {
@@ -400,7 +447,7 @@ sub read_input_chunked { # unlikely...
 				return recv_err($self, $len);
 			# (implicit) goto chunk_start if $r > 0;
 		}
-		$len = CHUNK_ZEND if $len == 0;
+		$len = CHUNK_TLR_END if $len == 0;
 
 		# drain the current chunk
 		until ($len <= 0) {

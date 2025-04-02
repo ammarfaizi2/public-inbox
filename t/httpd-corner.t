@@ -4,9 +4,10 @@
 # note: our HTTP server should be standalone and capable of running
 # generic PSGI/Plack apps.
 use v5.12; use PublicInbox::TestCommon;
-use autodie qw(close getsockopt open pipe read seek setsockopt sysread
+use autodie qw(close getsockopt open pipe read rename seek setsockopt sysread
 	syswrite truncate unlink);
 use PublicInbox::DS qw(now);
+use PublicInbox::IO qw(poll_in write_file);
 use PublicInbox::Spawn qw(spawn popen_rd);
 require_mods '-httpd';
 use PublicInbox::SHA qw(sha1_hex);
@@ -24,6 +25,8 @@ my $out = "$tmpdir/stdout.log";
 my $psgi = "./t/httpd-corner.psgi";
 my $sock = tcp_server();
 my @zmods = qw(PublicInbox::GzipFilter IO::Uncompress::Gunzip);
+my $base_url = 'http://'.tcp_host_port($sock);
+use Config;
 
 # Make sure we don't clobber socket options set by systemd or similar
 # using socket activation:
@@ -129,19 +132,136 @@ if ('test worker death') {
 	ok(-e $err, 'stderr recreated after USR1');
 	ok(-e "$tmpdir/alt.err", 'alt.err recreated after USR1');
 }
+
+my $ck_env = sub {
+	my ($env, $exp, $only) = @_;
+	for my $k (sort keys %$exp) {
+		my $v = $exp->{$k};
+		is $env->{$k}, $v, "`$k' matches expected ($v)";
+	}
+	return if !$only;
+	for (sort grep { !defined($exp->{$_}) } grep /^HTTP_/, keys %$env) {
+		ok !(defined $env->{$_}), "`$_' defined unexpectedly";
+	}
+};
+my $put = <<EOM;
+PUT /env HTTP/1.1\r\nHost: example.com\r\nTransfer-Encoding: chunked\r
+EOM
+my $chunk_body = "\r\n1\r\n0\r\n0\r\n";
+if ('successful Trailer cases') {
+	for my $t (
+['2 good trailers',  { a => 'z', b => 'y' }],
+['1 good trailer', { a => 'b' }],
+['1 multi-line trailer', { a => "multi\r\n line" }],
+['2 multi-line trailers', { two => "m\r\n ul", ti => "li\r\n e" }],
+			) {
+		my ($d, $tlr) = @$t;
+		my ($hdr, $end) = ('Trailer: ', '');
+		my %exp = (
+			HTTP_TRAILER => join(', ', keys %$tlr),
+			HTTP_HOST => 'example.com',
+			HTTP_TRANSFER_ENCODING => 'chunked',
+			'test.input_data' => '0',
+		);
+		$hdr .= $exp{HTTP_TRAILER} . "\r\n";
+		for my $k (keys %$tlr) {
+			my $v = $tlr->{$k};
+			$end .= "$k: $v\r\n";
+			$v =~ s/\r\n[ \t]+/ /sg;
+			$exp{"HTTP_\U$k"} = $v;
+		}
+		my $c = $mkreq->($sock, $d, "$put$hdr$chunk_body$end\r\n");
+		my $buf = do { local $/ = "\r\n\r\n"; <$c> };
+		like $buf, qr!^HTTP/1\.. 200\b!, "request w/ $d" or next;
+		{ local $/ = "\n.\n"; chomp($buf = <$c>) }
+		my $env = eval $buf // die "eval $@ ($buf)"; # Perl hashref
+		$ck_env->($env, \%exp, 1);
+	}
+}
+
+if ('test rejected trailers') {
+	for my $t (
+['unexpected trailer only', $put.$chunk_body."unexpected: bye\r\n"],
+['expected + unexpected trailer',
+	$put."Trailer: a\r\n".$chunk_body."unexpected: !\r\na: b\r\n"],
+['missing expected trailer', $put."Trailer: a\r\n".$chunk_body."\r\n"],
+['Content-Length in trailer',
+	$put."Trailer: Content-Length\r\n".$chunk_body."Content-Length: 1\r\n"],
+['Host in trailer',
+	$put."Trailer: Host\r\n".$chunk_body."Host: example.com\r\n"],
+['long trailer',
+	$put."Trailer: long\r\n".$chunk_body.'Long: '.('a' x 0x8000)."\r\n"],
+['trailer w/ Content-Length header',
+	"PUT /env HTTP/1.1\r\nHost: example.com\r\n".
+	"Content-Length: 11\r\nTrailer: a\r\n".$chunk_body."a: b\r\n"]
+	) {
+		my ($d, $req) = @$t;
+		my $c = $mkreq->($sock, $d, $req."\r\n");
+		poll_in $c, 30_000 or Carp::croak "timeout";
+		my $buf = do { local $/ = "\r\n\r\n"; <$c> };
+		like $buf, qr!^HTTP/1\.. 400\b!, "$d rejected";
+	}
+}
+
+{
+	my $d = 'trailer appends to header';
+	my $hdr = "Trailer: c\r\nc: a\r\n";
+	my $end = "C: b\r\n";
+	my $c = $mkreq->($sock, $d, "$put$hdr$chunk_body$end\r\n");
+	poll_in $c, 30_000 or Carp::croak "timeout";
+	my $buf = do { local $/ = "\r\n\r\n"; <$c> };
+	like $buf, qr!^HTTP/1\.. 200\b!, "request w/ $d" or next;
+	{ local $/ = "\n.\n"; chomp($buf = <$c>) }
+	my $env = eval $buf // die "eval $@ ($buf)"; # Perl hashref
+	my %exp = (
+		HTTP_TRAILER => 'c',
+		HTTP_HOST => 'example.com',
+		HTTP_TRANSFER_ENCODING => 'chunked',
+		HTTP_C => 'a, b',
+		'test.input_data' => '0',
+	);
+	$ck_env->($env, \%exp, 1);
+}
+
+# I don't trust myself to read RFCs properly and need a 3rd-party client:
+my $tup = "t/trailer-up-$Config{archname}";
+my @tup_h_st = stat 't/trailer-up.h' or die "stat('t/trailer-up.h'): $!";
+SKIP: if (!-e $tup || (stat(_))[10] < $tup_h_st[10]) {
+	my $curl_config = require_cmd 'curl-config', 1;
+	my %ccfg;
+	for my $f (qw(version cc cflags libs)) {
+		chomp($ccfg{$f} = xqx [ $curl_config, "--$f" ]);
+		skip "$curl_config --$f \$?=$?", 1 if $?;
+	}
+	$ccfg{version} =~ /([0-9]+\.[0-9\.]+)/ or
+		skip "can't parse `$curl_config --version`: $ccfg{version}", 1;
+	my $curl_ver = eval 'v'.$1;
+	skip "libcurl $ccfg{version} <7.64.0 for CURLOPT_TRAILERFUNCTION", 1
+		if $curl_ver lt v7.64.0;
+	write_file '>', "$tmpdir/trailer-up.c", qq{#include <trailer-up.h>\n};
+	my $cc = require_cmd $ccfg{cc}, 1;
+	my @build = split ' ',
+		"$cc $ccfg{cflags} -I t -o $tup.$<.$$.tmp ".
+		"$tmpdir/trailer-up.c $ccfg{libs}";
+	xsys(\@build) and skip "@build failed: \$?=$?", 1;
+	rename "$tup.$<.$$.tmp", $tup;
+	stat $tup; # for _ below:
+} # SKIP
+if (-x _) {
+	my %opt = (0 => \'i', 1 => \(my $o = ''), 2 => \(my $e = ''));
+	xsys [ $tup, "$base_url/env" ], undef,  \%opt;
+	is $?, 0, 'trailer-up using libcurl';
+	my ($buf) = split /\n\.\n/, $o;
+	my $env = eval $buf // die "eval $@ ($buf)"; # Perl hashref
+	$ck_env->($env, { 'test.input_data' => 'i', HTTP_A => 'b',
+		HTTP_TRAILER => 'a' });
+}
+
 {
 	my $conn = $mkreq->($sock, 'Header spaces bogus',
 		"GET /empty HTTP/1.1\r\nSpaced-Out : 3\r\n\r\n");
 	sysread $conn, my $buf, 4096;
 	like($buf, qr!\AHTTP/1\.[0-9] 400 !, 'got 400 response on bad request');
-}
-{
-	my $conn = $mkreq->($sock, 'Trailer rejected (for now)', <<EOM);
-PUT /sha1 HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Content-MD5\r\n\r
-EOM
-	sysread $conn, my $buf, 4096;
-	like $buf, qr!\AHTTP/1\.[0-9] 400 !,
-		'got 400 response on Trailer (for now)';
 }
 {
 	my $conn = $mkreq->($sock, 'streaming callback',
@@ -340,8 +460,7 @@ my $len = length $str;
 is($len, 26, 'got the alphabet');
 my $check_self = sub {
 	my ($conn) = @_;
-	vec(my $rbits = '', fileno($conn), 1) = 1;
-	select($rbits, undef, undef, 30) or Carp::confess('timed out');
+	poll_in $conn, 30_000 or Carp::croak "timeout";
 	read $conn, my $buf, 4096;
 	my ($head, $body) = split(/\r\n\r\n/, $buf, 2);
 	like($head, qr/\r\nContent-Length: 40\r\n/s, 'got expected length');
@@ -350,8 +469,7 @@ my $check_self = sub {
 
 SKIP: {
 	my $curl = require_cmd('curl', 1) or skip('curl(1) missing', 4);
-	my $base = 'http://'.tcp_host_port($sock);
-	my $url = "$base/sha1";
+	my $url = "$base_url/sha1";
 	my ($r, $w);
 	pipe $r, $w;
 	my $cmd = [$curl, qw(--tcp-nodelay -T- -HExpect: -gsSN), $url];
@@ -371,7 +489,7 @@ SKIP: {
 	seek($cout, 0, SEEK_SET);
 	is(<$cout>, sha1_hex($str), 'read expected body');
 
-	my $fh = popen_rd([$curl, '-gsS', "$base/async-big"]);
+	my $fh = popen_rd([$curl, '-gsS', "$base_url/async-big"]);
 	my $n = 0;
 	my $non_zero = 0;
 	while (1) {
@@ -385,13 +503,13 @@ SKIP: {
 	is($non_zero, 0, 'read all zeros');
 
 	require_mods(@zmods, 4);
-	my $buf = xqx([$curl, '-gsS', "$base/psgi-yield-gzip"]);
+	my $buf = xqx([$curl, '-gsS', "$base_url/psgi-yield-gzip"]);
 	is($?, 0, 'curl succesful');
 	IO::Uncompress::Gunzip::gunzip(\$buf => \(my $out));
 	is($out, "hello world\n");
 	my $curl_rdr = { 2 => \(my $curl_err = '') };
 	$buf = xqx([$curl, qw(-gsSv --compressed),
-			"$base/psgi-yield-compressible"], undef, $curl_rdr);
+			"$base_url/psgi-yield-compressible"], undef, $curl_rdr);
 	is($?, 0, 'curl --compressed successful');
 	is($buf, "goodbye world\n", 'gzipped response as expected');
 	like($curl_err, qr/\bContent-Encoding: gzip\b/,
