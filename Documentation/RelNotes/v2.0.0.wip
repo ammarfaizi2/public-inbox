@@ -46,6 +46,9 @@ New users + hackers:
   removal of dependencies for stripped-down or full setups.  See
   install/README for more details.
 
+  devel/try-lei now exists for testing out an empty lei instance
+  without writing to an existing one.
+
 treewide
 
   * support raw UTF-8 headers from SMTPUTF8 hosts
@@ -57,6 +60,8 @@ treewide
   * for daemons serving public traffic, MALLOC_MMAP_THRESHOLD_=131072 is
     recommended to reduce fragmentation in glibc malloc, while jemalloc
     (tested as an LD_PRELOAD) is another option (at least for 64-bit).
+
+  * embrace ->DESTROY in more places for control flow and reliability
 
 PublicInbox::WWW
 
@@ -115,11 +120,15 @@ lei
 
   * `lei index' accepts `+L:$LABEL' like `lei import' does
 
+  * fix several reliability problems with `lei import'
+
 solver (used by lei (rediff|blob), and PublicInbox::WWW)
 
   * handle copies in patches properly
 
   * no longer redundantly parallelized within each WWW process
+
+  * improve ambiguous OID debug messages
 
 portability
 
@@ -180,9 +189,29 @@ Search improvements (lei and PublicInbox::WWW)
     a C++ compiler, pkg-config, and the Xapian development files
     (see INSTALL).
 
-    This C++ helper will be used more heavily in the future
-    to enable query parser customizations and other functionality
-    unavailable from the Xapian SWIG or XS bindings.
+  * -X/--xapian-helpers may be specified for public-facing daemons
+    to use aforementioned C++ helper (or SWIG/XS fallback) to avoid
+    expensive searches blocking non-search HTTP and IMAP requests.
+
+  * the aforementioned C++ helper supports `thread:{SUBQUERY}' and
+    queries `thread:MSGID' like notmuch(1)
+
+  * --reindex and long-running (ext)index operations will auto
+    checkpoint every 5s to avoid SQLite timeouts in public-facing
+    frontends where SQLite WAL isn't possible.
+
+public-inbox-daemon (-netd, -imapd, -httpd, -nntpd, -pop3d)
+
+  * per-listener servername=, serverport=, and multi-accept=
+    parameters, --multi-accept= is also supported globally for
+    all listeners.
+
+  * listen(2) backlog no longer overridden when inheriting listeners
+    at startup, respecting `Backlog=' in systemd.socket(5)
+
+  * premature HTTP client disconnects are detected on expensive
+    requests (e.g. solver) and can be logged as 499 (like nginx)
+    using Plack::Middleware::AccessLog(::Timed).
 
 Thanks to all the bug reporters and users who made this release
 possible, and thanks for bearing with my anxiety over making releases.

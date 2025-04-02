@@ -111,16 +111,6 @@ all need to be considered for everything we introduce.)
 * imperfect scraper importers for obfuscated list archives
   (e.g. obfuscated Mailman stuff, Google Groups, etc...)
 
-* improve performance and avoid head-of-line blocking on slow storage
-  (done for most git blob retrievals, Xapian needs work)
-
-* allow optional use of separate Xapian worker process to implement
-  timeouts and avoid head-of-line blocking problems.  Consider
-  just-ahead-of-time builds to take advantage of custom date parsers
-  (approxidate) and other features not available to Perl bindings.
-
-* integrate git approxidate parsing into Xapian w/o spawning git
-
 * HTTP(S) search API (likely JMAP, but GraphQL could be an option)
   It should support git-specific prefixes (dfpre:, dfpost:, dfn:, etc)
   as extensions.  If JMAP, it should have HTTP(S) analogues to
@@ -161,3 +151,7 @@ all need to be considered for everything we introduce.)
 * git SHA-256 migration/coexistence path
 
 * decode RFC 3676 format=flowed + DelSp properly (see mflow (mblaze), mutt, ...)
+
+* ActivityPub support
+  https://public-inbox.org/meta/20240428175814.M304854@dcvr/
+  https://public-inbox.org/meta/20250327224143.M385019@dcvr/
