@@ -50,6 +50,7 @@ if ($dst eq 'NEWS') {
 		env => {
 			HTTP_HOST => 'public-inbox.org',
 			'psgi.url_scheme' => 'https',
+			SCRIPT_NAME => '',
 		},
 		www => {
 			pi_cfg => {
