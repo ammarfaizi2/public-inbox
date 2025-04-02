@@ -22,6 +22,7 @@ package PublicInbox::HTTP;
 use strict;
 use parent qw(PublicInbox::DS);
 use bytes qw(length);
+use autodie qw(open);
 use Fcntl qw(:seek);
 use Plack::HTTPParser qw(parse_http_request); # XS or pure Perl
 use Plack::Util;
@@ -45,7 +46,7 @@ use PublicInbox::Compat qw(sum0);
 our $MAX_REQUEST_BUFFER = $ENV{GIT_HTTP_MAX_REQUEST_BUFFER} ||
 			(10 * 1024 * 1024);
 
-open(my $null_io, '<', '/dev/null') or die "open /dev/null: $!";
+open my $null_io, '<', '/dev/null';
 {
 	my @n = stat($null_io) or die "stat(/dev/null): $!";
 	my @i = stat(STDIN) or die "stat(STDIN): $!";
