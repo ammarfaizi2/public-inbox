@@ -151,7 +151,7 @@ sub cmd_logout ($$) {
 	my ($self, $tag) = @_;
 	delete $self->{-idle_tag};
 	$self->write(\"* BYE logging out\r\n$tag OK Logout done\r\n");
-	$self->shutdn; # PublicInbox::DS::shutdn
+	$self->close;
 	undef;
 }
 

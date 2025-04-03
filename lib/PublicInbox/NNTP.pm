@@ -386,7 +386,7 @@ sub cmd_post ($) {
 sub cmd_quit ($) {
 	my ($self) = @_;
 	$self->write(\"205 closing connection - goodbye!\r\n");
-	$self->shutdn;
+	$self->close;
 	undef;
 }
 

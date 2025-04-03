@@ -364,7 +364,7 @@ sub requeue ($) { push @$nextq, $_[0] } # autovivifies
 
 # drop the IO::Handle ref, true if successful, false if not (or already dropped)
 # (this is closer to CORE::close than Danga::Socket::close)
-sub close {
+sub ds_close ($) {
 	my ($self) = @_;
 	my $sock = delete $self->{sock} or return;
 
@@ -625,19 +625,19 @@ sub accept_tls_step ($) {
 sub shutdn_tls_step ($) {
 	my ($self) = @_;
 	my $sock = $self->{sock} or return;
-	return $self->close if $sock->stop_SSL(SSL_fast_shutdown => 1);
-	return $self->close if $! != EAGAIN;
-	my $ev = PublicInbox::TLS::epollbit() or return $self->close;
+	return ds_close($self) if $sock->stop_SSL(SSL_fast_shutdown => 1) ||
+				$! != EAGAIN;
+	my $ev = PublicInbox::TLS::epollbit() or return ds_close($self);
 	epwait $sock, $ev | EPOLLONESHOT;
 	unshift @{$self->{wbuf}}, \&shutdn_tls_step; # autovivifies
 }
 
 # don't bother with shutdown($sock, 2), we don't fork+exec w/o CLOEXEC
 # or fork w/o exec, so no inadvertent socket sharing
-sub shutdn ($) {
+sub close {
 	my ($self) = @_;
 	my $sock = $self->{sock} or return;
-	$sock->can('stop_SSL') ? shutdn_tls_step $self : $self->close;
+	$sock->can('stop_SSL') ? shutdn_tls_step($self) : ds_close($self);
 }
 
 sub dflush {} # overridden by DSdeflate

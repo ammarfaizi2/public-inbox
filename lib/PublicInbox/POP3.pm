@@ -370,7 +370,7 @@ UPDATE users SET last_seen = ? WHERE user_id = ?
 		$self->{pop3d}->unlock_mailbox($self);
 	}
 	$self->write(\"+OK public-inbox POP3 server signing off\r\n");
-	$self->shutdn;
+	$self->close;
 	undef;
 }
 
