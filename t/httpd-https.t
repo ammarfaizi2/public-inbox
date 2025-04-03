@@ -123,9 +123,26 @@ for my $args (
 
 	$d = tcp_connect($https);
 	$o{SSL_hostname} = $o{SSL_verifycn_name} = 'server2.local';
+	my $ctx = IO::Socket::SSL::SSL_Context->new(%o,
+			SSL_session_cache_size => 128);
+	$o{SSL_reuse_ctx} = $ctx;
 	is(IO::Socket::SSL->start_SSL($d, %o), $d,
 		'new hostname to match cert works after HUP');
+	ok !$d->get_session_reused, 'initial client session not reused';
 	$check_url_scheme->($d, __LINE__);
+	$d->stop_SSL;
+
+	$d = tcp_connect($https);
+	IO::Socket::SSL->start_SSL($d, %o) or xbail "reconnect: $!";
+	print $d "GET /session_reused HTTP/1.1\r\nHost: example.com\r\n\r\n"
+		or xbail "print $!";
+	ok $d->get_session_reused, 'client session reused';
+	my $hdr = do { local $/ = "\r\n\r\n"; <$d> };
+	like $hdr , qr!\AHTTP/1\.1 200!, 'session_reused request';
+	chomp(my $bool = <$d>);
+	is $bool, 'y', 'server session reused';
+
+	# TODO: session tickets and TLS-PSK
 
 	# existing connection w/ old cert still works:
 	$check_url_scheme->($c, __LINE__);

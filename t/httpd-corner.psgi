@@ -80,6 +80,10 @@ my $app = sub {
 	} elsif ($path eq '/host-port') {
 		$code = 200;
 		push @$body, "$env->{REMOTE_ADDR} $env->{REMOTE_PORT}";
+	} elsif ($path eq '/session_reused') {
+		my $http = $env->{'psgix.io'}; # PublicInbox::HTTP
+		$body = [ $http->{sock}->get_session_reused ? "y\n" : "n\n" ];
+		$code = 200;
 	} elsif ($path eq '/callback') {
 		return sub {
 			my ($res) = @_;
