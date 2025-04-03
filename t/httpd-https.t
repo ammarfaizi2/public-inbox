@@ -29,7 +29,7 @@ cp('certs/server-key.pem', $key) or xbail $!;
 
 my $check_url_scheme = sub {
 	my ($s, $line) = @_;
-	$s->print("GET /url_scheme HTTP/1.1\r\n\r\nHost: example.com\r\n\r\n")
+	$s->print("GET /url_scheme HTTP/1.1\r\nHost: example.com\r\n\r\n")
 		or xbail "failed to write HTTP request: $! (line $line)";
 	my $buf = '';
 	sysread($s, $buf, 2007, length($buf)) until $buf =~ /\r\n\r\nhttps?/;
