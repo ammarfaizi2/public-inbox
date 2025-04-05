@@ -432,6 +432,7 @@ sub read_input_chunked { # unlikely...
 		}
 		if ($len == CHUNK_START) {
 			if ($$rbuf =~ s/\A([a-f0-9]+).*?\r\n//i) {
+				return quit($self, 400) if length($1) > 8;
 				$len = hex $1;
 				if (($len + -s $input) > $MAX_REQUEST_BUFFER) {
 					return quit($self, 413);
