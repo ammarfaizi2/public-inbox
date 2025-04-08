@@ -2,7 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
-use Socket qw(IPPROTO_TCP SOL_SOCKET);
+use Socket qw(IPPROTO_TCP SOL_SOCKET SOCK_STREAM);
 use PublicInbox::TestCommon;
 # IO::Poll and Net::NNTP are part of the standard library, but
 # distros may split them off...
@@ -35,7 +35,8 @@ for (1..3) {
 	pipe(my ($r, $w)) or xbail "pipe: $!";
 	push @pad_pipes, $r, $w;
 };
-my %srv = map { $_ => tcp_server() } qw(imap nntp imaps nntps);
+my @srv = map { $_ => tcp_server() } qw(imap nntp imaps nntps);
+my %srv = @srv;
 my $ibx = create_inbox 'netd', version => 2,
 			-primary_address => $addr, indexlevel => 'basic', sub {
 	my ($im, $ibx) = @_;
@@ -55,15 +56,16 @@ $pi_config //= "$ibx->{inboxdir}/pi_config";
 my @args = ("--cert=$cert", "--key=$key");
 my $rdr = {};
 my $fd = 3;
-while (my ($k, $v) = each %srv) {
+do {
+	my ($k, $v) = splice @srv, 0, 2;
 	push @args, "-l$k://".tcp_host_port($v);
+	$args[-1] .= '?servername=override.example' if $k eq 'nntp';
 	$rdr->{$fd++} = $v;
-}
+} while (@srv);
 my $cmd = [ '-netd', '-W0', @args, "--stdout=$out", "--stderr=$err" ];
 my $env = { PI_CONFIG => $pi_config };
 my $td = start_script($cmd, $env, $rdr);
 @pad_pipes = ();
-undef $rdr;
 my %o = (
 	SSL_hostname => 'server.local',
 	SSL_verifycn_name => 'server.local',
@@ -78,7 +80,53 @@ my %o = (
 {
 	my $c = tcp_connect($srv{nntp});
 	my $msg = <$c>;
-	like($msg, qr/^201 .*? ready - post via email/, 'connected to NNTP');
+	like $msg, qr/^201 override\.example ready - post via email/,
+		'connected to NNTP';
+}
+
+SKIP: {
+	skip "no ss(8), not Linux: $^O", 1 if $^O ne 'linux';
+	my $ss = require_cmd 'ss', 1 or skip 'ss(8) command not found', 1;
+	$td->kill;
+	my $nr = 10;
+	my @exp; # (scheme, addr_port, expected backlog)
+	for (@$cmd) {
+		if (m!\A-l([a-z]+)://([^/\?]+)!) {
+			push @exp, $1, $2, $nr;
+			$_ .= /\?/ ? ',' : '?';
+			$_ .= "backlog=$nr";
+			$nr++;
+		}
+	}
+	my $usock = "$tmpdir/u.sock";
+	push @$cmd, "-lnntp://$usock?backlog=$nr,servername=bogus.example";
+	$td->join;
+	$td = start_script($cmd, $env, $rdr);
+	my $c = tcp_connect($srv{nntp});
+	my $msg = <$c>;
+	like $msg, qr/^201 override\.example ready - post via email/,
+		'NNTP ready after restart';
+
+	require IO::Socket::UNIX;
+	$c = IO::Socket::UNIX->new(Peer => $usock, Type => Socket::SOCK_STREAM);
+	$msg = <$c>;
+	like $msg, qr/^201 bogus\.example ready - post via email/,
+		'UNIX socket bound';
+	my @ss_after = xqx([$ss, '-nl']);
+	my @ss_u = grep /^u_str\s+LISTEN\s+\d+\s+\d+\s+\Q$usock\E\s+/, @ss_after;
+	xbail("multiple (or zero) `$usock' matches", \@ss_u) if @ss_u != 1;
+	@ss_u = split /\s+/, $ss_u[0];
+	is $ss_u[3], $nr, 'newly bound listener has expected backlog in Send-Q' or
+		diag explain(\@ss_after);
+	do {
+		my ($scheme, $addr_port, $exp_backlog) = splice @exp, 0, 3;
+		my @l = grep /^tcp\s+LISTEN\s+\d+\s+\d+\s+\Q$addr_port\E\s+/, @ss_after;
+		xbail("multiple (or zero) `$addr_port' matches", \@l) if @l != 1;
+		@l = split /\s+/, $l[0];
+		is $l[3], $exp_backlog,
+			"inherited $scheme listener has expected backlog in Send-Q" or
+			diag explain(\@ss_after);
+	} while (@exp);
 }
 
 # TODO: more tests

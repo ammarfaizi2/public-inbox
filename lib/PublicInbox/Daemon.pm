@@ -68,6 +68,11 @@ sub listener_opt ($) {
 	# p5-io-socket-ssl/example/ssl_server.pl has this fallback:
 	$o->{cert} //= [ $default_cert ] if defined($default_cert);
 	$o->{key} //= defined($default_key) ? [ $default_key ] : $o->{cert};
+	if ($o->{backlog}) {
+		grep /[^0-9]/, @{$o->{backlog}} and
+			die "E: non-digit backlog in $str\n";
+		$o->{backlog} = $o->{backlog}->[-1];
+	}
 	$o;
 }
 
@@ -246,7 +251,11 @@ EOF
 		} elsif (defined($TLS_ONLY{$scheme})) {
 			die "$orig specified w/o cert=\n";
 		}
-		if ($listener_names->{$l}) { # already inherited
+		if (my $s = $listener_names->{$l}) { # already inherited
+			if (defined(my $bl = $opt->{backlog})) {
+				listen($s, $bl) or
+					warn "W: listen($l, backlog=$bl): $!\n";
+			}
 			$XNETD{$l} = load_mod($scheme, $opt, $l);
 			next;
 		}
@@ -274,7 +283,7 @@ EOF
 			die $@ if $@;
 			%o = (LocalAddr => $l, ReuseAddr => 1, Proto => 'tcp');
 		}
-		$o{Listen} = 2**31 - 1; # kernel will clamp
+		$o{Listen} = $opt->{backlog} // 2**31 - 1; # kernel will clamp
 		my $prev = umask 0000;
 		my $s = eval { $sock_pkg->new(%o) } or
 			warn "error binding $l: $! ($@)\n";

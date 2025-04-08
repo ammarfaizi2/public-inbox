@@ -50,7 +50,7 @@ all if relying on L<systemd.socket(5)> or similar,
 
 Per-listener options may be specified after C<?> as C<KEY=VALUE>
 pairs delimited by C<,>.  See L<public-inbox-netd(1)> for
-documentation on the C<cert=>, C<key=>, C<env.NAME=VALUE>,
+documentation on the C<backlog=>, C<cert=>, C<key=>, C<env.NAME=VALUE>,
 C<out=>, C<err=>, C<psgi=>, C<servername=>, and C<serverport=>
 options available.
 

@@ -58,6 +58,12 @@ is printed in the the greeting and used for generating C<Xref:>
 headers, overriding the L<public-inbox-config(5)/publicinbox.nntpserver>
 directive.
 
+C<backlog=> may be set to an integer on a per-listener basis to set the
+L<listen(2)> backlog parameter in public-inbox 2.0+ on both inherited and bound
+sockets.  This parameter is a convenient way to specify per-listener backlogs
+if multiple listen sockets are defined by a single L<systemd.socket(5)> unit
+but different backlog values are desired.
+
 =item --cert /path/to/cert
 
 See L<public-inbox-daemon(1)>.
