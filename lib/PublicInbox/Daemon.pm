@@ -431,11 +431,7 @@ sub sockname ($) {
 	my ($s) = @_;
 	my $addr = getsockname($s) or return;
 	my ($host, $port) = host_with_port($addr);
-	if ($port == 0 && $host eq '127.0.0.1') {
-		my ($path) = Socket::sockaddr_un($addr);
-		return $path;
-	}
-	"$host:$port";
+	($port == 0) ? (Socket::unpack_sockaddr_un($addr))[0] : "$host:$port";
 }
 
 sub unpack_ipv6 ($) {
@@ -470,7 +466,7 @@ sub host_with_port ($) {
 			($host, $port) = unpack_ipv6($addr);
 			$host = "[$host]";
 		} else {
-			($port, $host) = Socket::sockaddr_in($addr);
+			($port, $host) = Socket::unpack_sockaddr_in($addr);
 			$host = Socket::inet_ntoa($host);
 		}
 	};
