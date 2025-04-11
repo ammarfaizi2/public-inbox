@@ -17,7 +17,8 @@ use PublicInbox::Hval qw(ascii_html mid_href);
 use PublicInbox::MID qw($MID_EXTRACT);
 
 my $SALT = rand;
-my $LINK_RE = qr{([\('!])?\b((?:ftps?|https?|nntps?|imaps?|s?news|gopher)://
+my $LINK_RE = qr{([\('!])?\b(
+		(?:ftps?|https?|nntps?|imaps?|s?news|gopher|gemini)://
 		 [\@:\w\.-]+(?:/
 		 (?:[a-z0-9\-\._~!\$\&\';\(\)\*\+,;=:@/%]*)
 		 (?:\?[a-z0-9\-\._~!\$\&\';\(\)\*\+,;=:@/%]+)?
