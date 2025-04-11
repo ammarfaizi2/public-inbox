@@ -351,7 +351,14 @@ sub input_prepare {
 			$input = $null_io;
 		}
 	}
-
+	# curl sends `Expect: 100-continue' by default on uploads and our
+	# buffer-in-full behavior can't delegate the decision to apps, so
+	# assume we're OK with the client continuing at this point
+	if (($env->{HTTP_EXPECT} // '') =~ /\A100-continue\z/i) {
+		$self->write($env->{SERVER_PROTOCOL} .
+				" 100 Continue\r\n\r\n");
+		$self->{sock} or return;
+	}
 	# TODO: expire idle clients on ENFILE / EMFILE
 	$env->{'psgi.input'} = $input // return;
 	$self->{env} = $env;

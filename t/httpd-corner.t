@@ -470,24 +470,30 @@ my $check_self = sub {
 SKIP: {
 	my $curl = require_cmd('curl', 1) or skip('curl(1) missing', 4);
 	my $url = "$base_url/sha1";
-	my ($r, $w);
-	pipe $r, $w;
-	my $cmd = [$curl, qw(--tcp-nodelay -T- -HExpect: -gsSN), $url];
-	open my $cout, '+>', undef;
-	open my $cerr, '>', undef;
-	my $rdr = { 0 => $r, 1 => $cout, 2 => $cerr };
-	my $pid = spawn($cmd, undef, $rdr);
-	close $r;
-	foreach my $c ('a'..'z') {
-		print $w $c or die "failed to write to curl: $!";
-		$delay->();
+	my $e100_timeo = 60;
+	my $t0 = now;
+	for my $H (['--expect100-timeout', $e100_timeo], ['-HExpect:']) {
+		pipe my $r, my $w;
+		my $cmd = [$curl, qw(--tcp-nodelay -T- -gsSN), @$H, $url];
+		open my $cout, '+>', undef;
+		open my $cerr, '>', undef;
+		my $rdr = { 0 => $r, 1 => $cout, 2 => $cerr };
+		my $pid = spawn($cmd, undef, $rdr);
+		close $r;
+		for my $c ('a'..'z') {
+			print $w $c or die "failed to write to curl: $!";
+			$delay->();
+		}
+		close $w;
+		waitpid($pid, 0);
+		is($?, 0, 'curl exited successfully');
+		is(-s $cerr, 0, 'no errors from curl');
+		seek($cout, 0, SEEK_SET);
+		is(<$cout>, sha1_hex($str), 'read expected body');
 	}
-	close $w;
-	waitpid($pid, 0);
-	is($?, 0, 'curl exited successfully');
-	is(-s $cerr, 0, 'no errors from curl');
-	seek($cout, 0, SEEK_SET);
-	is(<$cout>, sha1_hex($str), 'read expected body');
+	my $elapsed = now - $t0;
+	diag "elapsed=${elapsed}s";
+	ok $elapsed < $e100_timeo, 'able to handle 100-continue responses';
 
 	my $fh = popen_rd([$curl, '-gsS', "$base_url/async-big"]);
 	my $n = 0;
