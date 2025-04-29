@@ -1626,7 +1626,7 @@ sub request_umask { # assumes client is trusted and fast
 	$u eq 'u' or warn "E: recv $v has no umask";
 }
 
-sub _stdin_cb { # PublicInbox::InputPipe::consume callback for --stdin
+sub _stdin_cb { # PublicInbox::InputStream::consume callback for --stdin
 	my (undef, $lei, $cb) = @_; # $_[-1] = $rbuf
 	$_[1] // return $lei->fail("error reading stdin: $!");
 	$lei->{stdin_buf} .= $_[-1];
@@ -1635,7 +1635,7 @@ sub _stdin_cb { # PublicInbox::InputPipe::consume callback for --stdin
 
 sub slurp_stdin {
 	my ($lei, $cb) = @_;
-	require PublicInbox::InputPipe;
+	require PublicInbox::InputStream;
 	my $in = $lei->{0};
 	if (-t $in) { # run cat via script/lei and read from it
 		$in = undef;
@@ -1643,7 +1643,7 @@ sub slurp_stdin {
 		say { $lei->{2} } '# enter query, Ctrl-D when done';
 		send_exec_cmd($lei, [ $lei->{0}, $wr ], ['cat'], {});
 	}
-	PublicInbox::InputPipe::consume($in, \&_stdin_cb, $lei, $cb);
+	PublicInbox::InputStream::consume($in, \&_stdin_cb, $lei, $cb);
 }
 
 1;

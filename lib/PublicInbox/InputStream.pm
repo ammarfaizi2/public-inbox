@@ -2,7 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 
 # for reading pipes, sockets, and TTYs off the DS event loop
-package PublicInbox::InputPipe;
+package PublicInbox::InputStream;
 use v5.12;
 use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLIN);
