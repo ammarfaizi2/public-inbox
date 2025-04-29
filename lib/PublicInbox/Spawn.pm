@@ -384,9 +384,12 @@ sub spawn ($;$$) {
 	my $rlim = [];
 	foreach my $l (@RLIMITS) {
 		my $v = $opt->{$l} // next;
-		my $r = $RLIMITS{$l} //
-			eval "require BSD::Resource; BSD::Resource::$l();" //
-			do {
+		my $r = $RLIMITS{$l} // eval {
+				require BSD::Resource;
+				my $rl = BSD::Resource::get_rlimits();
+				@RLIMITS{@RLIMITS} = @$rl{@RLIMITS};
+				$RLIMITS{$l};
+			} // do {
 				warn "$l undefined by BSD::Resource: $@\n";
 				next;
 			};
