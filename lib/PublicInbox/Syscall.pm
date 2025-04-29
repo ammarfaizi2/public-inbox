@@ -27,11 +27,11 @@ our ($INOTIFY, %CONST);
 use List::Util qw(sum);
 
 # $VERSION = '0.25'; # Sys::Syscall version
-our @EXPORT_OK = qw(epoll_ctl epoll_create epoll_wait
+our @EXPORT_OK = qw(epoll_create
 		EPOLLIN EPOLLOUT EPOLLET
 		EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
 		EPOLLONESHOT EPOLLEXCLUSIVE
-		signalfd rename_noreplace %SIGNUM $F_SETPIPE_SZ);
+		rename_noreplace %SIGNUM $F_SETPIPE_SZ);
 use constant {
 	EPOLLIN => 1,
 	EPOLLOUT => 4,
@@ -54,8 +54,7 @@ use constant TMPL_size_t => SIZEOF_size_t == 8 ? 'Q' : 'L';
 
 our ($SYS_epoll_create,
 	$SYS_epoll_ctl,
-	$SYS_epoll_wait,
-	$SYS_signalfd4,
+	$SYS_epoll_pwait,
 	$SYS_renameat2,
 	$F_SETPIPE_SZ,
 	$SYS_sendmsg,
@@ -69,8 +68,10 @@ our $no_deprecated = 0;
 if ($^O eq "linux") {
 	$F_SETPIPE_SZ = 1031;
 	my (undef, undef, $release, undef, $machine) = POSIX::uname();
-	my ($maj, $min) = ($release =~ /\A([0-9]+)\.([0-9]+)/);
-	$SYS_renameat2 = 0 if "$maj.$min" < 3.15;
+	my ($kver) = ($release =~ /([0-9]+(?:\.(?:[0-9]+))+)/);
+	$kver = eval("v$kver") // v2.6;
+	$SYS_renameat2 = 0 if $kver lt v3.15;
+	$SYS_epoll_pwait = 0 if $kver lt v2.6.19;
 	# whether the machine requires 64-bit numbers to be on 8-byte
 	# boundaries.
 	my $u64_mod_8 = 0;
@@ -90,8 +91,7 @@ if ($^O eq "linux") {
 	if ($machine =~ m/^i[3456]86$/) {
 		$SYS_epoll_create = 254;
 		$SYS_epoll_ctl = 255;
-		$SYS_epoll_wait = 256;
-		$SYS_signalfd4 = 327;
+		$SYS_epoll_pwait //= 319;
 		$SYS_renameat2 //= 353;
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 370;
@@ -107,8 +107,7 @@ if ($^O eq "linux") {
 	} elsif ($machine eq "x86_64") {
 		$SYS_epoll_create = 213;
 		$SYS_epoll_ctl = 233;
-		$SYS_epoll_wait = 232;
-		$SYS_signalfd4 = 289;
+		$SYS_epoll_pwait //= 281;
 		$SYS_renameat2 //= 316;
 		$SYS_fstatfs = 138;
 		$SYS_sendmsg = 46;
@@ -124,8 +123,7 @@ if ($^O eq "linux") {
 	} elsif ($machine eq 'x32') {
 		$SYS_epoll_create = 1073742037;
 		$SYS_epoll_ctl = 1073742057;
-		$SYS_epoll_wait = 1073742056;
-		$SYS_signalfd4 = 1073742113;
+		$SYS_epoll_pwait //= 0x40000000 + 281;
 		$SYS_renameat2 //= 0x40000000 + 316;
 		$SYS_fstatfs = 138;
 		$SYS_sendmsg = 0x40000206;
@@ -141,9 +139,8 @@ if ($^O eq "linux") {
 	} elsif ($machine eq 'sparc64') {
 		$SYS_epoll_create = 193;
 		$SYS_epoll_ctl = 194;
-		$SYS_epoll_wait = 195;
+		$SYS_epoll_pwait //= 309;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 317;
 		$SYS_renameat2 //= 345;
 		$SFD_CLOEXEC = 020000000;
 		$SYS_fstatfs = 158;
@@ -154,16 +151,14 @@ if ($^O eq "linux") {
 	} elsif ($machine =~ m/^parisc/) { # untested, no machine on cfarm
 		$SYS_epoll_create = 224;
 		$SYS_epoll_ctl = 225;
-		$SYS_epoll_wait = 226;
+		$SYS_epoll_pwait //= 297;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 309;
 		$SIGNUM{WINCH} = 23;
 	} elsif ($machine =~ m/^ppc64/) {
 		$SYS_epoll_create = 236;
 		$SYS_epoll_ctl = 237;
-		$SYS_epoll_wait = 238;
+		$SYS_epoll_pwait //= 303;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 313;
 		$SYS_renameat2 //= 357;
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 341;
@@ -179,9 +174,8 @@ if ($^O eq "linux") {
 	} elsif ($machine eq "ppc") { # untested, no machine on cfarm
 		$SYS_epoll_create = 236;
 		$SYS_epoll_ctl = 237;
-		$SYS_epoll_wait = 238;
+		$SYS_epoll_pwait //= 303;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 313;
 		$SYS_renameat2 //= 357;
 		$SYS_fstatfs = 100;
 		$SYS_writev = 146;
@@ -190,9 +184,8 @@ if ($^O eq "linux") {
 	} elsif ($machine =~ m/^s390/) { # untested, no machine on cfarm
 		$SYS_epoll_create = 249;
 		$SYS_epoll_ctl = 250;
-		$SYS_epoll_wait = 251;
+		$SYS_epoll_pwait //= 312;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 322;
 		$SYS_renameat2 //= 347;
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 370;
@@ -201,24 +194,21 @@ if ($^O eq "linux") {
 	} elsif ($machine eq 'ia64') { # untested, no machine on cfarm
 		$SYS_epoll_create = 1243;
 		$SYS_epoll_ctl = 1244;
-		$SYS_epoll_wait = 1245;
+		$SYS_epoll_pwait //= 1024 + 281;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 289;
 	} elsif ($machine eq "alpha") { # untested, no machine on cfarm
 		# natural alignment, ints are 32-bits
 		$SYS_epoll_create = 407;
 		$SYS_epoll_ctl = 408;
-		$SYS_epoll_wait = 409;
+		$SYS_epoll_pwait = 474;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 484;
 		$SFD_CLOEXEC = 010000000;
 	} elsif ($machine =~ /\A(?:loong|a)arch64\z/ || $machine eq 'riscv64') {
 		$SYS_epoll_create = 20; # (sys_epoll_create1)
 		$SYS_epoll_ctl = 21;
-		$SYS_epoll_wait = 22; # (sys_epoll_pwait)
+		$SYS_epoll_pwait //= 22;
 		$u64_mod_8 = 1;
 		$no_deprecated = 1;
-		$SYS_signalfd4 = 74;
 		$SYS_renameat2 //= 276;
 		$SYS_fstatfs = 44;
 		$SYS_sendmsg = 211;
@@ -234,9 +224,8 @@ if ($^O eq "linux") {
 	} elsif ($machine =~ m/arm(v\d+)?.*l/) { # ARM OABI (untested on cfarm)
 		$SYS_epoll_create = 250;
 		$SYS_epoll_ctl = 251;
-		$SYS_epoll_wait = 252;
+		$SYS_epoll_pwait //= 346;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 355;
 		$SYS_renameat2 //= 382;
 		$SYS_fstatfs = 100;
 		$SYS_sendmsg = 296;
@@ -245,9 +234,8 @@ if ($^O eq "linux") {
 	} elsif ($machine =~ m/^mips64/) { # cfarm only has 32-bit userspace
 		$SYS_epoll_create = 5207;
 		$SYS_epoll_ctl = 5208;
-		$SYS_epoll_wait = 5209;
+		$SYS_epoll_pwait //= 5272;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 5283;
 		$SYS_renameat2 //= 5311;
 		$SYS_fstatfs = 5135;
 		$SYS_sendmsg = 5045;
@@ -258,9 +246,8 @@ if ($^O eq "linux") {
 	} elsif ($machine =~ m/^mips/) { # 32-bit, tested on mips64 cfarm host
 		$SYS_epoll_create = 4248;
 		$SYS_epoll_ctl = 4249;
-		$SYS_epoll_wait = 4250;
+		$SYS_epoll_pwait //= 4313;
 		$u64_mod_8 = 1;
-		$SYS_signalfd4 = 4324;
 		$SYS_renameat2 //= 4351;
 		$SYS_fstatfs = 4100;
 		$SYS_sendmsg = 4179;
@@ -281,12 +268,15 @@ git clone https://80x24.org/public-inbox.git and
 Send the output of ./devel/sysdefs-list to meta\@public-inbox.org
 EOM
 	}
-	if ($u64_mod_8) {
-		*epoll_wait = \&epoll_wait_mod8;
-		*epoll_ctl = \&epoll_ctl_mod8;
-	} else {
-		*epoll_wait = \&epoll_wait_mod4;
-		*epoll_ctl = \&epoll_ctl_mod4;
+	if ($SYS_epoll_pwait) {
+		if ($u64_mod_8) {
+			*epoll_pwait = \&epoll_pwait_mod8;
+			*epoll_ctl = \&epoll_ctl_mod8;
+		} else {
+			*epoll_pwait = \&epoll_pwait_mod4;
+			*epoll_ctl = \&epoll_ctl_mod4;
+		}
+		push @EXPORT_OK, qw(epoll_pwait epoll_ctl);
 	}
 } elsif ($^O =~ /\A(?:freebsd|openbsd|netbsd|dragonfly)\z/) {
 # don't use syscall.ph here, name => number mappings are not stable on *BSD
@@ -344,7 +334,9 @@ BEGIN {
 	$CONST{TMPL_msghdr} //= undef;
 	$CONST{MSG_MORE} //= 0;
 	$CONST{FIONREAD} //= undef;
+	# $Config{sig_count} is NSIG, so this is NSIG/8:
 }
+my $SIGSET_SIZE = int($Config{sig_count}/8);
 
 # SFD_CLOEXEC is arch-dependent, so IN_CLOEXEC may be, too
 $INOTIFY->{IN_CLOEXEC} //= 0x80000 if $INOTIFY;
@@ -365,66 +357,52 @@ sub epoll_ctl_mod8 {
 		pack("LLLL", $_[3], 0, $_[2], 0));
 }
 
-# epoll_wait wrapper
-# ARGS: (epfd, maxevents, timeout (milliseconds), arrayref)
+# epoll_pwait wrapper
+# ARGS: (epfd, maxevents, timeout (milliseconds), arrayref, sigmask)
 #  arrayref: values modified to be [$fd, $event]
-our $epoll_wait_events = '';
-our $epoll_wait_size = 0;
-sub epoll_wait_mod4 {
-	my ($epfd, $maxevents, $timeout_msec, $events) = @_;
+our $epoll_pwait_events = '';
+our $epoll_pwait_size = 0;
+sub epoll_pwait_mod4 {
+	my ($epfd, $maxevents, $timeout_msec, $events, $oldset) = @_;
 	# resize our static buffer if maxevents bigger than we've ever done
-	if ($maxevents > $epoll_wait_size) {
-		$epoll_wait_size = $maxevents;
-		vec($epoll_wait_events, $maxevents * 12 - 1, 8) = 0;
+	if ($maxevents > $epoll_pwait_size) {
+		$epoll_pwait_size = $maxevents;
+		vec($epoll_pwait_events, $maxevents * 12 - 1, 8) = 0;
 	}
 	@$events = ();
-	my $ct = syscall($SYS_epoll_wait, $epfd, $epoll_wait_events,
-			$maxevents, $timeout_msec);
+	my $ct = syscall($SYS_epoll_pwait, $epfd, $epoll_pwait_events,
+			$maxevents, $timeout_msec,
+			$oldset ? ($$oldset, $SIGSET_SIZE) : (undef, 0));
 	for (0..$ct - 1) {
 		# 12-byte struct epoll_event
 		# 4 bytes uint32_t events mask (skipped, useless to us)
 		# 8 bytes: epoll_data_t union (first 4 bytes are the fd)
 		# So we skip the first 4 bytes and take the middle 4:
-		$events->[$_] = unpack('L', substr($epoll_wait_events,
+		$events->[$_] = unpack('L', substr($epoll_pwait_events,
 							12 * $_ + 4, 4));
 	}
 }
 
-sub epoll_wait_mod8 {
-	my ($epfd, $maxevents, $timeout_msec, $events) = @_;
+sub epoll_pwait_mod8 {
+	my ($epfd, $maxevents, $timeout_msec, $events, $oldset) = @_;
 
 	# resize our static buffer if maxevents bigger than we've ever done
-	if ($maxevents > $epoll_wait_size) {
-		$epoll_wait_size = $maxevents;
-		vec($epoll_wait_events, $maxevents * 16 - 1, 8) = 0;
+	if ($maxevents > $epoll_pwait_size) {
+		$epoll_pwait_size = $maxevents;
+		vec($epoll_pwait_events, $maxevents * 16 - 1, 8) = 0;
 	}
 	@$events = ();
-	my $ct = syscall($SYS_epoll_wait, $epfd, $epoll_wait_events,
+	my $ct = syscall($SYS_epoll_pwait, $epfd, $epoll_pwait_events,
 			$maxevents, $timeout_msec,
-			$no_deprecated ? undef : ());
+			$oldset ? ($$oldset, $SIGSET_SIZE) : (undef, 0));
 	for (0..$ct - 1) {
 		# 16-byte struct epoll_event
 		# 4 bytes uint32_t events mask (skipped, useless to us)
 		# 4 bytes padding (skipped, useless)
 		# 8 bytes epoll_data_t union (first 4 bytes are the fd)
 		# So skip the first 8 bytes, take 4, and ignore the last 4:
-		$events->[$_] = unpack('L', substr($epoll_wait_events,
+		$events->[$_] = unpack('L', substr($epoll_pwait_events,
 							16 * $_ + 8, 4));
-	}
-}
-
-sub signalfd ($) {
-	my ($signos) = @_;
-	if ($SYS_signalfd4) {
-		my $set = POSIX::SigSet->new(@$signos);
-		syscall($SYS_signalfd4, -1, "$$set",
-			# $Config{sig_count} is NSIG, so this is NSIG/8:
-			int($Config{sig_count}/8),
-			# SFD_NONBLOCK == O_NONBLOCK for every architecture
-			O_NONBLOCK|$SFD_CLOEXEC);
-	} else {
-		$! = ENOSYS;
-		undef;
 	}
 }
 

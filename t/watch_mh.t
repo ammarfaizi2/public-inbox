@@ -52,7 +52,6 @@ my $git = PublicInbox::Git->new($git_dir);
 	my $env = { PI_CONFIG => $cfg->{-f} };
 	# n.b. --no-scan is only intended for testing atm
 	my $wm = start_script([qw(-watch --no-scan)], $env);
-	no_pollerfd($wm->{pid});
 
 	my $eml = eml_load 't/data/binary.patch';
 	$eml->header_set('Cc', $addr);

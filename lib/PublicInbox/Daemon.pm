@@ -587,7 +587,6 @@ sub start_worker ($) {
 	if ($pid == 0) {
 		undef %WORKERS;
 		undef $xh_workers;
-		local $PublicInbox::DS::Poller; # allow epoll/kqueue
 		$set_user->() if $set_user;
 		PublicInbox::EOFpipe->new($parent_pipe, \&worker_quit);
 		worker_loop();
@@ -717,7 +716,6 @@ sub daemon_loop () {
 		$WORKER_SIG{USR2} = sub { worker_quit() if upgrade() };
 		$refresh->();
 	}
-	local $PublicInbox::DS::Poller; # allow epoll/kqueue
 	worker_loop();
 }
 

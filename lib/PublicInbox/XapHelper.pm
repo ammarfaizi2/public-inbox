@@ -373,10 +373,10 @@ sub start (@) {
 		CHLD => \&PublicInbox::DS::enqueue_reap,
 		USR1 => \&parent_reopen_logs,
 	};
-	PublicInbox::DS::block_signals();
+	my $oldset = PublicInbox::DS::block_signals();
 	start_workers();
 	@PublicInbox::DS::post_loop_do = \&xh_alive;
-	PublicInbox::DS::event_loop($sig);
+	PublicInbox::DS::event_loop($sig, $oldset);
 }
 
 1;

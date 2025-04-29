@@ -6,6 +6,8 @@ use Test::More;
 use autodie;
 use PublicInbox::Syscall qw(EPOLLOUT);
 plan skip_all => 'not Linux' if $^O ne 'linux';
+PublicInbox::Syscall->can('epoll_pwait') or
+	plan skip_all => 'Linux kernel too old for epoll_pwait?';
 require_ok 'PublicInbox::Epoll';
 my $ep = PublicInbox::Epoll->new;
 pipe(my $r, my $w);
@@ -17,6 +19,6 @@ is(scalar(@events), 1, 'got one event');
 is($events[0], fileno($w), 'got expected FD');
 close $w;
 $ep->ep_wait(0, \@events);
-is(scalar(@events), 0, 'epoll_wait timeout');
+is(scalar(@events), 0, 'epoll_pwait timeout');
 
 done_testing;

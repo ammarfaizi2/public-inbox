@@ -26,6 +26,8 @@ sub ep_wait {
 		push(@pset, $fd, $pevents);
 	}
 	@$events = ();
+	# no ppoll(2), wake up every 1s to let Perl dispatch %SIG handlers
+	$timeout_msec = 1000 if $timeout_msec < 0 || $timeout_msec > 1000;
 	$n = IO::Poll::_poll($timeout_msec, @pset) or return; # timeout expired
 	return if $n < 0 && $! == Errno::EINTR; # caller recalculates timeout
 	die "poll: $!" if $n < 0;
@@ -51,5 +53,6 @@ sub ep_add { $_[0]->{fileno($_[1])} = $_[2]; 0 }
 
 no warnings 'once';
 *ep_mod = \&ep_add;
+*prepare_signals = \&PublicInbox::Select::prepare_signals;
 
 1;

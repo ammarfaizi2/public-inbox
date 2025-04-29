@@ -97,9 +97,7 @@ int main(void)
 #ifdef __linux__
 	D(SYS_epoll_create1);
 	D(SYS_epoll_ctl);
-	MAYBE D(SYS_epoll_wait);
-	D(SYS_epoll_pwait);
-	D(SYS_signalfd4);
+	MAYBE D(SYS_epoll_pwait);
 
 	X(IN_CLOEXEC);
 	X(IN_ACCESS);

@@ -7,8 +7,9 @@
 # via select, but only to support cases we care about.
 package PublicInbox::Select;
 use v5.12;
-use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT);
+use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT %SIGNUM);
 use Errno;
+use POSIX ();
 
 sub new { bless {}, __PACKAGE__ } # fd => events
 
@@ -20,7 +21,9 @@ sub ep_wait {
 		vec($wvec, $fd, 1) = 1 if $ev & EPOLLOUT;
 	}
 	@$events = ();
-	my $to = $msec < 0 ? undef : ($msec/1000);
+	# no pselect(2), wake up every 1s to let Perl dispatch %SIG handlers
+	my $to = $msec < 0 ? 1 : ($msec/1000);
+	$to = 1 if $to > 1;
 	my $n = select $rvec, $wvec, undef, $to or return; # timeout expired
 	return if $n < 0 && $! == Errno::EINTR; # caller recalculates timeout
 	die "select: $!" if $n < 0;
@@ -36,6 +39,15 @@ sub ep_wait {
 
 sub ep_del { delete($_[0]->{fileno($_[1])}); 0 }
 sub ep_add { $_[0]->{fileno($_[1])} = $_[2]; 0 }
+
+sub prepare_signals {
+	my ($self, $sig, $sigset) = @_;
+	for (keys %$sig) { # like %SIG
+		my $num = $SIGNUM{$_} // POSIX->can("SIG$_")->();
+		$sigset->delset($num);
+	}
+	PublicInbox::DS::sig_setmask($sigset);
+}
 
 no warnings 'once';
 *ep_mod = \&ep_add;

@@ -160,7 +160,6 @@ More majordomo info at  http://vger.kernel.org/majordomo-info.html\n);
 EOM
 	# n.b. --no-scan is only intended for testing atm
 	my $wm = start_script([qw(-watch --no-scan)], $env);
-	no_pollerfd($wm->{pid});
 	my $eml = eml_load('t/data/0001.patch');
 	$eml->header_set('Cc', $addr);
 	my $em = PublicInbox::Emergency->new($maildir);

@@ -31,7 +31,7 @@ BEGIN {
 		quit_waiter_pipe wait_for_eof require_git_http_backend
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd no_httpd_errors xbail require_cmd is_xdeeply tail_f
-		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
+		ignore_inline_c_missing no_coredump cfg_new
 		require_fast_reliable_signals
 		strace strace_inject lsof_pid oct_is $find_xh_pid);
 	require Test::More;
@@ -63,12 +63,8 @@ sub check_broken_tmpfs () {
 }
 
 sub require_fast_reliable_signals (;$) {
-	state $ok = do {
-		require PublicInbox::Sigfd;
-		my $s = PublicInbox::Sigfd->new({}) ? 1 : $ENV{TEST_UNRELIABLE};
-		PublicInbox::DS->Reset;
-		$s;
-	};
+	state $ok = !!(PublicInbox::Syscall->can('epoll_pwait') //
+			eval { require IO::KQueue });
 	return $ok if $ok || defined(wantarray);
 	my $m = "fast, reliable signals not available(\$^O=$^O)";
 	@_ ? skip($m, 1) : plan(skip_all => $m);
@@ -1037,26 +1033,6 @@ sub lsof_pid ($;$) {
 		@out;
 	} else { # busybox lsof ignores -p, so we DIY it
 		grep /\b$pid\b/, @out;
-	}
-}
-
-sub no_pollerfd ($) {
-	my ($pid) = @_;
-	my ($re, @cmd);
-	$^O eq 'linux' and
-		($re, @cmd) = (qr/\Q[eventpoll]\E/, qw(lsof -p), $pid);
-	# n.b. *BSDs uses kqueue to emulate signalfd and/or inotify,
-	# and we can't distinguish which is which easily.
-	SKIP: {
-		(@cmd && $re) or
-			skip 'open poller test is Linux-only', 1;
-		my $bin = require_cmd($cmd[0], 1) or skip "$cmd[0] missing", 1;
-		$cmd[0] = $bin;
-		my @of = xqx(\@cmd, {}, {2 => \(my $e)});
-		my $err = $?;
-		skip "$bin broken? (\$?=$err) ($e)", 1 if $err;
-		@of = grep /\b$pid\b/, @of; # busybox lsof ignores -p
-		is(grep(/$re/, @of), 0, "no $re FDs") or diag explain(\@of);
 	}
 }
 

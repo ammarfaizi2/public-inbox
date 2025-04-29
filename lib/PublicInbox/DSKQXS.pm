@@ -8,15 +8,13 @@
 # like epoll to simplify the code in DS.pm.  This is NOT meant to be
 # an all encompassing emulation of epoll via IO::KQueue, but just to
 # support cases public-inbox-nntpd/httpd care about.
-#
-# It also implements signalfd(2) emulation via "tie".
 package PublicInbox::DSKQXS;
 use v5.12;
 use Symbol qw(gensym);
 use IO::KQueue;
 use Errno qw(EAGAIN);
-use PublicInbox::OnDestroy;
-use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET);
+use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET %SIGNUM);
+use POSIX ();
 
 sub EV_DISPATCH () { 0x0080 }
 
@@ -42,66 +40,11 @@ sub new {
 	bless { kq => IO::KQueue->new, fgen => $fgen }, $class;
 }
 
-# returns a new instance which behaves like signalfd on Linux.
-# It's wasteful in that it uses another FD, but it simplifies
-# our epoll-oriented code.
-sub signalfd {
-	my ($class, $signo) = @_;
-	my $sym = gensym;
-	tie *$sym, $class, $signo; # calls TIEHANDLE
-	$sym
-}
-
-sub TIEHANDLE { # similar to signalfd()
-	my ($class, $signo) = @_;
-	my $self = $class->new;
-	my $kq = $self->{kq};
-	$kq->EV_SET($_, EVFILT_SIGNAL, EV_ADD) for @$signo;
-	$self;
-}
-
-sub READ { # called by sysread() for signalfd compatibility
-	my ($self, undef, $len, $off) = @_; # $_[1] = buf
-	die "bad args for signalfd read" if ($len % 128) // defined($off);
-	my $sigbuf = $self->{sigbuf} //= [];
-	my $nr = $len / 128;
-	my $r = 0;
-	$_[1] = '';
-	while (1) {
-		while ($nr--) {
-			my $signo = shift(@$sigbuf) or last;
-			# caller only cares about signalfd_siginfo.ssi_signo:
-			$_[1] .= pack('L', $signo) . ("\0" x 124);
-			$r += 128;
-		}
-		return $r if $r;
-		my @events = eval { $self->{kq}->kevent(0) };
-		# workaround https://rt.cpan.org/Ticket/Display.html?id=116615
-		if ($@) {
-			next if $@ =~ /Interrupted system call/;
-			die;
-		}
-		if (!scalar(@events)) {
-			$! = EAGAIN;
-			return;
-		}
-
-		# Grab the kevent.ident (signal number).  The kevent.data
-		# field shows coalesced signals, and maybe we'll use it
-		# in the future...
-		@$sigbuf = map { $_->[0] } @events;
-	}
-}
-
-# for fileno() calls in PublicInbox::DS
-sub FILENO { ${$_[0]->{kq}} }
-
 sub _ep_mod_add ($$$$) {
 	my ($kq, $fd, $ev, $add) = @_;
 	$kq->EV_SET($fd, EVFILT_READ, $add|kq_flag(EPOLLIN, $ev));
 
-	# we call this blindly for read-only FDs such as tied
-	# DSKQXS (signalfd emulation) and Listeners
+	# we call this blindly for read-only FDs
 	eval { $kq->EV_SET($fd, EVFILT_WRITE, $add|kq_flag(EPOLLOUT, $ev)) };
 	0;
 }
@@ -118,20 +61,54 @@ sub ep_del {
 	0;
 }
 
+# there's nothing like the sigmask arg for pselect/ppoll/epoll_pwait, we
+# use EVFILT_SIGNAL to allow certain signals to wake us up from kevent
+# but let Perl invoke %SIG handlers (see $peek_sigs in ep_wait)
+sub prepare_signals {
+	my ($self, $sig, $sigset) = @_; # $sig => \%SIG like hashmap
+	my $kq = $self->{kq};
+	for (keys %$sig) {
+		my $num = $SIGNUM{$_} // POSIX->can("SIG$_")->();
+		$kq->EV_SET($num, EVFILT_SIGNAL, EV_ADD);
+	}
+	# Unlike Linux signalfd, EVFILT_SIGNAL can't handle
+	# signals received before the filter is created,
+	# so we peek at signals here:
+	my $restore = PublicInbox::DS::allow_sigs(keys %$sig);
+	select undef, undef, undef, 0; # check sigs
+	# $restore (on_destroy fires)
+}
+
 sub ep_wait {
-	my ($self, $timeout_msec, $events) = @_;
+	my ($self, $timeout_msec, $events, $sigmask) = @_;
 	# n.b.: IO::KQueue is hard-coded to return up to 1000 events
+	my $peek_sigs;
 	@$events = eval { $self->{kq}->kevent($timeout_msec) };
 	if (my $err = $@) {
 		# workaround https://rt.cpan.org/Ticket/Display.html?id=116615
 		if ($err =~ /Interrupted system call/) {
+			$peek_sigs = 1;
 			@$events = ();
 		} else {
 			die $err;
 		}
 	}
 	# caller only cares for $events[$i]->[0]
-	$_ = $_->[0] for @$events;
+	@$events = map {
+		if ($_->[KQ_FILTER] == EVFILT_SIGNAL) {
+			$peek_sigs = 1;
+			()
+		} else {
+			$_->[0]
+		}
+	} @$events;
+	if ($peek_sigs && $sigmask) {
+		my $orig = POSIX::SigSet->new;
+		PublicInbox::DS::sig_setmask($sigmask, $orig);
+		select undef, undef, undef, 0; # Perl invokes %SIG handlers here
+		PublicInbox::DS::sig_setmask($orig);
+	}
+	@$events;
 }
 
 # kqueue is close-on-fork (not exec), so we must not close it

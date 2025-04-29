@@ -24,7 +24,7 @@ use strict;
 use v5.10.1;
 use parent qw(Exporter);
 use bytes qw(length substr); # FIXME(?): needed for PublicInbox::NNTP
-use POSIX qw(WNOHANG sigprocmask SIG_SETMASK SIG_UNBLOCK);
+use POSIX qw(WNOHANG sigprocmask SIG_SETMASK);
 use Fcntl qw(SEEK_SET :DEFAULT);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 use Scalar::Util qw(blessed);
@@ -69,7 +69,7 @@ Reset all state
 
 =cut
 sub Reset {
-	$Poller = bless [], 'PublicInbox::DummyPoller';
+	$Poller = undef;
 	do {
 		$in_loop = undef; # first in case DESTROY callbacks use this
 		# clobbering $Poller may call DSKQXS::DESTROY,
@@ -92,7 +92,6 @@ sub Reset {
 
 	$reap_armed = undef;
 	$loop_timeout = -1;  # no timeout by default
-	$Poller = PublicInbox::Select->new;
 }
 
 sub _add_named_timer {
@@ -256,12 +255,19 @@ sub sigset_prep ($$$) {
 	$ret;
 }
 
-sub allowset ($) { sigset_prep $_[0], 'fillset', 'delset' }
-sub unblockset ($) { sigset_prep $_[0], 'emptyset', 'addset' }
+sub allowset (@) {
+	my $ret = POSIX::SigSet->new;
+	$ret->fillset or die "fillset: $!";
+	for (@_) {
+		my $num = $SIGNUM{$_} // POSIX->can("SIG$_")->();
+		$ret->delset($num) or die "delset ($_ => $num): $!";
+	}
+	for (@UNBLOCKABLE) { $ret->delset($_) or die "delset ($_): $!" }
+	$ret;
+}
 
 sub allow_sigs (@) {
-	my @signames = @_;
-	my $tmp = allowset(\@signames);
+	my $tmp = allowset @_;
 	sig_setmask($tmp, my $old = POSIX::SigSet->new);
 	on_destroy \&sig_setmask, $old;
 }
@@ -271,32 +277,16 @@ sub allow_sigs (@) {
 sub event_loop (;$$) {
 	my ($sig, $oldset) = @_;
 	$Poller //= _InitPoller();
-	require PublicInbox::Sigfd if $sig;
-	my $sigfd = $sig ? PublicInbox::Sigfd->new($sig) : undef;
 	local $SIG{PIPE} = 'IGNORE';
 	local @SIG{keys %$sig} = values(%$sig) if $sig;
-	if ($sigfd && $sigfd->{kq_sigs}) {
-		# Unlike Linux signalfd, EVFILT_SIGNAL can't handle
-		# signals received before the filter is created,
-		# so we peek at signals here.
-		my $restore = allow_sigs keys %$sig;
-		select undef, undef, undef, 0; # check sigs
-	}
-	if (!$sigfd && $sig) {
-		# wake up every second to accept signals if we don't
-		# have signalfd or IO::KQueue:
-		sig_setmask($oldset) if $oldset;
-		sigprocmask(SIG_UNBLOCK, unblockset($sig)) or
-			die "SIG_UNBLOCK: $!";
-		$loop_timeout = 1000;
-	}
-	$_[0] = $sigfd = $sig = undef; # $_[0] == sig
+	$Poller->prepare_signals($sig, $oldset) if $sig;
+	$_[0] = $sig = undef; # $_[0] == sig
 	local $in_loop = 1;
 	do {
 		my $timeout = RunTimers();
 
 		# grab whatever FDs are ready
-		$Poller->ep_wait($timeout, \@active);
+		$Poller->ep_wait($timeout, \@active, $oldset);
 
 		# map all FDs to their associated Perl object
 		@active = @FD_MAP[@active];
@@ -374,7 +364,7 @@ sub ds_close ($) {
 	delete $self->{wbuf};
 	$FD_MAP[fileno($sock)] = undef;
 
-	!$Poller->ep_del($sock); # stop getting notifications
+	$Poller ? !$Poller->ep_del($sock) : 1; # stop getting notifications
 }
 
 # portable, non-thread-safe sendfile emulation (no pread, yet)
@@ -405,7 +395,7 @@ sub epbit ($$) { # (sock, default)
 
 sub epwait ($$) {
 	my ($io, $ev) = @_;
-	$Poller->ep_mod($io, $ev) and croak("EPOLL_CTL_MOD($io): $!");
+	$Poller and $Poller->ep_mod($io, $ev) and croak "EPOLL_CTL_MOD $io: $!";
 }
 
 # returns 1 if done, 0 if incomplete
@@ -724,14 +714,6 @@ sub fork_persist () {
 	}
 	$pid;
 }
-
-package PublicInbox::DummyPoller; # only used during Reset
-use v5.12;
-
-sub ep_del {}
-no warnings 'once';
-*ep_add = \&ep_del;
-*ep_mod = \&ep_del;
 
 1;
 

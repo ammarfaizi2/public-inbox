@@ -88,8 +88,9 @@ New features
 
 * awaitpid (waitpid wrapper) support for reaping dead children
 
-* reliable signal wakeups are supported via signalfd on Linux,
-  EVFILT_SIGNAL on *BSDs via IO::KQueue.
+* reliable signal wakeups are supported via epoll_pwait on Linux,
+  EVFILT_SIGNAL on *BSDs via IO::KQueue  (signalfd was used in
+  public-inbox <= 1.9)
 
 Removed features
 

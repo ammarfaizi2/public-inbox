@@ -36,7 +36,7 @@ for my $t (0..1) {
 syswrite($y, '1') == 1 or die;
 is($p->ep_add($x, EPOLLIN|EPOLLONESHOT), 0, 'EPOLLIN|EPOLLONESHOT add');
 $p->ep_wait(-1, $events);
-is(scalar @$events, 2, 'epoll_wait has 2 ready');
+is(scalar @$events, 2, 'ep_wait has 2 ready');
 my @fds = sort @$events;
 my @exp = sort((fileno($r), fileno($x)));
 is_deeply(\@fds, \@exp, 'got both ready FDs');

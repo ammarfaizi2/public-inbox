@@ -19,7 +19,7 @@ my $do_scan = 1;
 GetOptions('scan!' => \$do_scan, # undocumented, testing only
 	'help|h' => \(my $show_help)) or do { print STDERR $help; exit 1 };
 if ($show_help) { print $help; exit 0 };
-PublicInbox::DS::block_signals();
+my $oldset = PublicInbox::DS::block_signals();
 STDOUT->autoflush(1);
 STDERR->autoflush(1);
 local $0 = $0; # local since this script may be eval-ed
@@ -29,7 +29,6 @@ my $reload = sub {
 	$watch->quit;
 	$watch = PublicInbox::Watch->new(PublicInbox::Config->new);
 	if ($watch) {
-		$watch->{sig} = $prev->{sig}; # prevent redundant signalfd
 		warn "# reloaded\n";
 	} else {
 		warn("E: reloading failed\n");
@@ -55,9 +54,8 @@ if ($watch) {
 		CHLD => \&PublicInbox::DS::enqueue_reap,
 	};
 	$sig->{QUIT} = $sig->{TERM} = $sig->{INT} = $quit;
-	local @SIG{keys %$sig} = values(%$sig); # for non-signalfd/kqueue
 
 	# --no-scan is only intended for testing atm, undocumented.
 	PublicInbox::DS::requeue($scan) if $do_scan;
-	$watch->watch($sig) while ($watch);
+	$watch->watch($sig, $oldset) while ($watch);
 }

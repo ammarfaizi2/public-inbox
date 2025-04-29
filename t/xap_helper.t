@@ -182,7 +182,6 @@ unless ($ENV{TEST_XH_CXX_ONLY}) {
 			PublicInbox::XapHelper::start('-j0')]);
 	($ar, my $s) = $test->($^X, qw[-w -MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j1')]);
-	no_pollerfd($ar->{pid});
 }
 SKIP: {
 	my $cmd = eval {

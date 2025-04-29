@@ -416,11 +416,10 @@ sub watch_imap_idle_1 ($$$) {
 sub watch_atfork_child ($) {
 	my ($self) = @_;
 	delete @$self{qw(dir_idle pids scan_q)};
-	my $sig = delete $self->{sig};
-	$sig->{CHLD} = $sig->{HUP} = $sig->{USR1} = 'DEFAULT';
+	$SIG{CHLD} = $SIG{HUP} = $SIG{USR1} = 'DEFAULT';
 	# TERM/QUIT/INT call ->quit, which works in both parent+child
-	@SIG{keys %$sig} = values %$sig;
-	PublicInbox::DS::sig_setmask(PublicInbox::DS::allowset($sig));
+	PublicInbox::DS::sig_setmask(
+		PublicInbox::DS::allowset(qw(QUIT TERM INT CHLD HUP USR1)));
 }
 
 sub watch_atfork_parent ($) { _done_for_now($_[0]) }
@@ -560,9 +559,7 @@ sub watch_nntp_init ($$) {
 sub quit_inprogress { !$_[0]->quit_done } # post_loop_do CB
 
 sub watch { # main entry point
-	my ($self, $sig) = @_;
-	my $first_sig;
-	$self->{sig} //= ($first_sig = $sig);
+	my ($self, $sig, $oldset) = @_;
 	my $poll = {}; # intvl_seconds => [ uri1, uri2 ]
 	watch_imap_init($self, $poll) if $self->{imap};
 	watch_nntp_init($self, $poll) if $self->{nntp};
@@ -572,7 +569,7 @@ sub watch { # main entry point
 	}
 	watch_fs_init($self) if $self->{d_re};
 	local @PublicInbox::DS::post_loop_do = (\&quit_inprogress, $self);
-	PublicInbox::DS::event_loop($first_sig); # calls ->event_step
+	PublicInbox::DS::event_loop($sig, $oldset); # calls ->event_step
 	_done_for_now($self);
 }
 
