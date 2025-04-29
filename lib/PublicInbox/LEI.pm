@@ -1157,11 +1157,14 @@ sub accept_dispatch { # Listener {post_accept} callback
 	my ($sock) = @_; # ignore other
 	$sock->autoflush(1);
 	my $self = bless { sock => $sock }, __PACKAGE__;
-	poll_in $sock, 60_000 or
-		return send_gently $sock, 'timed out waiting to recv FDs';
-	# (4096 * 33) >MAX_ARG_STRLEN
-	my @fds = $PublicInbox::IPC::recv_cmd->($sock, my $buf, 4096 * 33) or
-		return; # EOF
+	my (@fds, $buf);
+	do {
+		poll_in $sock, 60_000 or return send_gently $sock,
+						'timed out waiting to recv FDs';
+		# (4096 * 33) >MAX_ARG_STRLEN
+		@fds = $PublicInbox::IPC::recv_cmd->($sock, $buf, 4096 * 33)
+			or return; # EOF
+	} while (!defined($fds[0]) && $! == EAGAIN);
 	if (!defined($fds[0])) {
 		warn(my $msg = "recv_cmd failed: $!");
 		return send_gently $sock, $msg;
