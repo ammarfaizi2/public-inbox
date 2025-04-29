@@ -318,7 +318,10 @@ EOM
 		open STDERR, '>&', $fh;
 		STDERR->autoflush(1);
 		STDOUT->autoflush(1);
-		eval 'use Inline C => $all_libc, BUILD_NOISY => 1';
+		eval {
+			require Inline;
+			Inline->import(C => $all_libc, BUILD_NOISY => 1);
+		};
 		my $err = $@;
 		open(STDERR, '>&', $olderr);
 		open(STDOUT, '>&', $oldout);
