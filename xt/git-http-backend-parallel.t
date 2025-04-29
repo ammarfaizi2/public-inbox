@@ -10,7 +10,6 @@ use File::Path qw(remove_tree);
 use PublicInbox::IO qw(write_file try_cat);
 use PublicInbox::Spawn qw(spawn);
 use PublicInbox::Git qw(git_exe);
-require PublicInbox::Sigfd;
 my $git_dir = $ENV{GIANT_GIT_DIR} //
 	plan 'skip_all' => 'GIANT_GIT_DIR not defined';
 require_mods qw(-httpd psgi);
@@ -55,13 +54,10 @@ my $run_clones = sub {
 	\%chld_status;
 };
 
-my $sigfd = PublicInbox::Sigfd->new;
 my $reload_cfg = sub {
 	write_file '>>', $henv->{PI_CONFIG}, @_;
 	kill 'HUP', $PublicInbox::TestCommon::CURRENT_DAEMON->{pid};
-	# signalfd/EVFILT_SIGNAL platforms should handle signals more
-	# predictably and not need tick
-	tick(1) unless $sigfd;
+	tick(1) unless require_fast_reliable_signals;
 };
 
 my $ck_503 = sub {

@@ -11,7 +11,6 @@ use autodie qw(close);
 require_mods qw(-httpd);
 use IO::Socket::UNIX;
 use POSIX qw(mkfifo);
-require PublicInbox::Sigfd;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $unix = "$tmpdir/unix.sock";
 my $psgi = './t/httpd-corner.psgi';
@@ -97,11 +96,6 @@ check_sock($unix);
 	ok(-S $unix, 'unix socket still exists');
 }
 
-# portable Perl can delay or miss signal dispatches due to races,
-# so disable some tests on systems lacking signalfd(2) or EVFILT_SIGNAL
-my $has_sigfd = PublicInbox::Sigfd->new({}) ? 1 : $ENV{TEST_UNRELIABLE};
-PublicInbox::DS::Reset() if $has_sigfd;
-
 sub delay_until {
 	my ($cond, $msg) = @_;
 	my $end = time + 30;
@@ -114,7 +108,7 @@ sub delay_until {
 
 SKIP: {
 	require_mods('Net::Server::Daemonize', 52);
-	$has_sigfd or skip('signalfd / EVFILT_SIGNAL not available', 52);
+	require_fast_reliable_signals 1;
 	my $pid_file = "$tmpdir/pid";
 	my $read_pid = sub {
 		my $f = shift;

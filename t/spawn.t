@@ -4,7 +4,6 @@
 use v5.12;
 use Test::More;
 use PublicInbox::Spawn qw(which spawn popen_rd run_qx);
-require PublicInbox::Sigfd;
 require PublicInbox::DS;
 use PublicInbox::OnDestroy;
 my $rlimit_map = PublicInbox::Spawn->can('rlimit_map');

@@ -32,6 +32,7 @@ BEGIN {
 		tcp_host_port test_lei lei lei_ok $lei_out $lei_err $lei_opt
 		test_httpd no_httpd_errors xbail require_cmd is_xdeeply tail_f
 		ignore_inline_c_missing no_pollerfd no_coredump cfg_new
+		require_fast_reliable_signals
 		strace strace_inject lsof_pid oct_is $find_xh_pid);
 	require Test::More;
 	my @methods = grep(!/\W/, @Test::More::EXPORT);
@@ -59,6 +60,18 @@ sub check_broken_tmpfs () {
 	diag 'EVFILT_VNODE + tmpfs is broken on dragonfly <= 6.4 (have: '.
 		sprintf('%vd', kernel_version).')';
 	1;
+}
+
+sub require_fast_reliable_signals (;$) {
+	state $ok = do {
+		require PublicInbox::Sigfd;
+		my $s = PublicInbox::Sigfd->new({}) ? 1 : $ENV{TEST_UNRELIABLE};
+		PublicInbox::DS->Reset;
+		$s;
+	};
+	return $ok if $ok || defined(wantarray);
+	my $m = "fast, reliable signals not available(\$^O=$^O)";
+	@_ ? skip($m, 1) : plan(skip_all => $m);
 }
 
 sub require_bsd (;$) {

@@ -1358,7 +1358,6 @@ sub eidx_watch { # public-inbox-extindex --watch main loop
 	require PublicInbox::InboxIdle;
 	require PublicInbox::DS;
 	require PublicInbox::Syscall;
-	require PublicInbox::Sigfd;
 	my $idler = PublicInbox::InboxIdle->new($self->{cfg});
 	if (!$self->{cfg}) {
 		$idler->watch_inbox($_) for (@{ibx_sorted($self, 'active')});
