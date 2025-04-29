@@ -27,6 +27,7 @@ my $sock = tcp_server();
 my @zmods = qw(PublicInbox::GzipFilter IO::Uncompress::Gunzip);
 my $base_url = 'http://'.tcp_host_port($sock);
 use Config;
+local $SIG{PIPE} = 'IGNORE';
 
 # Make sure we don't clobber socket options set by systemd or similar
 # using socket activation:
@@ -196,10 +197,14 @@ if ('test rejected trailers') {
 	"Content-Length: 11\r\nTrailer: a\r\n".$chunk_body."a: b\r\n"]
 	) {
 		my ($d, $req) = @$t;
-		my $c = $mkreq->($sock, $d, $req."\r\n");
-		poll_in $c, 30_000 or Carp::croak "timeout";
-		my $buf = do { local $/ = "\r\n\r\n"; <$c> };
-		like $buf, qr!^HTTP/1\.. 400\b!, "$d rejected";
+		my $c = eval { $mkreq->($sock, $d, $req."\r\n") };
+		if ($@) {
+			ok $!{EPIPE}, "got EPIPE on $d";
+		} else {
+			poll_in $c, 30_000 or Carp::croak "timeout";
+			my $buf = do { local $/ = "\r\n\r\n"; <$c> };
+			like $buf, qr!^HTTP/1\.. 400\b!, "$d rejected";
+		}
 	}
 }
 
@@ -310,7 +315,6 @@ my $check_400 = sub {
 };
 
 {
-	local $SIG{PIPE} = 'IGNORE';
 	my $conn = $mkreq->($sock, 'excessive header',
 		"GET /callback HTTP/1.0\r\n");
 	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
@@ -586,7 +590,6 @@ SKIP: {
 
 # various DoS attacks against the chunk parser:
 {
-	local $SIG{PIPE} = 'IGNORE';
 	my $conn = $mkreq->($sock, '1.1 chunk header excessive',
 		"PUT /sha1 HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n");
 	setsockopt $conn, IPPROTO_TCP, TCP_NODELAY, 1;
