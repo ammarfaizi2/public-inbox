@@ -15,6 +15,7 @@ use IO::KQueue;
 use Errno qw(EAGAIN);
 use PublicInbox::Syscall qw(EPOLLONESHOT EPOLLIN EPOLLOUT EPOLLET %SIGNUM);
 use POSIX ();
+use PublicInbox::OnDestroy ();
 
 sub EV_DISPATCH () { 0x0080 }
 
