@@ -52,8 +52,8 @@ sub translate {
 	while ($lbuf =~ s/\A([^\0]+)\0\n//s) {
 		utf8_maybe($bdy = $1);
 		if ($is_tag) {
-			my %r;
-			eval "$bdy";
+			my %r; # filled by eval:
+			eval "$bdy"; # `git for-each-ref --perl' output
 			for (qw(contents:subject contents:body)) {
 				$r{$_} =~ /\S/ or delete($r{$_})
 			}
