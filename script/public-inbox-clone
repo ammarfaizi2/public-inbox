@@ -54,9 +54,8 @@ require PublicInbox::LeiMirror;
 $url = PublicInbox::LeiExternal::ext_canonicalize($url);
 my $lei = bless {
 	env => \%ENV, opt => $opt, cmd => 'public-inbox-clone',
-	0 => \*STDIN, 2 => \*STDERR,
+	0 => \*STDIN, 1 => \*STDOUT, 2 => \*STDERR,
 }, 'PublicInbox::LEI';
-open $lei->{1}, '+<&=', 1 or die "dup: $!";
 open $lei->{3}, '.' or die "open . $!";
 my $mrr = bless {
 	lei => $lei,
