@@ -15,6 +15,7 @@
 package PublicInbox::HlMod;
 use strict;
 use v5.10.1;
+use autodie qw(open);
 use highlight; # SWIG-generated stuff
 use PublicInbox::Hval qw(src_escape ascii_html);
 my $hl;
@@ -22,7 +23,7 @@ my $hl;
 sub _parse_filetypes ($) {
 	my $ft_conf = $_[0]->getFiletypesConfPath('filetypes') or
 				die 'filetypes.conf not found by highlight';
-	open my $fh, '<', $ft_conf or die "failed to open($ft_conf): $!";
+	open my $fh, '<', $ft_conf;
 	local $/;
 	my $cfg = <$fh>;
 	my %ext2lang;

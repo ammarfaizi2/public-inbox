@@ -3,7 +3,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
-use autodie qw(seek);
+use autodie qw(open seek);
 use PublicInbox::TestCommon;
 use List::Util qw(shuffle);
 use PublicInbox::Eml;
@@ -46,7 +46,7 @@ my $check_fmt = sub {
 	my $fmt = shift;
 	my @order = shuffle(keys %raw);
 	my $eml2mbox = PublicInbox::LeiToMail->can("eml2$fmt");
-	open my $fh, '+>', undef or BAIL_OUT "open: $!";
+	open my $fh, '+>', undef;
 	for my $k (@order) {
 		my $eml = PublicInbox::Eml->new($raw{$k});
 		my $buf = $eml2mbox->($eml);
@@ -104,7 +104,7 @@ EOM
 	# chop($no_blank_eom) eq "\n" or BAIL_OUT 'broken LF';
 	for my $variant (qw(mboxrd mboxo)) {
 		my @x;
-		open my $fh, '<', \$no_blank_eom or BAIL_OUT 'PerlIO::scalar';
+		open my $fh, '<', \$no_blank_eom;
 		$reader->$variant($fh, sub { push @x, shift });
 		is_deeply($x[0]->{bdy}, \"body1\n", 'LF preserved in 1st');
 		is_deeply($x[1]->{bdy}, \"body2\n", 'no LF added in 2nd');
@@ -134,7 +134,7 @@ EOM
 	for my $m (qw(mboxrd mboxcl mboxcl2 mboxo)) {
 		my (@w, @x);
 		local $SIG{__WARN__} = sub { push @w, @_ };
-		open my $fh, '<', \$html or xbail 'PerlIO::scalar';
+		open my $fh, '<', \$html;
 		PublicInbox::MboxReader->$m($fh, sub {
 			push @x, $_[0]->as_string
 		});

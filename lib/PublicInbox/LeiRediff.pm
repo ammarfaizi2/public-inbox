@@ -6,6 +6,7 @@ package PublicInbox::LeiRediff;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::IPC PublicInbox::LeiInput);
+use autodie qw(open);
 use File::Temp 0.19 (); # 0.19 for ->newdir
 use PublicInbox::Spawn qw(run_wait popen_wr which);
 use PublicInbox::MsgIter qw(msg_part_text);
@@ -49,7 +50,7 @@ sub solve_1 ($$$) {
 		uarg => $self,
 		inboxes => [ $self->{lxs}->locals, @{$self->{rmt}} ],
 	}, 'PublicInbox::SolverGit';
-	open my $log, '+>', \(my $log_buf = '') or die "PerlIO::scalar: $!";
+	open my $log, '+>', \(my $log_buf = '');
 	$self->{lei}->{log_buf} = \$log_buf;
 	local $PublicInbox::DS::in_loop = 0; # waitpid synchronously
 	$solver->solve($self->{lei}->{env}, $log, $oid_want, $hints);

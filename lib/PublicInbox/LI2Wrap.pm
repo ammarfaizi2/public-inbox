@@ -7,11 +7,12 @@
 package PublicInbox::LI2Wrap;
 use v5.12;
 our @ISA = qw(Linux::Inotify2);
+use autodie qw(open);
 
 sub wrapclose {
 	my ($inot) = @_;
 	my $fd = $inot->fileno;
-	open my $fh, '<&=', $fd or die "open <&= $fd $!";
+	open my $fh, '<&=', $fd;
 	bless $inot, __PACKAGE__;
 }
 

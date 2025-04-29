@@ -4,6 +4,7 @@
 # parent class for LeiImport, LeiConvert, LeiIndex
 package PublicInbox::LeiInput;
 use v5.12;
+use autodie qw(open);
 use PublicInbox::DS;
 use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(which popen_rd);
@@ -215,8 +216,7 @@ sub input_path_url {
 		my $mhr = PublicInbox::MHreader->new($dn, $lei->{3});
 		$mhr->mh_read_one($n, $self->can('input_mh_cb'), $self);
 	} elsif (-f $input && $ifmt eq 'eml') {
-		open my $fh, '<', $input or
-					return $lei->fail("open($input): $!");
+		open my $fh, '<', $input; # autodie::open hits caller eval
 		$self->input_fh($ifmt, $fh, $input, @args);
 	} elsif (-f _) {
 		my $m = $lei->{opt}->{'lock'} //

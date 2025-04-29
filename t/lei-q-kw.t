@@ -2,6 +2,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict; use v5.10.1; use PublicInbox::TestCommon;
+use autodie qw(open);
 use POSIX qw(mkfifo);
 use Fcntl qw(SEEK_SET O_RDONLY O_NONBLOCK);
 use IO::Uncompress::Gunzip qw(gunzip);
@@ -70,7 +71,7 @@ SKIP: {
 	$cat = popen_rd(['cat', $o]);
 	lei_ok(qw(q m:qp@example.com -o), "mboxrd:$o");
 	my $buf = do { local $/; <$cat> };
-	open my $fh, '<', \$buf or BAIL_OUT $!;
+	open my $fh, '<', \$buf;
 	PublicInbox::MboxReader->mboxrd($fh, sub {
 		my ($eml) = @_;
 		$eml->header_set('Status', 'RO');
@@ -86,7 +87,7 @@ my $read_file = sub {
 			BAIL_OUT 'gunzip';
 		$buf;
 	} else {
-		open my $fh, '+<', $_[0] or BAIL_OUT $!;
+		open my $fh, '+<', $_[0];
 		do { local $/; <$fh> };
 	}
 };
@@ -115,7 +116,7 @@ for my $sfx ('', '.gz') {
 	$write_file->($o, $buf);
 	lei_ok(qw(q -a -o), "mboxrd:$o", qw(m:testmessage@example.com));
 	$buf = $read_file->($o);
-	open my $fh, '<', \$buf or BAIL_OUT "PerlIO::scalar $!";
+	open my $fh, '<', \$buf;
 	my %res;
 	PublicInbox::MboxReader->mboxrd($fh, sub {
 		my ($eml) = @_;
@@ -166,18 +167,18 @@ $o = "$ENV{HOME}/kwmboxrd";
 lei_ok(qw(q -o), "mboxrd:$o", "m:$m", @inc);
 
 # emulate MUA marking mboxrd message as unread
-open my $fh, '<', $o or BAIL_OUT;
+open my $fh, '<', $o;
 my $s = do { local $/; <$fh> };
 $s =~ s/^Status: RO\n/Status: O\nX-Status: AF\n/sm or
 	fail "failed to clear R flag in $s";
-open $fh, '>', $o or BAIL_OUT;
+open $fh, '>', $o;
 print $fh $s or BAIL_OUT;
 close $fh or BAIL_OUT;
 
 lei_ok(qw(q -o), "mboxrd:$o", 'm:bogus', @inc,
 	\'clobber mbox to import keywords');
 lei_ok(qw(q -o), "mboxrd:$o", "m:$m", @inc);
-open $fh, '<', $o or BAIL_OUT;
+open $fh, '<', $o;
 $s = do { local $/; <$fh> };
 like($s, qr/^Status: O\nX-Status: AF\n/ms,
 	'seen keyword gone in mbox, answered + flagged set');
@@ -212,7 +213,7 @@ my $in = $eml->as_string;
 lei_ok([qw(import -F eml --stdin)], undef, { 0 => \$in, %$lei_opt });
 is($lei_err, '', 'no errors from import');
 lei_ok(qw(q -f mboxrd), "m:$m");
-open $fh, '<', \$lei_out or BAIL_OUT $!;
+open $fh, '<', \$lei_out;
 my @res;
 PublicInbox::MboxReader->mboxrd($fh, sub { push @res, shift });
 is($res[0]->header('Status'), 'RO', 'seen kw set');
@@ -225,7 +226,7 @@ lei_ok([qw(import -F eml --stdin)], undef, { 0 => \$in, %$lei_opt });
 is($lei_err, '', 'no errors from 2nd import');
 lei_ok(qw(q -f mboxrd), "m:$m", 'l:another.example.com');
 my @another;
-open $fh, '<', \$lei_out or BAIL_OUT $!;
+open $fh, '<', \$lei_out;
 PublicInbox::MboxReader->mboxrd($fh, sub { push @another, shift });
 is($another[0]->header('Status'), 'RO', 'seen kw set');
 
@@ -246,7 +247,7 @@ is($another[0]->header('Status'), 'RO', 'seen kw set');
 	scalar(@p) == 1 or xbail('multiple when 1 expected', \@p);
 	like($p[0], qr/,PS/, 'passed (Forwarded) flag kept');
 	lei_ok(qw(q -o), "mboxrd:$o.mboxrd", "m:$m");
-	open $fh, '<', "$o.mboxrd" or xbail $!;
+	open $fh, '<', "$o.mboxrd";
 	my @res;
 	PublicInbox::MboxReader->mboxrd($fh, sub { push @res, shift });
 	scalar(@res) == 1 or xbail('multiple when 1 expected', \@res);

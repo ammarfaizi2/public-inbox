@@ -16,6 +16,7 @@
 package PublicInbox::GzipFilter;
 use strict;
 use parent qw(Exporter);
+use autodie qw(open);
 use Compress::Raw::Zlib qw(Z_OK);
 use PublicInbox::CompressNoop;
 use PublicInbox::Eml;
@@ -136,8 +137,7 @@ sub write {
 
 sub zfh {
 	$_[0]->{zfh} // do {
-		open($_[0]->{zfh}, '>>', \($_[0]->{pbuf} //= '')) or
-			die "open: $!";
+		open($_[0]->{zfh}, '>>', \($_[0]->{pbuf} //= ''));
 		$_[0]->{zfh}
 	};
 }
