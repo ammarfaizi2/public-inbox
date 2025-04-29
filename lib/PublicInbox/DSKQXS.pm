@@ -113,7 +113,7 @@ sub ep_del {
 	my ($self, $io, $ev) = @_;
 	my $kq = $_[0]->{kq} // return; # called in cleanup
 	my $fd = fileno($io);
-	$kq->EV_SET($fd, EVFILT_READ, EV_DISABLE);
+	eval { $kq->EV_SET($fd, EVFILT_READ, EV_DISABLE) };
 	eval { $kq->EV_SET($fd, EVFILT_WRITE, EV_DISABLE) };
 	0;
 }
