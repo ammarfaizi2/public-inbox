@@ -10,12 +10,13 @@ use PublicInbox::Syscall qw(EPOLLIN);
 sub consume {
 	my ($in, $cb, @args) = @_;
 	my $self = bless { cb => $cb, args => \@args }, __PACKAGE__;
-	eval { $self->SUPER::new($in, EPOLLIN) };
-	if ($@) { # regular file (but not w/ select|IO::Poll backends)
+	if (-p $in || -S _) {
+		$in->blocking(0);
+		$self->SUPER::new($in, EPOLLIN);
+	} else { # regular file (but not w/ select|IO::Poll backends)
+		$self->{sock} = $in;
 		$self->{-need_rq} = 1;
 		$self->requeue;
-	} elsif (-p $in || -S _) { # O_NONBLOCK for sockets and pipes
-		$in->blocking(0);
 	}
 	$self;
 }
