@@ -22,6 +22,7 @@ use PublicInbox::GitAsyncCat;
 use PublicInbox::Eml;
 use PublicInbox::Compat qw(uniqstr);
 use URI::Escape qw(uri_escape_utf8);
+use B qw(cstring); # unconditional quoting, unlike git_quote
 
 # POSIX requires _POSIX_ARG_MAX >= 4096, and xargs is required to
 # subtract 2048 bytes.  We also don't factor in environment variable
@@ -473,13 +474,24 @@ sub parse_ls_files ($$) {
 	my @ls = split(/\0/, $$bref);
 	my ($line, @extra) = grep(/\t\Q$di->{path_b}\E\z/, @ls);
 	scalar(@extra) and die 'BUG? extra files in index:',
-				(map { "\n\t".git_quote($_) } ($line, @extra));
-	$line // die 'BUG? no ', git_quote($di->{path_b}), ' in',
-				(map { "\n\t".git_quote($_) } @ls);
+				(map { "\n\t".cstring($_) } ($line, @extra));
+
+	# some MUAs add trailing whitespace:
+	if (!defined $line && (my $no_tws = $di->{path_b}) =~ s/(\s+)\z//s) {
+		my $rm_sp = $1;
+		($line, @extra) = grep /\t\Q$no_tws\E\z/, @ls;
+		if (defined $line) {
+			dbg($self, 'removed trailing space(es) from '.
+				cstring($di->{path_b}).' => '.cstring($no_tws));
+			$di->{path_b} = $no_tws;
+		}
+	}
+	$line // die 'BUG? no ', cstring($di->{path_b}), ' in',
+				(map { "\n\t".cstring($_) } @ls);
 	my ($info, $file) = split(/\t/, $line, 2);
 	my ($mode_b, $oid_b_full, $stage) = split(/ /, $info);
 	$file eq $di->{path_b} or die "BUG? index mismatch: file=",
-		git_quote($file), ' != path_b=', git_quote($di->{path_b});
+		cstring($file), ' != path_b=', cstring($di->{path_b});
 
 	dbg($self, "index at:\n$mode_b $oid_b_full\t".git_quote($file));
 	my $tmp_git = $self->{tmp_git} or die 'no git working tree';
