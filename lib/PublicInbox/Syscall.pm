@@ -24,6 +24,7 @@ use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
 our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
 our ($INOTIFY, %CONST);
+my $FSWORD_T = 'l!'; # for unpack, tested on x86 and x86-64, `q' on x32
 use List::Util qw(sum);
 
 # $VERSION = '0.25'; # Sys::Syscall version
@@ -125,7 +126,7 @@ if ($^O eq "linux") {
 		$SYS_epoll_ctl = 1073742057;
 		$SYS_epoll_pwait //= 0x40000000 + 281;
 		$SYS_renameat2 //= 0x40000000 + 316;
-		$SYS_fstatfs = 138;
+		$SYS_fstatfs = 0x40000000 + 138;
 		$SYS_sendmsg = 0x40000206;
 		$SYS_recvmsg = 0x40000207;
 		$SYS_writev = 0x40000204;
@@ -439,7 +440,7 @@ sub nodatacow_fh ($) {
 	my $buf = "\0" x 120;
 	syscall($SYS_fstatfs // return, fileno($fh), $buf) == 0 or
 		return warn("fstatfs: $!\n");
-	my $f_type = unpack('l!', $buf); # statfs.f_type is a signed word
+	my $f_type = unpack($FSWORD_T, $buf);
 	return if $f_type != 0x9123683E; # BTRFS_SUPER_MAGIC
 
 	$FS_IOC_GETFLAGS //
