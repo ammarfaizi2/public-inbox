@@ -116,8 +116,13 @@ SKIP: {
 	my @ss_u = grep /^u_str\s+LISTEN\s+\d+\s+\d+\s+\Q$usock\E\s+/, @ss_after;
 	xbail("multiple (or zero) `$usock' matches", \@ss_u) if @ss_u != 1;
 	@ss_u = split /\s+/, $ss_u[0];
-	is $ss_u[3], $nr, 'newly bound listener has expected backlog in Send-Q' or
-		diag explain(\@ss_after);
+	SKIP: {
+		$ss_u[3] == 0 and skip 'Send-Q column is 0 for Unix socket '.
+				'(try upgrading your kernel)', 1;
+		is $ss_u[3], $nr,
+			'newly bound listener has expected backlog in Send-Q'
+			or diag explain([\@ss_u, \@ss_after]);
+	}
 	do {
 		my ($scheme, $addr_port, $exp_backlog) = splice @exp, 0, 3;
 		my @l = grep /^tcp\s+LISTEN\s+\d+\s+\d+\s+\Q$addr_port\E\s+/, @ss_after;
