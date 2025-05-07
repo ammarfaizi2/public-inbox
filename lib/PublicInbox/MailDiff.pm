@@ -60,7 +60,7 @@ sub next_smsg ($) {
 		$ctx->write('</pre>', $ctx->_html_end);
 		return $ctx->close;
 	}
-	PublicInbox::DS::requeue($self) if $ctx->{env}->{'pi-httpd.async'};
+	PublicInbox::DS::requeue($self) if $ctx->{env}->{'pi-httpd.app'};
 }
 
 sub emit_msg_diff {
@@ -112,7 +112,7 @@ sub event_step {
 	my ($self) = @_;
 	eval {
 		my $ctx = $self->{ctx};
-		if ($ctx->{env}->{'pi-httpd.async'}) {
+		if ($ctx->{env}->{'pi-httpd.app'}) {
 			ibx_async_cat($ctx->{ibx}, $self->{smsg}->{blob},
 					\&diff_msg_i_async, $self);
 		} else {
@@ -128,7 +128,7 @@ sub event_step {
 
 sub begin_mail_diff {
 	my ($self) = @_;
-	if ($self->{ctx}->{env}->{'pi-httpd.async'}) {
+	if ($self->{ctx}->{env}->{'pi-httpd.app'}) {
 		PublicInbox::DS::requeue($self);
 	} else {
 		event_step($self) while $self->{smsg};

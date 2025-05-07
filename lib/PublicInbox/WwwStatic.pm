@@ -55,9 +55,9 @@ sub r ($;$) {
 sub getline_response ($$$$$) {
 	my ($env, $in, $off, $len, $path) = @_;
 	my $r = bless {}, __PACKAGE__;
-	if ($env->{'pi-httpd.async'}) { # public-inbox-httpd-only mode
+	if (my $http = $env->{'pi-httpd.client'}) { # public-inbox-only mode
 		$env->{'psgix.no-compress'} = 1; # do not chunk response
-		%$r = ( bypass => [$in, $off, $len, $env->{'psgix.io'}] );
+		%$r = ( bypass => [$in, $off, $len, $http] );
 	} else {
 		%$r = ( in => $in, off => $off, len => $len, path => $path );
 	}

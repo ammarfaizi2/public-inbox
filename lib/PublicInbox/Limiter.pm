@@ -81,7 +81,7 @@ sub _start_next { # on_destroy cb
 		$rec = shift @{$self->{run_queue}} or return;
 		($start_cb, $ctx, $fail_cb) = @$rec;
 		$ck = $ctx->{env}->{'pi-httpd.ckhup'} or last;
-		$ck->($ctx->{env}->{'psgix.io'}->{sock}) or last;
+		$ck->($ctx->{env}->{'psgix.io'}) or last;
 		$fail_cb->($ctx, 499, 'client disconnected');
 	}
 	_do_start $self, $start_cb, $ctx, $fail_cb;

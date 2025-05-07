@@ -78,7 +78,7 @@ sub async_next {
 
 sub scan_attach ($) { # public-inbox-httpd only
 	my ($ctx) = @_;
-	$ctx->{env}->{'psgix.io'}->{forward} = $ctx;
+	$ctx->{env}->{'pi-httpd.client'}->{forward} = $ctx;
 	$ctx->smsg_blob($ctx->{smsg});
 }
 
@@ -94,7 +94,7 @@ sub get_attach ($$$) {
 		return sub { # public-inbox-httpd-only
 			$ctx->{wcb} = $_[0];
 			scan_attach($ctx);
-		} if $ctx->{env}->{'pi-httpd.async'};
+		} if $ctx->{env}->{'pi-httpd.app'};
 		# generic PSGI:
 		$eml = $ctx->{ibx}->smsg_eml($ctx->{smsg});
 	} elsif (!$ctx->{ibx}->over) {

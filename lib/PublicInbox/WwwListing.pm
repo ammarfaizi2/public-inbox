@@ -156,7 +156,7 @@ sub response {
 						\&list_match_i, $re, $ctx);
 		sub {
 			$ctx->{-wcb} = $_[0]; # HTTP server callback
-			$ctx->{env}->{'pi-httpd.async'} ?
+			$ctx->{env}->{'pi-httpd.app'} ?
 					$iter->event_step : $iter->each_section;
 		}
 	}

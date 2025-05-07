@@ -31,7 +31,7 @@ my @GZIP_HDRS = qw(Vary Accept-Encoding Content-Encoding gzip);
 
 sub new { bless {}, shift } # qspawn filter
 
-# for Qspawn if using $env->{'pi-httpd.async'}
+# for Qspawn if using $env->{'pi-httpd.client'}
 sub attach {
 	my ($self, $http_out) = @_;
 	$self->{http_out} = $http_out; # PublicInbox::HTTP::{Chunked,Identity}
@@ -54,8 +54,7 @@ sub gzf_maybe ($$) { bless { gz => gz_or_noop(@_) }, __PACKAGE__ }
 sub psgi_response {
 	# $code may be an HTTP response code (e.g. 200) or a CODE ref (mbox_hdr)
 	my ($self, $code, $res_hdr) = @_;
-	if ($self->{env}->{'pi-httpd.async'}) {
-		my $http = $self->{env}->{'psgix.io'}; # PublicInbox::HTTP
+	if (my $http = $self->{env}->{'pi-httpd.client'}) {
 		$http->{forward} = $self;
 		sub {
 			my ($wcb) = @_; # -httpd provided write callback
@@ -98,7 +97,7 @@ sub gone { # what: search/over/mm
 	undef;
 }
 
-# for GetlineResponse (via Qspawn) when NOT using $env->{'pi-httpd.async'}
+# for GetlineResponse (via Qspawn) when NOT using $env->{'pi-httpd.client'}
 # Also used for ->getline callbacks
 sub translate {
 	my $self = shift; # $_[1] => input
@@ -181,7 +180,7 @@ sub bail {
 	my $self = shift;
 	carp @_;
 	my $env = $self->{env} or return;
-	my $http = $env->{'psgix.io'} or return; # client abort
+	my $http = $env->{'pi-httpd.client'} or return; # client abort
 	eval { $http->close }; # should hit our close
 	carp "E: error in http->close: $@" if $@;
 	eval { $self->close }; # just in case...
@@ -191,7 +190,7 @@ sub bail {
 # this is public-inbox-httpd-specific
 sub async_blob_cb { # git->cat_async callback
 	my ($bref, $oid, $type, $size, $self) = @_;
-	my $http = $self->{env}->{'psgix.io'}; # PublicInbox::HTTP
+	my $http = $self->{env}->{'pi-httpd.client'}; # PublicInbox::HTTP
 	$http->{forward} or return; # client aborted
 	my $smsg = $self->{smsg} or return bail($self, 'BUG: no smsg');
 	$type // return

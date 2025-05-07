@@ -83,7 +83,7 @@ sub response {
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server callback
 		($ctx->{www}->{pi_cfg}->ALL ||
-					!$ctx->{env}->{'pi-httpd.async'}) ?
+					!$ctx->{env}->{'pi-httpd.app'}) ?
 				$iter->each_section : $iter->event_step;
 	}
 }

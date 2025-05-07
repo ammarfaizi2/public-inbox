@@ -234,7 +234,7 @@ sub istream_cb { # InputStream callback
 
 sub _yield_start { # may run later, much later...
 	my ($self) = @_;
-	if ($self->{env}->{'pi-httpd.async'}) {
+	if ($self->{env}->{'pi-httpd.app'}) {
 		my $rpipe = $self->{rpipe};
 		PublicInbox::InputStream::consume($rpipe, \&istream_cb, $self);
 	} else {
@@ -254,7 +254,7 @@ sub _yield_start { # may run later, much later...
 #                          sub for the PSGI server to call
 #
 #   $env->{'qspawn.filter'} - filter object, responds to ->attach for
-#                             pi-httpd.async and ->translate for generic
+#                             pi-httpd.client and ->translate for generic
 #                             PSGI servers
 #
 # $limiter - the Limiter object to use (uses the def_limiter if not given)
@@ -264,7 +264,7 @@ sub _yield_start { # may run later, much later...
 #              and a string ref of the current buffer.  Returns an arrayref
 #              for PSGI responses.  2-element arrays in PSGI mean the
 #              body will be streamed, later, via writes (push-based) to
-#              psgix.io.  3-element arrays means the body is available
+#              pi-httpd.client.  3-element arrays means the body is available
 #              immediately (or streamed via ->getline (pull-based)).
 
 sub psgi_yield {

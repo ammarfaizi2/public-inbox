@@ -141,7 +141,7 @@ sub ext_msg {
 	ext_msg_ALL($ctx) // sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server write callback
 
-		if ($ctx->{env}->{'pi-httpd.async'}) {
+		if ($ctx->{env}->{'pi-httpd.app'}) {
 			require PublicInbox::ConfigIter;
 			my $iter = PublicInbox::ConfigIter->new(
 						$ctx->{www}->{pi_cfg},
@@ -181,7 +181,7 @@ sub finalize_exact {
 		push @{$ctx->{partial}}, [ $cur, $mids ];
 	} elsif ($ctx->{again} && length($mid) >= $MIN_PARTIAL_LEN) {
 		bless $ctx, __PACKAGE__;
-		if ($ctx->{env}->{'pi-httpd.async'}) {
+		if ($ctx->{env}->{'pi-httpd.app'}) {
 			$ctx->event_step;
 			return;
 		}

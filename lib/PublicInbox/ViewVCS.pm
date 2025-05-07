@@ -134,7 +134,7 @@ sub do_cat_async {
 	# favor git(1) over Lg2 (libgit2) for SHA-256 support
 	my $ctx = ref $arg eq 'ARRAY' ? $arg->[0] : $arg;
 	$ctx->{git}->cat_async($_, $cb, $arg) for @req;
-	if ($ctx->{env}->{'pi-httpd.async'}) {
+	if ($ctx->{env}->{'pi-httpd.app'}) {
 		$ctx->{git}->watch_async;
 	} else { # synchronous, generic PSGI
 		$ctx->{git}->cat_async_wait;
@@ -143,7 +143,7 @@ sub do_cat_async {
 
 sub do_check_async {
 	my ($ctx, $cb, @req) = @_;
-	if ($ctx->{env}->{'pi-httpd.async'}) {
+	if ($ctx->{env}->{'pi-httpd.app'}) {
 		async_check($ctx, $_, $cb, $ctx) for @req;
 	} else { # synchronous, generic PSGI
 		$ctx->{git}->check_async($_, $cb, $ctx) for @req;

@@ -774,7 +774,7 @@ sub event_step { # called via requeue
 	# gzf = PublicInbox::GzipFilter == $ctx
 	my $gzf = shift(@{$self->{-low_prio_q}}) // return;
 	PublicInbox::DS::requeue($self) if scalar(@{$self->{-low_prio_q}});
-	my $http = $gzf->{env}->{'psgix.io'}; # PublicInbox::HTTP
+	my $http = $gzf->{env}->{'pi-httpd.client'}; # PublicInbox::HTTP
 	$http->next_step($gzf->can('async_next'));
 }
 

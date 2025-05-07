@@ -157,7 +157,8 @@ sub app_dispatch {
 	sysseek($input, 0, SEEK_SET) if defined $input;
 	# note: NOT $self->{sock}, we want our close (+ PublicInbox::DS::close),
 	# to do proper cleanup:
-	$env->{'psgix.io'} = $self; # for ->close or async_pass
+	$env->{'psgix.io'} = $self->{sock}; # for pi-httpd.ckhup
+	$env->{'pi-httpd.client'} = $self; # for ->close or async_pass
 	my $res = Plack::Util::run_app($env->{'pi-httpd.app'}, $env);
 	eval {
 		if (ref($res) eq 'CODE') {

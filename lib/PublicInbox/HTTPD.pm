@@ -42,7 +42,7 @@ sub env_for ($$$) {
 		# this to limit git-http-backend(1) parallelism.
 		# We also check for the truthiness of this to
 		# detect when to use async paths for slow blobs
-		'pi-httpd.async' => 1,
+		# 'pi-httpd.client' => PublicInbox::HTTP object
 		'pi-httpd.app' => $self->{app},
 		'pi-httpd.warn_cb' => $self->{warn_cb},
 		'pi-httpd.ckhup' => $port ? \&PublicInbox::Daemon::tcp_hup :

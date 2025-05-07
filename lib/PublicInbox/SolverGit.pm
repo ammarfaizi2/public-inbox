@@ -175,7 +175,7 @@ sub solve_existing ($$) {
 	my $try = $want->{try_gits} //= [ @{$self->{gits}} ]; # array copy
 	my $git = $try->[0] // die 'BUG {try_gits} empty';
 
-	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+	if ($self->{psgi_env}->{'pi-httpd.app'}) {
 		async_check({ git => $git }, $want->{oid_b},
 				\&ck_existing_cb, [ $self, $want ]);
 		$git->schedule_cleanup;
@@ -396,7 +396,7 @@ sub do_finish ($) {
 
 	# let git disambiguate if oid_want was too short,
 	# but long enough to be unambiguous:
-	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+	if ($self->{psgi_env}->{'pi-httpd.app'}) {
 		async_check { git => $self->{tmp_git} }, $oid_want,
 				\&finish_cb, $self
 	} else {
@@ -451,7 +451,7 @@ sub event_step ($) {
 sub next_step ($) {
 	# if outside of public-inbox-httpd, caller is expected to be
 	# looping event_step, anyways
-	PublicInbox::DS::requeue($_[0]) if $_[0]->{psgi_env}->{'pi-httpd.async'}
+	PublicInbox::DS::requeue($_[0]) if $_[0]->{psgi_env}->{'pi-httpd.app'}
 }
 
 sub mark_found ($$$) {
@@ -495,7 +495,7 @@ sub parse_ls_files ($$) {
 
 	dbg($self, "index at:\n$mode_b $oid_b_full\t".git_quote($file));
 	my $tmp_git = $self->{tmp_git} or die 'no git working tree';
-	if ($self->{psgi_env}->{'pi-httpd.async'}) {
+	if ($self->{psgi_env}->{'pi-httpd.app'}) {
 		async_check { git => $tmp_git }, $oid_b_full,
 			\&ck_size_cb, $self
 	} else {
@@ -678,7 +678,7 @@ sub resolve_patch ($$) {
 
 	if (my $msgs = $want->{try_smsgs}) {
 		my $smsg = shift @$msgs;
-		if ($self->{psgi_env}->{'pi-httpd.async'}) {
+		if ($self->{psgi_env}->{'pi-httpd.app'}) {
 			return ibx_async_cat($want->{cur_ibx}, $smsg->{blob},
 						\&extract_diff_async,
 						[$self, $want, $smsg]);
@@ -744,7 +744,7 @@ sub solve ($$$$$) {
 	$self->{found} = {}; # { abbr => [ ::Git, oid, type, size, $di ] }
 
 	dbg($self, "solving $oid_want ...");
-	if ($env->{'pi-httpd.async'}) {
+	if ($env->{'pi-httpd.app'}) {
 		PublicInbox::DS::requeue($self);
 	} else {
 		event_step($self) while $self->{user_cb};
