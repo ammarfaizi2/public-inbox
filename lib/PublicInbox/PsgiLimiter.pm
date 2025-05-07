@@ -1,7 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: GPL-3.0+ <https://www.gnu.org/licenses/gpl-3.0.txt>
 # generic Plack/PSGI middleware to expose PublicInbox::Limiter, (see __END__)
-package PublicInbox::PlackLimiter;
+package PublicInbox::PsgiLimiter;
 use v5.12;
 use parent qw(Plack::Middleware);
 use PublicInbox::Limiter;
@@ -60,7 +60,7 @@ __END__
 
 =head1 NAME
 
-PublicInbox::PlackLimiter - limit concurrency to parts of a PSGI app
+PublicInbox::PsgiLimiter - limit concurrency to parts of a PSGI app
 
 =head1 SYNOPSIS
 
@@ -69,12 +69,12 @@ PublicInbox::PlackLimiter - limit concurrency to parts of a PSGI app
 	builder {
 
 	# by default, only 2 requests may be processed at once:
-	enable '+PublicInbox::PlackLimiter';
+	enable '+PublicInbox::PsgiLimiter';
 
 	# You will likely only want to limit certain expensive endpoints,
 	# while allowing maximum concurrency for inexpensive endpoints.
 	# You can do that by passing a `match_cb' parameter:
-	enable '+PublicInbox::PlackLimiter',
+	enable '+PublicInbox::PsgiLimiter',
 		# some expensive endpoints for my public-inbox instance, YMMV
 		match_cb => sub {
 			my ($env) = @_;
@@ -96,7 +96,7 @@ PublicInbox::PlackLimiter - limit concurrency to parts of a PSGI app
 
 =head1 DESCRIPTION
 
-PublicInbox::PlackLimiter lets a sysadmin limit concurrency to certain
+PublicInbox::PsgiLimiter lets a sysadmin limit concurrency to certain
 expensive endpoints while allowing the normal concurrency level of the
 server to run inexpensive requests.
 
