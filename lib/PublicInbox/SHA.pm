@@ -20,43 +20,42 @@ our @ISA;
 
 BEGIN {
 	push @ISA, 'Exporter';
-	unless (eval(<<'EOM')) {
-use Net::SSLeay 1.43;
-my %SHA = (
-	1 => Net::SSLeay::EVP_sha1(),
-	256 => Net::SSLeay::EVP_sha256(),
-);
+	eval {
+		require Net::SSLeay;
+		Net::SSLeay->import(1.43); # for Net::SSLeay::EVP_*
+		my %SHA = (
+			1 => Net::SSLeay::EVP_sha1(),
+			256 => Net::SSLeay::EVP_sha256(),
+		);
 
-sub new {
-	my ($cls, $n) = @_;
-	my $mdctx = Net::SSLeay::EVP_MD_CTX_create();
-	Net::SSLeay::EVP_DigestInit($mdctx, $SHA{$n}) or
-			die "EVP_DigestInit $n: $!";
-	bless \$mdctx, $cls;
-}
+		*new = sub {
+			my ($cls, $n) = @_;
+			my $mdctx = Net::SSLeay::EVP_MD_CTX_create();
+			Net::SSLeay::EVP_DigestInit($mdctx, $SHA{$n}) or
+					die "EVP_DigestInit $n: $!";
+			bless \$mdctx, $cls;
+		};
 
-sub add {
-	my $self = shift;
-	Net::SSLeay::EVP_DigestUpdate($$self, $_) for @_;
-	$self;
-}
+		*add = sub {
+			my $self = shift;
+			Net::SSLeay::EVP_DigestUpdate($$self, $_) for @_;
+			$self;
+		};
 
-sub digest { Net::SSLeay::EVP_DigestFinal(${$_[0]}) };
-sub hexdigest { unpack('H*', Net::SSLeay::EVP_DigestFinal(${$_[0]})) }
-sub DESTROY { Net::SSLeay::EVP_MD_CTX_destroy(${$_[0]}) };
-
-sub sha1_hex { unpack('H*', Net::SSLeay::SHA1($_[0])) };
-sub sha256_hex { unpack('H*', Net::SSLeay::SHA256($_[0])) };
-*sha256 = \&Net::SSLeay::SHA256;
-# end of eval
-EOM
-	require Digest::SHA; # stdlib fallback
-	push @ISA, 'Digest::SHA';
-	*sha1_hex = \&Digest::SHA::sha1_hex;
-	*sha256_hex = \&Digest::SHA::sha256_hex;
-	*sha256 = \&Digest::SHA::sha256;
-}
-
+		*digest = sub { Net::SSLeay::EVP_DigestFinal(${$_[0]}) };
+		*hexdigest = sub { unpack 'H*', digest($_[0]) };
+		*DESTROY = sub { Net::SSLeay::EVP_MD_CTX_destroy(${$_[0]}) };
+		*sha1_hex = sub { unpack 'H*', Net::SSLeay::SHA1($_[0]) };
+		*sha256_hex = sub { unpack 'H*', Net::SSLeay::SHA256($_[0]) };
+		*sha256 = \&Net::SSLeay::SHA256;
+	}; # end of eval
+	if ($@) { # Net::SSLeay unavailable
+		require Digest::SHA; # stdlib fallback
+		push @ISA, 'Digest::SHA';
+		*sha1_hex = \&Digest::SHA::sha1_hex;
+		*sha256_hex = \&Digest::SHA::sha256_hex;
+		*sha256 = \&Digest::SHA::sha256;
+	}
 } # /BEGIN
 
 sub sha_all ($$) {
