@@ -164,7 +164,7 @@ sub mset_iter ($$) {
 }
 
 sub cmd_mset { # to be used by WWW + IMAP
-	my ($req, $qry_str) = @_;
+	my ($req, $qry_str, @rest) = @_;
 	$qry_str // die 'usage: mset [OPTIONS] QRY_STR';
 	my $opt = { limit => $req->{'m'}, offset => $req->{o} // 0 };
 	$opt->{relevance} = 1 if $req->{r};
@@ -177,7 +177,12 @@ sub cmd_mset { # to be used by WWW + IMAP
 	$opt->{uid_range} = \@uid_range if grep(defined, @uid_range) == 2;
 	$opt->{threadid} = $req->{T} if defined $req->{T};
 	my $mset = $req->{srch}->mset($qry_str, $opt);
-	say { $req->{0} } 'mset.size=', $mset->size,
+	my $size = $mset->size;
+	while ($size == 0 && @rest) {
+		$mset = $req->{srch}->mset(shift @rest, $opt);
+		$size = $mset->size;
+	}
+	say { $req->{0} } 'mset.size=', $size,
 		' .get_matches_estimated=', $mset->get_matches_estimated;
 	for my $it ($mset->items) {
 		for (my $t = 10; $t > 0; --$t) {

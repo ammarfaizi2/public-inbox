@@ -18,10 +18,16 @@ static bool cmd_mset(struct req *req)
 	CLEANUP_FBUF struct fbuf wbuf = {};
 	Xapian::MSet mset = req->code_search ? commit_mset(req, qry_str) :
 						mail_mset(req, qry_str);
+	unsigned long long size = mset.size();
+	while (size == 0 && ++optind < req->argc) {
+		qry_str = req->argv[optind];
+		mset = req->code_search ? commit_mset(req, qry_str) :
+					mail_mset(req, qry_str);
+		size = mset.size();
+	}
 	fbuf_init(&wbuf);
 	fprintf(wbuf.fp, "mset.size=%llu .get_matches_estimated=%llu\n",
-		(unsigned long long)mset.size(),
-		(unsigned long long)mset.get_matches_estimated());
+		size, (unsigned long long)mset.get_matches_estimated());
 	int fd = fileno(req->fp[0]);
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
 		off_t off = ftello(wbuf.fp);

@@ -247,29 +247,34 @@ for my $n (@NO_CXX) {
 	$err = do { local $/; <$err_r> };
 	is $err, "mset.size=6 nr_out=5\n", "got expected status ($xhc->{impl})";
 
-	pipe $r, $w;
-	$xhc->mkreq([$w], qw(mset), @ibx_shard_args,
-				'dfn:lib/PublicInbox/Search.pm');
-	close $w;
-	chomp((my $hdr, @res) = readline($r));
-	like $hdr, qr/\bmset\.size=1\b/,
-		"got expected header via mset ($xhc->{impl}";
-	is scalar(@res), 1, 'got one result';
-	@res = split /\0/, $res[0];
-	{
-		my $doc = $v2->search->xdb->get_document($res[0]);
-		ok $doc, 'valid document retrieved';
-		my @q = PublicInbox::Search::xap_terms('Q', $doc);
-		is_deeply \@q, [ $mid ], 'docid usable';
+	# ensure we can try multiple queries and return the first one
+	# with >0 matches
+	for my $try ([[], []], [['thisbetternotmatchanything'], ['z:0..']]) {
+		pipe $r, $w;
+		$xhc->mkreq([$w], qw(mset), @ibx_shard_args, @{$try->[0]},
+					'dfn:lib/PublicInbox/Search.pm',
+					@{$try->[1]});
+		close $w;
+		chomp((my $hdr, @res) = readline($r));
+		like $hdr, qr/\bmset\.size=1\b/,
+			"got expected header via mset ($xhc->{impl}";
+		is scalar(@res), 1, 'got one result';
+		@res = split /\0/, $res[0];
+		{
+			my $doc = $v2->search->xdb->get_document($res[0]);
+			ok $doc, 'valid document retrieved';
+			my @q = PublicInbox::Search::xap_terms('Q', $doc);
+			is_deeply \@q, [ $mid ], 'docid usable';
+		}
+		ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
+		is scalar(@res), 3, 'only 3 columns in result';
 	}
-	ok $res[1] > 0 && $res[1] <= 100, 'pct > 0 && <= 100';
-	is scalar(@res), 3, 'only 3 columns in result';
 
 	pipe $r, $w;
 	$xhc->mkreq([$w], qw(mset), @ibx_shard_args,
 				'dt:19700101'.'000000..');
 	close $w;
-	chomp(($hdr, @res) = readline($r));
+	chomp((my $hdr, @res) = readline($r));
 	like $hdr, qr/\bmset\.size=6\b/,
 		"got expected header via multi-result mset ($xhc->{impl}";
 	is(scalar(@res), 6, 'got 6 rows');
