@@ -104,6 +104,13 @@ sub ext_msg_step {
 	}
 }
 
+sub try_partial ($) {
+	my ($ctx) = @_;
+	bless $ctx, __PACKAGE__; # for ExtMsg->event_step
+	return $ctx->event_step if $ctx->{env}->{'pi-httpd.app'};
+	$ctx->event_step(1) while $ctx->{-wcb};
+}
+
 sub ext_msg_ALL ($) {
 	my ($ctx) = @_;
 	my $ALL = $ctx->{www}->{pi_cfg}->ALL or return;
@@ -125,12 +132,11 @@ sub ext_msg_ALL ($) {
 	return exact($ctx) if $ctx->{found};
 
 	# fall back to partial MID matching
-	for my $ibxish ($ctx->{ibx}, $ALL) {
-		my $mids = search_partial($ibxish, $ctx->{mid}) or next;
-		push @{$ctx->{partial}}, [ $ibxish, $mids ];
-		last if ($ctx->{n_partial} += scalar(@$mids)) >= PARTIAL_MAX;
+	$ctx->{again} = [ $ctx->{ibx}, $ALL ];
+	sub {
+		$ctx->{-wcb} = $_[0]; # HTTP server write callback
+		try_partial $ctx;
 	}
-	partial_response($ctx);
 }
 
 # only public entry point
@@ -170,7 +176,7 @@ sub event_step {
 sub finalize_exact {
 	my ($ctx) = @_;
 
-	return $ctx->{-wcb}->(exact($ctx)) if $ctx->{found};
+	return delete($ctx->{-wcb})->(exact($ctx)) if $ctx->{found};
 
 	# fall back to partial MID matching
 	my $mid = $ctx->{mid};
@@ -180,14 +186,7 @@ sub finalize_exact {
 		$ctx->{n_partial} = scalar(@$mids);
 		push @{$ctx->{partial}}, [ $cur, $mids ];
 	} elsif ($ctx->{again} && length($mid) >= $MIN_PARTIAL_LEN) {
-		bless $ctx, __PACKAGE__;
-		if ($ctx->{env}->{'pi-httpd.app'}) {
-			$ctx->event_step;
-			return;
-		}
-
-		# synchronous fall-through
-		$ctx->event_step while @{$ctx->{again}};
+		return try_partial $ctx;
 	}
 	finalize_partial($ctx);
 }
@@ -236,7 +235,7 @@ sub partial_response ($) {
 	html_oneshot($ctx, $code);
 }
 
-sub finalize_partial ($) { $_[0]->{-wcb}->(partial_response($_[0])) }
+sub finalize_partial ($) { delete($_[0]->{-wcb})->(partial_response($_[0])) }
 
 sub ext_urls {
 	my ($ctx, $mid, $href, $html) = @_;
