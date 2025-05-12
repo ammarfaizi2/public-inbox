@@ -36,10 +36,14 @@ sub partial_cb { # async_mset cb
 		++$ctx->{ext_msg_partial_fail};
 		warn($msg);
 	} else {
-		my $ibx = $ctx->{partial_ibx};
-		my @mid = map { $_->{mid} } @{$srch->mset_to_smsg($ibx, $mset)};
+		my $seen = $ctx->{partial_seen} //= {};
+		my (@mid, $mid);
+		for (@{$srch->mset_to_smsg($ctx->{partial_ibx}, $mset)}) {
+			$mid = $_->{mid};
+			$seen->{$mid} //= push @mid, $mid;
+		}
 		if (scalar @mid) {
-			push @{$ctx->{partial}}, [ $ibx, \@mid ];
+			push @{$ctx->{partial}}, [ $ctx->{partial_ibx}, \@mid ];
 			(($ctx->{n_partial} += scalar(@mid)) >= PARTIAL_MAX) and
 				delete $ctx->{again}; # done
 		}
