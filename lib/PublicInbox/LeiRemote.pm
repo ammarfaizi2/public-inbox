@@ -58,8 +58,13 @@ sub mset {
 
 # fake support for async API
 sub async_mset {
-	my ($self, $qstr, undef, $cb, @arg) = @_; # $opt ($_[2]) ignored
-	$cb->(@arg, mset($self, $qstr));
+	my ($self, $qry, undef, $cb, @arg) = @_; # $opt ($_[2]) ignored
+	my $mset;
+	for my $qstr (ref($qry) eq 'ARRAY' ? @$qry : ($qry)) {
+		$mset = eval { mset($self, $qstr) };
+		last if $mset && $mset->size;
+	}
+	$mset ? $cb->(@arg, $mset) : $cb->(@arg, undef, $@ || 'err');
 	undef;
 }
 

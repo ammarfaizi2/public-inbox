@@ -29,11 +29,30 @@ our @EXT_URL = map { ascii_html($_) } (
 
 sub PARTIAL_MAX () { 100 }
 
-sub search_partial ($$) {
-	my ($ibx, $mid) = @_;
+sub partial_cb { # async_mset cb
+	my ($ctx, $srch, $mset, $err) = @_;
+	if ($err) {
+		my $msg = "W: query failed: $! ($err)";
+		++$ctx->{ext_msg_partial_fail};
+		warn($msg);
+	} else {
+		my $ibx = $ctx->{partial_ibx};
+		my @mid = map { $_->{mid} } @{$srch->mset_to_smsg($ibx, $mset)};
+		if (scalar @mid) {
+			push @{$ctx->{partial}}, [ $ibx, \@mid ];
+			(($ctx->{n_partial} += scalar(@mid)) >= PARTIAL_MAX) and
+				delete $ctx->{again}; # done
+		}
+	}
+	PublicInbox::DS::requeue($ctx) if $ctx->{env}->{'pi-httpd.app'};
+}
+
+# returns true if started asynchronously
+sub partial_ibx_start ($$) {
+	my ($ctx, $ibx) = @_;
+	my $mid = $ctx->{mid};
 	return if length($mid) < $MIN_PARTIAL_LEN;
 	my $srch = $ibx->isrch or return;
-	my $opt = { limit => PARTIAL_MAX, sort_col => -1, asc => 1 };
 	my @try = ("m:$mid*");
 	my $chop = $mid;
 	if ($chop =~ s/(\W+)(\w*)\z//) {
@@ -59,18 +78,9 @@ sub search_partial ($$) {
 			push(@try, join(' ', map { "m:$_" } @long));
 		}
 	}
-
-	foreach my $m (@try) {
-		# If Xapian can't handle the wildcard since it
-		# has too many results.  $@ can be
-		# Search::Xapian::QueryParserError or even:
-		# "something terrible happened at ../Search/Xapian/Enquire.pm"
-		my $mset = eval { $srch->mset($m, $opt) } or next;
-		my @mids = map {
-			$_->{mid}
-		} @{$srch->mset_to_smsg($ibx, $mset)};
-		return \@mids if scalar(@mids);
-	}
+	$ctx->{partial_ibx} = $ibx;
+	my $opt = { limit => PARTIAL_MAX, sort_col => -1, asc => 1 };
+	$srch->async_mset(\@try, $opt, \&partial_cb, $ctx, $srch);
 }
 
 sub ext_msg_i {
@@ -104,19 +114,28 @@ sub ext_msg_step {
 	}
 }
 
-sub try_partial ($) {
+sub partial_enter ($) {
 	my ($ctx) = @_;
 	bless $ctx, __PACKAGE__; # for ExtMsg->event_step
 	return $ctx->event_step if $ctx->{env}->{'pi-httpd.app'};
 	$ctx->event_step(1) while $ctx->{-wcb};
 }
 
+sub partial_prepare ($@) {
+	my ($ctx, @try_ibxish) = @_;
+	$ctx->{again} = \@try_ibxish;
+	sub {
+		$ctx->{-wcb} = $_[0]; # HTTP server write callback
+		partial_enter $ctx;
+	}
+}
+
 sub ext_msg_ALL ($) {
 	my ($ctx) = @_;
 	my $ALL = $ctx->{www}->{pi_cfg}->ALL or return;
+	return partial_prepare($ctx, $ALL) if $ALL == $ctx->{ibx};
 	my $by_eidx_key = $ctx->{www}->{pi_cfg}->{-by_eidx_key};
-	my $cur_key = eval { $ctx->{ibx}->eidx_key } //
-			return partial_response($ctx); # $cur->{ibx} == $ALL
+	my $cur_key = $ctx->{ibx}->eidx_key;
 	my %seen = ($cur_key => 1);
 	my ($id, $prev);
 	while (my $x = $ALL->over->next_by_mid($ctx->{mid}, \$id, \$prev)) {
@@ -129,14 +148,7 @@ sub ext_msg_ALL ($) {
 			push(@{$ctx->{found}}, $ibx) unless $seen{$k}++;
 		}
 	}
-	return exact($ctx) if $ctx->{found};
-
-	# fall back to partial MID matching
-	$ctx->{again} = [ $ctx->{ibx}, $ALL ];
-	sub {
-		$ctx->{-wcb} = $_[0]; # HTTP server write callback
-		try_partial $ctx;
-	}
+	$ctx->{found} ? exact($ctx) : partial_prepare($ctx, $ctx->{ibx}, $ALL);
 }
 
 # only public entry point
@@ -165,30 +177,19 @@ sub event_step {
 	my ($ctx, $sync) = @_;
 	# can't find a partial match in current inbox, try the others:
 	my $ibx = shift @{$ctx->{again}} or return finalize_partial($ctx);
-	my $mids = search_partial($ibx, $ctx->{mid}) or
-			return ($sync ? undef : PublicInbox::DS::requeue($ctx));
-	$ctx->{n_partial} += scalar(@$mids);
-	push @{$ctx->{partial}}, [ $ibx, $mids ];
-	$ctx->{n_partial} >= PARTIAL_MAX ? finalize_partial($ctx)
-			: ($sync ? undef : PublicInbox::DS::requeue($ctx));
+	unless (partial_ibx_start($ctx, $ibx)) {
+		PublicInbox::DS::requeue($ctx) unless $sync;
+	}
 }
 
 sub finalize_exact {
 	my ($ctx) = @_;
-
-	return delete($ctx->{-wcb})->(exact($ctx)) if $ctx->{found};
-
-	# fall back to partial MID matching
-	my $mid = $ctx->{mid};
-	my $cur = $ctx->{ibx};
-	my $mids = search_partial($cur, $mid);
-	if ($mids) {
-		$ctx->{n_partial} = scalar(@$mids);
-		push @{$ctx->{partial}}, [ $cur, $mids ];
-	} elsif ($ctx->{again} && length($mid) >= $MIN_PARTIAL_LEN) {
-		return try_partial $ctx;
+	if ($ctx->{found}) {
+		delete($ctx->{-wcb})->(exact($ctx));
+	} else { # no exact matches? fall back to partial msgid matching
+		$ctx->{again} = [ $ctx->{ibx} ];
+		partial_enter $ctx;
 	}
-	finalize_partial($ctx);
 }
 
 sub _url_pfx ($$;$) {
@@ -230,6 +231,13 @@ sub partial_response ($) {
 		$s .= $ext;
 		$code = 300;
 	}
+	if (my $nr = delete $ctx->{ext_msg_partial_fail}) {
+		$s .= <<EOM
+
+$nr internal search queries failed (likely due to server overload)
+EOM
+	}
+	chop $s; # omit trailing \n
 	$ctx->{-html_tip} = $s .= '</pre>';
 	$ctx->{-title_html} = $title;
 	html_oneshot($ctx, $code);

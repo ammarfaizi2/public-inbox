@@ -72,10 +72,10 @@ sub mset {
 }
 
 sub async_mset {
-	my ($self, $str, $opt, $cb, @args) = @_;
+	my ($self, $qry, $opt, $cb, @args) = @_;
 	$opt = eidx_mset_prep $self, $opt;
 	local $self->{es}->{-extra} = $self->{-extra} if $self->{-extra};
-	$self->{es}->async_mset($str, $opt, $cb, @args);
+	$self->{es}->async_mset($qry, $opt, $cb, @args);
 }
 
 sub mset_to_artnums {

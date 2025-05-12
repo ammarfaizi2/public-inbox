@@ -482,15 +482,15 @@ sub xh_opt ($$) {
 # returns a true value if actually handled asynchronously,
 # and a falsy value if handled synchronously
 sub async_mset {
-	my ($self, $qry_str, $opt, $cb, @args) = @_;
+	my ($self, $qry, $opt, $cb, @args) = @_;
 	if ($XHC) { # unconditionally retrieving pct + rank for now
 		xdb($self); # populate {nshards}
 		my @margs = ($self->xh_args, xh_opt($self, $opt), '--');
 		my $ret = eval {
 			pipe my $out_rd, my $out_wr;
 			open my $err_rw, '+>', undef;
-			$XHC->mkreq([ $out_wr, $err_rw ],
-					'mset', @margs, $qry_str);
+			$XHC->mkreq([ $out_wr, $err_rw ], 'mset', @margs,
+				(ref($qry) eq 'ARRAY' ? @$qry : $qry));
 			undef $out_wr;
 			PublicInbox::XhcMset->maybe_new($out_rd, $err_rw,
 							$self, $cb, @args);
@@ -498,8 +498,12 @@ sub async_mset {
 		$cb->(@args, undef, $@) if $@;
 		$ret;
 	} else { # synchronous
-		my $mset = eval { $self->mset($qry_str, $opt) };
-		$@ ? $cb->(@args, undef, $@) : $cb->(@args, $mset);
+		my $mset;
+		for my $qstr (ref($qry) eq 'ARRAY' ? @$qry : ($qry)) {
+			$mset = eval { $self->mset($qstr, $opt) };
+			last if $mset && $mset->size;
+		}
+		$mset ? $cb->(@args, $mset) : $cb->(@args, undef, $@ || 'err');
 		undef;
 	}
 }
