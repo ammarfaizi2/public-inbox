@@ -350,7 +350,7 @@ sub which ($) {
 	return $file if index($file, '/') >= 0;
 	for my $p (split(/:/, $ENV{PATH})) {
 		$p .= "/$file";
-		return $p if -x $p;
+		return $p if (-x $p && ! -d _);
 	}
 	undef;
 }
