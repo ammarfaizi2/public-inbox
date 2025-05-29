@@ -249,8 +249,11 @@ for my $n (@NO_CXX) {
 
 	# ensure we can try multiple queries and return the first one
 	# with >0 matches
-	for my $try ([[], []], [['thisbetternotmatchanything'], ['z:0..']]) {
+	for my $try ([[], []], [['thisbetternotmatchanything'], ['z:0..']],
+			[['bogus...range ignored'], []],
+			[['z:0.. dfn:Search.pm'], ['bogus...range never tried']]) {
 		pipe $r, $w;
+		diag explain($try);
 		$xhc->mkreq([$w], qw(mset), @ibx_shard_args, @{$try->[0]},
 					'dfn:lib/PublicInbox/Search.pm',
 					@{$try->[1]});
@@ -286,6 +289,17 @@ for my $n (@NO_CXX) {
 		like $rank, qr/\A\d+\z/, 'rank is a digit';
 		is scalar(@rest), 0, 'no extra rows returned';
 	}
+
+	pipe $r, $w;
+	pipe $err_r, $err_w;
+	$xhc->mkreq([$w, $err_w], qw(mset), @ibx_shard_args, 'bogus...range');
+	close $w;
+	close $err_w;
+	chomp(@res = readline($r));
+	is_deeply \@res, [], 'no output on bogus query';
+	chomp(@res = readline($err_r));
+	ok scalar(@res) && $res[0], 'got error on bogus query';
+
 	my $nr;
 	for my $i (7, 8, 39, 40) {
 		pipe($err_r, $err_w);

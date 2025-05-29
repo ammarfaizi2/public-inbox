@@ -14,17 +14,22 @@
 static bool cmd_mset(struct req *req)
 {
 	if (optind >= req->argc) ABORT("usage: mset [OPTIONS] WANT QRY_STR");
-	const char *qry_str = req->argv[optind];
 	CLEANUP_FBUF struct fbuf wbuf = {};
-	Xapian::MSet mset = req->code_search ? commit_mset(req, qry_str) :
+	unsigned long long size = 0;
+	Xapian::MSet mset;
+	do {
+		try {
+			const char *qry_str = req->argv[optind++];
+			mset = req->code_search ? commit_mset(req, qry_str) :
 						mail_mset(req, qry_str);
-	unsigned long long size = mset.size();
-	while (size == 0 && ++optind < req->argc) {
-		qry_str = req->argv[optind];
-		mset = req->code_search ? commit_mset(req, qry_str) :
-					mail_mset(req, qry_str);
-		size = mset.size();
-	}
+			size = mset.size();
+		} catch (const Xapian::Error & e) {
+			// swallow exceptions for all but the last query
+			if (optind >= req->argc)
+				throw;
+		}
+	} while (size == 0 && optind < req->argc);
+
 	fbuf_init(&wbuf);
 	fprintf(wbuf.fp, "mset.size=%llu .get_matches_estimated=%llu\n",
 		size, (unsigned long long)mset.get_matches_estimated());

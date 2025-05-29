@@ -176,12 +176,15 @@ sub cmd_mset { # to be used by WWW + IMAP
 	my @uid_range = @$req{qw(u U)};
 	$opt->{uid_range} = \@uid_range if grep(defined, @uid_range) == 2;
 	$opt->{threadid} = $req->{T} if defined $req->{T};
-	my $mset = $req->{srch}->mset($qry_str, $opt);
-	my $size = $mset->size;
-	while ($size == 0 && @rest) {
-		$mset = $req->{srch}->mset(shift @rest, $opt);
-		$size = $mset->size;
-	}
+	my ($mset, $size);
+	do {
+		eval {
+			$mset = $req->{srch}->mset($qry_str, $opt);
+			$size = $mset->size;
+		};
+		# swallow exceptions for all but the last query
+		die if $@ && !@rest;
+	} while (!$size && (defined($qry_str = shift @rest)));
 	say { $req->{0} } 'mset.size=', $size,
 		' .get_matches_estimated=', $mset->get_matches_estimated;
 	for my $it ($mset->items) {
