@@ -10,7 +10,6 @@ use PublicInbox::IO qw(read_all);
 use PublicInbox::XhcMsetIterator;
 use PublicInbox::Syscall qw(EPOLLIN EPOLLONESHOT);
 use Fcntl qw(SEEK_SET);
-use Carp qw(croak);
 use PublicInbox::Git qw(git_quote);
 
 sub die_err ($@) {
@@ -19,7 +18,7 @@ sub die_err ($@) {
 	seek $err_rw, 0, SEEK_SET;
 	my $s = read_all $err_rw;
 	chomp $s;
-	croak $s, @msg;
+	die $s, @msg, "\n";
 }
 
 sub event_step {
@@ -41,7 +40,7 @@ sub event_step {
 		scalar(@it) == $size or die_err $self,
 			'got ', scalar(@it), ', expected mset.size=', $size;
 	};
-	my $err = $@;
+	chomp(my $err = $@);
 	$self->close;
 	eval { $cb->(@args, $self, $err) };
 	warn "E: $@\n" if $@;
