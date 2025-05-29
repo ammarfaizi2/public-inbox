@@ -12,6 +12,7 @@ use PublicInbox::Hval qw(ascii_html prurl mid_href);
 use PublicInbox::WwwStream qw(html_oneshot);
 use PublicInbox::Smsg;
 our $MIN_PARTIAL_LEN = 14; # for 'XXXXXXXXXX.fsf' msgids gnus generates
+use B qw(cstring);
 
 # TODO: user-configurable
 our @EXT_URL = map { ascii_html($_) } (
@@ -34,7 +35,8 @@ sub partial_cb { # async_mset cb
 	if ($err) {
 		my $msg = "W: query failed: $! ($err)";
 		++$ctx->{ext_msg_partial_fail};
-		warn($msg);
+		warn $msg, "\n",
+			map { ' '.cstring($_)."\n" } @{$ctx->{try}};
 	} else {
 		my $seen = $ctx->{partial_seen} //= {};
 		my (@mid, $mid);
@@ -58,6 +60,17 @@ sub partial_ibx_start ($$) {
 	return if length($mid) < $MIN_PARTIAL_LEN;
 	my $srch = $ibx->isrch or return;
 	my @try = ("m:$mid*");
+	# some email obfuscators may replace parts of addresses with "..."
+	# and confuse the QP into attempting to parse a range op:
+	# "foo.bar....@example.com"
+	my ($pfx, $domain) = split /\@/, $mid, 2;
+	if ($pfx =~ s/\.\.+\z//s) {
+		my @pfx = split /\W+/, $pfx;
+		push @try, join ' ', map { "m:$_" } @pfx;
+		$try[-1] .= '*';
+		$try[-1] .= ' '.join ' ', map { "m:$_" } split /\W+/, $domain
+			if defined $domain;
+	}
 	my $chop = $mid;
 	if ($chop =~ s/(\W+)(\w*)\z//) {
 		my ($delim, $word) = ($1, $2);
@@ -72,18 +85,20 @@ sub partial_ibx_start ($$) {
 	# break out long words individually to search for, because
 	# too many messages begin with "Pine.LNX." (or "alpine" or "nycvar")
 	if ($mid =~ /\w{9,}/) {
-		my @long = ($mid =~ m!(\w{3,})!g);
-		push(@try, join(' ', map { "m:$_" } @long));
+		my @long = sort { length $b <=> length $a }
+			($mid =~ m!(\w{3,})!g);
 
-		# is the last element long enough to not trigger excessive
+		# are some elements long enough to not trigger excessive
 		# wildcard matches?
-		if (length($long[-1]) > 8) {
-			$long[-1] .= '*';
-			push(@try, join(' ', map { "m:$_" } @long));
+		for (@long) {
+			last if 8 >= length;
+			$_ .= '*';
 		}
+		push @try, join ' ', map { "m:$_" } @long;
 	}
 	$ctx->{partial_ibx} = $ibx;
 	my $opt = { limit => PARTIAL_MAX, sort_col => -1, asc => 1 };
+	@{$ctx->{try}} = @try;
 	$srch->async_mset(\@try, $opt, \&partial_cb, $ctx, $srch);
 }
 
