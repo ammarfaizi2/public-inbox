@@ -16,7 +16,7 @@ our @EXPORT;
 my $lei_loud = $ENV{TEST_LEI_ERR_LOUD};
 our $tail_cmd = $ENV{TAIL};
 our ($lei_opt, $lei_out, $lei_err, $find_xh_pid);
-use autodie qw(chdir close fcntl mkdir open opendir seek unlink);
+use autodie qw(chdir close fcntl mkdir open opendir seek symlink unlink);
 $ENV{XDG_CACHE_HOME} //= "$ENV{HOME}/.cache"; # reuse C++ xap_helper builds
 $ENV{GIT_TEST_FSYNC} = 0; # hopefully reduce wear
 
@@ -783,12 +783,12 @@ SKIP: {
 		my $home = "$tmpdir/lei-daemon";
 		mkdir($home, 0700);
 		local $ENV{HOME} = $home;
-		if ($xh_cmd && $xh_cmd->[0] =~ m!\A(.+)/+[^/]+\z!) {
-			# avoid repeated rebuilds by copying
-			my $src = $1;
+		if ($xh_cmd && $xh_cmd->[0] =~ m!\A.+/+([^/]+)\z!) {
+			# avoid repeated rebuilds by symlinking
+			my ($src, $bn) = ($xh_cmd->[0], $1);
 			my $dst = "$home/.cache/public-inbox/jaot";
 			File::Path::make_path($dst);
-			xsys_e([qw(/bin/cp -Rp), $src, $dst ]);
+			symlink $src, "$dst/$bn";
 		}
 		my $persist;
 		if ($persist_xrd && !$test_opt->{daemon_only}) {
