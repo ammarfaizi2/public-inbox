@@ -457,7 +457,7 @@ sub do_read ($$$;$) {
 	} else {
 		$self->close;
 	}
-	undef;
+	$r; # undef or 0 (EOF)
 }
 
 # drop the socket if we hit unrecoverable errors on our system which
