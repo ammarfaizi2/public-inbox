@@ -181,7 +181,7 @@ sub response_header_write ($$$) {
 	my $proto = $env->{SERVER_PROTOCOL} or return; # HTTP/0.9 :P
 	my $status = $res->[0];
 	my $h = "$proto $status " . status_msg($status) . "\r\n";
-	my ($len, $chunked);
+	my ($len, $chunked, $alive, $res_body, $req_head);
 	my $headers = $res->[1];
 
 	for (my $i = 0; $i < @$headers; $i += 2) {
@@ -199,23 +199,26 @@ sub response_header_write ($$$) {
 	my $conn = $env->{HTTP_CONNECTION} || '';
 	my $term = defined($len) || $chunked ||
 		Plack::Util::status_with_no_entity_body($status);
-	my $prot_persist = ($proto eq 'HTTP/1.1') && ($conn !~ /\bclose\b/i);
-	my ($alive, $res_body);
+	my $prot_persist = ($proto eq 'HTTP/1.1');
 	if (!$term && ref($res->[2]) eq 'ARRAY') {
 		($res_body, $res->[2]) = ($res->[2], []);
 		$len = sum0(map length, @$res_body);
 		$h .= "Content-Length: $len\r\n";
 		$term = 1;
 	}
-	if (!$term && $prot_persist) { # auto-chunk
-		$chunked = $alive = 2;
-		$alive = 3 if $env->{REQUEST_METHOD} eq 'HEAD';
+	if ($conn =~ /\bclose\b/i) {
+		$alive = 0;
+		$h .= "Connection: close\r\n";
+	}
+	$req_head = $env->{REQUEST_METHOD} eq 'HEAD';
+	if (!$term && $prot_persist) {
 		$h .= "Transfer-Encoding: chunked\r\n";
+		$chunked //= 2 if !$req_head; # auto-chunk
+		$alive //= 1;
 		# no need for "Connection: keep-alive" with HTTP/1.1
 	} elsif ($term && ($prot_persist || ($conn =~ /\bkeep-alive\b/i))) {
-		$alive = 1;
-		$h .= "Connection: keep-alive\r\n";
-	} else {
+		$alive //= 1 and $h .= "Connection: keep-alive\r\n";
+	} elsif (!defined $alive) {
 		$alive = 0;
 		$h .= "Connection: close\r\n";
 	}
@@ -223,12 +226,13 @@ sub response_header_write ($$$) {
 
 	if ($res_body) {
 		$self->writev($h, @$res_body);
-	} elsif (($len || $chunked) && $env->{REQUEST_METHOD} ne 'HEAD') {
+	} elsif (($len || $chunked) && !$req_head) {
 		msg_more($self, $h);
 	} else {
 		$self->write(\$h);
 	}
-	$alive;
+	$self->{alive} = $alive;
+	($chunked // 0) == 2 ? ($self->{do_chunk} = 1) : undef;
 }
 
 # middlewares such as Deflater may write empty strings
@@ -243,8 +247,8 @@ sub identity_write ($$) {
 	$self->write(\($_[1])) if $_[1] ne '';
 }
 
-sub response_done {
-	my ($self, $alive) = @_;
+sub response_done ($) {
+	my ($self) = @_;
 	if (my $forward = delete $self->{forward}) { # avoid recursion
 		eval { $forward->close };
 		if ($@) {
@@ -252,9 +256,9 @@ sub response_done {
 			return $self->close; # idempotent
 		}
 	}
-	delete $self->{env}; # we're no longer busy
-	# HEAD requests set $alive = 3 so we don't send "0\r\n\r\n";
-	$self->write(\"0\r\n\r\n") if $alive == 2;
+	delete $self->{env}; # we're no longer busy (env == undef here)
+	my ($alive, $do_chunk) = delete @$self{qw(alive do_chunk)};
+	$self->write(\"0\r\n\r\n") if $do_chunk;
 	$self->write(\&close) if !$alive;
 	$self->requeue if $alive && !$self->{wbuf};
 }
@@ -272,7 +276,7 @@ sub getline_pull {
 
 	if (defined $buf) {
 		# may close in PublicInbox::DS::write
-		if ($self->{alive} == 2) {
+		if ($self->{do_chunk}) {
 			chunked_write($self, $buf);
 		} else {
 			identity_write($self, $buf);
@@ -291,30 +295,29 @@ sub getline_pull {
 		warn "response ->getline error: $@";
 		return $self->close;
 	}
-	response_done($self, delete $self->{alive});
+	response_done($self);
 }
 
 sub response_write {
 	my ($self, $env, $res) = @_;
-	my $alive = response_header_write($self, $env, $res);
+	my $do_chunk = response_header_write($self, $env, $res);
 	if (defined(my $body = $res->[2])) {
 		if (ref $body eq 'ARRAY') {
-			if ($alive == 2) {
+			if ($do_chunk) {
 				chunked_write($self, $_) for @$body;
 			} else {
 				identity_write($self, $_) for @$body;
 			}
-			response_done($self, $alive);
+			response_done($self);
 		} else {
 			$self->{forward} = $body;
-			$self->{alive} = $alive;
 			getline_pull($self); # kick-off!
 		}
 	# these are returned to the calling application:
-	} elsif ($alive >= 2) {
-		bless [ $self, $alive ], 'PublicInbox::HTTP::Chunked';
+	} elsif ($do_chunk) {
+		bless \$self, 'PublicInbox::HTTP::Chunked';
 	} else {
-		bless [ $self, $alive ], 'PublicInbox::HTTP::Identity';
+		bless \$self, 'PublicInbox::HTTP::Identity';
 	}
 }
 
@@ -520,24 +523,21 @@ package PublicInbox::HTTP::Chunked;
 use v5.12;
 
 sub write {
-	# ([$http], $buf) = @_;
-	PublicInbox::HTTP::chunked_write($_[0]->[0], $_[1]);
-	$_[0]->[0]->{sock} ? bytes::length($_[1]) : undef;
+	my $http = ${$_[0]};
+	PublicInbox::HTTP::chunked_write($http, $_[1]);
+	$http->{sock} ? bytes::length($_[1]) : undef;
 }
 
-sub close {
-	# $_[0] = [$http, $alive]
-	PublicInbox::HTTP::response_done(@{$_[0]});
-}
+sub close { PublicInbox::HTTP::response_done ${$_[0]} }
 
 package PublicInbox::HTTP::Identity;
 use v5.12;
 our @ISA = qw(PublicInbox::HTTP::Chunked);
 
 sub write {
-	# ([$http], $buf) = @_;
-	PublicInbox::HTTP::identity_write($_[0]->[0], $_[1]);
-	$_[0]->[0]->{sock} ? bytes::length($_[1]) : undef;
+	my $http = ${$_[0]};
+	PublicInbox::HTTP::identity_write($http, $_[1]);
+	$http->{sock} ? bytes::length($_[1]) : undef;
 }
 
 1;

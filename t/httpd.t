@@ -67,6 +67,22 @@ EOF
 	like $buf, qr!\nLocation:\x20http://\Q$hostname\E/$group/$msgid/\r\n!s,
 		'redirect used SERVER_{NAME,PORT} from CLI overrides';
 
+	$conn = tcp_connect($sock);
+	print $conn "GET /$group/new.html HTTP/1.1\r\n",
+		"Connection: close\r\n",
+		"Host: example.com\r\n\r\n" or xbail $!;
+	$buf = PublicInbox::IO::read_all($conn);
+	my ($head, $body) = split /\r\n\r\n/, $buf, 2;
+	like $head, qr!\AHTTP/1\.1 200!s,
+		'HTTP/1.1 response w/ Connection: close';
+	like $head, qr!^Connection: close\r\n!sm, 'connection: close set';
+	like $head, qr!^Transfer-Encoding: chunked\r\n!sm,
+		'got chunked in header';
+	like $body, qr/\r\n0\r\n\r\n\z/s,
+		'got chunked HTTP/1.1 response end w/ Connection: close';
+	like $body, qr/\A[a-f0-9]+\r\n/s,
+		'got chunked HTTP/1.1 response start w/ Connection: close';
+
 	is(xsys(qw(git clone -q --mirror),
 			"$http_pfx/$group", "$tmpdir/clone.git"),
 		0, 'smart clone successful');
