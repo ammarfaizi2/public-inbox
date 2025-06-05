@@ -75,13 +75,10 @@ sub new ($$$) {
 	my ($class, $sock, $addr, $srv_env) = @_;
 	my $self = bless { srv_env => $srv_env }, $class;
 	my $ev = EPOLLIN;
-	my $wbuf;
 	if ($sock->can('accept_SSL') && !$sock->accept_SSL) {
-		return $sock->close if $! != EAGAIN;
-		$ev = PublicInbox::TLS::epollbit() or return $sock->close;
-		$wbuf = [ \&PublicInbox::DS::accept_tls_step ];
+		return if $! != EAGAIN || !($ev = PublicInbox::TLS::epollbit());
+		$self->{wbuf} = [ \&PublicInbox::DS::accept_tls_step ];
 	}
-	$self->{wbuf} = $wbuf if $wbuf;
 	($addr, $self->{remote_port}) =
 		PublicInbox::Daemon::host_with_port($addr);
 	$self->{remote_addr} = $addr if $addr ne '127.0.0.1';
