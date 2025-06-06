@@ -783,9 +783,9 @@ SKIP: {
 		my $home = "$tmpdir/lei-daemon";
 		mkdir($home, 0700);
 		local $ENV{HOME} = $home;
-		if ($xh_cmd && $xh_cmd->[0] =~ m!\A.+/+([^/]+)\z!) {
-			# avoid repeated rebuilds by symlinking
-			my ($src, $bn) = ($xh_cmd->[0], $1);
+		if ($xh_cmd && $xh_cmd->[0] =~ m!\A(.+/+([^/]+))/+[^/]+\z!) {
+			# avoid repeated rebuilds by symlinking entire dir
+			my ($src, $bn) = ($1, $2);
 			my $dst = "$home/.cache/public-inbox/jaot";
 			File::Path::make_path($dst);
 			symlink $src, "$dst/$bn";
