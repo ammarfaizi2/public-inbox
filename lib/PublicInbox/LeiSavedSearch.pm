@@ -89,7 +89,7 @@ sub list {
 		my $p = "$lss_dir/$d/lei.saved-search";
 		say $fh "\tpath = ", cquote_val($p) if -f $p;
 	}
-	$fh->flush or die "flush: $fh";
+	$fh->flush or die "$fh->flush: $!";
 	my $cfg = $lei->cfg_dump($fh->filename);
 	my $out = $cfg ? $cfg->get_all('lei.q.output') : [];
 	s!$LOCAL_PFX!! for @$out;
