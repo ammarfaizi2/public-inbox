@@ -124,7 +124,7 @@ sub input_prepare {
 		print $in $buf;
 	}
 	# ensure it's visible to git-http-backend(1):
-	$in->flush // die "flush: $!";
+	$in->flush or die "$in->flush: $!";
 	sysseek $in, 0, SEEK_SET;
 	$in;
 }

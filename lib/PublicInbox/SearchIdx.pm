@@ -372,7 +372,7 @@ sub index_body_text {
 	if ($$sref =~ /^(?:diff|---|\+\+\+) /ms && !$PATCHID_BROKEN) {
 		my $git = ($self->{ibx} // $self->{eidx} // $self)->git;
 		my $fh = PublicInbox::IO::write_file '+>:utf8', undef, $$sref;
-		$fh->flush or die "flush: $!";
+		$fh->flush or die "$fh->flush: $!";
 		sysseek($fh, 0, SEEK_SET);
 		$rd = popen_rd($git->cmd(qw(patch-id --stable)), undef,
 				{ 0 => $fh });

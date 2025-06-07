@@ -42,7 +42,7 @@ sub num_records {
 sub read_prepare {
 	my ($self) = @_;
 	my $io = $self->{rd} = delete($self->{wr});
-	$io->flush or die "flush: $!";
+	$io->flush or die "$io->flush: $!";
 	$self;
 }
 

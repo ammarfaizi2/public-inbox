@@ -341,8 +341,8 @@ sub prepare_index ($) {
 	my $mode_a = $di->{mode_a} // '100644';
 
 	my $in = tmpfile("update-index.$oid_full") or die "tmpfile: $!";
-	print $in "$mode_a $oid_full\t$path_a\0" or die "print: $!";
-	$in->flush or die "flush: $!";
+	print $in "$mode_a $oid_full\t$path_a\0";
+	$in->flush or die "$in->flush: $!";
 	sysseek $in, 0, SEEK_SET;
 
 	dbg($self, 'preparing index');

@@ -40,8 +40,8 @@ sub prepare {
 	do {
 		$tmp = _fn_in($self, $pid, 'tmp');
 	} while (!sysopen($fh, $tmp, O_CREAT|O_EXCL|O_RDWR) and $! == EEXIST);
-	print $fh $$strref or die "print: $!";
-	$fh->flush or die "flush: $!";
+	print $fh $$strref;
+	$fh->flush or die "$fh->flush: $!";
 	$self->{fh} = $fh;
 	$self->{$tmp_key} = $tmp;
 }

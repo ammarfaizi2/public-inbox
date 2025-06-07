@@ -370,7 +370,7 @@ sub spawn ($;$$) {
 			$opt->{"fh.$child_fd"} = $fh; # for read_out_err
 			if ($child_fd == 0) {
 				print $fh $$pfd;
-				$fh->flush or die "flush: $!";
+				$fh->flush or die "$fh->flush: $!";
 				sysseek($fh, 0, SEEK_SET);
 			}
 			$pfd = fileno($fh);
