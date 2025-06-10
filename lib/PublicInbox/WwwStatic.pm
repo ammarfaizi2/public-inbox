@@ -10,7 +10,7 @@
 package PublicInbox::WwwStatic;
 use strict;
 use v5.10.1;
-use parent qw(Exporter);
+use parent qw(Exporter Plack::Component);
 use autodie qw(sysseek);
 use Fcntl qw(SEEK_SET O_RDONLY O_NONBLOCK);
 use HTTP::Date qw(time2str);

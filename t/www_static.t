@@ -17,8 +17,7 @@ my $psgi_env = sub { # @_ is passed to WwwStatic->new
 use v5.12;
 use Plack::Builder;
 use PublicInbox::WwwStatic;
-my \$ws = PublicInbox::WwwStatic->new(docroot => "$tmpdir" @_);
-builder { sub { \$ws->call(shift) } }
+PublicInbox::WwwStatic->new(docroot => "$tmpdir" @_)->to_app;
 EOM
 	{ psgi_file => $ret, TMPDIR => "$tmpdir" };
 };
