@@ -208,6 +208,10 @@ sub new {
 		docroot => $docroot,
 		index => $index,
 		autoindex => $opt{autoindex},
+		# not using Plack::MIME->set_fallback since we can have
+		# multiple WwwStatic instances with a different default
+		default_type => $opt{default_type} //
+			'application/octet-stream',
 		style => $style // \$STYLE,
 	}, $class;
 }
@@ -247,6 +251,13 @@ sub human_size ($) {
 	sprintf('%lu', $size).$suffix;
 }
 
+sub file_response ($$$) {
+	my ($self, $env, $fs_path) = @_;
+	response $env, [], $fs_path,
+		Plack::MIME->mime_type($fs_path) // $self->{default_type};
+
+}
+
 # by default, this returns "index.html" if it exists for a given directory
 # It'll generate a directory listing, (autoindex).
 # May be disabled by setting autoindex => 0
@@ -254,8 +265,7 @@ sub dir_response ($$$) {
 	my ($self, $env, $fs_path) = @_;
 	if (my $index = $self->{'index'}) { # serve index.html or similar
 		for my $html (@$index) {
-			my $p = $fs_path . $html;
-			my $res = response($env, [], $p);
+			my $res = file_response($self, $env, $fs_path.$html);
 			return $res if $res->[0] != 404;
 		}
 	}
@@ -327,7 +337,7 @@ sub call { # PSGI app endpoint
 	my $fs_path = join('/', $self->{docroot}, @parts);
 	return dir_response($self, $env, $fs_path) if $parts[-1] eq '';
 
-	my $res = response($env, [], $fs_path);
+	my $res = file_response($self, $env, $fs_path);
 	$res->[0] == 404 && -d $fs_path ? redirect_slash($env) : $res;
 }
 
