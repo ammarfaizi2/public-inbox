@@ -69,7 +69,6 @@ EOM
 Plack::Middleware::ReverseProxy missing,
 URL generation for redirects may be wrong if behind a reverse proxy
 EOM
-			enable 'Head';
 			sub { $www->call(@_) };
 		};
 	}

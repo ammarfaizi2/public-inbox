@@ -173,9 +173,9 @@ sub app_dispatch {
 # we use the non-standard 499 code for client disconnects (matching nginx)
 sub status_msg ($) { status_message($_[0]) // 'error' }
 
-sub response_header_write ($$$) {
+sub response_write {
 	my ($self, $env, $res) = @_;
-	my $proto = $env->{SERVER_PROTOCOL} or return; # HTTP/0.9 :P
+	my $proto = $env->{SERVER_PROTOCOL}; # HTTP/0.9 isn't supported
 	my $status = $res->[0];
 	my $h = "$proto $status " . status_msg($status) . "\r\n";
 	my ($len, $chunked, $alive, $res_body, $req_head);
@@ -197,11 +197,13 @@ sub response_header_write ($$$) {
 	my $term = defined($len) || $chunked ||
 		Plack::Util::status_with_no_entity_body($status);
 	my $prot_persist = ($proto eq 'HTTP/1.1');
-	if (!$term && ref($res->[2]) eq 'ARRAY') {
+	if (ref($res->[2]) eq 'ARRAY') {
 		($res_body, $res->[2]) = ($res->[2], []);
-		$len = sum0(map length, @$res_body);
-		$h .= "Content-Length: $len\r\n";
-		$term = 1;
+		if (!$term) {
+			$len = sum0(map length, @$res_body);
+			$h .= "Content-Length: $len\r\n";
+			$term = 1;
+		}
 	}
 	if ($conn =~ /\bclose\b/i) {
 		$alive = 0;
@@ -220,16 +222,31 @@ sub response_header_write ($$$) {
 		$h .= "Connection: close\r\n";
 	}
 	$h .= 'Date: ' . http_date() . "\r\n\r\n";
-
+	$self->{alive} = $alive;
+	if ($req_head) {
+		$self->write(\$h);
+		return bless(\$self, 'PublicInbox::HTTP::Null') if !$res->[2];
+		$res->[2]->close if ref($res->[2]) ne 'ARRAY';
+		return response_done($self);
+	}
+	my $do_chunk = ($chunked // 0) == 2 ? ($self->{do_chunk} = 1) : undef;
 	if ($res_body) {
 		$self->writev($h, @$res_body);
-	} elsif (($len || $chunked) && !$req_head) {
+		return response_done($self);
+	}
+	if ($len || $chunked) {
 		msg_more($self, $h);
 	} else {
 		$self->write(\$h);
 	}
-	$self->{alive} = $alive;
-	($chunked // 0) == 2 ? ($self->{do_chunk} = 1) : undef;
+	if ($res->[2]) {
+		$self->{forward} = $res->[2];
+		getline_pull($self); # kick-off!
+	} elsif ($do_chunk) {
+		bless \$self, 'PublicInbox::HTTP::Chunked'
+	} else {
+		bless \$self, 'PublicInbox::HTTP::Identity'
+	}
 }
 
 # middlewares such as Deflater may write empty strings
@@ -293,29 +310,6 @@ sub getline_pull {
 		return $self->close;
 	}
 	response_done($self);
-}
-
-sub response_write {
-	my ($self, $env, $res) = @_;
-	my $do_chunk = response_header_write($self, $env, $res);
-	if (defined(my $body = $res->[2])) {
-		if (ref $body eq 'ARRAY') {
-			if ($do_chunk) {
-				chunked_write($self, $_) for @$body;
-			} else {
-				identity_write($self, $_) for @$body;
-			}
-			response_done($self);
-		} else {
-			$self->{forward} = $body;
-			getline_pull($self); # kick-off!
-		}
-	# these are returned to the calling application:
-	} elsif ($do_chunk) {
-		bless \$self, 'PublicInbox::HTTP::Chunked';
-	} else {
-		bless \$self, 'PublicInbox::HTTP::Identity';
-	}
 }
 
 sub input_prepare {
@@ -534,6 +528,15 @@ our @ISA = qw(PublicInbox::HTTP::Chunked);
 sub write {
 	my $http = ${$_[0]};
 	PublicInbox::HTTP::identity_write($http, $_[1]);
+	$http->{sock} ? bytes::length($_[1]) : undef;
+}
+
+package PublicInbox::HTTP::Null; # for HEAD responses
+use v5.12;
+our @ISA = qw(PublicInbox::HTTP::Chunked);
+
+sub write {
+	my $http = ${$_[0]};
 	$http->{sock} ? bytes::length($_[1]) : undef;
 }
 
