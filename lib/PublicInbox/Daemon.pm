@@ -439,6 +439,12 @@ sub reopen_logs {
 		kill('USR1', $PublicInbox::Search::XHC->{io}->attached_pid);
 }
 
+# public API:
+sub register_log ($) {
+	my ($path) = @_;
+	$logs{$path} //= open_log_path(my $fh, $path);
+}
+
 sub sockname ($) {
 	my ($s) = @_;
 	my $addr = getsockname($s) or return;
