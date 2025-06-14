@@ -11,7 +11,6 @@ my $app = sub {
 };
 
 builder {
-	enable 'ContentLength';
 	enable 'Head';
 	$app;
 }
