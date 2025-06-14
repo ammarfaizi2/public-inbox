@@ -135,9 +135,7 @@ sub load_mod ($;$$) {
 	};
 	$xn{post_accept} = $tlsd->can('post_accept_cb') ?
 			$tlsd->post_accept_cb : sub { $modc->new($_[0], $tlsd) };
-	my @paths = qw(out err);
 	if ($modc eq 'PublicInbox::HTTP') {
-		@paths = qw(err);
 		$xn{af_default} = 'httpready';
 		if (my $p = $opt->{psgi}) {
 			die "multiple psgi= options specified\n" if @$p > 1;
@@ -146,7 +144,7 @@ sub load_mod ($;$$) {
 			warn "# $scheme://$addr psgi=$p->[0]\n";
 		}
 	}
-	for my $f (@paths) {
+	for my $f (qw(out err)) {
 		my $p = $opt->{$f} or next;
 		die "multiple $f= options specified\n" if @$p > 1;
 		check_absolute("$f=", $p->[0]) if $daemonize;
