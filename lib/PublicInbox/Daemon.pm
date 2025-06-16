@@ -110,7 +110,12 @@ sub do_chown ($) {
 }
 
 sub open_log_path ($$) { # my ($fh, $path) = @_; # $_[0] is modified
-	open $_[0], '>>', $_[1];
+	if (defined $_[0]) {
+		open my $tmp_fh, '>>', $_[1];
+		POSIX::dup2(fileno($tmp_fh), fileno($_[0])) or die "dup2: $!";
+	} else {
+		open $_[0], '>>', $_[1];
+	}
 	$_[0]->autoflush(1);
 	do_chown($_[1]);
 	$_[0];
