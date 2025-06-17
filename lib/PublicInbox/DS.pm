@@ -34,7 +34,7 @@ use PublicInbox::Tmpfile;
 use PublicInbox::Select;
 use PublicInbox::OnDestroy;
 use Errno qw(EAGAIN EINVAL ECHILD);
-use Carp qw(carp croak);
+use Carp qw(carp croak confess);
 use List::Util qw(sum);
 our @EXPORT_OK = qw(now msg_more awaitpid add_timer add_uniq_timer);
 my $sendmsg_more = PublicInbox::Syscall->can('sendmsg_more');
@@ -395,7 +395,7 @@ sub epbit ($$) { # (sock, default)
 
 sub epwait ($$) {
 	my ($io, $ev) = @_;
-	$Poller and $Poller->ep_mod($io, $ev) and croak "EPOLL_CTL_MOD $io: $!";
+	$Poller and $Poller->ep_mod($io, $ev) and confess "BUG: ep_mod $io: $!";
 }
 
 # returns 1 if done, 0 if incomplete
