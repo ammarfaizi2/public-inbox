@@ -14,7 +14,7 @@ sub err () { $SSL_ERROR }
 sub epollbit () {
 	return EPOLLIN if $SSL_ERROR == SSL_WANT_READ;
 	return EPOLLOUT if $SSL_ERROR == SSL_WANT_WRITE;
-	carp "unexpected SSL error: $SSL_ERROR";
+	carp "W: $SSL_ERROR";
 	undef;
 }
 
