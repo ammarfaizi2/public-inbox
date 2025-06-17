@@ -619,7 +619,7 @@ sub shutdn_tls_step ($) {
 				$! != EAGAIN;
 	my $ev = PublicInbox::TLS::epollbit() or return ds_close($self);
 	epwait $sock, $ev | EPOLLONESHOT;
-	unshift @{$self->{wbuf}}, \&shutdn_tls_step; # autovivifies
+	@{$self->{wbuf}} = (\&shutdn_tls_step); # autovivifies
 }
 
 # don't bother with shutdown($sock, 2), we don't fork+exec w/o CLOEXEC
