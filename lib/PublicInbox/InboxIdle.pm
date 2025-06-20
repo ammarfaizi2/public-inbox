@@ -24,7 +24,7 @@ sub in2_arm ($$) { # PublicInbox::Config::each_inbox callback
 	my $dir = $ibx->{inboxdir};
 	my $inot = $self->{inot};
 	my $cur = $self->{pathmap}->{$dir} //= [];
-	my $lock = "$dir/".($ibx->version >= 2 ? 'inbox.lock' : 'ssoma.lock');
+	my $lock = $ibx->lock_file;
 
 	# transfer old subscriptions to the current inbox, cancel the old watch
 	my $old_ibx = $cur->[0];

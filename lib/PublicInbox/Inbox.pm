@@ -394,4 +394,9 @@ sub mailboxid { # rfc 8474, 8620, 8621
 
 sub thing_type { 'public inbox' }
 
+sub lock_file {
+	my ($self) = @_;
+	$self->{inboxdir}.($self->version >= 2 ? '/inbox.lock' : '/ssoma.lock')
+}
+
 1;
