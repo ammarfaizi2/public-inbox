@@ -429,6 +429,7 @@ next_buf:
 			# bref may be enqueueing more CODE to call
 			# (see accept_tls_step)
 			return 0 if (scalar(@$wbuf) > $before);
+			$sock = $self->{sock} // return;
 		}
 	} # while @$wbuf
 
