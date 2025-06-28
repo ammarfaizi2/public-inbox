@@ -638,7 +638,8 @@ sub long_response_done {} # overridden by Net::NNTP
 sub long_step {
 	my ($self) = @_;
 	# wbuf is unset or empty, here; $cb may add to it
-	my ($fd, $cb, $t0, @args) = @{$self->{long_cb}};
+	my $fd = fileno($self->{sock} // return);
+	my ($cb, $t0, @args) = @{$self->{long_cb}};
 	my $more = eval { $cb->($self, @args) };
 	if ($@ || !$self->{sock}) { # something bad happened...
 		delete $self->{long_cb};
@@ -679,7 +680,7 @@ sub long_response ($$;@) {
 	# make sure we disable reading during a long response,
 	# clients should not be sending us stuff and making us do more
 	# work while we are stream a response to them
-	$self->{long_cb} = [ fileno($sock), $cb, now(), @args ];
+	$self->{long_cb} = [ $cb, now(), @args ];
 	long_step($self); # kick off!
 	undef;
 }
