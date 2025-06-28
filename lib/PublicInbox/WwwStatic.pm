@@ -170,7 +170,7 @@ sub getline {
 	# avoid buffering, by becoming the buffer! (public-inbox-httpd)
 	if (my $tmpio = delete $self->{bypass}) {
 		my $http = pop @$tmpio; # PublicInbox::HTTP
-		push @{$http->{wbuf}}, $tmpio; # [ $in, $off, $len ]
+		push @{$http->{wbuf}}, [ $http->can('send_io'), $tmpio ];
 		$http->flush_write;
 		return; # undef, EOF
 	}
