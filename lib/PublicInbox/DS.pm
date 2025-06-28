@@ -637,7 +637,7 @@ sub long_response_done {} # overridden by Net::NNTP
 
 sub long_step {
 	my ($self) = @_;
-	# wbuf is unset or empty, here; {long} may add to it
+	# wbuf is unset or empty, here; $cb may add to it
 	my ($fd, $cb, $t0, @args) = @{$self->{long_cb}};
 	my $more = eval { $cb->($self, @args) };
 	if ($@ || !$self->{sock}) { # something bad happened...
