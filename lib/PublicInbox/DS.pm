@@ -334,18 +334,13 @@ retry:
 # for IMAP, NNTP, and POP3 which greet clients upon connect
 sub greet {
 	my ($self, $sock) = @_;
-	my $ev = EPOLLIN;
-	my $wbuf;
+	my $ev = EPOLLOUT;
 	if ($sock->can('accept_SSL') && !$sock->accept_SSL) {
 		return if $! != EAGAIN || !($ev = PublicInbox::TLS::epollbit());
-		$wbuf = [ \&accept_tls_step, $self->can('do_greet')];
+		$self->{wbuf} = [ \&accept_tls_step ];
 	}
+	push @{$self->{wbuf}}, $self->can('do_greet');
 	new($self, $sock, $ev | EPOLLONESHOT);
-	if ($wbuf) {
-		$self->{wbuf} = $wbuf;
-	} else {
-		$self->do_greet;
-	}
 	$self;
 }
 
