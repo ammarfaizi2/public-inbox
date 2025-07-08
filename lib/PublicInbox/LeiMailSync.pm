@@ -460,7 +460,7 @@ WHERE b.oidbin = ?
 			my $f = "$d/$x/$n";
 			open my $fh, '<', $f or next;
 			# some (buggy) Maildir writers are non-atomic:
-			my $raw = read_all($fh, -s $fh // next);
+			my $raw = read_all($fh, -s $fh || next);
 			next if $vrfy && blob_mismatch $f, $oidhex, \$raw;
 			return \$raw;
 		}
@@ -478,7 +478,7 @@ WHERE b.oidbin = ? AND f.loc REGEXP '^mh:/'
 		$f =~ s/\Amh://s or die "BUG: not MH: $f";
 		$f .= "/$n";
 		open my $fh, '<', $f or next;
-		my $raw = read_all($fh, -s $fh // next);
+		my $raw = read_all($fh, -s $fh || next);
 		next if blob_mismatch $f, $oidhex, \$raw;
 		return \$raw;
 	}
