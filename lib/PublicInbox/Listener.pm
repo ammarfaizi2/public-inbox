@@ -5,6 +5,7 @@
 package PublicInbox::Listener;
 use v5.12;
 use parent 'PublicInbox::DS';
+use PublicInbox::DS qw(now);
 use Socket qw(SOL_SOCKET SO_KEEPALIVE IPPROTO_TCP TCP_NODELAY);
 use IO::Handle;
 use PublicInbox::Syscall qw(EPOLLIN EPOLLEXCLUSIVE);
@@ -40,7 +41,10 @@ sub event_step {
 			# ECONNABORTED is common with bad connections
 			return;
 		} elsif (my $sym = $ERR_WARN{int($!)}) {
-			return warn "W: accept(): $! ($sym)\n";
+			my $now = now;
+			return if $now < ($self->{next_warn} //= 0);
+			$self->{next_warn} = $now + 30;
+			return warn "W: accept(".fileno($sock)."): $! ($sym)\n";
 		} else {
 			return warn "BUG?: accept(): $!\n";
 		}
