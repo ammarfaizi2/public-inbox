@@ -144,6 +144,7 @@ sub app_dispatch {
 	my ($self, $input, $rbuf) = @_;
 	$self->rbuf_idle($rbuf);
 	my $env = $self->{env};
+	$env->{'pi-httpd.request_nr'} = $self->{request_nr}++;
 	$self->{env} = undef; # for exists() check in ->busy
 	$env->{REMOTE_ADDR} = $self->{remote_addr} // '127.0.0.1';
 	$env->{REMOTE_PORT} = $self->{remote_port};
