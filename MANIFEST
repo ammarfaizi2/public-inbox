@@ -210,6 +210,7 @@ lib/PublicInbox/GitAsyncCat.pm
 lib/PublicInbox/GitCredential.pm
 lib/PublicInbox/GitHTTPBackend.pm
 lib/PublicInbox/GzipFilter.pm
+lib/PublicInbox/H1ReqRes.pm
 lib/PublicInbox/HTTP.pm
 lib/PublicInbox/HTTPD.pm
 lib/PublicInbox/HlMod.pm
@@ -329,6 +330,7 @@ lib/PublicInbox/POP3.pm
 lib/PublicInbox/POP3D.pm
 lib/PublicInbox/PktOp.pm
 lib/PublicInbox/PsgiLimiter.pm
+lib/PublicInbox/PsgiRproxy.pm
 lib/PublicInbox/Qspawn.pm
 lib/PublicInbox/Reply.pm
 lib/PublicInbox/RepoAtom.pm
@@ -599,6 +601,7 @@ t/psgi_bad_mids.t
 t/psgi_log.psgi
 t/psgi_mount.t
 t/psgi_multipart_not.t
+t/psgi_rproxy.t
 t/psgi_scan_all.t
 t/psgi_search.t
 t/psgi_text.t

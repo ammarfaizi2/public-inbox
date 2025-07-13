@@ -2,6 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # corner case tests for the generic PSGI server
 # Usage: plackup [OPTIONS] /path/to/this/file
+# used by httpd-{corner,https,unix}.t and psgi_rproxy.t
 use v5.12;
 use Plack::Builder;
 require PublicInbox::SHA;
@@ -23,6 +24,7 @@ END {
 my $pi_config = $ENV{PI_CONFIG} // 'unset'; # capture ASAP
 my $app = sub {
 	my ($env) = @_;
+	use Data::Dumper; warn Dumper($env);
 	my $path = $env->{PATH_INFO};
 	my $in = $env->{'psgi.input'};
 	my $actual = -s $in;
@@ -93,6 +95,14 @@ my $app = sub {
 			$fh->write($buf);
 			$fh->close;
 		}
+	} elsif ($path eq '/callback-truncated') {
+		return sub {
+			my ($res) = @_;
+			push @$h, 'Transfer-Encoding', 'chunked';
+			my $fh = $res->([200, $h]);
+			$fh->write("9\r\ntoo ort\r\n");
+			$fh->close;
+		}
 	} elsif ($path eq '/empty') {
 		$code = 200;
 	} elsif ($path eq '/getline-die') {
@@ -149,6 +159,10 @@ my $app = sub {
 	} elsif ($path eq '/url_scheme') {
 		$code = 200;
 		push @$body, $env->{'psgi.url_scheme'}
+	} elsif ($path eq '/server') {
+		$code = 200;
+		push @$h, 'Server', 'none-of-your-business';
+		push @$body, 'trying to advertise server behind rproxy';
 	} elsif ($path eq '/PI_CONFIG') {
 		$code = 200;
 		push @$body, $pi_config; # show value at ->refresh_groups
