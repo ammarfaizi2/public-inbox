@@ -114,6 +114,7 @@ certs/create-certs.perl
 ci/README
 ci/profiles.perl
 ci/run.sh
+contrib/RejectBots.pm
 contrib/completion/lei-completion.bash
 contrib/css/216dark.css
 contrib/css/216light.css
