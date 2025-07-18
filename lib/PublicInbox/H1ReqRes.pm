@@ -18,6 +18,7 @@ use constant { # duplicated from HTTP.pm
 	CHUNK_END => -2,     # \r\n
 	CHUNK_TLR_END => -3, # (trailers*)?\r\n
 	CHUNK_MAX_HDR => 256,
+	IO_SIZE => 1 << 16,
 };
 
 sub new {
@@ -176,7 +177,7 @@ sub pass_res_chunked ($) {
 					\n)* \r\n)//ismx) {
 				return pass_trailers $self, $1;
 			}
-			die 'chunk not terminated' if length($$rbuf) > 0x4000;
+			die 'chunk not terminated' if length($$rbuf) > IO_SIZE;
 		}
 		if ($len == CHUNK_END) {
 			if ($$rbuf =~ s/\A\r\n//s) {
@@ -196,7 +197,7 @@ sub pass_res_chunked ($) {
 			} # else break from loop since $len >= 0
 		}
 		if ($len < 0) {
-			pass_refill($self, 0x4000, \&pass_res_chunked, $len) or
+			pass_refill($self, IO_SIZE, \&pass_res_chunked, $len) or
 				return;
 			# (implicit) goto chunk_start if $r > 0;
 		}
@@ -216,7 +217,7 @@ sub pass_res_chunked ($) {
 			}
 			if ($$rbuf eq '') {
 				# read more of current chunk
-				pass_refill($self, 0x4000,
+				pass_refill($self, IO_SIZE,
 					\&pass_res_chunked, $len) or return;
 			}
 		}
@@ -232,7 +233,7 @@ sub pass_res_identity ($) {
 			$len = _pass_res_block($self, $len) // return;
 		}
 		if ($$rbuf eq '' && $len) {
-			my $n = $len > 0x4000 ? 0x4000 : $len;
+			my $n = $len > IO_SIZE ? IO_SIZE : $len;
 			pass_refill($self, $n, \&pass_res_identity, $len) or
 				return;
 		}
@@ -250,7 +251,7 @@ sub pass_res_until_eof ($) { # HTTP/1.0-only
 			$$rbuf = '';
 		}
 		if ($$rbuf eq '') {
-			my $r = pass_refill($self, 0x4000,
+			my $r = pass_refill($self, IO_SIZE,
 					\&pass_res_until_eof, undef) // return;
 			last if $r == 0; # done
 		}
@@ -262,7 +263,7 @@ sub pass_res_hdr ($) { # called by flush_write
 	my ($self) = @_;
 	my ($rbuf, $r, $code, $phdr);
 	$rbuf = $self->{rbuf} // do {
-		$self->do_read(\(my $buf = ''), 0x4000) or
+		$self->do_read(\(my $buf = ''), IO_SIZE) or
 			return read_err $self, \&pass_res_hdr;
 		$self->{rbuf} = \$buf;
 	};
@@ -273,7 +274,7 @@ sub pass_res_hdr ($) { # called by flush_write
 		if ($r == -2) { # incomplete
 			length($$rbuf) > 0x4000 and
 				die 'upstream response headers too large';
-			$self->do_read($rbuf, 8192, length($$rbuf)) or return
+			$self->do_read($rbuf, IO_SIZE, length($$rbuf)) or return
 				read_err $self, \&pass_res_hdr;
 		} else {
 			die "upstream sent bad response headers (r=$r)";
@@ -342,7 +343,7 @@ sub send_req_body { # called by flush_write
 	# n.b. PublicInbox::HTTP always reads the entire request body
 	# before dispatching the PSGI app
 	my $r = $self->{req_left};
-	$r = 0x4000 if $r > 0x4000;
+	$r = IO_SIZE if $r > IO_SIZE;
 	$r = $self->{env}->{'psgi.input'}->read(my $buf, $r) //
 			die "input->read: $! ($self->{req_left} bytes left)";
 	die "input->read: EOF ($self->{req_left} bytes left)" if $r == 0;
