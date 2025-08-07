@@ -34,9 +34,22 @@ SKIP: {
 
 	$name = "$dn/pp.d";
 	mkdir($name) or BAIL_OUT "mkdir($name) $!";
-	PublicInbox::Syscall::nodatacow_dir($name);
+
+	{
+		my @w;
+		local $SIG{__WARN__} = sub { push @w, @_ };
+		PublicInbox::Syscall::nodatacow_dir($name);
+		like "@w", qr/^W: Disabling copy-on-write/sm,
+			'warned about disabling CoW';
+	}
 	$res = xqx([$lsattr, '-d', $name]);
 	like($res, qr/C.*\Q$name\E/, "`C' attribute set on dir with pure Perl");
+	{
+		my @w;
+		local $SIG{__WARN__} = sub { push @w, @_ };
+		PublicInbox::Syscall::nodatacow_dir($name);
+		is_deeply \@w, [], 'no warnings if CoW already disabled';
+	}
 };
 
 done_testing;

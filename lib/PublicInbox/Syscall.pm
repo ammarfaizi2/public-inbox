@@ -435,6 +435,7 @@ sub rename_noreplace ($$) {
 	}
 }
 
+# returns "0 but true" on success, undef or
 sub nodatacow_fh ($) {
 	my ($fh) = @_;
 	my $buf = "\0" x 120;
@@ -453,8 +454,17 @@ sub nodatacow_fh ($) {
 		warn("FS_IOC_SETFLAGS: $!\n");
 }
 
-sub nodatacow_dir {
-	if (open my $fh, '<', $_[0]) { nodatacow_fh($fh) }
+sub nodatacow_dir ($) {
+	my ($f) = @_;
+	if (open my $fh, '<', $f) {
+		my $rc = nodatacow_fh($fh); # returns "0 but true" on success
+		$rc && $rc == 0 and warn <<EOM;
+W: Disabling copy-on-write (CoW) on `$f'
+W: to avoid pathological slowdowns.  Data corruption may occur on unclean
+W: shutdowns, especially if using any form of BTRFS RAID.  Periodic defrag
+W: is recommended for *.sqlite3 and *.glass files to maintain performance.
+EOM
+	}
 }
 
 use constant \%CONST;
