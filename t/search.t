@@ -567,6 +567,21 @@ $ibx->with_umask(sub {
 	is_deeply($s, $res, 'got binary result from exact literal size');
 	$s = $query->('"literal 2"');
 	is_deeply($s, [], 'no results for wrong size');
+
+	{
+		my @w;
+		$eml->header_set('References', '<'.('x' x 241).'@x>');
+		$eml->header_set('Message-ID', '<references-too-long@x>');
+		local $SIG{__WARN__} = sub { push @w, @_; };
+		$rw->add_message($eml);
+		like "@w", qr/\bskipping term:/, 'excessively long term skipped';
+		@w = ();
+		$eml->header_set('References', '<'.('x' x 240).'@x>');
+		$eml->header_set('Message-ID', '<references-barely-fit@x>');
+		$rw->add_message($eml);
+		is_deeply \@w, [], 'no warnings on barely-fitting references';
+	}
+	$rw->commit_txn_lazy;
 });
 
 SKIP: {

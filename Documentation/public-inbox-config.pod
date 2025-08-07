@@ -50,6 +50,9 @@ public-inbox.  This must be specified once.
 This was previously known as "mainrepo", which remains supported,
 but "inboxdir" takes precedence.
 
+Absolute pathnames longer than 244 bytes cannot be indexed
+with L<public-inbox-extindex(1)>
+
 Default: none, required
 
 =item publicinbox.<name>.url
@@ -74,8 +77,9 @@ Omitting this for a given inbox will prevent the inbox from
 being served by L<public-inbox-nntpd(1)>,
 L<public-inbox-imapd(1)>, and/or L<public-inbox-pop3d(1)>
 
-Newsgroup names should be all lowercase.  Uppercase characters are
-converted to lowercase for compatibility with IMAP, POP3, and our
+Newsgroup names should be all lowercase and have a maximum
+length of 244 bytes.  Uppercase characters are converted to
+lowercase for compatibility with IMAP, POP3, and our
 L<public-inbox-extindex(1)> and L<public-inbox-cindex(1)> tools
 starting with public-inbox 2.0+ (they were unusable before).
 
@@ -369,6 +373,8 @@ Default: none
 =item coderepo.<nick>.dir
 
 The path to a git repository for "publicinbox.<name>.coderepo"
+Absolute pathnames longer than 244 bytes cannot be indexed
+with L<public-inbox-cindex(1)>
 
 =item coderepo.<nick>.cgitUrl
 

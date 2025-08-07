@@ -29,7 +29,8 @@ use PublicInbox::MsgTime qw(msg_timestamp msg_datestamp);
 use PublicInbox::Address;
 use Config;
 our @EXPORT_OK = qw(log2stack is_ancestor check_size prepare_stack
-	index_text term_generator add_val is_bad_blob update_checkpoint);
+	index_text term_generator add_val is_bad_blob update_checkpoint
+	add_bool_term);
 my $X = \%PublicInbox::Search::X;
 our ($DB_CREATE_OR_OPEN, $DB_OPEN);
 our $DB_NO_SYNC = 0;
@@ -39,7 +40,10 @@ our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# assume a typical 64-bit system has 8x more RAM than a
 	# typical 32-bit system:
 	(($Config{ptrsize} >= 8 ? 8192 : 1024) * 1024);
-use constant DEBUG => !!$ENV{DEBUG};
+use constant {
+	DEBUG => !!$ENV{DEBUG},
+	MAX_TERM_SIZE => 245, # Xapian limitation, includes prefix
+};
 my $BASE85 = qr/[a-zA-Z0-9\!\#\$\%\&\(\)\*\+\-;<=>\?\@\^_`\{\|\}\~]+/;
 my $xapianlevels = qr/\A(?:full|medium)\z/;
 my $hex = '[a-f0-9]';
@@ -191,10 +195,19 @@ sub index_text1 { # called by various ->index_extra
 	$self->{term_generator}->index_text_without_positions($text, 1, $pfx);
 }
 
+sub add_bool_term ($$) {
+	my ($doc, $pfx_term) = @_;
+	if (length($pfx_term) > MAX_TERM_SIZE) {
+		carp "W: skipping term: `$pfx_term'.length > ",
+			MAX_TERM_SIZE, "\n";
+	} else {
+		$doc->add_boolean_term($pfx_term);
+	}
+}
+
 sub index_boolean_term { # called by various ->index_extra
 	my ($self, $pfx, $term) = @_;
-	my $doc = $self->{term_generator}->get_document;
-	$doc->add_boolean_term($pfx.$term);
+	add_bool_term($self->{term_generator}->get_document, $pfx.$term);
 }
 
 sub index_text ($$$$) {
@@ -439,7 +452,7 @@ sub index_list_id ($$$) {
 		$l =~ /<([^>]+)>/ or next;
 		my $lid = lc $1;
 		$lid =~ tr/\n\t\r\0//d; # same rules as Message-ID
-		$doc->add_boolean_term('G' . $lid);
+		add_bool_term $doc, 'G' . $lid;
 		index_phrase($self, $lid, 1, 'XL'); # probabilistic
 	}
 }
@@ -456,7 +469,7 @@ sub index_ids ($$$$) {
 			index_phrase($self, join(' ', @long), 1, 'XM');
 		}
 	}
-	$doc->add_boolean_term('Q' . $_) for @$mids;
+	add_bool_term($doc, 'Q'.$_) for @$mids;
 	index_list_id($self, $doc, $hdr);
 }
 
@@ -478,11 +491,11 @@ sub eml2doc ($$$;$) {
 	index_headers($self, $smsg);
 
 	my $ekey = $smsg->{eidx_key};
-	$doc->add_boolean_term('O'.$ekey) if ($ekey // '.') ne '.';
+	add_bool_term($doc, 'O'.$ekey) if ($ekey // '.') ne '.';
 	msg_iter($eml, \&index_xapian, [ $self, $doc ]);
 	index_ids($self, $doc, $eml, $mids);
 	for (@{$smsg->parse_references($eml, $mids)}) {
-		$doc->add_boolean_term('XRF'.$_)
+		add_bool_term $doc, 'XRF'.$_;
 	}
 
 	# by default, we maintain compatibility with v1.5.0 and earlier
@@ -510,7 +523,7 @@ sub add_xapian ($$$$) {
 		my @x = @VMD_MAP;
 		while (my ($field, $pfx) = splice(@x, 0, 2)) {
 			for my $term (xap_terms($pfx, $old)) {
-				$doc->add_boolean_term($pfx.$term);
+				add_bool_term $doc, $pfx.$term;
 			}
 		}
 	}
@@ -595,7 +608,7 @@ sub add_eidx_info {
 	term_generator($self)->set_document($doc);
 
 	# '.' is special for lei_store
-	$doc->add_boolean_term('O'.$eidx_key) if $eidx_key ne '.';
+	add_bool_term($doc, 'O'.$eidx_key) if $eidx_key ne '.';
 
 	index_list_id($self, $doc, $eml);
 	$self->{xdb}->replace_document($docid, $doc);
@@ -657,7 +670,7 @@ sub set_vmd {
 	}
 	return unless scalar(@rm) || scalar(@add);
 	$doc->remove_term($_) for @rm;
-	$doc->add_boolean_term($_) for @add;
+	add_bool_term($doc, $_) for @add;
 	$self->{xdb}->replace_document($docid, $doc);
 }
 
@@ -674,7 +687,7 @@ sub apply_vmd_mod ($$) {
 			};
 		}
 		for my $val (@{$vmd_mod->{"+$field"} // []}) {
-			$doc->add_boolean_term($pfx . $val);
+			add_bool_term($doc, $pfx . $val);
 			++$updated;
 		}
 	}
@@ -689,7 +702,7 @@ sub add_vmd {
 	my $updated = 0;
 	while (my ($field, $pfx) = splice(@x, 0, 2)) {
 		my $add = $vmd->{$field} // next;
-		$doc->add_boolean_term($pfx . $_) for @$add;
+		add_bool_term($doc, $pfx . $_) for @$add;
 		$updated += scalar(@$add);
 	}
 	$updated += apply_vmd_mod($doc, $vmd);

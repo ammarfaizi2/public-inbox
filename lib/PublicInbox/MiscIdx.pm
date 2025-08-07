@@ -15,7 +15,7 @@ use strict;
 use v5.10.1;
 use PublicInbox::InboxWritable;
 use PublicInbox::Search; # for SWIG Xapian and Search::Xapian compat
-use PublicInbox::SearchIdx qw(index_text term_generator add_val);
+use PublicInbox::SearchIdx qw(index_text term_generator add_val add_bool_term);
 use Carp qw(croak);
 use File::Path ();
 use PublicInbox::MiscSearch;
@@ -105,7 +105,7 @@ EOF
 	add_val($doc, $PublicInbox::MiscSearch::MODIFIED, $ibx->modified);
 	add_val($doc, $PublicInbox::MiscSearch::UIDVALIDITY, $ibx->uidvalidity);
 
-	$doc->add_boolean_term('Q'.$eidx_key); # uniQue id
+	add_bool_term($doc, 'Q'.$eidx_key); # uniQue id
 	$doc->add_boolean_term('T'.'inbox'); # Type
 
 	# force reread from disk, {description} could be loaded from {misc}

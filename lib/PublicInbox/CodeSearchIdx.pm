@@ -61,7 +61,7 @@ use File::Spec::Functions qw(canonpath);
 use List::Util qw(max);
 use PublicInbox::SHA qw(sha256_hex sha_all);
 use PublicInbox::Search qw(xap_terms);
-use PublicInbox::SearchIdx qw(add_val);
+use PublicInbox::SearchIdx qw(add_val add_bool_term);
 use PublicInbox::Config qw(glob2re rel2abs_collapsed);
 use PublicInbox::Spawn qw(which spawn popen_rd);
 use PublicInbox::OnDestroy;
@@ -182,7 +182,7 @@ sub update_commit ($$$) {
 			join(', ', map { "#$_" } @extra), "\n";
 	$self->{xdb}->delete_document($_) for @extra;
 	my $doc = $PublicInbox::Search::X{Document}->new;
-	$doc->add_boolean_term($x);
+	$doc->add_boolean_term($x); # "Q$COMMIT_OIDHEX"
 	$doc->add_boolean_term('G'.$_) for @$roots;
 	$doc->add_boolean_term('XP'.$_) for split(/ /, $cmt->{P});
 	$doc->add_boolean_term('T'.'c');
@@ -247,7 +247,7 @@ sub store_repo { # wq_io_do, sends docid back
 	$self->{xdb}->delete_document($_) for @{$repo->{to_delete}};
 	my $doc = $PublicInbox::Search::X{Document}->new;
 	add_val($doc, PublicInbox::CodeSearch::CT, $repo->{ct});
-	$doc->add_boolean_term("P$repo->{git_dir}");
+	add_bool_term($doc, "P$repo->{git_dir}");
 	$doc->add_boolean_term('T'.'r');
 	$doc->add_boolean_term('G'.$_) for @{$repo->{roots}};
 	$doc->set_data($repo->{fp}); # \n delimited
@@ -257,7 +257,7 @@ sub store_repo { # wq_io_do, sends docid back
 	$OFMT2HEXLEN{$fmt} // warn <<EOM; # store unknown formats anyways
 E: unknown extensions.objectFormat=$fmt in $repo->{git_dir}
 EOM
-	$doc->add_boolean_term('H'.$fmt);
+	add_bool_term($doc, 'H'.$fmt);
 	my $did = $repo->{docid};
 	$did ? $self->{xdb}->replace_document($did, $doc)
 		: ($did = $self->{xdb}->add_document($doc));
@@ -908,7 +908,7 @@ sub store_objfmt { # via wq_do - make early cidx users happy
 		warn "BUG? #$docid for $git_dir has no P(ath)";
 	@p == 1 or return warn "BUG? #$docid $git_dir multi: @p";
 	$p[0] eq $git_dir or return warn "BUG? #$docid $git_dir != @p";
-	$doc->add_boolean_term('H'.$fmt);
+	add_bool_term($doc, 'H'.$fmt);
 	$self->{xdb}->replace_document($docid, $doc);
 	# wait for prune_commit to commit...
 }
