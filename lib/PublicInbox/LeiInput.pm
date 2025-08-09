@@ -353,6 +353,9 @@ sub prepare_inputs { # returns undef on error
 			# TODO: how would we detect r/w JMAP?
 			push @{$sync->{no}}, $input if $sync;
 			prepare_http_input($self, $lei, $input_path) or return;
+		} elsif ($input =~ /\A(?:L|kw):/) {
+			return $lei->fail("Unable to handle `$input', ".
+					"did you mean `+$input' ?");
 		} elsif ($input_path =~ s/\A([a-z0-9]+)://is) {
 			my $ifmt = lc $1;
 			if (($in_fmt // $ifmt) ne $ifmt) {
@@ -380,10 +383,7 @@ sub prepare_inputs { # returns undef on error
 				$may_sync and $input = "$ifmt:".
 						$lei->abs_path($input_path);
 			} else {
-				my $m = "Unable to handle $input";
-				$input =~ /\A(?:L|kw):/ and
-					$m .= ", did you mean +$input?";
-				return $lei->fail($m);
+				return $lei->fail("Unable to handle $input");
 			}
 		} elsif ($input =~ /\.(?:eml|patch)\z/i && -f $input) {
 			lc($in_fmt//'eml') eq 'eml' or return $lei->fail(<<"");
