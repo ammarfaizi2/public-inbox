@@ -715,4 +715,11 @@ if ('max-size') {
 		'noted skipping messages in stderr';
 }
 
+if ('basic') {
+	ok run_script([qw(-extindex -L basic --dangerous --all),
+			"$home/basic"]), 'extindex init basic';
+	my @shards = glob "$home/basic/ei*/[0123]/";
+	is_deeply \@shards, [], 'no search shards created';
+}
+
 done_testing;

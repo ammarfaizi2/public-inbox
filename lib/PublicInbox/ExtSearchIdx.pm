@@ -12,6 +12,10 @@
 # v2 has a 1:1 mapping of index:inbox or msgmap for NNTP support.
 # This is intended to be an M:N index:inbox mapping, but it'll likely
 # be 1:N in common practice (M==1)
+#
+# {-need_xapian} only applies to indexing for individual messages,
+# the Xapian /misc/ index for indexing information about inboxes
+# themselves is always created and maintained.
 
 package PublicInbox::ExtSearchIdx;
 use strict;
@@ -47,7 +51,6 @@ sub new {
 	my $l = $opt->{indexlevel} // 'full';
 	$l !~ $PublicInbox::SearchIdx::INDEXLEVELS and
 		die "invalid indexlevel=$l\n";
-	$l eq 'basic' and die "E: indexlevel=basic not yet supported\n";
 	my $self = bless {
 		xpfx => "$dir/ei".PublicInbox::Search::SCHEMA_VERSION,
 		topdir => $dir,
@@ -166,7 +169,8 @@ sub remove_doc ($$) {
 	my ($self, $docid) = @_;
 	$self->{oidx}->delete_by_num($docid);
 	$self->{oidx}->eidxq_del($docid);
-	$self->idx_shard($docid)->ipc_do('xdb_remove', $docid);
+	$self->{-need_xapian} and
+		idx_shard($self, $docid)->ipc_do('xdb_remove', $docid);
 }
 
 sub _unref_doc ($$$$$;$) {
@@ -197,7 +201,7 @@ sub _unref_doc ($$$$$;$) {
 	if (scalar(@$xr3) == 0) { # all gone
 		remove_doc($self, $docid);
 	} else { # enqueue for reindex of remaining messages
-		if ($ibx) {
+		if ($ibx && $self->{-need_xapian}) {
 			my $ekey = $ibx->{-gc_eidx_key} // $ibx->eidx_key;
 			my $idx = $self->idx_shard($docid);
 			my @list_ids = $eml->header_raw('List-Id');
@@ -232,8 +236,9 @@ sub do_xpost ($$) {
 		my $eidx_key = $xibx->eidx_key;
 		my $xnum = $req->{xnum};
 		$self->{oidx}->add_xref3($docid, $xnum, $oid, $eidx_key);
-		my $idx = $self->idx_shard($docid);
-		$idx->add_eidx_info($docid, $eidx_key, $eml);
+		$self->{-need_xapian} and
+			idx_shard($self, $docid)->
+					add_eidx_info($docid, $eidx_key, $eml);
 		apply_boost($req, $smsg) if $self->{boost_in_use};
 	} else { # 'd' no {xnum}
 		$self->git->async_wait_all;
@@ -253,13 +258,13 @@ sub index_unseen ($) {
 	my $self = $req->{self};
 	my $docid = $self->{oidx}->adj_counter('eidx_docid', '+');
 	$new_smsg->{num} = $docid;
-	my $idx = $self->idx_shard($docid);
 	$self->{oidx}->add_overview($eml, $new_smsg);
 	my $oid = $new_smsg->{blob};
 	my $ibx = ($req->{ibx} // $self->{ibx}) or die 'BUG: {ibx} unset';
 	my $ekey = $new_smsg->{eidx_key} = $ibx->eidx_key;
 	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ekey);
-	$idx->index_eml($eml, $new_smsg);
+	$self->{-need_xapian} and
+		idx_shard($self, $docid)->index_eml($eml, $new_smsg);
 	update_checkpoint $self, $new_smsg->{bytes};
 }
 
@@ -501,6 +506,7 @@ DELETE FROM eidxq WHERE docid NOT IN (SELECT num FROM over)
 SELECT MIN(num) FROM over WHERE num > 0
 EOM
 	$cur // return; # empty
+	return unless $self->{-need_xapian};
 	my ($r, $n, %active_shards);
 	$nr = 0;
 	while (1) {
@@ -584,16 +590,19 @@ sub _reindex_finalize ($$$) {
 	my $chash0 = $smsg->{chash} // die "BUG: $smsg->{blob} no {chash}";
 	my $stable = delete($by_chash->{$chash0}) //
 				die "BUG: $smsg->{blob} chash missing";
-	my $idx = $self->idx_shard($docid);
 	my $top_smsg = pop @$stable;
 	$top_smsg == $smsg or die 'BUG: top_smsg != smsg';
 	my $ibx = _ibx_for $self, $smsg;
 	$smsg->{eidx_key} = $ibx->eidx_key;
-	$idx->index_eml($eml, $smsg);
-	for my $x (reverse @$stable) {
-		my $lid = delete $x->{lid} // die 'BUG: no {lid}';
-		@$lid and $idx->ipc_do('add_eidx_info_raw', $docid,
-					_ibx_for($self, $x)->eidx_key, @$lid);
+	if ($self->{-need_xapian}) {
+		my $idx = idx_shard($self, $docid);
+		$idx->index_eml($eml, $smsg);
+		for my $x (reverse @$stable) {
+			my $lid = delete $x->{lid} // die 'BUG: no {lid}';
+			@$lid and $idx->ipc_do('add_eidx_info_raw', $docid,
+						_ibx_for($self, $x)->eidx_key,
+						@$lid);
+		}
 	}
 	return if $nr == 1; # likely, all good
 
