@@ -40,6 +40,7 @@ use PublicInbox::DS qw(now add_timer);
 use DBI qw(:sql_types); # SQL_BLOB
 use PublicInbox::Admin qw(fmt_localtime);
 use PublicInbox::Config qw(rel2abs_collapsed);
+use PublicInbox::IO qw(try_cat);
 
 sub new {
 	my (undef, $dir, $opt) = @_;
@@ -698,8 +699,7 @@ sub host_ident () {
 	# these while this process is running and we always want to be
 	# able to release locks taken by this process.
 	state $retval = hostname . '-' . do {
-		my $m; # machine-id(5) is systemd
-		if (open(my $fh, '<', '/etc/machine-id')) { $m = <$fh> }
+		my $m = try_cat '/etc/machine-id'; # machine-id(5) is systemd
 		# (g)hostid(1) is in GNU coreutils, kern.hostid is most BSDs
 		chomp($m ||= `{ sysctl -n kern.hostid ||
 				hostid || ghostid; } 2>/dev/null`
