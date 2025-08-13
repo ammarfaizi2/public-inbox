@@ -199,8 +199,10 @@ sub _unref_doc ($$$$$;$) {
 		if ($ibx) {
 			my $ekey = $ibx->{-gc_eidx_key} // $ibx->eidx_key;
 			my $idx = $self->idx_shard($docid);
-			$idx->ipc_do('remove_eidx_info', $docid, $ekey, $eml);
-		} # else: we can't remove_eidx_info in reindex-only path
+			my @list_ids = $eml->header_raw('List-Id');
+			$idx->ipc_do('remove_eidx_info_raw', $docid, $ekey,
+					@list_ids);
+		} # else: we can't remove_eidx_info_raw in reindex-only path
 
 		# replace invalidated blob ASAP with something which should be
 		# readable since we may commit the transaction on checkpoint.
@@ -230,7 +232,7 @@ sub do_xpost ($$) {
 		my $xnum = $req->{xnum};
 		$self->{oidx}->add_xref3($docid, $xnum, $oid, $eidx_key);
 		my $idx = $self->idx_shard($docid);
-		$idx->ipc_do('add_eidx_info', $docid, $eidx_key, $eml);
+		$idx->add_eidx_info($docid, $eidx_key, $eml);
 		apply_boost($req, $smsg) if $self->{boost_in_use};
 	} else { # 'd' no {xnum}
 		$self->git->async_wait_all;
@@ -588,9 +590,9 @@ sub _reindex_finalize ($$$) {
 	$smsg->{eidx_key} = $ibx->eidx_key;
 	$idx->index_eml($eml, $smsg);
 	for my $x (reverse @$stable) {
-		$ibx = _ibx_for $self, $x;
-		my $hdr = delete $x->{hdr} // die 'BUG: no {hdr}';
-		$idx->ipc_do('add_eidx_info', $docid, $ibx->eidx_key, $hdr);
+		my $lid = delete $x->{lid} // die 'BUG: no {lid}';
+		@$lid and $idx->ipc_do('add_eidx_info_raw', $docid,
+					_ibx_for($self, $x)->eidx_key, @$lid);
 	}
 	return if $nr == 1; # likely, all good
 
@@ -653,7 +655,7 @@ sub _reindex_oid { # git->cat_async callback
 	$re_smsg->{chash} = $chash;
 	$re_smsg->{xnum} = $req->{xr3r}->[$req->{ix}]->[1];
 	$re_smsg->{ibx_id} = $req->{xr3r}->[$req->{ix}]->[0];
-	$re_smsg->{hdr} = $eml->header_obj;
+	@{$re_smsg->{lid}} = $eml->header_raw('List-Id');
 	push @{$req->{by_chash}->{$chash}}, $re_smsg;
 	if (my $next_oid = $req->{xr3r}->[++$req->{ix}]->[2]) {
 		$self->git->cat_async($next_oid, \&_reindex_oid, $req);

@@ -446,15 +446,20 @@ sub index_xapian { # msg_iter callback
 	index_body_text($self, $doc, \$s);
 }
 
-sub index_list_id ($$$) {
-	my ($self, $doc, $hdr) = @_;
-	for my $l ($hdr->header_raw('List-Id')) {
+sub index_list_id_raw ($$@) {
+	my ($self, $doc, @list_ids) = @_;
+	for my $l (@list_ids) {
 		$l =~ /<([^>]+)>/ or next;
 		my $lid = lc $1;
 		$lid =~ tr/\n\t\r\0//d; # same rules as Message-ID
 		add_bool_term $doc, 'G' . $lid;
-		index_phrase($self, $lid, 1, 'XL'); # probabilistic
+		index_phrase $self, $lid, 1, 'XL'; # probabilistic
 	}
+}
+
+sub index_list_id ($$$) {
+	my ($self, $doc, $hdr) = @_;
+	index_list_id_raw $self, $doc, $hdr->header_raw('List-Id');
 }
 
 sub index_ids ($$$$) {
@@ -470,7 +475,7 @@ sub index_ids ($$$$) {
 		}
 	}
 	add_bool_term($doc, 'Q'.$_) for @$mids;
-	index_list_id($self, $doc, $hdr);
+	index_list_id $self, $doc, $hdr;
 }
 
 sub eml2doc ($$$;$) {
@@ -601,8 +606,8 @@ sub _get_doc ($$) {
 	}
 }
 
-sub add_eidx_info {
-	my ($self, $docid, $eidx_key, $eml) = @_;
+sub add_eidx_info_raw {
+	my ($self, $docid, $eidx_key, @list_ids) = @_;
 	begin_txn_lazy($self);
 	my $doc = _get_doc($self, $docid) or return;
 	term_generator($self)->set_document($doc);
@@ -610,7 +615,7 @@ sub add_eidx_info {
 	# '.' is special for lei_store
 	add_bool_term($doc, 'O'.$eidx_key) if $eidx_key ne '.';
 
-	index_list_id($self, $doc, $eml);
+	index_list_id_raw $self, $doc, @list_ids;
 	$self->{xdb}->replace_document($docid, $doc);
 }
 
@@ -620,13 +625,13 @@ sub get_terms {
 	xap_terms($pfx, $self->{xdb}, $docid);
 }
 
-sub remove_eidx_info {
-	my ($self, $docid, $eidx_key, $eml) = @_;
+sub remove_eidx_info_raw {
+	my ($self, $docid, $eidx_key, @list_ids) = @_;
 	begin_txn_lazy($self);
 	my $doc = _get_doc($self, $docid) or return;
 	eval { $doc->remove_term('O'.$eidx_key) };
 	warn "W: ->remove_term O$eidx_key: $@\n" if $@;
-	for my $l ($eml ? $eml->header_raw('List-Id') : ()) {
+	for my $l (@list_ids) {
 		$l =~ /<([^>]+)>/ or next;
 		my $lid = lc $1;
 		eval { $doc->remove_term('G' . $lid) };

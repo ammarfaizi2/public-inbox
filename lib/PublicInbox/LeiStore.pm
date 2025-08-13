@@ -456,7 +456,7 @@ sub add_eml {
 				$smsg->{-merge_vmd} = 1;
 				$idx->index_eml($eml, $smsg);
 			} else { # lse fuzzy hit off ale
-				$idx->ipc_do('add_eidx_info', $docid, '.', $eml);
+				$idx->add_eidx_info($docid, '.', $eml);
 			}
 			for my $oid (keys %$xoids) {
 				$oidx->add_xref3($docid, -1, $oid, '.');
@@ -470,7 +470,7 @@ sub add_eml {
 			my $idx = $eidx->idx_shard($docid);
 			$oidx->add_xref3($docid, -1, $smsg->{blob}, '.');
 			# add_eidx_info for List-Id
-			$idx->ipc_do('add_eidx_info', $docid, '.', $eml);
+			$idx->add_eidx_info($docid, '.', $eml);
 			_add_vmd($self, $idx, $docid, $vmd) if $vmd;
 		}
 		_docids_and_maybe_kw $self, \@docids;

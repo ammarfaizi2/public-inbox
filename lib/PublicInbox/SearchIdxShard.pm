@@ -53,6 +53,12 @@ sub index_eml {
 	$self->ipc_do('add_xapian', $eml, $smsg);
 }
 
+sub add_eidx_info {
+	my ($self, $docid, $eidx_key, $eml) = @_;
+	my @list_ids = $eml->header_raw('List-Id');
+	$self->ipc_do('add_eidx_info_raw', $docid, $eidx_key, @list_ids);
+}
+
 # wait for return to determine when ipc_do('commit_txn_lazy') is done
 sub echo {
 	shift;
