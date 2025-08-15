@@ -46,11 +46,31 @@ use PublicInbox::Admin qw(fmt_localtime);
 use PublicInbox::Config qw(rel2abs_collapsed);
 use PublicInbox::IO qw(try_cat);
 
+sub detect_indexlevel ($) {
+	my ($self) = @_;
+	my $l = 'full'; # the default for new extindices
+	if ($self->xdb) {
+		my $m = $self->xdb->get_metadata('indexlevel');
+		if ($m eq 'medium') {
+			$l = 'medium';
+		} elsif ($m ne '') {
+			warn <<EOM;
+W: $self->{topdir} has unexpected indexlevel in Xapian: $l
+EOM
+		}
+	# we're basic if over.sqlite3 is non-empty and there's nothing
+	# in Xapian
+	} elsif ($self->over && $self->over->dbh->selectrow_array(<<'') > 0) {
+SELECT COUNT(*) FROM over
+
+		$l = 'basic';
+	}
+	delete @$self{qw(xdb over)};
+	$l;
+}
+
 sub new {
 	my (undef, $dir, $opt) = @_;
-	my $l = $opt->{indexlevel} // 'full';
-	$l !~ $PublicInbox::SearchIdx::INDEXLEVELS and
-		die "invalid indexlevel=$l\n";
 	my $self = bless {
 		xpfx => "$dir/ei".PublicInbox::Search::SCHEMA_VERSION,
 		topdir => $dir,
@@ -58,7 +78,6 @@ sub new {
 		ibx_map => {}, # (newsgroup//inboxdir) => $ibx
 		ibx_active => [], # by config section order
 		ibx_known => [], # by config section order
-		indexlevel => $l,
 		transact_bytes => 0,
 		total_bytes => 0,
 		current_info => '',
@@ -67,7 +86,13 @@ sub new {
 	}, __PACKAGE__;
 	$self->{shards} = $self->count_shards ||
 		nproc_shards { nproc => $opt->{jobs} };
-	my $oidx = PublicInbox::OverIdx->new("$self->{xpfx}/over.sqlite3");
+	my $l = $opt->{indexlevel};
+	my $over_file = "$self->{xpfx}/over.sqlite3";
+	$l ||= detect_indexlevel $self;
+	$l !~ $PublicInbox::SearchIdx::INDEXLEVELS and
+		die "invalid indexlevel=$l\n";
+	$self->{indexlevel} = $l;
+	my $oidx = PublicInbox::OverIdx->new($over_file);
 	$oidx->{journal_mode} = 'wal' if $opt->{wal};
 	$self->{-no_fsync} = $oidx->{-no_fsync} = 1 if !$opt->{fsync};
 	$self->{-dangerous} = 1 if $opt->{dangerous};

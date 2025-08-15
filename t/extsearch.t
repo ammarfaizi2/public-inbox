@@ -718,10 +718,28 @@ if ('max-size') {
 }
 
 if ('basic') {
-	ok run_script([qw(-extindex -L basic --dangerous --all),
-			"$home/basic"]), 'extindex init basic';
-	my @shards = glob "$home/basic/ei*/[0123]/";
+	my $rdr = { 2 => \(my $err = '') };
+	my $dir = "$home/basic";
+	ok run_script([qw(-extindex -L basic --dangerous --all), $dir],
+			undef, $rdr), 'extindex init basic';
+	my @shards = glob "$dir/ei*/[0123]/";
 	is_deeply \@shards, [], 'no search shards created';
+
+	$env->{ORIGINAL_RECIPIENT} = $v2addr;
+	my $eml = eml_load('t/msg_iter-order.eml');
+	my $msgid = 'msg-iter-order@eml';
+	$eml->header_set('Message-ID', "<$msgid>");
+	my $in = \($eml->as_string);
+	run_script [qw(-mda --no-precheck)], $env, { 0 => $in } or
+		xbail '-mda';
+
+	ok run_script([qw(-extindex --all), $dir], undef, $rdr),
+		'extindex incremental basic';
+	@shards = glob "$dir/ei*/[0123]/";
+	is_deeply \@shards, [], 'no new search shards on incremental update';
+	my $es = PublicInbox::ExtSearch->new($dir);
+	my $smsg = $es->over->next_by_mid($msgid, \(my $id), \(my $prev));
+	ok $smsg, 'new message imported into over.sqlite3 w/ basic';
 }
 
 done_testing;
