@@ -540,7 +540,7 @@ sub v1_mm_init ($) {
 	die "BUG: v1_mm_init is only for v1\n" if $self->{ibx}->version != 1;
 	$self->{mm} //= do {
 		require PublicInbox::Msgmap;
-		PublicInbox::Msgmap->new_file($self->{ibx}, 1);
+		PublicInbox::Msgmap->new_file($self->{ibx}, 1, $self->{-opt});
 	};
 }
 
@@ -1108,6 +1108,7 @@ sub _index_sync {
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
 	local $SIG{TERM} = $quit;
+	$self->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 	my $xdb = $self->begin_txn_lazy;
 	$self->{oidx}->rethread_prepare($opt);
 	my $mm = v1_mm_init $self;

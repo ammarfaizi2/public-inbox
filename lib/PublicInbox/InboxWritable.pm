@@ -30,13 +30,16 @@ sub assert_usable_dir {
 
 sub _init_v1 {
 	my ($self) = @_;
-	my $skip_artnum = ($self->{-creat_opt} // {})->{'skip-artnum'};
-	if (defined($self->{indexlevel}) || defined($skip_artnum)) {
+	my $opt = $self->{-creat_opt} // {};
+	my $skip_artnum = $opt->{'skip-artnum'};
+	if (defined($self->{indexlevel}) || defined($skip_artnum) ||
+			$opt->{wal}) {
 		require PublicInbox::SearchIdx;
 		require PublicInbox::Msgmap;
 		my $sidx = PublicInbox::SearchIdx->new($self, 1); # just create
+		$sidx->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 		$sidx->begin_txn_lazy;
-		my $mm = PublicInbox::Msgmap->new_file($self, 1);
+		my $mm = PublicInbox::Msgmap->new_file($self, 1, $opt);
 		if (defined $skip_artnum) {
 			$mm->{dbh}->begin_work;
 			$mm->skip_artnum($skip_artnum);

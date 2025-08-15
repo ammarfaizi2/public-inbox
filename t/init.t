@@ -14,10 +14,19 @@ sub quiet_fail {
 	ok(!run_script($cmd, undef, { 2 => \$err, 1 => \$err }), $msg);
 }
 
+my $check_wal = sub {
+	my ($bn) = ($_[0] =~ m!/([^/]+)/*\z!);
+	my $ibx = PublicInbox::Inbox->new({inboxdir => $_[0]});
+	my $jm = $ibx->over->dbh->selectrow_array('PRAGMA journal_mode');
+	is $jm, 'wal', "--wal works with $bn (over.sqlite3)";
+	$jm = $ibx->mm->{dbh}->selectrow_array('PRAGMA journal_mode');
+	is $jm, 'wal', "--wal works with $bn (msgmap.sqlite3)";
+};
+
 {
 	local $ENV{PI_DIR} = "$tmpdir/.public-inbox/";
 	my $cfgfile = "$ENV{PI_DIR}/config";
-	my $cmd = [ '-init', 'blist', "$tmpdir/blist",
+	my $cmd = [ qw(-init blist), "$tmpdir/blist",
 		   qw(http://example.com/blist blist@example.com) ];
 	my $umask = umask(070) // xbail "umask: $!";
 	ok(run_script($cmd), 'public-inbox-init OK');
@@ -127,12 +136,13 @@ SKIP: {
 	local $ENV{PI_DIR} = "$tmpdir/.public-inbox/";
 	local $ENV{PI_EMERGENCY} = "$tmpdir/.public-inbox/emergency";
 	my $cfgfile = "$ENV{PI_DIR}/config";
-	my $cmd = [ '-init', '-V2', 'v2list', "$tmpdir/v2list",
+	my $cmd = [ qw(-init -V2 --wal v2list), "$tmpdir/v2list",
 		   qw(http://example.com/v2list v2list@example.com) ];
 	ok(run_script($cmd), 'public-inbox-init -V2 OK');
 	ok(-d "$tmpdir/v2list", 'v2list directory exists');
 	ok(-f "$tmpdir/v2list/msgmap.sqlite3", 'msgmap exists');
 	ok(-d "$tmpdir/v2list/all.git", 'catch-all.git directory exists');
+	$check_wal->("$tmpdir/v2list");
 	$cmd = [ '-init', 'v2list', "$tmpdir/v2list",
 		   qw(http://example.com/v2list v2list@example.com) ];
 	ok(run_script($cmd), 'public-inbox-init is idempotent');
@@ -204,8 +214,8 @@ SKIP: {
 
 	$addr = 'skip4@example.com';
 	$env = { ORIGINAL_RECIPIENT => $addr };
-	$cmd = [ qw(-init -V1 --skip-artnum 12 -Lmedium skip4), "$tmpdir/skip4",
-		   qw(http://example.com/skip4), $addr ];
+	$cmd = [ qw(-init -V1 --wal --skip-artnum 12 -Lmedium skip4),
+			"$tmpdir/skip4", qw(http://example.com/skip4), $addr ];
 	ok(run_script($cmd), '--skip-artnum -V1');
 	$err = '';
 	ok(run_script([qw(-mda --no-precheck)], $env, $rdr), 'deliver V1');
@@ -214,6 +224,14 @@ SKIP: {
 			"$tmpdir/skip4/public-inbox/msgmap.sqlite3");
 	$n = $mm->num_for($mid);
 	is($n, 13, 'V1 NNTP article numbers skipped via --skip-artnum');
+	$check_wal->("$tmpdir/skip4");
+
+	# n.b. for now, indexlevel defaults to `full' if unspecified w/
+	# --wal or --skip-artnum
+	$cmd = [ qw(-init -V1 --wal wal-only-v1), "$tmpdir/wal-1",
+			qw(http://example.com/wal-1 wal@example.com) ];
+	ok run_script($cmd), '--wal with -V1';
+	$check_wal->("$tmpdir/wal-1");
 }
 
 {

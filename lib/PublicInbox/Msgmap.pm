@@ -16,7 +16,7 @@ use PublicInbox::Over;
 use Scalar::Util qw(blessed);
 
 sub new_file {
-	my ($class, $ibx, $rw) = @_;
+	my ($class, $ibx, $rw, $opt) = @_;
 	my $f;
 	if (blessed($ibx)) {
 		$f = $ibx->mm_file;
@@ -27,6 +27,7 @@ sub new_file {
 	return if !$rw && !-r $f;
 
 	my $self = bless { filename => $f }, $class;
+	$self->{journal_mode} = 'wal' if $opt->{wal};
 	my $dbh = $self->{dbh} = PublicInbox::Over::dbh_new($self, $rw);
 	if ($rw) {
 		$dbh->begin_work;

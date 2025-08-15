@@ -11,6 +11,7 @@ require_mods(qw(DBD::SQLite Xapian));
 have_xapian_compact;
 my ($tmpdir, $for_destroy) = tmpdir();
 my $ibx = create_inbox 'v1', indexlevel => 'medium', tmpdir => "$tmpdir/v1",
+		wal => 1,
 		pre_cb => sub {
 			my ($inboxdir) = @_;
 			PublicInbox::Import::init_bare($inboxdir);
@@ -45,6 +46,12 @@ foreach (@xdir) {
 	oct_is($st[2] & 05777, -f _ ? 0644 : 0755,
 		'sharedRepository respected on file after convert');
 }
+
+is $ibx->mm->{dbh}->selectrow_array('PRAGMA journal_mode'), 'wal',
+	'-compact preserves msgmap.sqlite3 wal';
+is $ibx->over->dbh->selectrow_array('PRAGMA journal_mode'), 'wal',
+	'-compact preserves over.sqlite3 wal';
+$ibx->cleanup;
 
 local $ENV{PI_CONFIG} = '/dev/null';
 my ($out, $err) = ('', '');
@@ -83,6 +90,11 @@ ok(run_script($cmd, $env, $rdr), 'v2 compact works');
 $ibx->{inboxdir} = "$tmpdir/x/v2";
 $ibx->{version} = 2;
 is($ibx->mm->num_highwater, $hwm, 'highwater mark unchanged in v2 inbox');
+is $ibx->mm->{dbh}->selectrow_array('PRAGMA journal_mode'), 'wal',
+	'-convert preserves msgmap.sqlite3 wal';
+is $ibx->over->dbh->selectrow_array('PRAGMA journal_mode'), 'wal',
+	'-convert preserves over.sqlite3 wal';
+$ibx->cleanup;
 
 @xdir = glob("$tmpdir/x/v2/xap*/*");
 foreach (@xdir) {

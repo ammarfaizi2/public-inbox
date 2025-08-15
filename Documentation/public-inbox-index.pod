@@ -209,6 +209,14 @@ Available in public-inbox 2.0.0+
 
 Passed directly to L<git-log(1)> to limit changes for C<--reindex>
 
+=item --wal
+
+Enable WAL (Write-Ahead-Log) on SQLite files.  This may reduce
+fragmentation and improve performance; but requires read-only
+processes (e.g. public-inbox-netd) to have write access
+to all directories containing *.sqlite3 files.
+See L<https://sqlite.org/wal.html> for more info.
+
 =back
 
 =head1 FILES

@@ -49,6 +49,8 @@ process which distributes work to the Xapian shards.
 
 =item --max-size=BYTES
 
+=item --wal
+
 These options affect indexing.  They have no effect if
 L</--no-index> is specified
 

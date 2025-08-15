@@ -36,7 +36,7 @@ my $opt = {
 	'update-extindex' => [], # ":s@" optional arg sets '' if no arg given
 };
 GetOptions($opt, qw(verbose|v+ reindex rethread compact|c+ jobs|j=i prune
-		fsync|sync! xapian_only|xapian-only dangerous
+		fsync|sync! xapian_only|xapian-only dangerous wal
 		indexlevel|index-level|L=s max_size|max-size=s
 		batch_size|batch-size=s
 		since|after=s until|before=s

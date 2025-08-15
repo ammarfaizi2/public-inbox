@@ -68,6 +68,7 @@ sub new {
 	$self->{shards} = $self->count_shards ||
 		nproc_shards { nproc => $opt->{jobs} };
 	my $oidx = PublicInbox::OverIdx->new("$self->{xpfx}/over.sqlite3");
+	$oidx->{journal_mode} = 'wal' if $opt->{wal};
 	$self->{-no_fsync} = $oidx->{-no_fsync} = 1 if !$opt->{fsync};
 	$self->{-dangerous} = 1 if $opt->{dangerous};
 	$self->{oidx} = $oidx;

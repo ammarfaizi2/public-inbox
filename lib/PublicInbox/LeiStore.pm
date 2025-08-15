@@ -139,7 +139,7 @@ sub eidx_init {
 	my $tl = wantarray && $self->{-err_wr} ?
 			on_destroy(\&_tail_err, $self) :
 			undef;
-	$eidx->idx_init({-private => 1}); # acquires lock
+	$eidx->idx_init({wal => 1, -private => 1}); # acquires lock
 	wantarray ? ($eidx, $tl) : $eidx;
 }
 

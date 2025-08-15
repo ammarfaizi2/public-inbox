@@ -473,7 +473,7 @@ sub create {
 		my ($dir) = ($fn =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($dir);
 	}
-	$self->{journal_mode} = 'WAL' if $opt->{-private};
+	$self->{journal_mode} = 'wal' if $opt->{wal};
 	# create the DB:
 	PublicInbox::Over::dbh($self);
 	$self->dbh_close;

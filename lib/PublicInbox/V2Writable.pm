@@ -85,7 +85,7 @@ sub init_inbox {
 	my $skip_epoch = ($self->{ibx}->{-creat_opt} // {})->{'skip-epoch'};
 	$max = $skip_epoch if (defined($skip_epoch) && !defined($max));
 	$self->{mg}->add_epoch($max // 0);
-	$self->idx_init;
+	$self->idx_init($self->{ibx}->{-creat_opt});
 	my $skip_artnum = ($self->{ibx}->{-creat_opt} // {})->{'skip-artnum'};
 	$self->{mm}->skip_artnum($skip_artnum) if defined $skip_artnum;
 	$self->done;
@@ -243,7 +243,7 @@ sub _idx_init { # with_umask callback
 
 	# Now that all subprocesses are up, we can open the FDs
 	# for SQLite:
-	my $mm = $self->{mm} = PublicInbox::Msgmap->new_file($ibx, 1);
+	my $mm = $self->{mm} = PublicInbox::Msgmap->new_file($ibx, 1, $opt);
 	$mm->{dbh}->begin_work;
 }
 

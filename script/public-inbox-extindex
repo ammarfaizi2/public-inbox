@@ -28,7 +28,7 @@ See public-inbox-extindex(1) man page for full documentation.
 EOF
 my $opt = { quiet => -1, compact => 0, fsync => 1, scan => 1 };
 GetOptions($opt, qw(verbose|v+ reindex rethread compact|c+ jobs|j=i
-		fsync|sync! fast dangerous
+		fsync|sync! fast dangerous wal
 		indexlevel|index-level|L=s max_size|max-size=s
 		batch_size|batch-size=s
 		dedupe:s@ gc commit-interval=i watch scan! dry-run|n

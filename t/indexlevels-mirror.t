@@ -34,7 +34,8 @@ my $import_index_incremental = sub {
 	local $ENV{PI_CONFIG} = "$tmpdir/config";
 
 	# index master (required for v1)
-	my @cmd = (qw(-index -j0 --dangerous), $ibx->{inboxdir}, "-L$level");
+	my @cmd = (qw(-index --wal -j0 --dangerous),
+		$ibx->{inboxdir}, "-L$level");
 	push @cmd, '-c' if have_xapian_compact;
 	ok(run_script(\@cmd, undef, { 2 => \$err }), 'index master');
 	my $ro_master = PublicInbox::Inbox->new({
@@ -44,6 +45,10 @@ my $import_index_incremental = sub {
 	my $msgs = $ro_master->over->recent;
 	is(scalar(@$msgs), 1, 'only one message in master, so far');
 	is($msgs->[0]->{mid}, 'm@1', 'first message in master indexed');
+	my $jm = $ro_master->over->dbh->selectrow_array('PRAGMA journal_mode');
+	is $jm, 'wal', 'over.sqlite3 respects --wal';
+	$jm = $ro_master->mm->{dbh}->selectrow_array('PRAGMA journal_mode');
+	is $jm, 'wal', 'msgmap.sqlite3 respects --wal';
 
 	# clone
 	@cmd = (qw(git clone --mirror -q));

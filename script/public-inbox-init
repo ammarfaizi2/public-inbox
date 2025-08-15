@@ -41,6 +41,7 @@ my (@c_extra, @chdir);
 my $creat_opt = {};
 my %opts = (
 	'V|version=i' => \$version,
+	wal => \($creat_opt->{wal}),
 	'L|index-level|indexlevel=s' => \$indexlevel,
 	'S|skip|skip-epoch=i' => \($creat_opt->{'skip-epoch'}),
 	'skip-artnum=i' => \($creat_opt->{'skip-artnum'}),
