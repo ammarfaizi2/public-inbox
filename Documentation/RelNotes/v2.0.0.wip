@@ -200,6 +200,11 @@ Search improvements (lei and PublicInbox::WWW)
     checkpoint every 5s to avoid SQLite timeouts in public-facing
     frontends where SQLite WAL isn't possible.
 
+  * publicinbox.$NAME.altid is now supported with public-inbox-extindex
+
+  * publicinbox.$NAME.indexheader added to support custom header indexing,
+    see public-inbox-config(5) for details.
+
 public-inbox-daemon (-netd, -imapd, -httpd, -nntpd, -pop3d)
 
   * per-listener servername=, serverport=, and multi-accept=
