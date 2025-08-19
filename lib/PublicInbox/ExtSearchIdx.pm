@@ -256,21 +256,20 @@ sub do_xpost ($$) {
 	my ($req, $smsg) = @_;
 	my $self = $req->{self};
 	my $docid = $smsg->{num};
-	my $oid = $req->{oid};
+	my $hex = $req->{oid};
 	my $xibx = $req->{ibx} // $self->{ibx};
 	my $eml = $req->{eml};
 	if (my $new_smsg = $req->{new_smsg}) { # 'm' on cross-posted message
 		my $eidx_key = $xibx->eidx_key;
 		my $xnum = $req->{xnum};
-		$self->{oidx}->add_xref3($docid, $xnum, $oid, $eidx_key);
+		$self->{oidx}->add_xref3($docid, $xnum, $hex, $eidx_key);
 		$self->{-need_xapian} and
 			idx_shard($self, $docid)->
 					add_eidx_info($docid, $eidx_key, $eml);
 		apply_boost($req, $smsg) if $self->{boost_in_use};
 	} else { # 'd' no {xnum}
 		$self->git->async_wait_all;
-		$oid = pack('H*', $oid);
-		_unref_doc $self, $docid, $xibx, undef, $oid, $eml;
+		_unref_doc $self, $docid, $xibx, undef, pack('H*', $hex), $eml;
 	}
 }
 
@@ -286,10 +285,10 @@ sub index_unseen ($) {
 	my $docid = $self->{oidx}->adj_counter('eidx_docid', '+');
 	$new_smsg->{num} = $docid;
 	$self->{oidx}->add_overview($eml, $new_smsg);
-	my $oid = $new_smsg->{blob};
+	my $hex = $new_smsg->{blob};
 	my $ibx = ($req->{ibx} // $self->{ibx}) or die 'BUG: {ibx} unset';
 	my $ekey = $new_smsg->{eidx_key} = $ibx->eidx_key;
-	$self->{oidx}->add_xref3($docid, $req->{xnum}, $oid, $ekey);
+	$self->{oidx}->add_xref3($docid, $req->{xnum}, $hex, $ekey);
 	$self->{-need_xapian} and
 		idx_shard($self, $docid)->index_eml($eml, $new_smsg);
 	update_checkpoint $self, $new_smsg->{bytes};
@@ -342,13 +341,13 @@ sub _blob_missing ($$) { # called when a known $smsg->{blob} is gone
 }
 
 sub ck_existing { # git->cat_async callback
-	my ($bref, $oid, $type, $size, $req) = @_;
+	my ($bref, $hex, $type, $size, $req) = @_;
 	my $smsg = delete $req->{cur_smsg} or die 'BUG: {cur_smsg} missing';
 	if ($type eq 'missing') {
 		_blob_missing($req, $smsg);
-	} elsif (!is_bad_blob($oid, $type, $size, $smsg->{blob})) {
+	} elsif (!is_bad_blob($hex, $type, $size, $smsg->{blob})) {
 		my $self = $req->{self} // die 'BUG: {self} missing';
-		local $self->{current_info} = "$self->{current_info} $oid";
+		local $self->{current_info} = "$self->{current_info} $hex";
 		my $cur = PublicInbox::Eml->new($bref);
 		if (content_hash($cur) eq $req->{chash}) {
 			push @{$req->{indexed}}, $smsg; # for do_xpost
@@ -377,12 +376,12 @@ sub cur_ibx_xnum ($$;$) {
 }
 
 sub index_oid { # git->cat_async callback for 'm'
-	my ($bref, $oid, $type, $size, $req) = @_;
+	my ($bref, $hex, $type, $size, $req) = @_;
 	my $self = $req->{self} // die 'BUG: {self} missing';
-	local $self->{current_info} = "$self->{current_info} $oid";
-	return if is_bad_blob($oid, $type, $size, $req->{oid});
+	local $self->{current_info} = "$self->{current_info} $hex";
+	return if is_bad_blob($hex, $type, $size, $req->{oid});
 	my $new_smsg = $req->{new_smsg} = bless {
-		blob => $oid,
+		blob => $hex,
 	}, 'PublicInbox::Smsg';
 	$new_smsg->set_bytes($$bref, $size);
 	++$self->{nrec};
@@ -391,17 +390,17 @@ sub index_oid { # git->cat_async callback for 'm'
 		warn "# deleted\n";
 		warn "# mismatch $_->{blob}\n" for @$mismatch;
 		$self->{latest_cmt} = $req->{cur_cmt} //
-			die "BUG: {cur_cmt} unset ($oid)\n";
+			die "BUG: {cur_cmt} unset ($hex)\n";
 		return;
 	};
 	do_step($req);
 }
 
 sub unindex_oid { # git->cat_async callback for 'd'
-	my ($bref, $oid, $type, $size, $req) = @_;
+	my ($bref, $hex, $type, $size, $req) = @_;
 	my $self = $req->{self};
-	local $self->{current_info} = "$self->{current_info} $oid";
-	return if is_bad_blob($oid, $type, $size, $req->{oid});
+	local $self->{current_info} = "$self->{current_info} $hex";
+	return if is_bad_blob($hex, $type, $size, $req->{oid});
 	return if defined(cur_ibx_xnum($req, $bref)); # was re-added
 	do_step($req);
 }
@@ -470,17 +469,16 @@ EOM
 SELECT ibx_id,eidx_key FROM inboxes
 EOM
 	$ibx_ck->execute;
-	while (my ($ibx_id, $eidx_key) = $ibx_ck->fetchrow_array) {
-		next if $self->{ibx_map}->{$eidx_key};
-		$self->{midx}->remove_eidx_key($eidx_key);
-		warn "# deleting messages for $eidx_key...\n";
+	while (my ($ibx_id, $ekey) = $ibx_ck->fetchrow_array) {
+		next if $self->{ibx_map}->{$ekey};
+		$self->{midx}->remove_eidx_key($ekey);
+		warn "# deleting messages for $ekey...\n";
 		$x3_doc->execute($ibx_id);
-		my $ibx = { -ibx_id => $ibx_id, -gc_eidx_key => $eidx_key };
-		while (my ($docid, $xnum, $oid) = $x3_doc->fetchrow_array) {
-			my $r = _unref_doc $self, $docid, $ibx, $xnum, $oid;
-			$oid = unpack('H*', $oid);
+		my $ibx = { -ibx_id => $ibx_id, -gc_eidx_key => $ekey };
+		while (my ($docid, $xnum, $oidbin) = $x3_doc->fetchrow_array) {
+			my $r = _unref_doc $self, $docid, $ibx, $xnum, $oidbin;
 			$r = $r ? 'unref' : 'remove';
-			warn "# $r #$docid $eidx_key $oid\n";
+			warn "# $r #$docid $ekey ", unpack('H*', $oidbin), "\n";
 			if (update_checkpoint $self) {
 				$x3_doc = $ibx_ck = undef;
 				reindex_checkpoint($self);
@@ -496,15 +494,15 @@ DELETE FROM inboxes WHERE ibx_id = ?
 SELECT key FROM eidx_meta WHERE key GLOB ? AND key REGEXP ?
 
 		my $ekg = 'lc-v[1-9]*:'.
-			PublicInbox::SQLiteUtil::escape_glob($eidx_key).'//*';
-		$lc_i->execute($ekg, qr!\Alc-v[1-9]+:\Q$eidx_key\E//!);
+			PublicInbox::SQLiteUtil::escape_glob($ekey).'//*';
+		$lc_i->execute($ekg, qr!\Alc-v[1-9]+:\Q$ekey\E//!);
 		while (my ($key) = $lc_i->fetchrow_array) {
 			warn "# removing $key\n";
 			$self->{oidx}->dbh->do(<<'', undef, $key);
 DELETE FROM eidx_meta WHERE key = ?
 
 		}
-		warn "# $eidx_key removed\n";
+		warn "# $ekey removed\n";
 	}
 }
 
