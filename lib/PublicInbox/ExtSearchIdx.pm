@@ -1241,6 +1241,7 @@ sub symlink_packs ($$) {
 sub idx_init { # similar to V2Writable
 	my ($self, $opt) = @_;
 	return if $self->{idx_shards};
+	$self->{txn_t0} = now;
 
 	$self->git->cleanup;
 	my $mode = 0644;

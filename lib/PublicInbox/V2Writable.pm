@@ -22,7 +22,7 @@ use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob
 	update_checkpoint);
-use PublicInbox::DS;
+use PublicInbox::DS qw(now);
 use IO::Handle; # ->autoflush
 use POSIX ();
 use Carp qw(confess);
@@ -256,6 +256,7 @@ sub parallel_init ($$) {
 sub idx_init {
 	my ($self, $opt) = @_;
 	return if $self->{idx_shards};
+	$self->{txn_t0} = now;
 	my $ibx = $self->{ibx};
 
 	# do not leak read-only FDs to child processes, we only have these
@@ -701,6 +702,8 @@ sub reindex_checkpoint ($) {
 	my $mm_tmp = $self->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
 	die 'BUG: {im} during reindex' if $self->{im};
+	my $t0 = now;
+	my $txn_bytes = $self->{transact_bytes};
 	if ($self->{ibx_map} && !$self->{checkpoint_unlocks}) {
 		checkpoint($self, 1); # no need to release lock on pure index
 	} else {
@@ -708,7 +711,14 @@ sub reindex_checkpoint ($) {
 	}
 
 	if (my $pr = $self->{-regen_fmt} ? $self->{-opt}->{-progress} : undef) {
-		$pr->(sprintf $self->{-regen_fmt}, $self->{nrec});
+		my $now = now;
+		chop(my $fmt = $self->{-regen_fmt}); # remove '\n';
+		$fmt .= " c:%ums all:%0.1fKB/s\n";
+		my $txn_kb = $txn_bytes / 1024;
+		$pr->(sprintf $fmt, $self->{nrec},
+			($now - $t0) * 1000,
+			$txn_kb / ($now - $self->{txn_t0}));
+		$self->{txn_t0} = $now;
 	}
 
 	# allow -watch or -mda to write...
@@ -811,6 +821,7 @@ sub index_oid { # cat_async callback
 }
 
 # only update last_commit for $i on reindex iff newer than current
+# Overridden for PublicInbox::ExtSearchIdx
 sub update_last_commit {
 	my ($self, $stk) = @_;
 	my $unit = $self->{unit} // return;
