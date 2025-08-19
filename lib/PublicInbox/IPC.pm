@@ -100,8 +100,8 @@ sub exit_exception { exit(!!$@) }
 # starts a worker if Sereal or Storable is installed
 sub ipc_worker_spawn {
 	my ($self, $ident, $oldset, $fields, @cb_args) = @_;
-	return if ($self->{-ipc_ppid} // -1) == $$; # idempotent
-	delete(@$self{qw(-ipc_req -ipc_res -ipc_ppid -ipc_pid)});
+	return if $self->{-ipc_res} && $self->{-ipc_res}->can_reap; # idempotent
+	delete(@$self{qw(-ipc_req -ipc_res -ipc_pid)});
 	pipe(my $r_req, my $w_req);
 	pipe(my $r_res, my $w_res);
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
@@ -132,7 +132,6 @@ sub ipc_worker_spawn {
 	$self->{-ipc_req} = $w_req;
 	$self->{-ipc_res} = PublicInbox::IO::attach_pid($r_res, $pid,
 					\&ipc_worker_reap, $self, @cb_args);
-	$self->{-ipc_ppid} = $$;
 	$self->{-ipc_pid} = $pid;
 }
 
@@ -160,7 +159,7 @@ sub ipc_atfork_child {
 # idempotent, can be called regardless of whether worker is active or not
 sub ipc_worker_stop {
 	my ($self) = @_;
-	my ($pid, $ppid) = delete(@$self{qw(-ipc_pid -ipc_ppid)});
+	my $pid = delete $self->{-ipc_pid};
 	my ($w_req, $r_res) = delete(@$self{qw(-ipc_req -ipc_res)});
 	if (!$w_req && !$r_res) {
 		die "unexpected PID:$pid without IPC pipes" if $pid;
@@ -198,7 +197,7 @@ sub ipc_do {
 # causes newer siblings to inherit older siblings sockets
 sub ipc_sibling_atfork_child {
 	my ($self) = @_;
-	my ($pid, undef) = delete(@$self{qw(-ipc_pid -ipc_ppid)});
+	my $pid = delete $self->{-ipc_pid};
 	delete(@$self{qw(-ipc_req -ipc_res)});
 	$pid == $$ and die "BUG: $$ ipc_atfork_child called on itself";
 }
