@@ -251,10 +251,8 @@ sub require_mods (@) {
 				next;
 			}
 		} elsif ($mod eq '+SCM_RIGHTS') {
-			if (my $msg = need_scm_rights()) {
-				push @need, $msg;
-				next;
-			}
+			push @need, need_scm_rights();
+			next;
 		} elsif ($mod eq ':fcntl_lock') {
 			next if $^O eq 'linux' || require_bsd;
 			diag "untested platform: $^O, ".
@@ -722,13 +720,16 @@ sub ignore_inline_c_missing {
 }
 
 sub need_scm_rights () {
-	state $ok = PublicInbox::Spawn->can('send_cmd4') || do {
+	state $ok = do {
 			require PublicInbox::Syscall;
-			PublicInbox::Syscall->can('send_cmd4'); # Linux only
-		} || eval { require Socket::MsgHdr; 1 };
-	return if $ok;
-	'need SCM_RIGHTS support: Inline::C unconfigured/missing '.
-	'(mkdir -p ~/.cache/public-inbox/inline-c) OR Socket::MsgHdr missing';
+			PublicInbox::Syscall->can('send_cmd4'); # Linux+*BSD
+		} || eval { require Socket::MsgHdr; 1 } ||
+			PublicInbox::Spawn->can('send_cmd4');
+	return () if $ok;
+	('need SCM_RIGHTS support: Socket::MsgHdr OR ' .
+	 '(syscall numbers + msg_hdr pack templates missing) OR ' .
+	 'Inline::C unconfigured/missing '.
+	 '( mkdir -p ~/.cache/public-inbox/inline-c)' );
 }
 
 # returns a pipe with FD_CLOEXEC disabled on the write-end
