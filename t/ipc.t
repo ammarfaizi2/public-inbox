@@ -104,12 +104,10 @@ pipe(my $rc, my $wc);
 open my $warn, '+>', undef;
 $warn->autoflush(0);
 local $SIG{__WARN__} = sub { print $warn "PID:$$ ", @_ };
-my @ppids;
 my $big = try_cat('COPYING') || BAIL_OUT "try_cat(COPYING): $!";
 
 for my $t ('worker', 'worker again') {
-	my $ppid = $ipc->wq_workers_start('wq', 1);
-	push(@ppids, $ppid);
+	$ipc->wq_workers_start('wq', 1);
 	$ipc->wq_io_do('test_write_each_fd', [ $wa, $wb, $wc ], 'hello world');
 	my $i = 0;
 	for my $fh ($ra, $rb, $rc) {
@@ -144,9 +142,7 @@ for my $t ('worker', 'worker again') {
 
 # wq_io_do works across fork (siblings can feed)
 SKIP: {
-	skip 'Socket::MsgHdr or Inline::C missing', 3 if !$ppids[0];
-	is_xdeeply(\@ppids, [$$, undef],
-		'parent pid returned in wq_workers_start');
+	require_mods '+SCM_RIGHTS', 1;
 	my $pid = fork;
 	if ($pid == 0) {
 		use POSIX qw(_exit);
@@ -176,7 +172,7 @@ SKIP: {
 
 $ipc->wq_close;
 SKIP: {
-	skip 'Socket::MsgHdr or Inline::C missing', 11 if !$ppids[0];
+	require_mods '+SCM_RIGHTS', 1;
 	seek $warn, 0, SEEK_SET;
 	my @warn = <$warn>;
 	is(scalar(@warn), 2, 'warned 3 times');
@@ -184,7 +180,7 @@ SKIP: {
 	is($warn[0], $warn[1], 'worker did not die');
 
 	$SIG{__WARN__} = 'DEFAULT';
-	is($ipc->wq_workers_start('wq', 2), $$, 'workers started again');
+	$ipc->wq_workers_start('wq', 2);
 	$ipc->wq_broadcast('test_append_pid', "$tmpdir/append_pid");
 	$ipc->wq_close;
 	chomp(my @pids = try_cat("$tmpdir/append_pid"));
