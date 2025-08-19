@@ -9,8 +9,16 @@
 # None of this is intended to be thread-safe since Perl5 maintainers
 # officially discourage the use of threads.
 #
-# There'll probably be more OS-level C stuff here, down the line.
+# n.b. consider dropping Inline::C for SCM_RIGHTS in favor of `syscall'
+# and use pack templates (with help from devel/sysdefs-list).
+#
+# We only need (Inline::C || XS) to support vfork(2) since Perl can't
+# guarantee a child won't modify global state.  `syscall' and pack/unpack
+# ought to handle everything else.
+#
 # We don't want too many DSOs: https://udrepper.livejournal.com/8790.html
+# and can rely on devel/sysdefs-list to write (or even generate) `pack'
+# perlop templates.
 
 package PublicInbox::Spawn;
 use v5.12;
