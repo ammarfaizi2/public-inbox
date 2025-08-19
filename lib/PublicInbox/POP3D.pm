@@ -5,6 +5,7 @@
 package PublicInbox::POP3D;
 use v5.12;
 use parent qw(PublicInbox::Lock);
+use autodie qw(open);
 use DBI qw(:sql_types); # SQL_BLOB
 use Carp ();
 use File::Temp 0.19 (); # 0.19 for ->newdir
@@ -140,7 +141,7 @@ sub state_dbh_new {
 
 	# ensure the interprocess fcntl lock file exists
 	$f = "$self->{pi_cfg}->{'publicinbox.pop3state'}/txn.locks";
-	open my $fh, '+>>', $f or Carp::croak("open($f): $!");
+	open my $fh, '+>>', $f;
 	$self->{txn_fh} = $fh;
 
 	create_state_tables($self, $dbh);

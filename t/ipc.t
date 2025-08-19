@@ -2,8 +2,9 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use v5.12;
-use autodie qw(seek);
+use autodie qw(fork open pipe seek);
 use PublicInbox::TestCommon;
+use PublicInbox::IO qw(try_cat);
 use Fcntl qw(SEEK_SET);
 use PublicInbox::SHA qw(sha1_hex);
 require_mods(qw(Storable||Sereal));
@@ -11,7 +12,8 @@ require_ok 'PublicInbox::IPC';
 my ($tmpdir, $for_destroy) = tmpdir();
 state $once = eval <<'';
 package PublicInbox::IPC;
-use strict;
+use v5.12;
+use autodie qw(open);
 use PublicInbox::SHA qw(sha1_hex);
 sub test_array { qw(test array) }
 sub test_scalar { 'scalar' }
@@ -33,7 +35,7 @@ sub test_sha {
 }
 sub test_append_pid {
 	my ($self, $file) = @_;
-	open my $fh, '>>', $file or die "open: $!";
+	open my $fh, '>>', $file;
 	$fh->autoflush(1);
 	print $fh "$$\n" or die "print: $!";
 }
@@ -96,16 +98,14 @@ $test->('local');
 $ipc->ipc_worker_stop; # idempotent
 
 # work queues
-pipe(my ($ra, $wa)) or BAIL_OUT $!;
-pipe(my ($rb, $wb)) or BAIL_OUT $!;
-pipe(my ($rc, $wc)) or BAIL_OUT $!;
-open my $warn, '+>', undef or BAIL_OUT;
+pipe(my $ra, my $wa);
+pipe(my $rb, my $wb);
+pipe(my $rc, my $wc);
+open my $warn, '+>', undef;
 $warn->autoflush(0);
 local $SIG{__WARN__} = sub { print $warn "PID:$$ ", @_ };
 my @ppids;
-open my $agpl, '<', 'COPYING' or BAIL_OUT "AGPL-3 missing: $!";
-my $big = do { local $/; <$agpl> } // BAIL_OUT "read: $!";
-close $agpl or BAIL_OUT "close: $!";
+my $big = try_cat('COPYING') || BAIL_OUT "try_cat(COPYING): $!";
 
 for my $t ('worker', 'worker again') {
 	my $ppid = $ipc->wq_workers_start('wq', 1);
@@ -147,7 +147,7 @@ SKIP: {
 	skip 'Socket::MsgHdr or Inline::C missing', 3 if !$ppids[0];
 	is_xdeeply(\@ppids, [$$, undef],
 		'parent pid returned in wq_workers_start');
-	my $pid = fork // BAIL_OUT $!;
+	my $pid = fork;
 	if ($pid == 0) {
 		use POSIX qw(_exit);
 		$ipc->wq_io_do('test_write_each_fd', [ $wa, $wb, $wc ], $$);
@@ -187,8 +187,7 @@ SKIP: {
 	is($ipc->wq_workers_start('wq', 2), $$, 'workers started again');
 	$ipc->wq_broadcast('test_append_pid', "$tmpdir/append_pid");
 	$ipc->wq_close;
-	open my $fh, '<', "$tmpdir/append_pid" or BAIL_OUT "open: $!";
-	chomp(my @pids = <$fh>);
+	chomp(my @pids = try_cat("$tmpdir/append_pid"));
 	my %pids = map { $_ => 1 } grep(/\A[0-9]+\z/, @pids);
 	is(scalar keys %pids, 2, 'broadcast hit both PIDs');
 }

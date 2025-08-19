@@ -21,6 +21,7 @@ package PublicInbox::ExtSearchIdx;
 use strict;
 use v5.10.1;
 use parent qw(PublicInbox::ExtSearch PublicInbox::Umask PublicInbox::Lock);
+use autodie qw(mkdir);
 use Carp qw(croak carp);
 use Scalar::Util qw(blessed);
 use Sys::Hostname qw(hostname);
@@ -1278,7 +1279,7 @@ sub idx_init { # similar to V2Writable
 			}
 		}
 	} elsif ($!{ENOENT}) {
-		mkdir($pd) or die "mkdir($pd): $!";
+		mkdir $pd;
 	} else {
 		die "opendir($pd): $!";
 	}

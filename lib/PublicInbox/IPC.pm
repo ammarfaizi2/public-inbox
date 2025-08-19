@@ -10,7 +10,7 @@
 package PublicInbox::IPC;
 use v5.12;
 use parent qw(Exporter);
-use autodie qw(close pipe read socketpair);
+use autodie qw(close pipe read send socketpair);
 use Errno qw(EAGAIN EINTR);
 use Carp qw(croak);
 use PublicInbox::DS qw(awaitpid);
@@ -265,7 +265,7 @@ sub wq_broadcast {
 	my $buf = ipc_freeze([$sub, @args]);
 	for my $bcast1 (values %$wkr) {
 		my $sock = $bcast1 // $self->{-wq_s1} // next;
-		send($sock, $buf, 0) // croak "send: $!";
+		send($sock, $buf, 0);
 		# XXX shouldn't have to deal with EMSGSIZE here...
 	}
 }
