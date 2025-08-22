@@ -107,7 +107,12 @@ sub references ($) {
 			$addr{$_} = 1 for (PublicInbox::Address::emails($v));
 		}
 	}
-	uniq_mids(\@mids, \%addr);
+	@mids = reverse @mids; # keep IRT last (reversed again below)
+	my $ret = uniq_mids(\@mids, \%addr);
+
+	# preserve original ordering, PublicInbox::SearchThread favors last
+	@$ret = reverse @$ret;
+	$ret;
 }
 
 sub uniq_mids ($;$) {
