@@ -340,6 +340,7 @@ INSERT INTO id2num (id, num) VALUES (?,?)
 		my $id = mid2id($self, $mid);
 		$sth->execute($id, $num);
 	}
+	$self->{-art_max} = $num if $num > ($self->{-art_max} // 0);
 }
 
 sub _remove_oid {

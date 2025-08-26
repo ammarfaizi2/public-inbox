@@ -22,6 +22,7 @@ use PublicInbox::Spawn qw(spawn popen_rd run_die);
 use PublicInbox::Search;
 use PublicInbox::SearchIdx qw(log2stack is_ancestor check_size is_bad_blob
 	update_checkpoint);
+use PublicInbox::Syscall qw(defrag_file);
 use PublicInbox::DS qw(now);
 use IO::Handle; # ->autoflush
 use POSIX ();
@@ -220,6 +221,8 @@ sub _idx_init { # with_umask callback
 	$self->{shards} = $nshards if $nshards && $nshards != $self->{shards};
 	$self->{batch_bytes} = $opt->{batch_size} //
 				$PublicInbox::SearchIdx::BATCH_BYTES;
+	$self->{defrag_at} =
+		PublicInbox::SearchIdx::next_defrag $self->{oidx}->max, $opt;
 
 	# need to create all shards before initializing msgmap FD
 	# idx_shards must be visible to all forked processes
@@ -510,6 +513,29 @@ sub set_last_commits ($) { # this is NOT for ExtSearchIdx
 	}
 }
 
+sub do_defrag ($) {
+	my ($self) = @_;
+	my ($pr, $t0) = ($self->{-opt}->{-progress}, now);
+
+	# parallel shards, but each *.{glass,honey,etc.} is synchronous
+	$_->ipc_do('defrag_xdir') for @{$self->{idx_shards} // []};
+
+	# TODO: parallelize SQLite defrags?
+	if (my $df_ok = defrag_file $self->{oidx}->dbh->sqlite_db_filename) {
+		$self->{mm} and  # v2 only, not -extindex
+			defrag_file $self->{mm}->{dbh}->sqlite_db_filename;
+		$self->{defrag_at} = PublicInbox::SearchIdx::next_defrag
+						$self->{oidx}->{-art_max},
+						$self->{-opt};
+		$pr->('defrag took ',
+			sprintf('%ums', now - $t0),
+			", next defrag: >=#$self->{defrag_at} ",
+			"(cur: $self->{oidx}->{-art_max})\n");
+	} else { # defrag not supported (or needed, maybe)
+		delete $self->{defrag_at};
+	}
+}
+
 # public
 sub checkpoint ($;$) {
 	my ($self, $wait) = @_;
@@ -528,6 +554,10 @@ sub checkpoint ($;$) {
 		# start commit_txn_lazy asynchronously on all parallel shards
 		# (non-parallel waits here)
 		$_->ipc_do('commit_txn_lazy') for @$shards;
+
+		defined($self->{defrag_at}) and
+			($self->{oidx}->{-art_max}//0) >= $self->{defrag_at} and
+			do_defrag $self;
 
 		# transactions started on parallel shards,
 		# wait for them by issuing an echo command (echo can only

@@ -33,7 +33,17 @@ for (qw(sys/ioctl sys/filio)) {
 	($Config{"i_$cfg_name"} // '') eq 'define' and
 		push @cflags, "-DHAVE_${cpp_name}_H";
 }
-system($cc, '-o', $x, $f, @cflags) == 0 or die "$cc failed \$?=$?";
+my @cc_cmd = ($cc, '-o', $x, $f, @cflags);
+if ($^O eq 'linux') {
+	if (system @cc_cmd, '-DHAVE_LINUX_BTRFS_H=1') {
+		warn "W: `@cc_cmd' failed w/ linux/btrfs.h, trying w/o ...\n";
+	} else {
+		@cc_cmd = ();
+	}
+}
+if (@cc_cmd) {
+	system(@cc_cmd) == 0 or die "`@cc_cmd' failed \$?=$?";
+}
 print STDERR '# %Config',
 	(map { " $_=$Config{$_}" } qw(ptrsize sizesize lseeksize)), "\n";
 exit(system($x)); # exit is to ensure File::Temp::Dir->DESTROY fires
@@ -57,6 +67,9 @@ __DATA__
 #	include <sys/epoll.h>
 #	include <sys/inotify.h>
 #	include <sys/vfs.h>
+#	ifdef HAVE_LINUX_BTRFS_H
+#		include <linux/btrfs.h>
+#	endif
 #endif
 #include <sys/types.h>
 #include <fcntl.h>
@@ -134,6 +147,7 @@ int main(void)
 
 	MAYBE X(FS_IOC_GETFLAGS);
 	MAYBE X(FS_IOC_SETFLAGS);
+	MAYBE X(BTRFS_IOC_DEFRAG);
 
 	MAYBE D(SYS_renameat2);
 

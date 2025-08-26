@@ -32,7 +32,7 @@ our @EXPORT_OK = qw(epoll_create
 		EPOLLIN EPOLLOUT EPOLLET
 		EPOLL_CTL_ADD EPOLL_CTL_DEL EPOLL_CTL_MOD
 		EPOLLONESHOT EPOLLEXCLUSIVE
-		rename_noreplace %SIGNUM $F_SETPIPE_SZ);
+		rename_noreplace %SIGNUM $F_SETPIPE_SZ defrag_file);
 use constant {
 	EPOLLIN => 1,
 	EPOLLOUT => 4,
@@ -62,7 +62,8 @@ our ($SYS_epoll_create,
 	$SYS_recvmsg);
 
 my $SYS_fstatfs; # don't need fstatfs64, just statfs.f_type
-my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS, $SYS_writev);
+my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS, $SYS_writev,
+	$BTRFS_IOC_DEFRAG);
 my $SFD_CLOEXEC = 02000000; # Perl does not expose O_CLOEXEC
 our $no_deprecated = 0;
 
@@ -105,6 +106,7 @@ if ($^O eq "linux") {
 		};
 		$FS_IOC_GETFLAGS = 0x80046601;
 		$FS_IOC_SETFLAGS = 0x40046602;
+		$BTRFS_IOC_DEFRAG = 0x50009402;
 	} elsif ($machine eq "x86_64") {
 		$SYS_epoll_create = 213;
 		$SYS_epoll_ctl = 233;
@@ -121,6 +123,7 @@ if ($^O eq "linux") {
 		};
 		$FS_IOC_GETFLAGS = 0x80086601;
 		$FS_IOC_SETFLAGS = 0x40086602;
+		$BTRFS_IOC_DEFRAG = 0x50009402;
 	} elsif ($machine eq 'x32') {
 		$SYS_epoll_create = 1073742037;
 		$SYS_epoll_ctl = 1073742057;
@@ -435,23 +438,40 @@ sub rename_noreplace ($$) {
 	}
 }
 
-# returns "0 but true" on success, undef or
-sub nodatacow_fh ($) {
+sub is_btrfs ($) {
 	my ($fh) = @_;
 	my $buf = "\0" x 120;
-	syscall($SYS_fstatfs // return, fileno($fh), $buf) == 0 or
-		return warn("fstatfs: $!\n");
+	if (syscall($SYS_fstatfs // return, fileno($fh), $buf) != 0) {
+		warn "fstatfs: $!\n";
+		return;
+	}
 	my $f_type = unpack($FSWORD_T, $buf);
-	return if $f_type != 0x9123683E; # BTRFS_SUPER_MAGIC
+	$f_type == 0x9123683E; # BTRFS_SUPER_MAGIC
+}
+
+# returns "0 but true" on success, undef on noop, true != 0 on failure
+sub defrag_file ($) {
+	my ($file) = @_;
+	open my $fh, '+<', $file or return;
+	is_btrfs $fh or return;
+	$BTRFS_IOC_DEFRAG //
+		return warn 'BTRFS_IOC_DEFRAG undefined for architecture';
+	ioctl $fh, $BTRFS_IOC_DEFRAG, 0;
+}
+
+# returns "0 but true" on success, undef on noop, true != 0 on failure
+sub nodatacow_fh ($) {
+	my ($fh) = @_;
+	return unless is_btrfs $fh;
 
 	$FS_IOC_GETFLAGS //
-		return warn('FS_IOC_GETFLAGS undefined for platform');
-	ioctl($fh, $FS_IOC_GETFLAGS, $buf) //
-		return warn("FS_IOC_GETFLAGS: $!\n");
+		return (undef, warn 'FS_IOC_GETFLAGS undefined for platform');
+	ioctl($fh, $FS_IOC_GETFLAGS, my $buf = "\0\0\0\0") //
+		return (undef, warn "FS_IOC_GETFLAGS: $!");
 	my $attr = unpack('l!', $buf);
 	return if ($attr & 0x00800000); # FS_NOCOW_FL;
 	ioctl($fh, $FS_IOC_SETFLAGS, pack('l', $attr | 0x00800000)) //
-		warn("FS_IOC_SETFLAGS: $!\n");
+		return (undef, warn "FS_IOC_SETFLAGS: $!");
 }
 
 sub nodatacow_dir ($) {
@@ -461,8 +481,7 @@ sub nodatacow_dir ($) {
 		$rc && $rc == 0 and warn <<EOM;
 W: Disabling copy-on-write (CoW) on `$f'
 W: to avoid pathological slowdowns.  Data corruption may occur on unclean
-W: shutdowns, especially if using any form of BTRFS RAID.  Periodic defrag
-W: is recommended for *.sqlite3 and *.glass files to maintain performance.
+W: shutdowns, especially if using any form of BTRFS RAID.
 EOM
 	}
 }

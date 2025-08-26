@@ -14,6 +14,7 @@ use parent qw(PublicInbox::Search PublicInbox::Lock PublicInbox::Umask
 use PublicInbox::Eml;
 use PublicInbox::DS qw(now);
 use PublicInbox::Search qw(xap_terms);
+use PublicInbox::Syscall qw(defrag_file);
 use PublicInbox::InboxWritable;
 use PublicInbox::MID qw(mids_for_index mids);
 use PublicInbox::MsgIter;
@@ -36,6 +37,7 @@ our ($DB_CREATE_OR_OPEN, $DB_OPEN);
 our $DB_NO_SYNC = 0;
 our $DB_DANGEROUS = 0;
 our $CHECKPOINT_INTVL = 5; # seconds
+our $DEFRAG_NR = 100000; # document count
 our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# assume a typical 64-bit system has 8x more RAM than a
 	# typical 32-bit system:
@@ -148,7 +150,6 @@ sub idx_acquire {
 		if (!-d $dir && (!$is_shard ||
 				($is_shard && need_xapian($self)))) {
 			File::Path::mkpath($dir);
-			require PublicInbox::Syscall;
 			PublicInbox::Syscall::nodatacow_dir($dir);
 			# owner == self for CodeSearchIdx
 			$self->{-set_has_threadid_once} = 1 if $owner != $self;
@@ -1213,6 +1214,23 @@ sub eidx_shard_new {
 					$all ? [ @$per_ibx, @$all ] : $per_ibx;
 	}
 	$self;
+}
+
+# calculate the next article number to defrag at
+sub next_defrag ($$) {
+	my ($num, $opt) = @_;
+	my $nr = ($opt->{defrag} // $DEFRAG_NR) || return;
+	$num ||= 1; # num == 0 on new DB
+	$num + $nr - ($num % $nr);
+}
+
+sub defrag_xdir {
+	my ($self) = @_;
+	# e.g. xap15/[0123]/*.{glass,honey}, skip flintlock+iam{glass,*}
+	for (glob($self->xdir.'/*.*')) {
+		next if /\.sqlite3/; # v1 has over.sqlite3*
+		last unless defrag_file $_
+	}
 }
 
 1;
