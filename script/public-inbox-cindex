@@ -26,7 +26,7 @@ See public-inbox-cindex(1) man page for full documentation.
 EOF
 my $opt = { fsync => 1, scan => 1 }; # --no-scan is hidden
 GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
-		indexlevel|index-level|L=s join:s@
+		cow! indexlevel|index-level|L=s join:s@
 		batch_size|batch-size=s max_size|max-size=s
 		include|I=s@ only=s@ all show:s@
 		project-list=s exclude=s@ project-root|r=s

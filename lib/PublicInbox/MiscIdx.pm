@@ -28,9 +28,10 @@ sub new {
 	PublicInbox::SearchIdx::load_xapian_writable();
 	my $mi_dir = "$eidx->{xpfx}/misc";
 	File::Path::mkpath($mi_dir);
-	PublicInbox::Syscall::nodatacow_dir($mi_dir);
-	my $flags = $PublicInbox::SearchIdx::DB_CREATE_OR_OPEN;
 	my $opt = $eidx->{-opt};
+	$opt->{cow} or
+		PublicInbox::Syscall::nodatacow_dir($mi_dir);
+	my $flags = $PublicInbox::SearchIdx::DB_CREATE_OR_OPEN;
 	$flags |= $PublicInbox::SearchIdx::DB_NO_SYNC if !$opt->{fsync};
 	$flags |= $PublicInbox::SearchIdx::DB_DANGEROUS if $opt->{dangerous};
 	$json //= PublicInbox::Config::json();

@@ -474,6 +474,20 @@ sub nodatacow_fh ($) {
 		return (undef, warn "FS_IOC_SETFLAGS: $!");
 }
 
+# returns "0 but true" on success, undef on noop, true != 0 on failure
+sub yesdatacow_fh ($) {
+	my ($fh) = @_;
+	return unless is_btrfs $fh;
+	$FS_IOC_GETFLAGS //
+		return (undef, warn 'FS_IOC_GETFLAGS undefined for platform');
+	ioctl($fh, $FS_IOC_GETFLAGS, my $buf = "\0\0\0\0") //
+		return (undef, warn "FS_IOC_GETFLAGS: $!");
+	my $attr = unpack('l!', $buf);
+	return unless ($attr & 0x00800000); # FS_NOCOW_FL;
+	ioctl($fh, $FS_IOC_SETFLAGS, pack('l', $attr & ~0x00800000)) //
+		return (undef, warn "FS_IOC_SETFLAGS: $!");
+}
+
 sub nodatacow_dir ($) {
 	my ($f) = @_;
 	if (open my $fh, '<', $f) {

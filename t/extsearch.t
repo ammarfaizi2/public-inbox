@@ -740,5 +740,16 @@ if ('basic') {
 	my $smsg = $es->over->next_by_mid($msgid, \(my $id), \(my $prev));
 	ok $smsg, 'new message imported into over.sqlite3 w/ basic';
 }
+SKIP: {
+	my $bdir = $ENV{BTRFS_TESTDIR} or skip 'BTRFS_TESTDIR not defined', 1;
+	my $lsattr = require_cmd 'lsattr', 1;
+	my $tmp = File::Temp->newdir('eidx-cow-XXXX', DIR => $bdir);
+	local $ENV{DUMP} = 1;
+	ok run_script([qw(-extindex --cow --all), "$tmp/eidx"], undef,
+			{ 2 => \(my $err = '') }), 'extindexed w/ --cow';
+	diag $err;
+	my $lsa = xqx([$lsattr, '-Rl', glob("$tmp/eidx/ei*")]);
+	unlike $lsa, qr/No_COW/i, '--cow respected';
+}
 
 done_testing;

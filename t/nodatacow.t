@@ -50,6 +50,10 @@ SKIP: {
 		PublicInbox::Syscall::nodatacow_dir($name);
 		is_deeply \@w, [], 'no warnings if CoW already disabled';
 	}
+	open $fh, '<', $name or BAIL_OUT "open($name): $!";
+	PublicInbox::Syscall::yesdatacow_fh($fh);
+	$res = xqx([$lsattr, '-d', $name]);
+	like $res, qr/^-+ \Q$name\E/, "`C' attribute cleared";
 };
 
 done_testing;

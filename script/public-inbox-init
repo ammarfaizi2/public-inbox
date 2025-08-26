@@ -39,7 +39,7 @@ my $usage_cb = sub {
 	exit 1;
 };
 GetOptions(my $opt = {}, qw(version|V=i
-	wal indexlevel|index-level|L=s
+	cow! wal indexlevel|index-level|L=s
 	skip-epoch|skip|S=i skip-artnum=i
 	jobs|j=i newsgroup|ng=s
 	skip-docdata help|h

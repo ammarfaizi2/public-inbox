@@ -458,6 +458,7 @@ t/config.t
 t/config_limiter.t
 t/content_hash.t
 t/convert-compact.t
+t/cow.t
 t/daemon.t
 t/data-gen/.gitignore
 t/data/0001.patch

@@ -21,7 +21,7 @@ sub dbh_new {
 	my $opt = $self->{-opt};
 	if (!-s $f) {
 		if ($rw) {
-			PublicInbox::SQLiteUtil::create_db $f;
+			PublicInbox::SQLiteUtil::create_db $f, $opt;
 		} else {
 			$self->{filename} = $f; # die on stat() below:
 		}

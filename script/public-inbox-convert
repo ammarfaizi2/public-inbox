@@ -37,7 +37,7 @@ GetOptions($opt, qw(jobs|j=i index! help|h C=s@),
 		# index options
 		qw(verbose|v+ rethread compact|c+ fsync|sync!
 		indexlevel|index-level|L=s max_size|max-size=s
-		batch_size|batch-size=s wal
+		batch_size|batch-size=s cow! wal
 		sequential-shard|seq-shard
 		)) or die $help;
 if ($opt->{help}) { print $help; exit 0 };

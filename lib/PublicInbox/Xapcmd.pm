@@ -2,7 +2,7 @@
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 package PublicInbox::Xapcmd;
 use v5.12;
-use autodie qw(chmod opendir rename syswrite);
+use autodie qw(chmod closedir open opendir rename syswrite);
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::Syscall;
 use PublicInbox::Admin qw(setup_signals);
@@ -11,7 +11,7 @@ use PublicInbox::Search qw(xap_terms);
 use PublicInbox::SearchIdx;
 use File::Temp 0.19 (); # ->newdir
 use File::Path qw(remove_tree);
-use POSIX qw(WNOHANG _exit);
+use POSIX qw(WNOHANG dup _exit);
 use PublicInbox::DS;
 
 # support testing with dev versions of Xapian which installs
@@ -214,7 +214,8 @@ sub prepare_run {
 		my $v = PublicInbox::Search::SCHEMA_VERSION();
 		my $wip = File::Temp->newdir("xapian$v-XXXX", DIR => $dir);
 		$tmp->{$old} = $wip;
-		PublicInbox::Syscall::nodatacow_dir($wip->dirname);
+		$opt->{cow} or
+			PublicInbox::Syscall::nodatacow_dir($wip->dirname);
 		push @queue, [ $old, $wip ];
 	} elsif (defined $old) {
 		opendir(my $dh, $old);
@@ -229,6 +230,12 @@ sub prepare_run {
 				warn "W: skipping unknown dir: $old/$dn\n"
 			}
 		}
+		if ($opt->{cow}) { # make existing $DIR/{xap,ei}* CoW
+			my $dfd = dup(fileno($dh)) // die "dup: $!";
+			open my $fh, '<&='.$dfd;
+			closedir $dh;
+			PublicInbox::Syscall::yesdatacow_fh($fh);
+		}
 		die "No Xapian shards found in $old\n" unless @old_shards;
 		@old_shards = sort { $a <=> $b } @old_shards;
 		my ($src, $max_shard);
@@ -242,10 +249,12 @@ sub prepare_run {
 		}
 		foreach my $dn (0..$max_shard) {
 			my $wip = File::Temp->newdir("$dn-XXXX", DIR => $old);
-			same_fs_or_die($old, $wip->dirname);
+			my $wip_dn = $wip->dirname;
+			same_fs_or_die($old, $wip_dn);
 			my $cur = "$old/$dn";
 			push @queue, [ $src // $cur , $wip ];
-			PublicInbox::Syscall::nodatacow_dir($wip->dirname);
+			$opt->{cow} or
+				PublicInbox::Syscall::nodatacow_dir($wip_dn);
 			$tmp->{$cur} = $wip;
 		}
 		# mark old shards to be unlinked
@@ -418,13 +427,13 @@ sub xapian_write_prep ($) {
 	(\%PublicInbox::Search::X, $flag);
 }
 
-sub compact_tmp_shard ($) {
-	my ($wip) = @_;
+sub compact_tmp_shard ($$) {
+	my ($wip, $opt) = @_;
 	my $new = $wip->dirname;
 	my ($dir) = ($new =~ m!(.*?/)[^/]+/*\z!);
 	same_fs_or_die($dir, $new);
 	my $ft = File::Temp->newdir("$new.compact-XXXX", DIR => $dir);
-	PublicInbox::Syscall::nodatacow_dir($ft->dirname);
+	PublicInbox::Syscall::nodatacow_dir($ft->dirname) if !$opt->{cow};
 	$ft;
 }
 
@@ -444,7 +453,8 @@ sub cidx_reshard { # not docid based
 	my @tmp;
 	my @dst = map {
 		my $wip = $_->[1];
-		my $tmp = $opt->{compact} ? compact_tmp_shard($wip) : $wip;
+		my $tmp = $opt->{compact} ?
+				compact_tmp_shard($wip, $opt) : $wip;
 		push @tmp, $tmp;
 		$X->{WritableDatabase}->new($tmp->dirname, $flag);
 	} @$queue;
@@ -520,7 +530,7 @@ sub cpdb ($$) { # cb_spawn callback
 	my $tmp = $wip;
 	local @SIG{keys %SIG} = values %SIG;
 	if ($opt->{compact}) {
-		$tmp = compact_tmp_shard($wip);
+		$tmp = compact_tmp_shard($wip, $opt);
 		setup_signals();
 	}
 

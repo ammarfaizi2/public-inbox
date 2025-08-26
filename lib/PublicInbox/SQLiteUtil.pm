@@ -28,11 +28,13 @@ sub mk_sqlite_re ($$) {
 		: ($anywhere ? '.*' : '^')."\Q$pfx\E.*";
 }
 
-sub create_db ($) {
-	my ($f) = @_;
-	require PublicInbox::Syscall;
+sub create_db ($;$) {
+	my ($f, $opt) = @_;
 	my ($dir) = ($f =~ m!(.+)/[^/]+\z!);
-	PublicInbox::Syscall::nodatacow_dir($dir); # for journal/shm/wal
+	unless ($opt->{cow}) {
+		require PublicInbox::Syscall;
+		PublicInbox::Syscall::nodatacow_dir($dir); # for journal/shm/wal
+	}
 	# SQLite defaults mode to 0644, we want 0666 to respect umask
 	open my $fh, '+>>', $f;
 }

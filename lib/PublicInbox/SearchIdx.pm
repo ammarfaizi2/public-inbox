@@ -150,7 +150,8 @@ sub idx_acquire {
 		if (!-d $dir && (!$is_shard ||
 				($is_shard && need_xapian($self)))) {
 			File::Path::mkpath($dir);
-			PublicInbox::Syscall::nodatacow_dir($dir);
+			$self->{-opt}->{cow} or
+				PublicInbox::Syscall::nodatacow_dir($dir);
 			# owner == self for CodeSearchIdx
 			$self->{-set_has_threadid_once} = 1 if $owner != $self;
 			$flag |= $DB_DANGEROUS if $self->{-opt}->{dangerous};

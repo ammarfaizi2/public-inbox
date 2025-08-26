@@ -75,6 +75,7 @@ sub new {
 	my $self = bless {
 		xpfx => "$dir/ei".PublicInbox::Search::SCHEMA_VERSION,
 		topdir => $dir,
+		-opt => $opt,
 		creat => $opt->{creat},
 		ibx_map => {}, # (newsgroup//inboxdir) => $ibx
 		ibx_active => [], # by config section order
