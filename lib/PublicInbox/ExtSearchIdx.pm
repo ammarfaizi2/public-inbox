@@ -93,11 +93,9 @@ sub new {
 	$l !~ $PublicInbox::SearchIdx::INDEXLEVELS and
 		die "invalid indexlevel=$l\n";
 	$self->{indexlevel} = $l;
-	my $oidx = PublicInbox::OverIdx->new($over_file);
-	$oidx->{journal_mode} = 'wal' if $opt->{wal};
-	$self->{-no_fsync} = $oidx->{-no_fsync} = 1 if !$opt->{fsync};
+	$self->{oidx} = PublicInbox::OverIdx->new($over_file, $opt);
+	$self->{-no_fsync} = 1 if !$opt->{fsync};
 	$self->{-dangerous} = 1 if $opt->{dangerous};
-	$self->{oidx} = $oidx;
 	$self
 }
 

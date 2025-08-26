@@ -81,9 +81,8 @@ sub new {
 	}
 	if ($version == 1) {
 		$self->{lock_path} = "$inboxdir/ssoma.lock";
-		my $dir = $self->xdir;
-		$self->{oidx} = PublicInbox::OverIdx->new("$dir/over.sqlite3");
-		$self->{oidx}->{-no_fsync} = 1 if $ibx->{-no_fsync};
+		$self->{oidx} = PublicInbox::OverIdx->new(
+				$self->xdir.'/over.sqlite3', $creat_opt);
 	} elsif ($version == 2) {
 		defined $shard or die "shard is required for v2\n";
 		# shard is a number
@@ -1115,7 +1114,6 @@ sub _index_sync {
 	local $SIG{QUIT} = $quit;
 	local $SIG{INT} = $quit;
 	local $SIG{TERM} = $quit;
-	$self->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 	my $xdb = $self->begin_txn_lazy;
 	$self->{oidx}->rethread_prepare($opt);
 	my $mm = v1_mm_init $self;

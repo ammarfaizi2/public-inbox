@@ -42,6 +42,7 @@ use PublicInbox::DS qw(add_uniq_timer);
 
 sub new {
 	my (undef, $dir, $opt) = @_;
+	$opt->{wal} = 1;
 	my $eidx = PublicInbox::ExtSearchIdx->new($dir, $opt);
 	my $self = bless { priv_eidx => $eidx }, __PACKAGE__;
 	eidx_init($self)->done if $opt->{creat};

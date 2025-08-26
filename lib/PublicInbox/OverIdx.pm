@@ -21,7 +21,7 @@ use bytes (); # length
 
 sub dbh_new {
 	my ($self) = @_;
-	my $dbh = $self->SUPER::dbh_new($self->{-no_fsync} ? 2 : 1);
+	my $dbh = $self->SUPER::dbh_new(1);
 
 	# 80000 pages (80MiB on SQLite <3.12.0, 320MiB on 3.12.0+)
 	# was found to be good in 2018 during the large LKML import
@@ -34,8 +34,9 @@ sub dbh_new {
 }
 
 sub new {
-	my ($class, $f) = @_;
+	my ($class, $f, $opt) = @_;
 	my $self = $class->SUPER::new($f);
+	$self->{-opt} = $opt;
 	$self->{min_tid} = 0;
 	$self;
 }
@@ -474,7 +475,6 @@ sub create {
 		my ($dir) = ($fn =~ m!(.*?/)[^/]+\z!);
 		File::Path::mkpath($dir);
 	}
-	$self->{journal_mode} = 'wal' if $opt->{wal};
 	# create the DB:
 	PublicInbox::Over::dbh($self);
 	$self->dbh_close;

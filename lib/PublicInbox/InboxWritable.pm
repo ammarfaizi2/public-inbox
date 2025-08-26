@@ -37,7 +37,6 @@ sub _init_v1 {
 		require PublicInbox::SearchIdx;
 		require PublicInbox::Msgmap;
 		my $sidx = PublicInbox::SearchIdx->new($self, $opt);
-		$sidx->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 		$sidx->begin_txn_lazy;
 		my $mm = PublicInbox::Msgmap->new_file($self, $opt);
 		if (defined $skip_artnum) {

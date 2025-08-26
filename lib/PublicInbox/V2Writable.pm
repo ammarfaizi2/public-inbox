@@ -64,7 +64,8 @@ sub new {
 		total_bytes => 0,
 		current_info => '',
 		xpfx => $xpfx,
-		oidx => PublicInbox::OverIdx->new("$xpfx/over.sqlite3"),
+		oidx => PublicInbox::OverIdx->new("$xpfx/over.sqlite3",
+							$creat_opt),
 		lock_path => "$dir/inbox.lock",
 		# limit each git repo (epoch) to 1GB or so
 		rotate_bytes => int((1024 * 1024 * 1024) / $PACKING_FACTOR),

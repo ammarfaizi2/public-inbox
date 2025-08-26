@@ -28,7 +28,7 @@ sub new_file {
 	return if !$rw && !-r $f;
 
 	my $self = bless { filename => $f }, $class;
-	$self->{journal_mode} = 'wal' if $opt->{wal};
+	$self->{-opt} = $opt if $opt; # for WAL
 	my $dbh = $self->{dbh} = PublicInbox::Over::dbh_new($self, $rw);
 	if ($rw) {
 		$dbh->begin_work;

@@ -95,7 +95,7 @@ for my $ei_name (@$update_extindex) {
 my $mods = {};
 my @eidx_unconfigured;
 foreach my $ibx (@ibxs) {
-	$ibx = PublicInbox::InboxWritable->new($ibx);
+	$ibx = PublicInbox::InboxWritable->new($ibx, $opt);
 	# detect_indexlevel may also set $ibx->{-skip_docdata}
 	my $detected = $ibx->detect_indexlevel;
 	# XXX: users can shoot themselves in the foot, with opt->{indexlevel}

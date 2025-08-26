@@ -18,6 +18,7 @@ use PublicInbox::SQLiteUtil;
 sub dbh_new {
 	my ($self, $rw) = @_;
 	my $f = delete $self->{filename};
+	my $opt = $self->{-opt};
 	if (!-s $f) {
 		if ($rw) {
 			PublicInbox::SQLiteUtil::create_db $f;
@@ -59,16 +60,14 @@ sub dbh_new {
 		# If an admin is willing to give read-only daemons R/W
 		# permissions; they can enable WAL manually and we will
 		# respect that by not clobbering it.
-		my $jm = $self->{journal_mode}; # set by lei
-		if (defined $jm) {
-			$dbh->do('PRAGMA journal_mode = '.$jm);
+		if ($opt->{wal}) {
+			$dbh->do('PRAGMA journal_mode = wal');
 		} else {
-			$jm = $dbh->selectrow_array('PRAGMA journal_mode');
+			my $jm = $dbh->selectrow_array('PRAGMA journal_mode');
 			$jm eq 'wal' or
 				$dbh->do('PRAGMA journal_mode = TRUNCATE');
 		}
-
-		$dbh->do('PRAGMA synchronous = OFF') if $rw > 1;
+		$opt->{fsync} or $dbh->do('PRAGMA synchronous = OFF')
 	}
 	$dbh;
 }

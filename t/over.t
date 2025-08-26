@@ -27,9 +27,13 @@ $over->dbh_close;
 
 $over = PublicInbox::Over->new("$tmpdir/over.sqlite3");
 ok($over->dbh->{ReadOnly}, 'Over is ReadOnly');
+my $jm = $over->dbh->selectrow_array('PRAGMA journal_mode');
+isnt $jm, 'wal', 'journal_mode is not WAL by default';
 
-$over = PublicInbox::OverIdx->new("$tmpdir/over.sqlite3");
+$over = PublicInbox::OverIdx->new("$tmpdir/over.sqlite3", { wal => 1 });
 $over->dbh;
+$jm = $over->dbh->selectrow_array('PRAGMA journal_mode');
+is $jm, 'wal', "`wal' option respected";
 is($over->sid('hello-world'), $x, 'idempotent across reopen');
 $over->each_by_mid('never', sub { fail('should not be called') });
 
