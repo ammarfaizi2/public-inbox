@@ -10,7 +10,7 @@ use_ok 'PublicInbox::MiscSearch';
 use_ok 'PublicInbox::MiscIdx';
 
 my ($tmp, $for_destroy) = tmpdir();
-my $eidx = { xpfx => "$tmp/eidx", -no_fsync => 1 }; # mock ExtSearchIdx
+my $eidx = { xpfx => "$tmp/eidx" }; # mock ExtSearchIdx
 my $v1 = create_inbox 'hope', address => [ 'nope@example.com' ],
 			indexlevel => 'basic', -no_gc => 1, sub {
 	my ($im, $ibx) = @_;

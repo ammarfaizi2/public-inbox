@@ -122,8 +122,6 @@ for my $ibx (@ibxs) {
 	if ($opt->{compact} >= 2) {
 		PublicInbox::Xapcmd::run($ibx, 'compact', $opt->{compact_opt});
 	}
-	$ibx->{-no_fsync} = 1 if !$opt->{fsync};
-	$ibx->{-dangerous} = 1 if $opt->{dangerous};
 	$ibx->{-skip_docdata} //= $opt->{'skip-docdata'};
 
 	my $ibx_opt = $opt;

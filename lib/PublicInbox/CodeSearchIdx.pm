@@ -152,8 +152,6 @@ sub new {
 	}, __PACKAGE__;
 	$self->{nshard} = count_shards($self) ||
 		nproc_shards({nproc => $opt->{jobs}});
-	$self->{-no_fsync} = 1 if !$opt->{fsync};
-	$self->{-dangerous} = 1 if $opt->{dangerous};
 	$self;
 }
 

@@ -857,7 +857,6 @@ sub setup_public_inboxes () {
 	my $seen = 0;
 	$cfg->each_inbox(sub {
 		my ($ibx) = @_;
-		$ibx->{-no_fsync} = 1;
 		my $im = PublicInbox::InboxWritable->new($ibx)->importer(0);
 		my $V = $ibx->version;
 		my @eml = (glob('t/*.eml'), 't/data/0001.patch');
@@ -944,7 +943,6 @@ sub create_inbox ($;@) {
 	my $scope = $lk->lock_for_scope;
 	my $pre_cb = delete $opt{pre_cb};
 	$pre_cb->($dir) if $pre_cb && $new;
-	$opt{-no_fsync} = 1;
 	my $no_gc = delete $opt{-no_gc};
 	my $addr = $opt{address} // [];
 	$opt{-primary_address} //= $addr->[0] // "$ident\@example.com";

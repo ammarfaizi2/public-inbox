@@ -25,7 +25,7 @@ options:
 See public-inbox-purge(1) man page for full documentation.
 EOF
 
-my $opt = { verbose => 1, all => 0, -min_inbox_version => 2 };
+my $opt = { verbose => 1, all => 0, -min_inbox_version => 2, fsync => 1 };
 GetOptions($opt, @PublicInbox::AdminEdit::OPT, 'C=s@') or die $help;
 if ($opt->{help}) { print $help; exit 0 };
 
@@ -39,7 +39,7 @@ my $n_purged = 0;
 
 foreach my $ibx (@ibxs) {
 	my $eml = PublicInbox::Eml->new($data);
-	my $v2w = PublicInbox::V2Writable->new($ibx);
+	my $v2w = PublicInbox::V2Writable->new($ibx, $opt);
 
 	my $commits = $v2w->purge($eml) || [];
 

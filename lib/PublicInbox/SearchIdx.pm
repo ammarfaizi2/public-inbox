@@ -153,11 +153,11 @@ sub idx_acquire {
 			PublicInbox::Syscall::nodatacow_dir($dir);
 			# owner == self for CodeSearchIdx
 			$self->{-set_has_threadid_once} = 1 if $owner != $self;
-			$flag |= $DB_DANGEROUS if $owner->{-dangerous};
+			$flag |= $DB_DANGEROUS if $self->{-opt}->{dangerous};
 		}
 	}
 	return unless defined $flag;
-	$flag |= $DB_NO_SYNC if $owner->{-no_fsync};
+	$flag |= $DB_NO_SYNC if !$self->{-opt}->{fsync};
 	my $xdb = eval { ($X->{WritableDatabase})->new($dir, $flag) };
 	croak "Failed opening $dir: $@" if $@;
 	$self->{xdb} = $xdb;
@@ -1196,6 +1196,7 @@ sub eidx_shard_new {
 	my ($class, $eidx, $shard) = @_;
 	my $self = bless {
 		eidx => $eidx,
+		-opt => $eidx->{-opt}, # hmm...
 		xpfx => $eidx->{xpfx},
 		indexlevel => $eidx->{indexlevel},
 		-skip_docdata => 1,

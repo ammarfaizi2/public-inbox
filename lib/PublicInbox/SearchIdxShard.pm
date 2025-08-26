@@ -12,7 +12,7 @@ use PublicInbox::Syscall qw($F_SETPIPE_SZ);
 sub new {
 	my ($class, $v2w, $shard) = @_; # v2w may be ExtSearchIdx
 	my $ibx = $v2w->{ibx};
-	my $self = $ibx ? $class->SUPER::new($ibx, 1, $shard)
+	my $self = $ibx ? $class->SUPER::new($ibx, $v2w->{-opt}, $shard)
 			: $class->eidx_shard_new($v2w, $shard);
 	# create the DB before forking:
 	$self->idx_acquire;

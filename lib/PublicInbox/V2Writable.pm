@@ -70,8 +70,8 @@ sub new {
 		# limit each git repo (epoch) to 1GB or so
 		rotate_bytes => int((1024 * 1024 * 1024) / $PACKING_FACTOR),
 		last_commit => [], # git epoch -> commit
+		-opt => $creat_opt // {},
 	};
-	$self->{oidx}->{-no_fsync} = 1 if $v2ibx->{-no_fsync};
 	$self->{shards} = count_shards($self) || nproc_shards($creat_opt);
 	bless $self, $class;
 }

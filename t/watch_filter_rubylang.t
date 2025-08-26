@@ -67,7 +67,6 @@ EOF
 	watchspam = maildir:$spamdir
 EOM
 	my $ibx = $cfg->lookup_name($v);
-	$ibx->{-no_fsync} = 1;
 	ok($ibx, 'found inbox by name');
 
 	my $w = PublicInbox::Watch->new($cfg);
@@ -100,7 +99,6 @@ EOM
 
 	$cfg = PublicInbox::Config->new($cfg->{-f});
 	$ibx = $cfg->lookup_name($v);
-	$ibx->{-no_fsync} = 1;
 	is($ibx->search->reopen->mset('b:spam')->size, 0, 'spam removed');
 
 	is_deeply [], [ grep !/^#/, @warn ], 'no warnings';

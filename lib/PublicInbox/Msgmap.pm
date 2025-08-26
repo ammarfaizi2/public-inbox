@@ -17,18 +17,12 @@ use Scalar::Util qw(blessed);
 
 sub new_file {
 	my ($class, $ibx, $opt) = @_;
-	my $f;
 	my $rw = !!$opt;
-	if (blessed($ibx)) {
-		$f = $ibx->mm_file;
-		$rw = 2 if $rw && $ibx->{-no_fsync};
-	} else {
-		$f = $ibx;
-	}
+	my $f = blessed($ibx) ? $ibx->mm_file : $ibx;
 	return if !$rw && !-r $f;
 
 	my $self = bless { filename => $f }, $class;
-	$self->{-opt} = $opt if $opt; # for WAL
+	$self->{-opt} = $opt if $opt; # for WAL and fsync
 	my $dbh = $self->{dbh} = PublicInbox::Over::dbh_new($self, $rw);
 	if ($rw) {
 		$dbh->begin_work;

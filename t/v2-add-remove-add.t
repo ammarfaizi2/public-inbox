@@ -13,7 +13,6 @@ my $ibx = {
 	inboxdir => "$inboxdir/v2",
 	name => 'test-v2writable',
 	version => 2,
-	-no_fsync => 1,
 	-primary_address => 'test@example.com',
 };
 $ibx = PublicInbox::Inbox->new($ibx);

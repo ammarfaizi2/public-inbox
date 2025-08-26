@@ -94,8 +94,6 @@ sub new {
 		die "invalid indexlevel=$l\n";
 	$self->{indexlevel} = $l;
 	$self->{oidx} = PublicInbox::OverIdx->new($over_file, $opt);
-	$self->{-no_fsync} = 1 if !$opt->{fsync};
-	$self->{-dangerous} = 1 if $opt->{dangerous};
 	$self
 }
 

@@ -40,7 +40,6 @@ my $v2_init_add = sub {
 		address => [ "test-$i\@example.com" ],
 		url => [ "//example.com/test-$i" ],
 		version => 2,
-		-no_fsync => 1,
 	});
 	$ibx->{indexlevel} = $indexlevel if $level_cfg ne '';
 	my $entry = <<EOF;

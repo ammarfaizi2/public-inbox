@@ -18,7 +18,6 @@ my $ibx_config = {
 	name => 'test-v1reindex',
 	-primary_address => 'test@example.com',
 	indexlevel => 'full',
-	-no_fsync => 1,
 };
 my $mime = PublicInbox::Eml->new(<<'EOF');
 From: a@example.com
