@@ -168,6 +168,10 @@ SKIP: {
 	my $exp = bless ['blessed'], 'PublicInbox::WTF';
 	my $ret = eval { $ipc->wq_do('test_die', $exp) };
 	is_deeply($@, $exp, 'die with blessed ref');
+	$s = $ipc->wq_do('test_scalarref');
+	is_xdeeply $s, \'scalarref', 'scalar ref returned';
+	$s = $ipc->wq_do('test_undef');
+	is $s, undef, 'undef returned';
 }
 
 $ipc->wq_close;
@@ -175,7 +179,7 @@ SKIP: {
 	require_mods '+SCM_RIGHTS', 1;
 	seek $warn, 0, SEEK_SET;
 	my @warn = <$warn>;
-	is(scalar(@warn), 2, 'warned 3 times');
+	is(scalar(@warn), 2, 'warned 3 times') or diag explain(\@warn);
 	like($warn[0], qr/ wq_worker: /, '2nd warned from wq_worker');
 	is($warn[0], $warn[1], 'worker did not die');
 
