@@ -57,7 +57,7 @@ EOF
 	ok($im->add($eml), 'message added');
 	$im->done;
 	if ($version == 1) {
-		my $s = PublicInbox::SearchIdx->new($ibx, 1);
+		my $s = PublicInbox::SearchIdx->new($ibx, { wal => 1 });
 		$s->index_sync;
 	}
 }

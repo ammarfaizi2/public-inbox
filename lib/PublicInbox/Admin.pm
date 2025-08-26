@@ -309,7 +309,7 @@ EOM
 		$idx = $v2w;
 	} else {
 		require PublicInbox::SearchIdx;
-		$idx = PublicInbox::SearchIdx->new($ibx, 1);
+		$idx = PublicInbox::SearchIdx->new($ibx, $opt);
 	}
 	$idx->index_sync($opt);
 	$idx->{nidx} // 0; # returns number processed

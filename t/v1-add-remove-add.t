@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use warnings;
@@ -30,7 +30,7 @@ ok($im->add($mime), 'message added');
 ok($im->remove($mime), 'message removed');
 ok($im->add($mime), 'message added again');
 $im->done;
-my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+my $rw = PublicInbox::SearchIdx->new($ibx, { wal => 1 });
 $rw->index_sync;
 my $msgs = $ibx->over->recent({limit => 10});
 is($msgs->[0]->{mid}, 'a-mid@b', 'message exists in history');

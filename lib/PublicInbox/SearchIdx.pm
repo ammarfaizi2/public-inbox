@@ -55,7 +55,7 @@ our $INDEXLEVELS = qr/\A(?:full|medium|basic)\z/;
 our $PATCHID_BROKEN;
 
 sub new {
-	my ($class, $ibx, $creat, $shard) = @_;
+	my ($class, $ibx, $creat_opt, $shard) = @_;
 	ref $ibx or die "BUG: expected PublicInbox::Inbox object: $ibx";
 	my $inboxdir = $ibx->{inboxdir};
 	my $version = $ibx->version;
@@ -92,7 +92,7 @@ sub new {
 	} else {
 		die "unsupported inbox version=$version\n";
 	}
-	$self->{creat} = ($creat || 0) == 1;
+	$self->{creat} = !!$creat_opt;
 	$self;
 }
 

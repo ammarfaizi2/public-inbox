@@ -36,7 +36,7 @@ sub _init_v1 {
 			$opt->{wal}) {
 		require PublicInbox::SearchIdx;
 		require PublicInbox::Msgmap;
-		my $sidx = PublicInbox::SearchIdx->new($self, 1); # just create
+		my $sidx = PublicInbox::SearchIdx->new($self, $opt);
 		$sidx->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 		$sidx->begin_txn_lazy;
 		my $mm = PublicInbox::Msgmap->new_file($self, 1, $opt);

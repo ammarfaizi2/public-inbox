@@ -23,7 +23,7 @@ for my $V (1, 2) {
 		$ibx->init_inbox(0);
 		$_[0] = undef;
 		return if $V != 1;
-		my $sidx = PublicInbox::SearchIdx->new($ibx, 1);
+		my $sidx = PublicInbox::SearchIdx->new($ibx, { wal => 1 });
 		$sidx->idx_acquire;
 		$sidx->set_metadata_once;
 		$sidx->idx_release; # allow watching on lockfile

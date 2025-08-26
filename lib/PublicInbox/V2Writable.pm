@@ -1325,7 +1325,7 @@ sub index_sync {
 	if (!$self->{quit} && $opt->{reindex} &&
 			!ref($opt->{reindex}) && $idxlevel ne 'basic') {
 		$self->lock_acquire;
-		my $s0 = PublicInbox::SearchIdx->new($self->{ibx}, 0, 0);
+		my $s0 = PublicInbox::SearchIdx->new($self->{ibx}, $opt, 0);
 		if (my $xdb = $s0->idx_acquire) {
 			my $n = $xdb->get_metadata('has_threadid');
 			$xdb->set_metadata('has_threadid', '1') if $n ne '1';

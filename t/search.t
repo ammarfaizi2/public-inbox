@@ -23,7 +23,8 @@ is(0, xsys(qw(git init --shared -q --bare), $git_dir), "git init (main)")
 eval { PublicInbox::Search->new($ibx)->xdb };
 ok($@, "exception raised on non-existent DB");
 
-my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+my $sidx_opt = { wal => 1 };
+my $rw = PublicInbox::SearchIdx->new($ibx, $sidx_opt);
 $ibx->with_umask(sub {
 	$rw->idx_acquire;
 	$rw->idx_release;
@@ -31,7 +32,7 @@ $ibx->with_umask(sub {
 $rw = undef;
 my $rw_commit = sub {
 	$rw->commit_txn_lazy if $rw;
-	$rw = PublicInbox::SearchIdx->new($ibx, 1);
+	$rw = PublicInbox::SearchIdx->new($ibx, $sidx_opt);
 	$rw->{qp_flags} = 0; # quiet a warning
 	$rw->begin_txn_lazy;
 	$ibx->search->reopen;

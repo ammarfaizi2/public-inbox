@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -34,7 +34,7 @@ hello world gmane:666
 EOF
 	};
 	$ibx->{altid} = $altid;
-	PublicInbox::SearchIdx->new($ibx, 1)->index_sync;
+	PublicInbox::SearchIdx->new($ibx, { wal => 1 })->index_sync;
 }
 
 {

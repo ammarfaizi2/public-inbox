@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2017-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -17,7 +17,7 @@ my $git_dir = "$tmpdir/a.git";
 
 PublicInbox::Import::init_bare($git_dir);
 my $ibx = PublicInbox::Inbox->new({inboxdir => $git_dir});
-my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+my $rw = PublicInbox::SearchIdx->new($ibx, { wal => 1 });
 ok($rw, "search indexer created");
 my $data = <<'EOF';
 Subject: [RFC 00/14]

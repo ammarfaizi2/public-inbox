@@ -66,7 +66,7 @@ test_psgi($app, sub {
 SKIP: {
 	require_mods(qw(DBD::SQLite Xapian IO::Uncompress::Gunzip), 3);
 	require_ok 'PublicInbox::SearchIdx';
-	PublicInbox::SearchIdx->new($ibx, 1)->index_sync;
+	PublicInbox::SearchIdx->new($ibx, { wal => 1 })->index_sync;
 	test_psgi($app, sub {
 		my ($cb) = @_;
 		my $res = $cb->(GET('/a/test/blah@example.com/t.mbox.gz'));

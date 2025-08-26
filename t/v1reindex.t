@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use warnings;
@@ -31,6 +31,8 @@ EOF
 my $minmax;
 my $msgmap;
 my ($mark1, $mark2, $mark3, $mark4);
+my $sidx_opt = { wal => 1 };
+my $search_idx_new = sub { PublicInbox::SearchIdx->new($_[0], $sidx_opt) };
 {
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
@@ -54,7 +56,7 @@ my ($mark1, $mark2, $mark3, $mark4);
 	}
 
 	$im->done;
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync() };
 	is($@, '', 'no error from indexing');
 
@@ -81,7 +83,7 @@ my ($mark1, $mark2, $mark3, $mark4);
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing');
 	$im->done;
@@ -99,7 +101,7 @@ ok(!-d $xap, 'Xapian directories removed');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing');
@@ -123,7 +125,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing without msgmap');
 	is(scalar(@warn), 0, 'no warnings from reindexing');
@@ -146,7 +148,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing without msgmap');
 	is_deeply(\@warn, [], 'no warnings');
@@ -170,7 +172,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	$config{indexlevel} = 'medium';
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing without msgmap');
 	is_deeply(\@warn, [], 'no warnings');
@@ -196,7 +198,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	$config{indexlevel} = 'basic';
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from reindexing without msgmap');
 	is_deeply(\@warn, [], 'no warnings');
@@ -221,7 +223,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	$config{indexlevel} = 'medium';
 	my $ibx = PublicInbox::Inbox->new(\%config);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	eval { $rw->index_sync({reindex => 1}) };
 	is($@, '', 'no error from indexing');
 	is_deeply(\@warn, [], 'no warnings');
@@ -244,7 +246,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark1 4 simple additions in the same index_sync
 	eval { $rw->index_sync({ref => $mark1}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -268,7 +270,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark2 A delete separated form and add in the same index_sync
 	eval { $rw->index_sync({ref => $mark2}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -291,7 +293,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark3 adds following the delete at mark2
 	eval { $rw->index_sync({ref => $mark3}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -320,7 +322,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark4 A delete of an older message
 	eval { $rw->index_sync({ref => $mark4}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -354,7 +356,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark2 an add and it's delete in the same index_sync
 	eval { $rw->index_sync({ref => $mark2}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -377,7 +379,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark3 adds following the delete at mark2
 	eval { $rw->index_sync({ref => $mark3}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -406,7 +408,7 @@ ok(!-d $xap, 'Xapian directories removed again');
 	my %config = %$ibx_config;
 	my $ibx = PublicInbox::Inbox->new(\%config);
 	my $im = PublicInbox::Import->new($ibx->git, undef, undef, $ibx);
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	# mark4 A delete of an older message
 	eval { $rw->index_sync({ref => $mark4}) };
 	is($@, '', 'no error from reindexing without msgmap');
@@ -447,7 +449,7 @@ SELECT tid FROM over WHERE num > 0 ORDER BY tid ASC
 	my $tid = PublicInbox::OverIdx::get_counter($dbh, 'thread');
 	my $nr = $dbh->do('UPDATE over SET tid = ?', undef, $tid);
 
-	my $rw = PublicInbox::SearchIdx->new($ibx, 1);
+	my $rw = $search_idx_new->($ibx);
 	my @pr;
 	my $pr = sub { push @pr, @_ };
 	$rw->index_sync({reindex => 1, rethread => 1, -progress => $pr });

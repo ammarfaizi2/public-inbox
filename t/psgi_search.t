@@ -148,7 +148,7 @@ test_psgi(sub { $www->call(@_) }, sub {
 
 	# clobber has_threadid to emulate old versions:
 	{
-		my $sidx = PublicInbox::SearchIdx->new($ibx, 0);
+		my $sidx = PublicInbox::SearchIdx->new($ibx);
 		my $xdb = $sidx->idx_acquire;
 		$xdb->set_metadata('has_threadid', '0');
 		$sidx->idx_release;
