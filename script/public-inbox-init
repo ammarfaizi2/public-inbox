@@ -34,7 +34,6 @@ EOF
 require PublicInbox::Admin;
 PublicInbox::Admin::require_or_die('-base');
 
-my $creat_opt = {};
 my $usage_cb = sub {
 	print STDERR $help;
 	exit 1;
@@ -46,14 +45,10 @@ GetOptions(my $opt = {}, qw(version|V=i
 	skip-docdata help|h
 	c=s@ C=s@
 )) or $usage_cb->();
-for (qw(wal skip-epoch skip-artnum)) {
-	$creat_opt->{$_} = $opt->{$_} if exists $opt->{$_};
-}
 if ($opt->{help}) { print $help; exit 0 };
 my $ng = $opt->{newsgroup} // '';
 my $version = $opt->{version} if defined $opt->{version};
 my $indexlevel = $opt->{indexlevel} if defined $opt->{indexlevel};
-my $jobs = $opt->{jobs} if defined $opt->{jobs};
 my $name = shift @ARGV or $usage_cb->();
 my $inboxdir = shift @ARGV or $usage_cb->();
 my $http_url = shift @ARGV or $usage_cb->();
@@ -182,7 +177,7 @@ if (-f "$inboxdir/inbox.lock") {
 
 $version = 1 unless defined $version;
 
-if ($version == 1 && defined $creat_opt->{'skip-epoch'}) {
+if ($version == 1 && defined $opt->{'skip-epoch'}) {
 	die "--skip-epoch is only supported for -V2 inboxes\n";
 }
 
@@ -194,14 +189,14 @@ my $ibx = PublicInbox::Inbox->new({
 	indexlevel => $indexlevel,
 });
 
-if (defined $jobs) {
+if (defined(my $jobs = $opt->{jobs})) {
 	die "--jobs is only supported for -V2 inboxes\n" if $version == 1;
 	die "--jobs=$jobs must be >= 1\n" if $jobs <= 0;
-	$creat_opt->{nproc} = $jobs;
+	$opt->{nproc} = $jobs;
 }
 
 require PublicInbox::InboxWritable;
-$ibx = PublicInbox::InboxWritable->new($ibx, $creat_opt);
+$ibx = PublicInbox::InboxWritable->new($ibx, $opt);
 if ($opt->{'skip-docdata'}) {
 	$ibx->{indexlevel} //= 'full'; # ensure init_inbox writes xdb
 	$ibx->{indexlevel} eq 'basic' and

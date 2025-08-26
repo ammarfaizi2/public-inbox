@@ -82,10 +82,8 @@ local %ENV = (%$env, %ENV) if $env;
 my $new = { %$old };
 $new->{inboxdir} = PublicInbox::Config::rel2abs_collapsed($new_dir);
 $new->{version} = 2;
-my $creat_opt = { nproc => $opt->{jobs} };
-$creat_opt->{wal} = 1 if $opt->{wal};
-$creat_opt->{fsync} = $opt->{fsync};
-$new = PublicInbox::InboxWritable->new($new, $creat_opt);
+$opt->{nproc} = $opt->{jobs}; # FIXME validate
+$new = PublicInbox::InboxWritable->new($new, $opt);
 my $v2w;
 
 sub link_or_copy ($$) {
