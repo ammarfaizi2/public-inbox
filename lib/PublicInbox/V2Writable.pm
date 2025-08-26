@@ -518,7 +518,7 @@ sub checkpoint ($;$) {
 	my $shards = $self->{idx_shards};
 	if ($shards) {
 		# SQLite msgmap is second in importance (not in eidx)
-		my $dbh = $self->{mm} ? $self->{mm}->mm_commit : undef;
+		my $mm_dbh = $self->{mm} ? $self->{mm}->mm_commit : undef;
 
 		# SQLite overview is third
 		$self->{oidx}->commit_lazy;
@@ -552,11 +552,11 @@ shard[$i] bad echo:$echo != $i waiting for txn commit
 
 		# last_commit is special, don't commit these until
 		# Xapian shards are done:
-		$dbh->begin_work if $dbh;
+		$mm_dbh->begin_work if $mm_dbh;
 		set_last_commits($self);
-		if ($dbh) {
-			$dbh->commit;
-			$dbh->begin_work;
+		if ($mm_dbh) {
+			$mm_dbh->commit;
+			$mm_dbh->begin_work;
 		}
 	}
 	delete $self->{next_checkpoint};
