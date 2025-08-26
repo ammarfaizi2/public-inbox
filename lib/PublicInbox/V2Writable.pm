@@ -696,13 +696,15 @@ sub atfork_child {
 sub reindex_checkpoint ($) {
 	my ($self) = @_;
 
+	my $t0 = now;
 	$self->git->async_wait_all;
 	$self->update_last_commit;
+	my $git_wait = now - $t0;
 	$self->{need_checkpoint} = 0;
 	my $mm_tmp = $self->{mm_tmp};
 	$mm_tmp->atfork_prepare if $mm_tmp;
 	die 'BUG: {im} during reindex' if $self->{im};
-	my $t0 = now;
+	$t0 = now;
 	my $txn_bytes = $self->{transact_bytes};
 	if ($self->{ibx_map} && !$self->{checkpoint_unlocks}) {
 		checkpoint($self, 1); # no need to release lock on pure index
@@ -712,10 +714,13 @@ sub reindex_checkpoint ($) {
 
 	if (my $pr = $self->{-regen_fmt} ? $self->{-opt}->{-progress} : undef) {
 		my $now = now;
+		$self->{-abbrev_shown}++ or
+			$pr->("g: git wait, c: commit time\n");
 		chop(my $fmt = $self->{-regen_fmt}); # remove '\n';
-		$fmt .= " c:%ums all:%0.1fKB/s\n";
+		$fmt .= " g:%ums c:%ums all:%0.1fKB/s\n";
 		my $txn_kb = $txn_bytes / 1024;
 		$pr->(sprintf $fmt, $self->{nrec},
+			$git_wait * 1000,
 			($now - $t0) * 1000,
 			$txn_kb / ($now - $self->{txn_t0}));
 		$self->{txn_t0} = $now;
