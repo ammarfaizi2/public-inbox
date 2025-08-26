@@ -620,14 +620,12 @@ sub _reindex_finalize ($$$) {
 	my $ibx = _ibx_for $self, $smsg;
 	$smsg->{eidx_key} = $ibx->eidx_key;
 	if ($self->{-need_xapian}) {
-		my $idx = idx_shard($self, $docid);
-		$idx->index_eml($eml, $smsg);
 		for my $x (reverse @$stable) {
 			my $lid = delete $x->{lid} // die 'BUG: no {lid}';
-			@$lid and $idx->ipc_do('add_eidx_info_raw', $docid,
-						_ibx_for($self, $x)->eidx_key,
-						@$lid);
+			@$lid and push @{$smsg->{-eidx_more}},
+					[ _ibx_for($self, $x)->eidx_key, @$lid ]
 		}
+		idx_shard($self, $docid)->index_eml($eml, $smsg);
 	}
 	return if $nr == 1; # likely, all good
 

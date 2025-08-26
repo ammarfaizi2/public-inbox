@@ -522,7 +522,7 @@ sub eml2doc ($$$;$) {
 sub add_xapian ($$$$) {
 	my ($self, $eml, $smsg, $mids) = @_;
 	begin_txn_lazy($self);
-	my $merge_vmd = delete $smsg->{-merge_vmd};
+	my ($merge_vmd, $eidx_more) = delete @$smsg{qw(-merge_vmd -eidx_more)};
 	my $doc = eml2doc($self, $eml, $smsg, $mids);
 	if (my $old = $merge_vmd ? _get_doc($self, $smsg->{num}) : undef) {
 		my @x = @VMD_MAP;
@@ -531,6 +531,11 @@ sub add_xapian ($$$$) {
 				add_bool_term $doc, $pfx.$term;
 			}
 		}
+	}
+	for (@$eidx_more) {
+		my ($eidx_key, @list_ids) = @$_;
+		add_bool_term($doc, 'O'.$eidx_key) if $eidx_key ne '.';
+		index_list_id_raw $self, $doc, @list_ids;
 	}
 	$self->{xdb}->replace_document($smsg->{num}, $doc);
 }
