@@ -34,38 +34,34 @@ EOF
 require PublicInbox::Admin;
 PublicInbox::Admin::require_or_die('-base');
 
-my ($version, $indexlevel, $jobs, $show_help);
-my $skip_docdata;
-my $ng = '';
-my (@c_extra, @chdir);
 my $creat_opt = {};
-my %opts = (
-	'V|version=i' => \$version,
-	wal => \($creat_opt->{wal}),
-	'L|index-level|indexlevel=s' => \$indexlevel,
-	'S|skip|skip-epoch=i' => \($creat_opt->{'skip-epoch'}),
-	'skip-artnum=i' => \($creat_opt->{'skip-artnum'}),
-	'j|jobs=i' => \$jobs,
-	'ng|newsgroup=s' => \$ng,
-	'skip-docdata' => \$skip_docdata,
-	'help|h' => \$show_help,
-	'c=s@' => \@c_extra,
-	'C=s@' => \@chdir,
-);
 my $usage_cb = sub {
 	print STDERR $help;
 	exit 1;
 };
-GetOptions(%opts) or $usage_cb->();
-if ($show_help) { print $help; exit 0 };
+GetOptions(my $opt = {}, qw(version|V=i
+	wal indexlevel|index-level|L=s
+	skip-epoch|skip|S=i skip-artnum=i
+	jobs|j=i newsgroup|ng=s
+	skip-docdata help|h
+	c=s@ C=s@
+)) or $usage_cb->();
+for (qw(wal skip-epoch skip-artnum)) {
+	$creat_opt->{$_} = $opt->{$_} if exists $opt->{$_};
+}
+if ($opt->{help}) { print $help; exit 0 };
+my $ng = $opt->{newsgroup} // '';
+my $version = $opt->{version} if defined $opt->{version};
+my $indexlevel = $opt->{indexlevel} if defined $opt->{indexlevel};
+my $jobs = $opt->{jobs} if defined $opt->{jobs};
 my $name = shift @ARGV or $usage_cb->();
 my $inboxdir = shift @ARGV or $usage_cb->();
 my $http_url = shift @ARGV or $usage_cb->();
 my (@address) = @ARGV;
 @address or $usage_cb->();
-PublicInbox::Admin::do_chdir(\@chdir);
+PublicInbox::Admin::do_chdir($opt->{C} // []);
 
-@c_extra = map {
+my @c_extra = map {
 	my ($k, $v) = split(/=/, $_, 2);
 	defined($v) or die "Usage: -c KEY=VALUE\n";
 	$k =~ /\A[a-z]+\z/i or die "$k contains invalid characters\n";
@@ -87,7 +83,7 @@ PublicInbox::Admin::do_chdir(\@chdir);
 	} else {
 		$_
 	}
-} @c_extra;
+} @{$opt->{c}};
 
 PublicInbox::Admin::indexlevel_ok_or_die($indexlevel) if defined $indexlevel;
 
@@ -206,11 +202,11 @@ if (defined $jobs) {
 
 require PublicInbox::InboxWritable;
 $ibx = PublicInbox::InboxWritable->new($ibx, $creat_opt);
-if ($skip_docdata) {
+if ($opt->{'skip-docdata'}) {
 	$ibx->{indexlevel} //= 'full'; # ensure init_inbox writes xdb
 	$ibx->{indexlevel} eq 'basic' and
 		die "--skip-docdata ignored with --indexlevel=basic\n";
-	$ibx->{-skip_docdata} = $skip_docdata;
+	$ibx->{-skip_docdata} = 1;
 }
 $ibx->init_inbox(0);
 
