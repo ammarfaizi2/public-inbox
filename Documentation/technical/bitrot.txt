@@ -1,0 +1,96 @@
+notes on bitrot avoidance for on-disk data (including code + APIs)
+
+As a long term archival project the choices we make for the
+usability and accessibility of our data is of the utmost
+importance.
+
+While past history is no guarantee of the future, it does seem to be an
+important data point in choosing formats for data we hope to be
+in use decades or centuries from now.  Data formats include
+programming languages and APIs of our implementation.
+
+* git - great history of data compatibility since its first year of
+  existence.  As a programming API, the only major plumbing change
+  was the removal of the dashed `git-foo' form from the install path
+  in the early years.
+
+* SQLite 3 - good on-disk format and one of the few recommended
+  formats by the Library of Congress[1].
+
+  However, we only depend on its stability to maintain a stable,
+  bidirectional mapping of Message-IDs to NNTP article numbers
+  in msgmap.sqlite3.  lei uses it to maintain mail source mappings,
+  but lei itself is not-yet-ready for reliably storing private mail.
+
+  [1] https://www.loc.gov/preservation/digital/formats/fdd/fdd000461.shtml
+
+* POSIX, Linux + *BSD kernel APIs - the only relevant OS APIs
+
+  As good as it gets with no other practical choices available.
+
+  When relying on the `syscall' perlop, be sure to hard code the
+  actual numbers used for syscalls instead of relying on the
+  symbolic name => number mapping at compilation time.  FreeBSD (and
+  probably others) will assign different numbers to the same name
+  name (e.g. SYS_kevent changed from 363 to 560, while
+  SYS_freebsd11_kevent continues to map to 363 in FreeBSD 12+).
+
+* Perl 5 - probably accidentally stable due to the focus on Perl 6
+  (now Raku), but it seems to have the strongest record of backwards
+  compatibility of all scripting languages suitable for systems and
+  network programming on POSIX-like systems.  The scare we got from
+  the Perl 7 proposal in 2020 will not be forgotten, however.
+  Additional independent implementations would improve our trust
+  of the language going forward.
+
+* Xapian - A search index, not suitable for long-term archival (and
+  it need not be).  There have been several DB format changes
+  which required migrations across the years.  The Xapian Perl API
+  has gone through incompatible changes migrating from XS to the
+  SWIG API.  It's native API is C++, which seems to have its own
+  share of bitrot problems from forward/backwards compatibility.
+
+  We need to provide a migration/backup path for tags and labels in
+  lei/store before lei can be trusted to store private mail.
+
+  The behavior of the Xapian query parser does leak into public
+  interfaces (lei, WWW) so unexpected changes can affect cronjobs,
+  bookmarks, and such.  Fortunately, the query parser seems to
+  have remained stable for many years.  This type of dependency
+  appears unavoidable with any search engine which seeks to
+  emulate the behavior of existing websites and tools (e.g.
+  mairix(1) and notmuch(1)).
+
+* POSIX shell - standardized by POSIX, but many tools are not and
+  GNU-isms can creep in.  Perl is typically a nicer and more
+  powerful language for anything longer than a few lines.
+
+* C - Two major and several minor Free implementations supporting
+  various standards with a reasonable history of forwards/backwards
+  compatibility.  Build systems and non-POSIX dependencies are a
+  significantly bigger bitrot problem than the language itself.
+
+Things to avoid:
+
+* autoconf + automake - Several backwards and forwards compatibility
+  problems in the past.  Use Perl 5 and possibly POSIX make, instead.
+
+* newer Perl 5 features - We need to support users on LTS distros and
+  will never encourage the use of 3rd-party or custom Perl installs.
+
+* GNU (awk|make|*) - Stick to POSIX features as much as possible due
+  to a few instances of backwards compatibility problems.  Perl's
+  standard ExtUtils::MakeMaker does tend to use GNU-isms in the
+  generated Makefile, unfortunately.
+
+* bash - Use POSIX shell for portability, or use Perl.
+
+* C++ - BDFL isn't smart enough to understand it, but it appears more
+  subject to bitrot than C.  Avoid it unless required for small pieces
+  such as the native Xapian API.  Compilation is slow and the language
+  seems surprising to inexperienced users, so it's unpleasant to work
+  with on old hardware.
+
+* Markdown - 927 subtly incompatible flavors and counting!  perlpod(1)
+  is more appropriate for manpages, but use plain UTF-8 text for
+  everything else.

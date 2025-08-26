@@ -97,6 +97,7 @@ Documentation/public-inbox-xcpdb.pod
 Documentation/public-inbox.cgi.pod
 Documentation/reproducibility.txt
 Documentation/standards.perl
+Documentation/technical/bitrot.txt
 Documentation/technical/data_structures.txt
 Documentation/technical/ds.txt
 Documentation/technical/memory.txt
