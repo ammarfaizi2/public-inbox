@@ -948,7 +948,7 @@ sub create_inbox ($;@) {
 	$opt{-primary_address} //= $addr->[0] // "$ident\@example.com";
 	my $parallel = delete($opt{importer_parallel}) // 0;
 	my $creat_opt = { nproc => delete($opt{nproc}) // 1 };
-	$creat_opt->{wal} = 1 if $opt{wal};
+	$creat_opt->{wal} = 1 if delete $opt{wal};
 	my $ibx = PublicInbox::InboxWritable->new({ %opt }, $creat_opt);
 	if (!-f "$dir/creat.stamp") {
 		my $im = $ibx->importer($parallel);
