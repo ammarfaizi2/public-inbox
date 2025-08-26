@@ -34,6 +34,9 @@ $sto->done;
 	my $mi = ($mset->items)[0];
 	my @kw = PublicInbox::Search::xap_terms('K', $mi->get_document);
 	is_deeply(\@kw, [], 'no flags');
+
+	my $jm = $es->over->dbh->selectrow_array('PRAGMA journal_mode');
+	is $jm, 'wal', 'lei/store over.sqlite3 journal_mode defaults to wal';
 }
 
 for my $parallel (0, 1) {
