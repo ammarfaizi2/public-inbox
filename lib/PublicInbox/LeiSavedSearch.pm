@@ -229,7 +229,7 @@ sub is_dup {
 
 sub prepare_dedupe {
 	my ($self) = @_;
-	$self->{oidx} //= do {
+	$self->{oidx} // do {
 		my $creat = !-f $self->{-ovf};
 		my $lk = $self->lock_for_scope; # git-config doesn't wait
 		my $oidx = PublicInbox::OverIdx->new($self->{-ovf});
@@ -237,7 +237,7 @@ sub prepare_dedupe {
 		$oidx->{journal_mode} = 'WAL';
 		$oidx->dbh;
 		$oidx->eidx_prep if $creat; # for xref3
-		$oidx
+		$self->{oidx} = $oidx
 	};
 }
 
