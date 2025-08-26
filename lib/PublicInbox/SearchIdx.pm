@@ -92,7 +92,8 @@ sub new {
 	} else {
 		die "unsupported inbox version=$version\n";
 	}
-	$self->{creat} = !!$creat_opt;
+	$self->{creat} = !!$creat_opt; # TODO: eliminate
+	$self->{-opt} = $creat_opt;
 	$self;
 }
 
@@ -546,7 +547,7 @@ sub v1_mm_init ($) {
 	die "BUG: v1_mm_init is only for v1\n" if $self->{ibx}->version != 1;
 	$self->{mm} //= do {
 		require PublicInbox::Msgmap;
-		PublicInbox::Msgmap->new_file($self->{ibx}, 1, $self->{-opt});
+		PublicInbox::Msgmap->new_file($self->{ibx}, $self->{-opt});
 	};
 }
 

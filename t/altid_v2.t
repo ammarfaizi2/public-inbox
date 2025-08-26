@@ -13,7 +13,8 @@ my $altid = [ "serial:gmane:file=$another" ];
 my $ibx = create_inbox 'v2', version => 2, indexlevel => 'medium',
 			altid => $altid, sub {
 	my ($im, $ibx) = @_;
-	my $mm = PublicInbox::Msgmap->new_file("$ibx->{inboxdir}/$another", 2);
+	my $mm = PublicInbox::Msgmap->new_file("$ibx->{inboxdir}/$another",
+						{ wal => 1 });
 	is($mm->mid_set(1234, 'a@example.com'), 1, 'mid_set') or xbail 'once';
 	is($mm->mid_set(1234, 'a@example.com')+0, 0, 'mid_set not idempotent');
 	is($mm->mid_set(1, 'a@example.com')+0, 0, 'mid_set fails with dup MID');
@@ -26,7 +27,8 @@ Message-ID: <a@example.com>
 hello world gmane:666
 EOF
 };
-my $mm = PublicInbox::Msgmap->new_file("$ibx->{inboxdir}/$another", 2);
+my $mm = PublicInbox::Msgmap->new_file("$ibx->{inboxdir}/$another",
+					{ wal => 1 });
 is($mm->mid_set(1234, 'a@example.com') + 0, 0, 'mid_set not idempotent');
 is($mm->mid_set(1, 'a@example.com') + 0, 0, 'mid_set fails with dup MID');
 my $mset = $ibx->search->mset('gmane:1234');

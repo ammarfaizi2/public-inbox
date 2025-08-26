@@ -39,7 +39,7 @@ sub _init_v1 {
 		my $sidx = PublicInbox::SearchIdx->new($self, $opt);
 		$sidx->{oidx}->{journal_mode} = 'wal' if $opt->{wal};
 		$sidx->begin_txn_lazy;
-		my $mm = PublicInbox::Msgmap->new_file($self, 1, $opt);
+		my $mm = PublicInbox::Msgmap->new_file($self, $opt);
 		if (defined $skip_artnum) {
 			$mm->{dbh}->begin_work;
 			$mm->skip_artnum($skip_artnum);

@@ -16,8 +16,9 @@ use PublicInbox::Over;
 use Scalar::Util qw(blessed);
 
 sub new_file {
-	my ($class, $ibx, $rw, $opt) = @_;
+	my ($class, $ibx, $opt) = @_;
 	my $f;
+	my $rw = !!$opt;
 	if (blessed($ibx)) {
 		$f = $ibx->mm_file;
 		$rw = 2 if $rw && $ibx->{-no_fsync};
@@ -56,7 +57,7 @@ sub tmp_clone {
 	require PublicInbox::Syscall;
 	PublicInbox::Syscall::nodatacow_fh($fh);
 	$self->{dbh}->sqlite_backup_to_file($fn);
-	$tmp = ref($self)->new_file($fn, 2);
+	$tmp = ref($self)->new_file($fn, {});
 	$tmp->{dbh}->do('PRAGMA journal_mode = MEMORY');
 	$tmp->{pid} = $$;
 	$tmp;

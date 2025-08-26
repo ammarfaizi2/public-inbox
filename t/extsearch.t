@@ -634,7 +634,8 @@ if ('per-inbox altid w/ extindex') {
 				altid => $altid, sub {
 		my ($im, $ibx) = @_;
 		my $mm = PublicInbox::Msgmap->new_file(
-					"$ibx->{inboxdir}/$another", 2);
+					"$ibx->{inboxdir}/$another",
+					{ wal => 1 });
 		$mm->mid_set(1234, 'a@example.com') == 1 or xbail 'mid_set';
 		$im->add(PublicInbox::Eml->new(<<'EOF')) or BAIL_OUT;
 From: a@example.com

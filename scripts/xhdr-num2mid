@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# Copyright (C) 2016-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 # Useful for mapping article IDs from existing NNTP servers to MIDs
 use strict;
@@ -14,7 +14,7 @@ GetOptions(%opts) or die "bad command-line args\n$usage";
 if ($msgmap) {
 	require PublicInbox::Msgmap;
 	require PublicInbox::MID; # mid_clean
-	$mm = PublicInbox::Msgmap->new_file($msgmap, 1);
+	$mm = PublicInbox::Msgmap->new_file($msgmap, {});
 }
 
 my $group = shift or die $usage;

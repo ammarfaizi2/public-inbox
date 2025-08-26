@@ -42,7 +42,9 @@ sub mm_alt ($) {
 	my ($self) = @_;
 	$self->{mm_alt} ||= eval {
 		require PublicInbox::Msgmap;
-		PublicInbox::Msgmap->new_file(@$self{qw(filename writable)});
+		# TODO: expose a way to disable fsync + enable WAL
+		my $opt = $self->{writable} ? { fsync => 1 } : undef;
+		PublicInbox::Msgmap->new_file($self->{filename}, $opt);
 	};
 }
 
