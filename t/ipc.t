@@ -102,7 +102,7 @@ pipe(my $ra, my $wa);
 pipe(my $rb, my $wb);
 pipe(my $rc, my $wc);
 open my $warn, '+>', undef;
-$warn->autoflush(0);
+$warn->autoflush(1);
 local $SIG{__WARN__} = sub { print $warn "PID:$$ ", @_ };
 my $big = try_cat('COPYING') || BAIL_OUT "try_cat(COPYING): $!";
 
