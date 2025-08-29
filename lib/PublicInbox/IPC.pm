@@ -101,7 +101,7 @@ sub exit_exception { exit(!!$@) }
 sub ipc_worker_spawn {
 	my ($self, $ident, $oldset, $fields, @cb_args) = @_;
 	return if $self->{-ipc_res} && $self->{-ipc_res}->can_reap; # idempotent
-	delete(@$self{qw(-ipc_req -ipc_res -ipc_pid)});
+	delete(@$self{qw(-ipc_req -ipc_res)});
 	pipe(my $r_req, my $w_req);
 	pipe(my $r_res, my $w_res);
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
@@ -132,7 +132,7 @@ sub ipc_worker_spawn {
 	$self->{-ipc_req} = $w_req;
 	$self->{-ipc_res} = PublicInbox::IO::attach_pid($r_res, $pid,
 					\&ipc_worker_reap, $self, @cb_args);
-	$self->{-ipc_pid} = $pid;
+	$pid; # used by tests
 }
 
 sub ipc_worker_reap { # awaitpid callback
@@ -159,15 +159,7 @@ sub ipc_atfork_child {
 # idempotent, can be called regardless of whether worker is active or not
 sub ipc_worker_stop {
 	my ($self) = @_;
-	my $pid = delete $self->{-ipc_pid};
-	my ($w_req, $r_res) = delete(@$self{qw(-ipc_req -ipc_res)});
-	if (!$w_req && !$r_res) {
-		die "unexpected PID:$pid without IPC pipes" if $pid;
-		return; # idempotent
-	}
-	die 'no PID with IPC pipes' unless $pid;
-	$w_req = undef; # order matters
-	$r_res = undef;
+	delete $self->{$_} for qw(-ipc_req -ipc_res); # order matters
 }
 
 sub _wait_return ($$) {
@@ -197,9 +189,9 @@ sub ipc_do {
 # causes newer siblings to inherit older siblings sockets
 sub ipc_sibling_atfork_child {
 	my ($self) = @_;
-	my $pid = delete $self->{-ipc_pid};
-	delete(@$self{qw(-ipc_req -ipc_res)});
-	$pid == $$ and die "BUG: $$ ipc_atfork_child called on itself";
+	my (undef, $res) = delete(@$self{qw(-ipc_req -ipc_res)});
+	$res && $res->can_reap and
+		die "BUG: $$ ipc_atfork_child called on itself";
 }
 
 sub recv_and_run {
