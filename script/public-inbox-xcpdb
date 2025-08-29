@@ -29,7 +29,7 @@ my $opt = { quiet => -1, compact => 0, fsync => 1,
 	-eidx_ok => 1, -cidx_ok => 1 };
 GetOptions($opt, qw(
 	cow! fsync|sync! compact|c reshard|R=i
-	max_size|max-size=s batch_size|batch-size=s
+	commit-interval|commit=i max_size|max-size=s batch_size|batch-size=s
 	sequential-shard|seq-shard
 	jobs|j=i quiet|q verbose|v
 	blocksize|b=s no-full|n fuller|F

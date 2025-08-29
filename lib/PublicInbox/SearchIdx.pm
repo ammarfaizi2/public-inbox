@@ -819,7 +819,8 @@ sub update_checkpoint ($;$) {
 	$self->{need_checkpoint} // return; # must be defined via local
 	return ++$self->{need_checkpoint} if $nr >= $self->{batch_bytes};
 	my $now = now;
-	my $next = $self->{next_checkpoint} //= $now + $CHECKPOINT_INTVL;
+	my $next = $self->{next_checkpoint} //= $now +
+		($self->{-opt}->{'commit-interval'} // $CHECKPOINT_INTVL);
 	$self->{need_checkpoint} += ($now > $next ? 1 : 0);
 }
 
