@@ -108,7 +108,7 @@ sub ipc_worker_spawn {
 	$self->ipc_atfork_prepare;
 	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
-		delete @$self{qw(-wq_s1 -wq_s2 -wq_workers -wq_ppid)};
+		delete @$self{qw(-wq_s1 -wq_s2 -wq_workers)};
 		$w_req = $r_res = undef;
 		$w_res->autoflush(1);
 		$SIG{$_} = 'IGNORE' for (qw(TERM INT QUIT));
@@ -338,7 +338,7 @@ sub _wq_worker_start {
 	my $pid = PublicInbox::DS::fork_persist;
 	if ($pid == 0) {
 		undef $bcast1;
-		delete @$self{qw(-wq_s1 -wq_ppid)};
+		delete $self->{-wq_s1};
 		$self->{-wq_worker_nr} =
 				keys %{delete($self->{-wq_workers}) // {}};
 		$SIG{$_} = 'DEFAULT' for (qw(TTOU TTIN TERM QUIT INT CHLD));
@@ -381,7 +381,6 @@ sub wq_workers_start {
 		_wq_worker_start($self, $sigset, $fields, $one, @cb_args);
 	}
 	PublicInbox::DS::sig_setmask($sigset) unless $oldset;
-	$self->{-wq_ppid} = $$;
 }
 
 sub wq_close {
@@ -389,9 +388,7 @@ sub wq_close {
 	if (my $wqb = delete $self->{wqb}) {
 		$wqb->enq_close;
 	}
-	delete @$self{qw(-wq_s1 -wq_s2)} or return;
-	return if ($self->{-wq_ppid} // -1) != $$;
-	delete $self->{-wq_workers};
+	delete @$self{qw(-wq_s1 -wq_s2 -wq_workers)};
 }
 
 sub wq_kill {
@@ -401,8 +398,6 @@ sub wq_kill {
 
 sub DESTROY {
 	my ($self) = @_;
-	my $ppid = $self->{-wq_ppid};
-	wq_kill($self) if $ppid && $ppid == $$;
 	wq_close($self);
 	ipc_worker_stop($self);
 }
