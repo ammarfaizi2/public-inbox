@@ -31,7 +31,7 @@ sub call {
 		my $body = <<EOM;
 Requiring persistent connection to access: $uri ...
 EOM
-		[ 200, [ 'Refresh' => 1,
+		[ 200, [ 'Refresh' => 1, 'Content-Type' => 'text/plain',
 			'Content-Length' => length($body) ], [ $body ] ]
 	} else {
 		$self->app->($env);
