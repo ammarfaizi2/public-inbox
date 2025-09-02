@@ -22,7 +22,6 @@ sub call {
 	my ($self, $env) = @_;
 	my $ua = $env->{HTTP_USER_AGENT} // '';
 	return [ 403, [], [] ] if $ua =~ /$bad_ua/o;
-	my $res = $self->app->($env);
 	my $uri;
 	if ($env->{PATH_INFO} !~ /\.css\z/ &&
 			$ua =~ m!\A(?:Mozilla|Opera)/! &&
@@ -35,7 +34,7 @@ EOM
 		[ 200, [ 'Refresh' => 1,
 			'Content-Length' => length($body) ], [ $body ] ]
 	} else {
-		$res;
+		$self->app->($env);
 	}
 }
 
