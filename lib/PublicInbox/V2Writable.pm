@@ -531,7 +531,7 @@ sub do_defrag ($) {
 		$pr->('defrag took ',
 			sprintf('%ums', now - $t0),
 			", next defrag: >=#$self->{defrag_at} ",
-			"(cur: $self->{oidx}->{-art_max})\n");
+			"(cur: $self->{oidx}->{-art_max})\n") if $pr;
 	} else { # defrag not supported (or needed, maybe)
 		delete $self->{defrag_at};
 	}
