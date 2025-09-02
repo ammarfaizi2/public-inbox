@@ -23,7 +23,7 @@ sub call {
 	my $ua = $env->{HTTP_USER_AGENT} // '';
 	return [ 403, [], [] ] if $ua =~ /$bad_ua/o;
 	my $uri;
-	if ($env->{PATH_INFO} !~ /\.css\z/ &&
+	if ($env->{PATH_INFO} !~ m!(?:/\.well-known/|\.css\z)! &&
 			$ua =~ m!\A(?:Mozilla|Opera)/! &&
 			defined($uri = $env->{REQUEST_URI}) &&
 			($env->{HTTP_REFERER} // '') !~ /\Q$uri\E\z/ &&
