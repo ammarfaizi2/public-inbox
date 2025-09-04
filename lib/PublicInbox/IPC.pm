@@ -102,6 +102,11 @@ sub ipc_worker_spawn {
 	my ($self, $ident, $oldset, $fields, @cb_args) = @_;
 	return if $self->{-ipc_res} && $self->{-ipc_res}->can_reap; # idempotent
 	delete(@$self{qw(-ipc_req -ipc_res)});
+
+	# n.b. we use 2 pipes here instead of a single socketpair since
+	# Linux (as of v6.15) allows a 1MB pipe buffer but only 0.5MB
+	# socket buffer for unprivileged processes.  The extra buffer
+	# space improves parallel indexing performance by 5-10%
 	pipe(my $r_req, my $w_req);
 	pipe(my $r_res, my $w_res);
 	my $sigset = $oldset // PublicInbox::DS::block_signals();
