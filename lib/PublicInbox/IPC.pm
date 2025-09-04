@@ -14,7 +14,7 @@ use autodie qw(close pipe read send socketpair);
 use Errno qw(EAGAIN EINTR);
 use Carp qw(croak);
 use PublicInbox::DS qw(awaitpid);
-use PublicInbox::IO;
+use PublicInbox::IO qw(read_all);
 use PublicInbox::Spawn;
 use PublicInbox::OnDestroy;
 use PublicInbox::WQWorker;
@@ -58,8 +58,8 @@ sub _get_rec ($) {
 	my ($r) = @_;
 	my $len = <$r> // return;
 	chop($len) eq "\n" or croak "no LF byte in $len";
-	my $n = read($r, my $buf, $len);
-	$n == $len or croak "short read: $n != $len";
+	my $buf = read_all $r, $len;
+	length($buf) == $len or croak "short read: ",length($buf)," != $len";
 	ipc_thaw($buf);
 }
 
