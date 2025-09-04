@@ -560,18 +560,9 @@ sub checkpoint ($;$) {
 			($self->{oidx}->{-art_max}//0) >= $self->{defrag_at} and
 			do_defrag $self;
 
-		# transactions started on parallel shards,
-		# wait for them by issuing an echo command (echo can only
-		# run after commit_txn_lazy is done)
+		# wait for all transactions started on parallel shards
 		if ($wait && $self->{parallel}) {
-			my $i = 0;
-			for my $shard (@$shards) {
-				my $echo = $shard->ipc_do('echo', $i);
-				$echo == $i or die <<"";
-shard[$i] bad echo:$echo != $i waiting for txn commit
-
-				++$i;
-			}
+			$_->ipc_wait_all for @$shards;
 		}
 
 		my $midx = $self->{midx}; # misc index

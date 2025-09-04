@@ -92,8 +92,21 @@ $test->('local');
 	is($ipc->ipc_do('test_pid'), $pid, 'worker pid returned');
 	$test->('worker');
 	is($ipc->ipc_do('test_pid'), $pid, 'worker pid returned');
-	$ipc->ipc_worker_stop;
+	my @x;
+	$ipc->ipc_async('test_pid', ['hi'],
+		sub { (undef, @x) = @_ }, [ 'acb_arg' ]);
+	$ipc->ipc_async('test_die', ['DIE']);
+	eval { $ipc->ipc_worker_stop };
+	like $@, qr/\bDIE\b/, 'exception propagated';
+	is_deeply \@x, [ 'test_pid', ['hi'], [ 'acb_arg' ], [ $pid ] ],
+		'ipc_async (worker)';
 	ok(!kill(0, $pid) && $!{ESRCH}, 'worker stopped');
+
+	$ipc->ipc_async('test_pid', ['hi'],
+		sub { (undef, @x) = @_ }, [ 'acb_arg' ]);
+	is_deeply \@x, [ 'test_pid', ['hi'], [ 'acb_arg' ], [ $$ ] ],
+		'ipc_async (same process)';
+
 }
 $ipc->ipc_worker_stop; # idempotent
 

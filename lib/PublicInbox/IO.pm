@@ -100,6 +100,8 @@ sub try_cat ($) {
 }
 
 # TODO: move existing HTTP/IMAP/NNTP/POP3 uses of rbuf here
+# this does not return partial data; only a scalar ref on success,
+# 0 on EOF, and undef on error.
 sub my_bufread {
 	my ($io, $len) = @_;
 	my $rbuf = ${*$io}{pi_io_rbuf} //= \(my $new = '');
