@@ -1333,8 +1333,9 @@ sub on_inbox_unlock { # called by PublicInbox::InboxIdle
 	$pr->("indexing $ekey\n") if $pr;
 	$self->idx_init($opt);
 	sync_inbox $self, $ibx;
-	$self->{-commit_timer} //= add_timer($opt->{'commit-interval'} // 10,
-					\&_watch_commit, $self);
+	$self->{-commit_timer} //= add_timer($opt->{'commit-interval'} //
+				$PublicInbox::SearchIdx::CHECKPOINT_INTVL,
+				\&_watch_commit, $self);
 }
 
 sub eidx_reload { # -extindex --watch SIGHUP handler

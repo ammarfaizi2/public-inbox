@@ -36,7 +36,7 @@ my $X = \%PublicInbox::Search::X;
 our ($DB_CREATE_OR_OPEN, $DB_OPEN);
 our $DB_NO_SYNC = 0;
 our $DB_DANGEROUS = 0;
-our $CHECKPOINT_INTVL = 5; # seconds
+our $CHECKPOINT_INTVL = 15; # seconds
 our $DEFRAG_NR = 100000; # document count
 our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# assume a typical 64-bit system has 8x more RAM than a
