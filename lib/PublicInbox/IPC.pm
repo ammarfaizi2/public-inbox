@@ -208,7 +208,7 @@ sub ipc_worker_reap { # awaitpid callback
 	my ($pid, $self, $inflight, $cb, @args) = @_;
 	while (defined($inflight) && @$inflight) {
 		my ($sub, $sub_arg, $acb, $acb_arg) = splice @$inflight, 0, 4;
-		my $exc = bless \(my $x = 'aborted'), 'PublicInbox::IPC::Die';
+		my $exc = bless \(my $x = "aborted\n"), 'PublicInbox::IPC::Die';
 		eval { $acb->($self, $sub, $sub_arg, $acb_arg, $exc) };
 		warn "E: (in abort): $sub: $@" if $@;
 	}
