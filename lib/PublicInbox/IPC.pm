@@ -66,8 +66,8 @@ sub _get_rec ($) {
 
 sub ipc_fail ($@) {
 	my ($self, @msg) = @_;
-	eval { ipc_worker_stop($self) };
-	unshift @msg, " (stop: $@)" if $@;
+	my @err = eval { ipc_worker_stop($self) };
+	unshift @msg, @err;
 	eval { delete $self->{-ipc_res} };
 	unshift @msg, " (delete -ipc_res: $@)" if $@;
 	croak @msg;
@@ -91,6 +91,7 @@ sub ipc_read_step ($$) {
 	my $ret = ipc_get_res $self;
 	splice @$inflight, 0, 4;
 	eval { $acb->($self, $sub, $sub_arg, $acb_arg, $ret) };
+	return ($@ ? ($@) : ()) if wantarray;
 	ipc_fail $self, "E: $sub $@" if $@;
 }
 
@@ -236,9 +237,13 @@ sub ipc_worker_stop {
 	my ($self) = @_;
 	if (my $w_req = delete $self->{-ipc_req}) {
 		close $w_req; # invalidate if referenced upstack
-		ipc_wait_all $self;
-		delete $self->{-ipc_res}; # ipc_worker_reap will fire
+		my @exc = ipc_wait_all $self;
+		my $res = delete $self->{-ipc_res};
+		return @exc if wantarray;
+		die @exc if @exc;
+		# ipc_worker_reap will fire for $res going out-of-scope
 	}
+	();
 }
 
 sub _wait_return ($$) {
@@ -251,15 +256,22 @@ sub _wait_return ($$) {
 my $ipc_die = sub { # default ipc_async acb
 	my ($self, undef, undef, undef, $ret) = @_;
 	if (ref($ret) eq 'PublicInbox::IPC::Die') {
-		ipc_worker_stop $self;
-		croak $$ret;
+		my @err = ("$$ret");
+		push @err, (eval { ipc_worker_stop $self });
+		push @err, $@ if $@;
+		die @err;
 	}
 };
 
 sub ipc_wait_all ($) {
 	my ($self) = @_;
-	my $inflight = $self->{-ipc_inflight} // return;
-	ipc_read_step($self, $inflight) while @$inflight;
+	my @exc;
+	my $inflight = $self->{-ipc_inflight} // return @exc;
+	while (@$inflight) {
+		push @exc, ipc_read_step($self, $inflight);
+	}
+	croak(@exc) if @exc && !wantarray;
+	@exc;
 }
 
 # call $self->$sub(@args), on a worker if ipc_worker_spawn was used
