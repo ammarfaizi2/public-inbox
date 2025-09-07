@@ -36,6 +36,8 @@ along with L<DBD::SQLite> and L<DBI> Perl modules.
 
 =item --wal
 
+=item --commit SECONDS
+
 These switches behave as they do for L<public-inbox-index(1)>
 
 =item --all

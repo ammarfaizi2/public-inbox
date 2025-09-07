@@ -9,11 +9,16 @@ around improved integration between inboxes and coderepos for
 solver.  Portability and reliability is also improved, especially
 in the internal process management of lei.
 
+Search now supports `thread:{SUBQUERY}' for installations
+with Xapian development headers (and necessary C++ toolchain).
+More Xapian functionality will be available in the future
+for users with development headers installed.
+
 public-inbox-cindex is a new command to index coderepos for
 WWW search and perform automatic associations between
-coderepos and inboxes.  This makes solver vastly more useful
-for the WWW UI as admins will no longer have to manually
-associate coderepos with inboxes.
+coderepos and inboxes.  This makes blob reconstruction via
+solver vastly more useful for the WWW UI as admins no longer
+have to manually associate coderepos with inboxes.
 
 public-inbox-clone gains the ability to mirror entire (or partial)
 grokmirror-compatible manifests.
@@ -26,7 +31,7 @@ extindex due to the need to interoperate with SHA-1 epochs.
 
 Upgrading:
 
-  lei users need to "lei daemon-kill" after installation to load
+  lei users must "lei daemon-kill" after installation to load
   new code.  Normal daemons (read-only, and public-inbox-watch)
   will also need restarts, of course, but there's no
   backwards-incompatible data format changes so rolling back to
@@ -62,6 +67,9 @@ treewide
     (tested as an LD_PRELOAD) is another option (at least for 64-bit).
 
   * embrace ->DESTROY in more places for control flow and reliability
+
+  * enforced error handling for ENOSPC, FS corruption, etc. for
+    parallel indexing
 
 PublicInbox::WWW
 
@@ -138,8 +146,8 @@ portability
 
   * various fixes for CentOS 7.x
 
-  * fix excessive pipelining to `git cat-file' on systems with small
-    getdelim(3) buffers (mainly affects musl)
+  * fix `git cat-file --batch' on systems with small getdelim(3)
+    buffers (mainly affects musl)
 
   * support Alpine Linux, Dragonfly, NetBSD and OpenBSD.  This resulted
     not only in bugfixes to our code, but also to Dragonfly and OpenBSD.
@@ -198,7 +206,11 @@ Search improvements (lei and PublicInbox::WWW)
 
   * --reindex and long-running (ext)index operations will auto
     checkpoint every 5s to avoid SQLite timeouts in public-facing
-    frontends where SQLite WAL isn't possible.
+    frontends where SQLite WAL isn't possible, use
+    `--commit=SECONDS'
+
+  * --wal switch added to public-inbox-init(1), public-inbox-index(1),
+    public-inbox-extindex(1), public-inbox-convert(1)
 
   * publicinbox.$NAME.altid is now supported with public-inbox-extindex
 

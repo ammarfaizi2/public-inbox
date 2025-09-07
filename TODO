@@ -21,13 +21,11 @@ all need to be considered for everything we introduce.)
   {over,msgmap}.sqlite3 (and Xapian) files can remain on a
   different FS than git repos.
 
-* support keeping CoW on btrfs for SQLite files,
-
 * investigate SQLite WAL feasibility with CoW enabled on btrfs
 
 * investigate fragmentation effects on btrfs even without CoW
 
-* adjustable commit interval for -index, -extindex and lei
+* adjustable commit interval for lei (done for -extindex + -index)
 
 * SQLite VACUUM support on -compact
 

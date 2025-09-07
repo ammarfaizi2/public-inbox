@@ -211,11 +211,27 @@ Passed directly to L<git-log(1)> to limit changes for C<--reindex>
 
 =item --wal
 
-Enable WAL (Write-Ahead-Log) on SQLite files.  This may reduce
+Enable WAL (Write-Ahead-Log) on SQLite files.  WAL may reduce
 fragmentation and improve performance; but requires read-only
-processes (e.g. public-inbox-netd) to have write access
-to all directories containing *.sqlite3 files.
+processes (e.g. L<public-inbox-netd(1)>) to have write access
+to all directories containing *.sqlite3 files.  This only
+needs to be used once as the setting is persistent.
 See L<https://sqlite.org/wal.html> for more info.
+
+Available in public-inbox 2.0.0+.
+
+=item --commit SECONDS
+
+Force commits after a given interval if the L</--batch-size> or
+L</publicinbox.indexBatchSize> threshold is not reached.  For
+non-WAL users, it should be under 30s to avoid the default
+L<DBD::SQLite(3pm)> busy timeout in read-only processes.
+Use a higher value if your index has no concurrent readers
+while indexing.
+
+Default: 15 seconds
+
+Available in public-inbox 2.0.0+.
 
 =back
 
@@ -249,16 +265,18 @@ Default: none
 
 =item publicinbox.indexBatchSize
 
-Flushes changes to the filesystem and releases locks after
+Commits changes to the filesystem and releases locks after
 indexing the given number of bytes.  The default value of C<1m>
 (one megabyte) is low to minimize memory use and reduce
 contention with parallel invocations of L<public-inbox-mda(1)>,
 L<public-inbox-learn(1)>, and L<public-inbox-watch(1)>.
 
+L<--commit> may also be specified to force commits after a
+certain amount of time if using a large value, here.
+
 Increase this value on powerful systems to improve throughput at
 the expense of memory use.  The reduction of lock granularity
-may not be noticeable on fast systems.  With SSDs, values above
-C<4m> have little benefit.
+may not be noticeable on fast systems.
 
 For L<public-inbox-v2-format(5)> inboxes, this value is
 multiplied by the number of Xapian shards.  Thus a typical v2
@@ -273,7 +291,7 @@ in excess of 10x this value.
 This option is available in public-inbox 1.6 or later.
 public-inbox 1.5 and earlier used the current default, C<1m>.
 
-Default: 1m (one megabyte)
+Default: 1m (one megabyte) on 32-bit, 8m on 64-bit
 
 =item publicinbox.indexSequentialShard
 
