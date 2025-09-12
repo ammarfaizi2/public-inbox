@@ -752,4 +752,35 @@ SKIP: {
 	unlike $lsa, qr/No_COW/i, '--cow respected';
 }
 
+{
+	my $many = create_inbox 'many', version => 2, indexlevel => 'basic',
+				tmpdir => "$home/many", sub {
+		my $eml = PublicInbox::Eml->new(<<'EOM');
+From: a@example.com
+To: b@example.com
+Subject: s
+Date: Fri, 02 Oct 1993 00:00:00 +0000
+
+EOM
+		my ($im, $ibx) = @_;
+		for my $i (0..6) { # >(PublicInbox::Git::MAX_INFLIGHT/3)
+			$eml->header_set('Message-ID', "<$i\@a>");
+			$im->add($eml);
+		}
+		$im->done;
+	};
+	my @before = glob("$many->{inboxdir}/xap*/?");
+	is_deeply \@before, [],
+		'no Xapian shards in v2 to be reindexed by -extindex';
+	my $opt = { 2 => \(my $err = '') };
+	ok run_script([qw(-extindex --reindex --batch-size=1),
+			"$home/fresh", $many->{inboxdir}],
+			undef, $opt),
+			'--reindex fresh on fresh directory';
+	my @after = glob("$many->{inboxdir}/xap*/?");
+	is_deeply \@after, [],
+		'no Xapian shards in v2 after reindexed by -extindex';
+	is $err, '', 'no warnings on --reindex';
+}
+
 done_testing;
