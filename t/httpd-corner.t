@@ -231,8 +231,10 @@ if ('test rejected trailers') {
 # I don't trust myself to read RFCs properly and need a 3rd-party client:
 my $tup = "t/trailer-up-$Config{archname}";
 my @tup_h_st = stat 't/trailer-up.h' or die "stat('t/trailer-up.h'): $!";
-SKIP: if (!-e $tup || (stat(_))[10] < $tup_h_st[10]) {
-	my $curl_config = require_cmd 'curl-config', 1;
+SKIP: {
+if (!-e $tup || (stat(_))[10] < $tup_h_st[10]) {
+	my $curl_config = require_cmd('curl-config', 1) or
+		skip 'curl-config missing', 1;
 	my %ccfg;
 	for my $f (qw(version cc cflags libs)) {
 		chomp($ccfg{$f} = xqx [ $curl_config, "--$f" ]);
@@ -251,6 +253,7 @@ SKIP: if (!-e $tup || (stat(_))[10] < $tup_h_st[10]) {
 	xsys(\@build) and skip "@build failed: \$?=$?", 1;
 	rename "$tup.$<.$$.tmp", $tup;
 	stat $tup; # for _ below:
+}
 } # SKIP
 if (-x _) {
 	my %opt = (0 => \'i', 1 => \(my $o = ''), 2 => \(my $e = ''));
