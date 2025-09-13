@@ -58,12 +58,6 @@ sub add_eidx_info {
 	$self->ipc_do('add_eidx_info_raw', $docid, $eidx_key, @list_ids);
 }
 
-# wait for return to determine when ipc_do('commit_txn_lazy') is done
-sub echo {
-	shift;
-	"@_";
-}
-
 sub idx_close {
 	my ($self) = @_;
 	die "BUG: $$ $0 txn active" if $self->{txn};
