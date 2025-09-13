@@ -200,7 +200,7 @@ sub index_text1 { # called by various ->index_extra
 sub add_bool_term ($$) {
 	my ($doc, $pfx_term) = @_;
 	if (length($pfx_term) > MAX_TERM_SIZE) {
-		carp "W: skipping term: `$pfx_term'.length > ",
+		warn "W: skipping term: `$pfx_term'.length > ",
 			MAX_TERM_SIZE, "\n";
 	} else {
 		$doc->add_boolean_term($pfx_term);
