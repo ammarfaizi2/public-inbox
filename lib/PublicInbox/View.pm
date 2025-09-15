@@ -1272,10 +1272,6 @@ sub paginate_recent ($$) {
 	$t =~ /\A([0-9]{8,14})\z/ and $before = str2ts($1);
 
 	my $msgs = $ctx->{ibx}->over->recent($opts, $after, $before);
-	if (defined($after) && scalar(@$msgs) < $lim) {
-		$after = $before = undef;
-		$msgs = $ctx->{ibx}->over->recent($opts);
-	}
 	my $more = scalar(@$msgs) == $lim;
 	my ($newest, $oldest);
 	if (@$msgs) {
