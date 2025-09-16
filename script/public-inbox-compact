@@ -19,7 +19,7 @@ See public-inbox-compact(1) man page for full documentation.
 EOF
 GetOptions($opt, qw(all C=s@ help|h),
 	# compact options:
-	qw(jobs|j=i quiet|q blocksize|b=s no-full|n fuller|F),
+	qw(jobs|j=i quiet|q blocksize|b=s no-full|n fuller|F cow!),
 ) or die $help;
 if ($opt->{help}) { print $help; exit 0 };
 
