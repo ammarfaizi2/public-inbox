@@ -225,7 +225,7 @@ sub _unref_doc ($$$$$;$) {
 	if (scalar(@$xr3) == 0) { # all gone
 		remove_doc($self, $docid);
 	} else { # enqueue for reindex of remaining messages
-		if ($ibx && $self->{-need_xapian}) {
+		if ($eml && $ibx && $self->{-need_xapian}) {
 			my $ekey = $ibx->{-gc_eidx_key} // $ibx->eidx_key;
 			my $idx = $self->idx_shard($docid);
 			my @list_ids = $eml->header_raw('List-Id');
