@@ -38,6 +38,7 @@ my $import_index_incremental = sub {
 		$ibx->{inboxdir}, "-L$level");
 	push @cmd, '-c' if have_xapian_compact;
 	ok(run_script(\@cmd, undef, { 2 => \$err }), 'index master');
+	unlike $err, qr/Use of uninitialized/, 'no uninitialized warnings';
 	my $ro_master = PublicInbox::Inbox->new({
 		inboxdir => $ibx->{inboxdir},
 		indexlevel => $level
@@ -166,6 +167,8 @@ my $import_index_incremental = sub {
 		my $cmd = [ qw(-compact), $mirror ];
 		ok(run_script($cmd, undef, { 2 => \$err}), "compact $level")
 			or diag $err;
+		unlike $err, qr/Use of uninitialized/,
+				'no uninitialized warnings';
 	}
 };
 

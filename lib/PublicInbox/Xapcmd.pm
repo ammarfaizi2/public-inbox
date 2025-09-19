@@ -35,9 +35,11 @@ sub commit_changes ($$$$) {
 		my ($y) = ($b =~ m!/([0-9]+)/*\z!);
 		($y // -1) <=> ($x // -1) # we may have non-shards
 	} keys %$tmp;
-
-	my ($dname) = ($order[0] =~ m!(.*/)[^/]+/*\z!);
-	my $mode = (stat($dname))[2];
+	my ($xpfx, $mode);
+	if (@order) {
+		($xpfx) = ($order[0] =~ m!(.*/)[^/]+/*\z!);
+		$mode = (stat($xpfx))[2];
+	}
 	for my $old (@order) {
 		next if $old eq ''; # no invalid paths
 		my $newdir = $tmp->{$old};
