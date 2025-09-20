@@ -491,12 +491,7 @@ sub yesdatacow_fh ($) {
 sub nodatacow_dir ($) {
 	my ($f) = @_;
 	if (open my $fh, '<', $f) {
-		my $rc = nodatacow_fh($fh); # returns "0 but true" on success
-		$rc && $rc == 0 and warn <<EOM;
-W: Disabling copy-on-write (CoW) on `$f'
-W: to avoid pathological slowdowns.  Data corruption may occur on unclean
-W: shutdowns, especially if using any form of BTRFS RAID.
-EOM
+		return nodatacow_fh($fh); # returns "0 but true" on success
 	}
 }
 
