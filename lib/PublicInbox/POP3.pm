@@ -58,8 +58,8 @@ sub do_greet {
 }
 
 sub new {
-	my ($cls, $sock, $pop3d) = @_;
-	(bless { pop3d => $pop3d }, $cls)->greet($sock)
+	my ($cls, $sock, $addr, $pop3d) = @_;
+	(bless { pop3d => $pop3d }, $cls)->greet($sock, $addr)
 }
 
 # POP user is $UUID1@$NEWSGROUP[.$SLICE][?QUERY_ARGS]

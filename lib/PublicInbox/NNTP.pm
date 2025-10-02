@@ -49,8 +49,8 @@ COMPRESS DEFLATE\r
 sub do_greet ($) { $_[0]->write($_[0]->{nntpd}->{greet}) };
 
 sub new {
-	my ($cls, $sock, $nntpd) = @_;
-	(bless { nntpd => $nntpd }, $cls)->greet($sock)
+	my ($cls, $sock, $addr, $nntpd) = @_;
+	(bless { nntpd => $nntpd }, $cls)->greet($sock, $addr)
 }
 
 sub args_ok ($$) {

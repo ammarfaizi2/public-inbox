@@ -139,7 +139,8 @@ sub load_mod ($;$$) {
 		$tlsd->refresh_groups($sig);
 	};
 	$xn{post_accept} = $tlsd->can('post_accept_cb') ?
-			$tlsd->post_accept_cb : sub { $modc->new($_[0], $tlsd) };
+			$tlsd->post_accept_cb :
+			sub { $modc->new(@_[0, 1], $tlsd) };
 	if ($modc eq 'PublicInbox::HTTP') {
 		$xn{af_default} = 'httpready';
 		if (my $p = $opt->{psgi}) {

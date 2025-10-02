@@ -98,8 +98,9 @@ sub do_greet {
 }
 
 sub new {
-	my (undef, $sock, $imapd) = @_;
-	(bless { imapd => $imapd }, 'PublicInbox::IMAP_preauth')->greet($sock)
+	my (undef, $sock, $addr, $imapd) = @_;
+	(bless { imapd => $imapd }, 'PublicInbox::IMAP_preauth')
+		->greet($sock, $addr)
 }
 
 sub logged_in { 1 }

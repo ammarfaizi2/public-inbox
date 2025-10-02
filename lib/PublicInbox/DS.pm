@@ -333,7 +333,7 @@ retry:
 
 # for IMAP, NNTP, and POP3 which greet clients upon connect
 sub greet {
-	my ($self, $sock) = @_;
+	my ($self, $sock, $addr) = @_;
 	my $ev = EPOLLOUT;
 	if ($sock->can('accept_SSL') && !$sock->accept_SSL) {
 		return if $! != EAGAIN || !($ev = PublicInbox::TLS::epollbit());
@@ -341,6 +341,8 @@ sub greet {
 	}
 	push @{$self->{wbuf}}, $self->can('do_greet');
 	new($self, $sock, $ev | EPOLLONESHOT);
+	($addr, my $port) = PublicInbox::Daemon::host_with_port($addr);
+	$self->out('['.fileno($sock)."] accept $addr:$port");
 	$self;
 }
 
