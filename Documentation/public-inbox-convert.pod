@@ -49,6 +49,12 @@ process which distributes work to the Xapian shards.
 
 =item --max-size=BYTES
 
+=item --split-shards
+
+=item --split-at DOCCOUNT
+
+=item --multipass
+
 =item --wal
 
 These options affect indexing.  They have no effect if

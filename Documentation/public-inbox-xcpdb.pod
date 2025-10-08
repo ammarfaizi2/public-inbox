@@ -81,6 +81,10 @@ affects indexing done at the end of a run.
 
 =item --max-size=BYTES
 
+=item --split-shards
+
+=item --split-at DOCCOUNT
+
 See L<public-inbox-index(1)> for a description of these options.
 
 These indexing options indexing at the end of a run.

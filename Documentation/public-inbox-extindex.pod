@@ -34,6 +34,12 @@ along with L<DBD::SQLite> and L<DBI> Perl modules.
 
 =item --batch-size SIZE
 
+=item --split-shards
+
+=item --split-at DOCCOUNT
+
+=item --multipass
+
 =item --wal
 
 =item --commit SECONDS

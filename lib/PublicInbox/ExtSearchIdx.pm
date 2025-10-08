@@ -559,7 +559,10 @@ sub eidx_gc { # top-level entry point
 	my ($self, $opt) = @_;
 	$self->{cfg} or die "E: GC requires ->attach_config\n";
 	$opt->{-idx_gc} = 1;
-	local $self->{checkpoint_unlocks} = 1;
+	$opt->{'split-shards'} and warn "W: --split-shards ignored with --gc\n";
+	delete local $opt->{'split-shards'};
+	delete local $opt->{'split-at'};
+	local $self->{ckpt_unlocks} = 1;
 	local $self->{need_checkpoint} = 0;
 	local $self->{nrec};
 	local $self->{-opt} = $opt;
@@ -1133,7 +1136,11 @@ EOS
 
 sub eidx_sync ($$) { # main entry point
 	my ($self, $opt) = @_;
-
+	warn <<EOM if $opt->{'split-shards'} && $opt->{reindex};
+W: --split-shards is generally not useful with --reindex
+W: --split-shards prevents new messages from being indexed until --reindex
+W: is complete (which may take days)
+EOM
 	local $self->{current_info} = '';
 	local $SIG{__WARN__} = PublicInbox::Admin::warn_cb $self;
 	$self->idx_init($opt); # acquire lock via V2Writable::_idx_init
@@ -1157,11 +1164,11 @@ sub eidx_sync ($$) { # main entry point
 	}
 
 	if (my $msgids = delete($opt->{dedupe})) {
-		local $self->{checkpoint_unlocks} = 1;
+		local $self->{ckpt_unlocks} = 1 if !$opt->{'split-shards'};
 		eidx_dedupe $self, $msgids;
 	}
 	if (delete($opt->{reindex})) {
-		local $self->{checkpoint_unlocks} = 1;
+		local $self->{ckpt_unlocks} = 1 if !$opt->{'split-shards'};
 		eidx_reindex $self;
 	}
 

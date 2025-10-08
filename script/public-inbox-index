@@ -42,6 +42,7 @@ GetOptions($opt, qw(verbose|v+ reindex rethread compact|c+ jobs|j=i prune
 		since|after=s until|before=s
 		sequential-shard|seq-shard
 		multi-pack-index!
+		split-shards split-at=s multipass
 		no-update-extindex update-extindex|E=s@
 		fast-noop|F skip-docdata all C=s@ help|h))
 	or die $help;

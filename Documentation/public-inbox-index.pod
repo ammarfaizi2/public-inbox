@@ -209,6 +209,27 @@ Available in public-inbox 2.0.0+
 
 Passed directly to L<git-log(1)> to limit changes for C<--reindex>
 
+=item --split-shards
+
+Speed up initial indexing of millions of messages by ~2x at the
+cost of 2-3x temporary disk space.  Requires L<xapian-compact(1)> to be
+installed.  Unlikely useful with L</--reindex>, DO NOT use with
+L</--reindex> unless you want new messages to remain unindexed for
+days until reindexing is done.
+
+=item --split-at DOCCOUNT
+
+Implies and used for tuning C<--split-shards>.  The default is
+likely fine.  Tiny values may overflow system file/command-line
+limits while giant values negate the performance benefit.
+
+Default: 450000
+
+=item --multipass
+
+Passed to L<xapian-compact(1)> when using C<--split-shards>, may
+further improve performance at the expense of even more disk space.
+
 =item --wal
 
 Enable WAL (Write-Ahead-Log) on SQLite files.  WAL may reduce

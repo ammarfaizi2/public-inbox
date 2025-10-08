@@ -345,9 +345,19 @@ sub parse_unsigned ($) {
 sub index_prepare ($$) {
 	my ($opt, $cfg) = @_;
 	my $env;
-	if ($opt->{compact}) {
+	my $need_compact = $opt->{compact};
+	if (defined(my $v = $opt->{'split-at'})) {
+		parse_unsigned(\$v) //
+				die "--split-at=$v not parsed as unsigned\n";
+		$opt->{'split-at'} = $v;
+		$opt->{'split-shards'} = 1;
+	}
+	$need_compact = 1 if $opt->{'split-shards'};
+	if ($need_compact) {
 		require PublicInbox::Xapcmd;
 		PublicInbox::Xapcmd::check_compact();
+	}
+	if ($opt->{compact}) {
 		$opt->{compact_opt} = { -coarse_lock => 1, compact => 1 };
 		if (defined(my $jobs = $opt->{jobs})) {
 			$opt->{compact_opt}->{jobs} = $jobs;
@@ -362,7 +372,7 @@ sub index_prepare ($$) {
 		$opt->{$k} = $v;
 	}
 
-	# out-of-the-box builds of Xapian 1.4.x are still limited to 32-bit
+	# out-of-the-box builds of Xapian 1.4.x are still limited to 32-bit IDs
 	# https://getting-started-with-xapian.readthedocs.io/en/latest/concepts/indexing/limitations.html
 	$opt->{batch_size} and
 		$env = { XAPIAN_FLUSH_THRESHOLD => '4294967295' };

@@ -66,10 +66,4 @@ sub idx_close {
 	$self->idx_release if $self->{xdb};
 }
 
-sub shard_close {
-	my ($self) = @_;
-	$self->ipc_do('idx_close');
-	$self->ipc_worker_stop;
-}
-
 1;

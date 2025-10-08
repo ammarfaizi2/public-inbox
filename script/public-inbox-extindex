@@ -32,6 +32,7 @@ GetOptions($opt, qw(verbose|v+ reindex rethread compact|c+ jobs|j=i
 		commit-interval|commit=i
 		indexlevel|index-level|L=s max_size|max-size=s
 		batch_size|batch-size=s
+		split-shards split-at=s multipass
 		dedupe:s@ gc watch scan! dry-run|n
 		multi-pack-index! all C=s@ help|h))
 	or die $help;

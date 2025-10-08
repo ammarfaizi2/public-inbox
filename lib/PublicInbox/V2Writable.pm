@@ -603,7 +603,7 @@ sub active { !!$_[0]->{im} }
 # public
 sub done {
 	my ($self) = @_;
-	local $PublicInbox::DS::in_loop; # sync awaitpid in shard_close
+	local $PublicInbox::DS::in_loop; # sync awaitpid in ipc_worker_stop
 	my $err = '';
 	if (my $im = delete $self->{im}) {
 		eval { $im->done }; # PublicInbox::Import::done
@@ -625,8 +625,9 @@ sub done {
 
 	my $shards = delete $self->{idx_shards};
 	if ($shards) {
+		$_->ipc_do('idx_close') for @$shards;
 		for (@$shards) {
-			eval { $_->shard_close };
+			eval { $_->ipc_worker_stop };
 			$err .= "shard close: $@\n" if $@;
 		}
 	}
@@ -734,7 +735,7 @@ sub reindex_checkpoint ($) {
 	die 'BUG: {im} during reindex' if $self->{im};
 	$t0 = now;
 	my $txn_bytes = $self->{transact_bytes};
-	if ($self->{ibx_map} && !$self->{checkpoint_unlocks}) {
+	if ($self->{ibx_map} && !$self->{ckpt_unlocks}) {
 		checkpoint($self, 1); # no need to release lock on pure index
 	} else {
 		$self->done; # release lock
@@ -1003,6 +1004,10 @@ sub sync_prepare ($) {
 		return 0 if $self->{quit};
 		my $nr = $stk ? $stk->num_records : 0;
 		$pr->("$nr\n") if $pr;
+		$nr > 10000 && !$self->{-opt}->{'split-shards'} &&
+			!$self->{-split_hinted}++ and warn <<EOM;
+# hint: --split-shards recommended if you have many messages to index
+EOM
 		$unit->{stack} = $stk; # may be undef
 		unshift @{$self->{todo}}, $unit;
 		$regen_max += $nr;
