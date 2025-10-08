@@ -273,7 +273,7 @@ sub run {
 	my ($ibx, $task, $opt) = @_; # task = 'cpdb' or 'compact'
 	PublicInbox::Admin::progress_prepare($opt ||= {});
 	my $dir;
-	for my $fld (qw(inboxdir topdir cidx_dir)) {
+	for my $fld (qw(inboxdir topdir)) {
 		my $d = $ibx->{$fld} // next;
 		-d $d or die "$fld=$d does not exist\n";
 		$dir = $d;

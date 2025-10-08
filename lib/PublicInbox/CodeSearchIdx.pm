@@ -141,7 +141,7 @@ sub new {
 	$l eq 'basic' and die "E: indexlevel=basic not supported\n";
 	my $self = bless {
 		xpfx => "$dir/cidx".  PublicInbox::CodeSearch::CIDX_SCHEMA_VER,
-		cidx_dir => $dir,
+		topdir => $dir,
 		creat => 1, # TODO: get rid of this, should be implicit
 		transact_bytes => 0, # for checkpoint
 		total_bytes => 0, # for lock_release
@@ -723,7 +723,7 @@ sub load_existing ($) { # for -u/--update
 	if ($self->{-opt}->{update} || $self->{-opt}->{prune}) {
 		local $self->{xdb};
 		$self->xdb or
-			die "E: $self->{cidx_dir} non-existent for --update\n";
+			die "E: $self->{topdir} non-existent for --update\n";
 		my @cur = grep {
 			if (-e $_) {
 				1;
@@ -736,7 +736,7 @@ sub load_existing ($) { # for -u/--update
 			warn "W: the following repos no longer exist:\n",
 				(map { "W:\t$_\n" } @GIT_DIR_GONE),
 				"W: use --prune to remove them from ",
-				$self->{cidx_dir}, "\n";
+				$self->{topdir}, "\n";
 		}
 		push @$dirs, @cur;
 	}
@@ -749,7 +749,7 @@ sub shard_usr1 { $TXN_BYTES = -1 }
 
 sub cidx_init ($) {
 	my ($self) = @_;
-	my $dir = $self->{cidx_dir};
+	my $dir = $self->{topdir};
 	unless (-d $dir) {
 		warn "# creating $dir\n" if !$self->{-opt}->{quiet};
 		File::Path::mkpath($dir);
@@ -869,12 +869,12 @@ sub prep_umask ($) {
 		local $self->{git} =
 			PublicInbox::Git->new($self->{git_dirs}->[0]);
 		$self->with_umask;
-	} elsif (-d $self->{cidx_dir}) { # respect existing perms
+	} elsif (-d $self->{topdir}) { # respect existing perms
 		my @st = stat(_);
 		my $um = (~$st[2] & 0777);
 		$self->{umask} = $um; # for SearchIdx->with_umask
 		umask == $um or progress($self, 'using umask from ',
-						$self->{cidx_dir}, ': ',
+						$self->{topdir}, ': ',
 						sprintf('0%03o', $um));
 		on_destroy \&CORE::umask, umask($um);
 	} else {
@@ -1346,7 +1346,7 @@ sub cidx_run { # main entry point
 		my $c = canonpath $d;
 		next if $c eq $d;
 		$cwarn = warn <<EOM if !$cwarn;
-E: BUG? paths in $self->{cidx_dir} not canonicalized:
+E: BUG? paths in $self->{topdir} not canonicalized:
 EOM
 		warn "E: $d => $c\n";
 		$d = $c;
