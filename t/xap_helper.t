@@ -76,11 +76,14 @@ EOM
 };
 
 my @ibx_idx = glob("$v2->{inboxdir}/xap*/?");
-my @ibx_shard_args = map { ('-d', $_) } @ibx_idx;
+my @v2ol = ('-l', "$v2->{inboxdir}/open.lock");
+my @ibx_shard_args = (@v2ol, map { ('-d', $_) } @ibx_idx);
 my (@int) = glob("$crepo/public-inbox-cindex/cidx*/?");
 my (@ext) = glob("$crepo/cidx-ext/cidx*/?");
 is(scalar(@ext), 2, 'have 2 external shards') or diag explain(\@ext);
 is(scalar(@int), 1, 'have 1 internal shard') or diag explain(\@int);
+my @ciol = ('-l', "$crepo/public-inbox-cindex/open.lock");
+my @cidx_int_shard_args = (@ciol, map { ('-d', $_) } @int);
 
 my $doreq = sub {
 	my ($s, @arg) = @_;
@@ -104,12 +107,12 @@ my $test = sub {
 	my $ar = PublicInbox::AutoReap->new($pid);
 	diag "$cmd[-1] running pid=$pid";
 	close $y;
-	my $r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0]);
+	my $r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0], @v2ol);
 	my %info = map { split(/=/, $_, 2) } split(/ /, do { local $/; <$r> });
 	is($info{has_threadid}, '1', 'has_threadid true for inbox');
 	like($info{pid}, qr/\A\d+\z/, 'got PID from inbox inspect');
 
-	$r = $doreq->($s, qw(test_inspect -d), $int[0]);
+	$r = $doreq->($s, qw(test_inspect -d), $int[0], @ciol);
 	my %cinfo = map { split(/=/, $_, 2) } split(/ /, do { local $/; <$r> });
 	is($cinfo{has_threadid}, '0', 'has_threadid false for cindex');
 	is($cinfo{pid}, $info{pid}, 'PID unchanged for cindex');
@@ -135,7 +138,7 @@ my $test = sub {
 	kill('TERM', $cinfo{pid});
 	my $tries = 0;
 	do {
-		$r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0]);
+		$r = $doreq->($s, qw(test_inspect -d), $ibx_idx[0], @v2ol);
 		%info = map { split(/=/, $_, 2) }
 			split(/ /, do { local $/; <$r> });
 	} while ($info{pid} == $cinfo{pid} && ++$tries < 10);
@@ -143,7 +146,7 @@ my $test = sub {
 
 	my %pids;
 	$tries = 0;
-	my @ins = ($s, qw(test_inspect -d), $ibx_idx[0]);
+	my @ins = ($s, qw(test_inspect -d), $ibx_idx[0], @v2ol);
 	kill('TTIN', $pid);
 	until (scalar(keys %pids) >= 2 || ++$tries > 100) {
 		tick;
@@ -224,8 +227,7 @@ for my $n (@NO_CXX) {
 
 	pipe my $r, my $w;
 	$xhc->mkreq([ $w, $err_w ], qw(dump_ibx -A XDFID -A Q),
-				(map { ('-d', $_) } @ibx_idx),
-				9, "mid:$mid");
+				@ibx_shard_args, 9, "mid:$mid");
 	close $err_w;
 	close $w;
 	my $res = do { local $/; <$r> };
@@ -236,7 +238,7 @@ for my $n (@NO_CXX) {
 	pipe($err_r, $err_w);
 	pipe $r, $w;
 	$xhc->mkreq([ $w, $err_w ], qw(dump_roots -c -A XDFID),
-			(map { ('-d', $_) } @int),
+			@cidx_int_shard_args,
 			$root2id_file, 'dt:19700101'.'000000..');
 	close $err_w;
 	close $w;
@@ -305,7 +307,7 @@ for my $n (@NO_CXX) {
 		pipe($err_r, $err_w);
 		pipe($r, $w);
 		$xhc->mkreq([ $w, $err_w ], qw(dump_roots -c -A),
-				"XDFPOST$i", (map { ('-d', $_) } @int),
+				"XDFPOST$i", @cidx_int_shard_args,
 				$root2id_file, 'dt:19700101'.'000000..');
 		close $err_w;
 		close $w;
@@ -344,7 +346,9 @@ for my $n (@NO_CXX) {
 		require PublicInbox::XhcMset;
 		my $over = $thr->over;
 		my @thr_idx = glob("$thr->{inboxdir}/xap*/?");
-		my @thr_shard_args = map { ('-d', $_) } @thr_idx;
+		my @thr_shard_args = ('-l', "$thr->{inboxdir}/open.lock",
+					map { ('-d', $_) } @thr_idx);
+
 		my (@art, $mset, $err);
 		my $capture = sub { ($mset, $err) = @_ };
 		my $retrieve = sub {
@@ -402,7 +406,7 @@ for my $n (@NO_CXX) {
 			my $t0 = now;
 			pipe $r, $w;
 			$xhc->mkreq([ $w ], qw(test_sleep -K 1 -d),
-					$ibx_idx[0]);
+					$ibx_idx[0], @v2ol);
 			close $w;
 			is readline($r), undef, 'got EOF';
 			my $diff = now - $t0;

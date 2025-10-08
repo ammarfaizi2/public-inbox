@@ -230,10 +230,16 @@ sub _idx_init { # with_umask callback
 	eval {
 		my $max = $self->{shards} - 1;
 		my $idx = $self->{idx_shards} = [];
-		for (0..$max) {
+		my $lk = PublicInbox::Lock->new("$self->{xpfx}/../open.lock");
+		my $unlk = $lk->lock_for_scope;
+		for (0..$max) { # no forking, yet
 			push @$idx, PublicInbox::SearchIdxShard->new($self, $_)
 		}
+		undef $unlk; # releases lock
 		$self->{-need_xapian} = $idx->[0]->need_xapian;
+		if ($self->{parallel}) { # fork here:
+			$_->start_v2w_worker($self) for @$idx;
+		}
 	};
 	if ($@) {
 		delete $self->{idx_shards};

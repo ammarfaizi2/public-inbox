@@ -381,4 +381,6 @@ sub repos_sorted {
 	@recs = sort { $b->[0] <=> $a->[0] } @recs; # sort by commit time
 }
 
+sub open_lock { "$_[0]->{topdir}/open.lock" }
+
 1;

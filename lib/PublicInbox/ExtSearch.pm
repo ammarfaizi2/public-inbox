@@ -10,6 +10,7 @@ use v5.10.1;
 use PublicInbox::Over;
 use PublicInbox::Inbox;
 use PublicInbox::MiscSearch;
+use PublicInbox::Lock;
 use DBI qw(:sql_types); # SQL_BLOB
 
 # for ->reopen, ->mset, ->mset_to_artnums
@@ -27,7 +28,10 @@ sub new {
 
 sub misc {
 	my ($self) = @_;
-	$self->{misc} //= PublicInbox::MiscSearch->new("$self->{xpfx}/misc");
+	$self->{misc} //= do {
+		my $lk = PublicInbox::Lock::may_sh "$self->{topdir}/open.lock";
+		PublicInbox::MiscSearch->new("$self->{xpfx}/misc");
+	};
 }
 
 # same as per-inbox ->over, for now...
@@ -120,6 +124,8 @@ sub search {
 }
 
 sub thing_type { 'external index' }
+
+sub open_lock { "$_[0]->{topdir}/open.lock" }
 
 no warnings 'once';
 *base_url = \&PublicInbox::Inbox::base_url;

@@ -17,18 +17,20 @@ sub new {
 	$self->idx_acquire;
 	$self->set_metadata_once;
 	$self->idx_release;
-	if ($v2w->{parallel}) {
-		local $self->{-v2w_afc} = $v2w;
-		$self->ipc_worker_spawn("shard[$shard]");
-		# Increasing the pipe size for requests speeds V2 batch imports
-		# across 8 cores by nearly 20%.  Since many of our responses
-		# are small, make the response pipe as small as possible
-		if ($F_SETPIPE_SZ) {
-			fcntl($self->{-ipc_req}, $F_SETPIPE_SZ, 1048576);
-			fcntl($self->{-ipc_res}, $F_SETPIPE_SZ, 4096);
-		}
-	}
 	$self;
+}
+
+sub start_v2w_worker {
+	my ($self, $v2w) = @_;
+	local $self->{-v2w_afc} = $v2w;
+	$self->ipc_worker_spawn("shard[$self->{shard}]");
+	# Increasing the pipe size for requests speeds V2 batch imports
+	# across 8 cores by nearly 20%.  Since many of our responses
+	# are small, make the response pipe as small as possible
+	if ($F_SETPIPE_SZ) {
+		fcntl($self->{-ipc_req}, $F_SETPIPE_SZ, 1048576);
+		fcntl($self->{-ipc_res}, $F_SETPIPE_SZ, 4096);
+	}
 }
 
 sub _worker_done { # OnDestroy cb

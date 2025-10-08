@@ -63,10 +63,13 @@ sub attach_external {
 	}
 	push @{$self->{shards_flat}}, @shards;
 	push @{$self->{shard_dirs}}, @dirs;
+	push @{$self->{open_locks}}, $srch->open_lock;
 	push(@{$self->{shard2ibx}}, $ibxish) for (@shards);
 }
 
 sub shard_dirs { @{$_[0]->{shard_dirs}} }
+
+sub xh_lock_args { map { ('-l', $_) } @{$_[0]->{open_locks}} }
 
 # returns a list of local inboxes (or count in scalar context)
 sub locals { @{$_[0]->{locals} // []} }

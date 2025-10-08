@@ -46,8 +46,8 @@ is also stripped as that header makes no sense in a public archive.
 
 =head1 LOCKING
 
-L<flock(2)> locking exclusively locks the empty $GIT_DIR/ssoma.lock file
-for all non-atomic operations.
+L<flock(2)> locking exclusively locks the empty C<$GIT_DIR/ssoma.lock>
+file for all non-atomic operations.
 
 =head1 EXAMPLE INPUT FLOW (SERVER-SIDE MDA)
 
@@ -154,6 +154,12 @@ updated if it exists to remain compatible with ssoma installations.
 A git index file used for MDA updates.  The normal git index (in
 $GIT_DIR/index) is not used at all as there is typically no working
 tree.
+
+=item $GIT_DIR/public-inbox/open.lock
+
+An empty file for L<flock(2)> locking the C<xapian*> directory
+to protect the final phase of L<public-inbox-compact(1)>.
+Introduced in public-inbox 2.0+.
 
 =back
 

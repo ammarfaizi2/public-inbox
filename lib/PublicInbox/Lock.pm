@@ -5,10 +5,10 @@
 # only uses {lock_path} and {lockfh} fields
 package PublicInbox::Lock;
 use v5.12;
-use Fcntl qw(LOCK_UN LOCK_EX O_RDWR O_CREAT);
-use Carp qw(confess);
+use Fcntl qw(LOCK_UN LOCK_EX O_RDWR O_CREAT LOCK_SH);
+use Carp qw(carp confess);
 use PublicInbox::OnDestroy;
-use Errno qw(EINTR);
+use Errno qw(EINTR ENOENT);
 use autodie qw(close sysopen syswrite);
 
 sub xflock ($$) {
@@ -61,6 +61,23 @@ sub lock_for_scope_fast {
 	my ($self) = @_;
 	lock_acquire_fast($self) or return; # lock_path not set
 	on_destroy \&lock_release_fast, $self;
+}
+
+sub lock_for_scope_shared ($) {
+	my ($self) = @_;
+	my $fn = $self->{lock_path};
+	if (open(my $fh, '<', $fn)) {
+		xflock($fh, LOCK_SH) or confess "LOCK_SH $fn: $!";
+		$self->{lockfh} = $fh;
+		on_destroy \&lock_release, $self;
+	} else {
+		carp "W: open($fn): $!" if $! != ENOENT;
+		undef;
+	}
+}
+
+sub may_sh ($) {
+	lock_for_scope_shared(new(__PACKAGE__, $_[0]));
 }
 
 1;

@@ -58,7 +58,7 @@ my ($out, $err) = ('', '');
 my $rdr = { 1 => \$out, 2 => \$err };
 
 my $cmd = [ '-compact', $ibx->{inboxdir} ];
-ok(run_script($cmd, undef, $rdr), 'v1 compact works');
+ok(run_script($cmd, undef, $rdr), 'v1 compact works') or diag $err;
 
 @xdir = glob("$ibx->{inboxdir}/public-inbox/xap*");
 is(scalar(@xdir), 1, 'got one xapian directory after compact');

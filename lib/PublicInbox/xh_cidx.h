@@ -86,7 +86,9 @@ static enum exc_iter dump_ibx_iter(struct req *req, const char *ibx_id,
 		for (int p = 0; p < req->pfxc; p++)
 			dump_ibx_term(req, p, &doc, ibx_id);
 	} catch (const Xapian::DatabaseModifiedError & e) {
+		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(req);
 		req->srch->db->reopen();
+		NOT_UNUSED(lk);
 		return ITER_RETRY;
 	} catch (const Xapian::DocNotFoundError & e) { // oh well...
 		warnx("doc not found: %s", e.get_description().c_str());
@@ -230,7 +232,9 @@ static enum exc_iter dump_roots_iter(struct req *req,
 		for (int p = 0; p < req->pfxc; p++)
 			dump_roots_term(req, p, drt, &root_offs, &doc);
 	} catch (const Xapian::DatabaseModifiedError & e) {
+		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(req);
 		req->srch->db->reopen();
+		NOT_UNUSED(lk);
 		return ITER_RETRY;
 	} catch (const Xapian::DocNotFoundError & e) { // oh well...
 		warnx("doc not found: %s", e.get_description().c_str());

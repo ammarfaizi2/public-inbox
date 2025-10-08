@@ -19,7 +19,9 @@ static enum exc_iter xpand_col_iter(Xapian::Query *xqry,
 		*xqry |= Xapian::Query(Xapian::Query::OP_VALUE_RANGE,
 					column, val, val);
 	} catch (const Xapian::DatabaseModifiedError &e) {
-		cur_srch->db->reopen();
+		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(cur_req);
+		cur_req->srch->db->reopen();
+		NOT_UNUSED(lk);
 		return ITER_RETRY;
 	} catch (const Xapian::DocNotFoundError &e) { // oh well...
 		warnx("doc not found: %s", e.get_description().c_str());
@@ -30,13 +32,13 @@ static enum exc_iter xpand_col_iter(Xapian::Query *xqry,
 static Xapian::Query qry_xpand_col(Xapian::Query qry, unsigned column)
 {
 	Xapian::Query xqry = Xapian::Query::MatchNothing;
-	Xapian::Enquire enq(*cur_srch->db);
+	Xapian::Enquire enq(*cur_req->srch->db);
 
 	enq.set_weighting_scheme(Xapian::BoolWeight());
 	enq.set_query(qry);
 	enq.set_collapse_key(column);
 
-	Xapian::MSet mset = enq.get_mset(0, cur_srch->db->get_doccount());
+	Xapian::MSet mset = enq.get_mset(0, cur_req->srch->db->get_doccount());
 
 	for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++)  {
 		for (int t = 10; t > 0; --t)
@@ -63,7 +65,8 @@ Xapian::Query ThreadFieldProcessor::operator()(const std::string &str)
 		throw Xapian::QueryParserError("missing } in '" + str + "'");
 	} else { // thread:"{hello world}"
 		std::string qstr = str.substr(1, str.size() - 2);
-		qry = cur_srch->qp->parse_query(qstr, cur_srch->qp_flags);
+		qry = cur_req->srch->qp->parse_query(qstr,
+						cur_req->srch->qp_flags);
 	}
 	return qry_xpand_col(qry, THREADID);
 }

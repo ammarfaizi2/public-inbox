@@ -11,6 +11,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Search PublicInbox::Lock PublicInbox::Umask
 	Exporter);
+use autodie qw(open);
 use PublicInbox::Eml;
 use PublicInbox::DS qw(now);
 use PublicInbox::Search qw(xap_terms);
@@ -82,7 +83,7 @@ sub new {
 	if ($version == 1) {
 		$self->{lock_path} = "$inboxdir/ssoma.lock";
 		$self->{oidx} = PublicInbox::OverIdx->new(
-				$self->xdir.'/over.sqlite3', $creat_opt);
+				"$self->{xpfx}/over.sqlite3", $creat_opt);
 	} elsif ($version == 2) {
 		defined $shard or die "shard is required for v2\n";
 		# shard is a number
@@ -152,6 +153,7 @@ sub idx_acquire {
 			File::Path::mkpath($dir);
 			$self->{-opt}->{cow} or
 				PublicInbox::Syscall::nodatacow_dir($dir);
+			open my $fh, '>>', $owner->open_lock;
 			# owner == self for CodeSearchIdx
 			$self->{-set_has_threadid_once} = 1 if $owner != $self;
 			$flag |= $DB_DANGEROUS if $self->{-opt}->{dangerous};

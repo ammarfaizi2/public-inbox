@@ -7,6 +7,7 @@ package PublicInbox::Search;
 use strict;
 use v5.10.1;
 use parent qw(Exporter);
+use PublicInbox::Lock;
 our @EXPORT_OK = qw(retry_reopen int_val get_pct xap_terms);
 use List::Util qw(max);
 use POSIX qw(strftime);
@@ -89,6 +90,7 @@ our @XH_SPEC = (
 	'd=s@', # shard dirs
 	'g=s', # git dir (with -c)
 	'k=i', # sort column (like sort(1))
+	'l=s', # open.lock path
 	'm=i', # maximum number of results
 	'o=i', # offset
 	'r', # 1=relevance then column
@@ -251,12 +253,15 @@ sub shard_dirs ($) {
 	}
 }
 
+sub open_lock ($) { "$_[0]->{xpfx}/../open.lock" }
+
 # returns all shards as separate Xapian::Database objects w/o combining
 sub xdb_shards_flat ($) {
 	my ($self) = @_;
 	load_xapian();
 	$self->{qp_flags} //= $QP_FLAGS;
 	my $slow_phrase;
+	my $lk = PublicInbox::Lock::may_sh open_lock($self);
 	my @xdb = map {
 		$slow_phrase ||= -f "$_/iamchert";
 		$X{Database}->new($_); # raises if missing
@@ -322,6 +327,9 @@ sub new {
 sub reopen {
 	my ($self) = @_;
 	if (my $xdb = $self->{xdb}) {
+		my $lk = defined($self->{xpfx}) ?
+			PublicInbox::Lock::may_sh(open_lock($self)) :
+			undef;
 		$xdb->reopen;
 	}
 	$self; # make chaining easier
@@ -745,10 +753,13 @@ sub xh_args { # prep getopt args to feed to xap_helper.h socket
 			$dedupe{$x->{prefix}.$sym.$x->{xprefix}} = undef;
 		}
 		# TODO: arbitrary header indexing goes here
-		[ sort keys %dedupe ];
+		my @apfx = map { ('-Q', $_) } sort keys %dedupe;
+		\@apfx;
 	};
-	((map { ('-d', $_) } $self->shard_dirs), map { ('-Q', $_) } @$apfx);
+	((map { ('-d', $_) } $self->shard_dirs), $self->xh_lock_args, @$apfx);
 }
+
+sub xh_lock_args { ('-l', open_lock($_[0])) }
 
 sub docids_by_postlist ($$) {
 	my ($self, $q) = @_;

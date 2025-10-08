@@ -399,4 +399,10 @@ sub lock_file {
 	$self->{inboxdir}.($self->version >= 2 ? '/inbox.lock' : '/ssoma.lock')
 }
 
+sub open_lock {
+	my ($self) = @_;
+	$self->{inboxdir}.(version($self) >= 2 ? '/open.lock'
+						: '/public-inbox/open.lock')
+}
+
 1;

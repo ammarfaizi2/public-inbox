@@ -5,6 +5,7 @@ use v5.12;
 use autodie qw(chmod closedir open opendir rename syswrite);
 use PublicInbox::Spawn qw(which popen_rd);
 use PublicInbox::Syscall;
+use PublicInbox::Lock;
 use PublicInbox::Admin qw(setup_signals);
 use PublicInbox::Over;
 use PublicInbox::Search qw(xap_terms);
@@ -18,6 +19,7 @@ use PublicInbox::DS;
 # commands with a version number suffix (e.g. "xapian-compact-1.5")
 our $XAPIAN_COMPACT = $ENV{XAPIAN_COMPACT} || 'xapian-compact';
 our @COMPACT_OPT = qw(jobs|j=i quiet|q blocksize|b=s no-full|n fuller|F);
+my %SKIP = map { $_ => 1 } qw(. ..);
 
 sub commit_changes ($$$$) {
 	my ($ibx, $im, $tmp, $opt) = @_;
@@ -35,9 +37,11 @@ sub commit_changes ($$$$) {
 		my ($y) = ($b =~ m!/([0-9]+)/*\z!);
 		($y // -1) <=> ($x // -1) # we may have non-shards
 	} keys %$tmp;
-	my ($xpfx, $mode);
+	my ($xpfx, $mode, $unlk);
 	if (@order) {
 		($xpfx) = ($order[0] =~ m!(.*/)[^/]+/*\z!);
+		my $lk = PublicInbox::Lock->new($ibx->open_lock);
+		$unlk = $lk->lock_for_scope;
 		$mode = (stat($xpfx))[2];
 	}
 	for my $old (@order) {
@@ -69,6 +73,7 @@ sub commit_changes ($$$$) {
 		rename $new, $old;
 		push @old_shard, "$old/old" if $have_old;
 	}
+	undef $unlk; # unlock
 
 	# trigger ->check_inodes in read-only daemons
 	syswrite($im->{lockfh}, '.') if $over_chg && $im;
@@ -101,12 +106,12 @@ sub commit_changes ($$$$) {
 	}
 }
 
-sub cb_spawn {
-	my ($cb, $args, $opt) = @_; # $cb = cpdb() or compact()
+sub cb_spawn ($$$$) {
+	my ($cb, $ibxish, $args, $opt) = @_; # $cb = cpdb() or compact()
 	my $pid = PublicInbox::DS::fork_persist;
 	return $pid if $pid > 0;
 	$SIG{__DIE__} = sub { warn @_; _exit(1) }; # don't jump up stack
-	$cb->($args, $opt);
+	$cb->($ibxish, $args, $opt);
 	_exit(0);
 }
 
@@ -147,13 +152,13 @@ sub kill_pids {
 	kill($sig, keys %$pids); # pids may be empty
 }
 
-sub process_queue {
-	my ($queue, $task, $opt) = @_;
+sub process_queue ($$$$) {
+	my ($ibxish, $queue, $task, $opt) = @_;
 	my $max = $opt->{jobs} // scalar(@$queue);
 	my $cb = \&$task;
 	if ($max <= 1) {
 		while (defined(my $args = shift @$queue)) {
-			$cb->($args, $opt);
+			$cb->($ibxish, $args, $opt);
 		}
 		return;
 	}
@@ -165,7 +170,7 @@ sub process_queue {
 	while (@$queue) {
 		while (scalar(keys(%pids)) < $max && scalar(@$queue)) {
 			my $args = shift @$queue;
-			$pids{cb_spawn($cb, $args, $opt)} = $args;
+			$pids{cb_spawn($cb, $ibxish, $args, $opt)} = $args;
 		}
 
 		my $flags = 0;
@@ -225,7 +230,7 @@ sub prepare_run {
 		while (defined(my $dn = readdir($dh))) {
 			if ($dn =~ /\A[0-9]+\z/) {
 				push(@old_shards, $dn + 0);
-			} elsif ($dn eq '.' || $dn eq '..') {
+			} elsif ($SKIP{$dn}) {
 			} elsif ($dn =~ /\Aover\.sqlite3/) {
 			} elsif ($dn eq 'misc' && $misc_ok) {
 			} else {
@@ -254,7 +259,7 @@ sub prepare_run {
 			my $wip_dn = $wip->dirname;
 			same_fs_or_die($old, $wip_dn);
 			my $cur = "$old/$dn";
-			push @queue, [ $src // $cur , $wip ];
+			push @queue, [ $src // $cur, $wip ];
 			$opt->{cow} or
 				PublicInbox::Syscall::nodatacow_dir($wip_dn);
 			$tmp->{$cur} = $wip;
@@ -308,7 +313,7 @@ sub run {
 	if ($task eq 'cpdb' && $opt->{reshard} && $ibx->can('cidx_run')) {
 		cidx_reshard($ibx, $queue, $opt);
 	} else {
-		process_queue($queue, $task, $opt);
+		process_queue $ibx, $queue, $task, $opt;
 	}
 	($im // $ibx)->lock_acquire if !$opt->{-coarse_lock};
 	commit_changes($ibx, $im, $tmp, $opt);
@@ -343,8 +348,8 @@ sub kill_compact { # setup_signals callback
 }
 
 # xapian-compact wrapper
-sub compact ($$) { # cb_spawn callback
-	my ($args, $opt) = @_;
+sub compact ($$$) { # cb_spawn callback
+	my ($ibxish, $args, $opt) = @_;
 	my ($src, $newdir) = @$args;
 	my $dst = ref($newdir) ? $newdir->dirname : $newdir;
 	my $pfx = $opt->{-progress_pfx} ||= progress_pfx($src);
@@ -497,17 +502,18 @@ sub cidx_reshard { # not docid based
 		push @q, [ "$tmp", $wip ];
 	}
 	delete $opt->{-progress_pfx};
-	process_queue(\@q, 'compact', $opt);
+	process_queue $cidx, \@q, 'compact', $opt;
 }
 
 # Like copydatabase(1), this is horribly slow; and it doesn't seem due
 # to the overhead of Perl.
-sub cpdb ($$) { # cb_spawn callback
-	my ($args, $opt) = @_;
+sub cpdb ($$$) { # cb_spawn callback
+	my ($ibxish, $args, $opt) = @_;
 	my ($old, $wip) = @$args;
 	my ($src, $cur_shard);
 	my $reshard;
 	my ($X, $flag) = xapian_write_prep($opt);
+	my $lk = PublicInbox::Lock::may_sh $ibxish->open_lock;
 	if (ref($old) eq 'ARRAY') {
 		my $new = $wip->dirname;
 		($cur_shard) = ($new =~ m!(?:xap|ei)[0-9]+/([0-9]+)\b!);
@@ -525,7 +531,7 @@ sub cpdb ($$) { # cb_spawn callback
 				$src = $X->{Database}->new($_);
 			}
 		}
-	} else {
+	} else { # 1:1 copy
 		$src = $X->{Database}->new($old);
 	}
 
@@ -595,7 +601,7 @@ sub cpdb ($$) { # cb_spawn callback
 
 	# this is probably the best place to do xapian-compact
 	# since $dst isn't readable by HTTP or NNTP clients, yet:
-	compact([ $tmp, $new ], $opt);
+	compact $ibxish, [ $tmp, $new ], $opt;
 }
 
 1;

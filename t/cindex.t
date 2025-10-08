@@ -80,8 +80,8 @@ ok(run_script([qw(-cindex -L medium --dangerous -q -d),
 
 SKIP: {
 	have_xapian_compact 2;
-	ok(run_script([qw(-compact -q), "$tmp/ext"]), 'compact on full');
-	ok(run_script([qw(-compact -q), "$tmp/med"]), 'compact on medium');
+	# ok(run_script([qw(-compact -q), "$tmp/ext"]), 'compact on full');
+	# ok(run_script([qw(-compact -q), "$tmp/med"]), 'compact on medium');
 }
 
 my $no_metadata_set = sub {

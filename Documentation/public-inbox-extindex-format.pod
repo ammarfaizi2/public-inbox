@@ -39,12 +39,13 @@ unique Message-ID requirement of NNTP.
 
   foo/                              # "foo" is the name of the index
   - ei.lock                         # lock file to protect global state
+  - open.lock                       # shared lock for readers (2.0+)
   - ALL.git                         # empty, alternates for inboxes
   - ei$SCHEMA_VERSION/$SHARD        # per-shard Xapian DB
   - ei$SCHEMA_VERSION/over.sqlite3  # overview DB for WWW, IMAP
   - ei$SCHEMA_VERSION/misc          # misc Xapian DB
 
-File and directory names are intentionally different from
+Most file and directory names are intentionally different from
 analogous v2 names to ensure extindex and v2 inboxes can
 easily be distinguished from each other.
 
@@ -91,8 +92,10 @@ reindexing and rely exclusively on GC.
 
 =head1 LOCKING
 
-L<flock(2)> locking exclusively locks the empty ei.lock file
-for all non-atomic operations.
+L<flock(2)> locking exclusively locks the empty C<ei.lock> file
+for all non-atomic operations.  In 2.0+, the L<flock(2)>
+C<open.lock> is a shared lock used by readers to protect them
+from L<public-inbox-compact(1)> and L<public-inbox-xcpdb(1)>.
 
 =head1 THANKS
 
@@ -101,7 +104,7 @@ and testing.
 
 =head1 COPYRIGHT
 
-Copyright 2020-2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<http://www.gnu.org/licenses/agpl-3.0.txt>
 

@@ -31,6 +31,7 @@ databases for parallelism by "shards".
   - xap$SCHEMA_VERSION/$SHARD       # per-shard Xapian DB
   - xap$SCHEMA_VERSION/over.sqlite3 # OVER-view DB for NNTP, threading
   - msgmap.sqlite3                  # same as the v1 msgmap
+  - open.lock                       # protect Xapian shard changes (2.0+)
 
 For blob lookups, the reader only needs to open the "all.git"
 repository with $GIT_DIR/objects/info/alternates which references
@@ -162,6 +163,12 @@ described below.
 The SQLite msgmap DB is unchanged from v1, but it is now at the
 top-level of the directory.
 
+=head2 over.lock
+
+An empty file for L<flock(2)> locking the C<xap*> directory to
+protect the final phase of L<public-inbox-compact(1)>.
+Introduced in public-inbox 2.0+.
+
 =head1 OBJECT IDENTIFIERS
 
 There are three distinct type of identifiers.  content_hash is the
@@ -216,7 +223,9 @@ without making DB changes.
 =head1 LOCKING
 
 L<flock(2)> locking exclusively locks the empty inbox.lock file
-for all non-atomic operations.
+for all non-atomic operations.  In 2.0+, the L<flock(2)>
+C<open.lock> is a shared lock used by readers to protect them
+from L<public-inbox-compact(1)> and L<public-inbox-xcpdb(1)>.
 
 =head1 HEADERS
 
@@ -235,7 +244,7 @@ and testing of the v2 format.
 
 =head1 COPYRIGHT
 
-Copyright 2018-2021 all contributors L<mailto:meta@public-inbox.org>
+Copyright all contributors L<mailto:meta@public-inbox.org>
 
 License: AGPL-3.0+ L<http://www.gnu.org/licenses/agpl-3.0.txt>
 

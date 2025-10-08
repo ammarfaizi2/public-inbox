@@ -16,6 +16,7 @@ use PublicInbox::DS qw(awaitpid);
 use autodie qw(open getsockopt);
 use POSIX qw(:signal_h);
 use Fcntl qw(LOCK_UN LOCK_EX);
+use PublicInbox::Lock;
 use Carp qw(croak);
 my $X = \%PublicInbox::Search::X;
 our (%SRCH, %WORKERS, $nworker, $workerset, $in, $SHARD_NFD, $MY_FD_MAX);
@@ -32,7 +33,9 @@ sub cmd_test_sleep { select(undef, undef, undef, 0.01) while 1 }
 
 sub iter_retry_check ($) {
 	if (ref($@) =~ /\bDatabaseModifiedError\b/) {
-		$_[0]->{srch}->reopen;
+		my ($req) = @_;
+		my $lk = PublicInbox::Lock::may_sh $req->{l};
+		$req->{srch}->reopen;
 		undef; # retries
 	} elsif (ref($@) =~ /\bDocNotFoundError\b/) {
 		warn "doc not found: $@";
@@ -118,9 +121,9 @@ sub dump_roots_iter ($$$) {
 sub dump_roots_flush ($$) {
 	my ($req, $fh) = @_;
 	if ($req->{wbuf} ne '') {
-		until (flock($fh, LOCK_EX)) { die "LOCK_EX: $!" if !$!{EINTR} }
+		PublicInbox::Lock::xflock($fh, LOCK_EX) or die "LOCK_EX: $!";
 		print { $req->{0} } $req->{wbuf} or die "print: $!";
-		until (flock($fh, LOCK_UN)) { die "LOCK_UN: $!" if !$!{EINTR} }
+		PublicInbox::Lock::xflock($fh, LOCK_UN) or die "LOCK_UN: $!";
 		$req->{wbuf} = '';
 	}
 }
@@ -226,6 +229,7 @@ sub dispatch (@) {
 		for my $retried (0, 1) {
 			my $slow_phrase = -f "$first/iamchert";
 			eval {
+				my $lk = PublicInbox::Lock::may_sh $req->{l};
 				$new->{xdb} = $X->{Database}->new($first);
 				for (@$dirs) {
 					$slow_phrase ||= -f "$_/iamchert";
@@ -250,7 +254,10 @@ sub dispatch (@) {
 		srch_init_extra $new, $req;
 		$SRCH{$key} = $new;
 	};
-	$req->{srch}->{xdb}->reopen unless $new;
+	unless ($new) {
+		my $lk = PublicInbox::Lock::may_sh $req->{l};
+		$req->{srch}->{xdb}->reopen;
+	}
 	my $timeo = $req->{K};
 	alarm($timeo) if $timeo;
 	$fn->($req, @argv);

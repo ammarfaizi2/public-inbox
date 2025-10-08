@@ -104,9 +104,10 @@ static void *xreallocarray(void *ptr, size_t nmemb, size_t size)
 {
 #ifdef HAVE_REALLOCARRAY
 	void *ret = reallocarray(ptr, nmemb, size);
-#else // can't rely on __builtin_mul_overflow in gcc 4.x :<
+#else // everyone has g++ >=5 these days, right?
 	void *ret = NULL;
-	if (nmemb && size > SIZE_MAX / nmemb)
+
+	if (__builtin_mul_overflow(nmemb, size, 0))
 		errno = ENOMEM;
 	else
 		ret = realloc(ptr, nmemb * size);
@@ -139,7 +140,7 @@ static int srch_eq(const struct srch *a, const struct srch *b)
 KHASHL_CSET_INIT(KH_LOCAL, srch_set, srch_set, struct srch *,
 		srch_hash, srch_eq)
 static srch_set *srch_cache;
-static struct srch *cur_srch; // for ThreadFieldProcessor
+static struct req *cur_req; // for ThreadFieldProcessor
 static long my_fd_max, shard_nfd;
 // sock_fd is modified in signal handler, yes, it's SOCK_SEQPACKET
 static volatile int sock_fd = STDIN_FILENO;
@@ -170,11 +171,12 @@ enum exc_iter {
 	ITER_ABORT
 };
 
-#define MY_ARG_MAX 256
+#define MY_ARG_MAX 256 // FIXME too small?
 typedef bool (*cmd)(struct req *);
 
 // only one request per-process since we have RLIMIT_CPU timeout
 struct req { // argv and pfxv point into global rbuf
+	char *lockv[MY_ARG_MAX]; // open.lock files
 	char *argv[MY_ARG_MAX];
 	char *pfxv[MY_ARG_MAX]; // -A <prefix>
 	char *qpfxv[MY_ARG_MAX]; // -Q <user_prefix>[:=]<INTERNAL_PREFIX>
@@ -191,7 +193,7 @@ struct req { // argv and pfxv point into global rbuf
 	unsigned long timeout_sec;
 	size_t nr_out;
 	long sort_col; // value column, negative means BoolWeight
-	int argc, pfxc, qpfxc, dirc;
+	int argc, pfxc, qpfxc, dirc, lockc;
 	FILE *fp[2]; // [0] response pipe or sock, [1] status/errors (optional)
 	bool has_input; // fp[0] is bidirectional
 	bool collapse_threads;
@@ -209,6 +211,11 @@ struct fbuf {
 	FILE *fp;
 	char *ptr;
 	size_t len;
+};
+
+struct open_locks {
+	struct req *req;
+	int lock_fd[]; // counted by req->lockc
 };
 
 #define SPLIT2ARGV(dst,buf,len) split2argv(dst,buf,len,MY_ARRAY_SIZE(dst))
@@ -251,6 +258,68 @@ static Xapian::Enquire prep_enquire(const struct req *req)
 	return enq;
 }
 
+static void xclose(int fd)
+{
+	if (close(fd) < 0 && errno != EINTR)
+		EABORT("BUG: close");
+}
+
+// NOT_UNUSED keeps clang happy (tested 14.0.5 on FreeBSD)
+#define NOT_UNUSED(v) (void)v
+#define AUTO_UNLOCK __attribute__((__cleanup__(unlock_ensure)))
+static void unlock_ensure(void *ptr)
+{
+	struct open_locks **lk_ = (struct open_locks **)ptr;
+	struct open_locks *lk = *lk_;
+
+	if (!lk)
+		return;
+	for (int i = 0; i < lk->req->lockc; i++)
+		if (lk->lock_fd[i] >= 0)
+			xclose(lk->lock_fd[i]); // implicit LOCK_UN
+}
+
+static struct open_locks *lock_shared_maybe(struct req *req)
+{
+	struct open_locks *lk = NULL;
+	size_t size;
+
+	assert(req->dirc);
+	if (!req->lockc) {
+		warn("W: %s has no -l (open.lock)", req->dirv[0]);
+		return NULL;
+	}
+	assert(req->lockc > 0);
+	assert(req->lockc < MY_ARG_MAX);
+	if (__builtin_mul_overflow(sizeof(int), (size_t)req->lockc, &size)) {
+		warnx("W: too many locks (%d)", req->lockc);
+		return NULL;
+	}
+	if (__builtin_add_overflow(sizeof(*lk), size, &size)) {
+		warnx("W: too many locks (%d)", req->lockc);
+		return NULL;
+	}
+	lk = (struct open_locks *)malloc(size);
+	if (!lk) EABORT("malloc(%zu)", size);
+	lk->req = req;
+	for (int i = 0; i < req->lockc; i++) {
+		lk->lock_fd[i] = open(req->lockv[i], O_RDONLY);
+
+		if (lk->lock_fd[i] < 0) {
+			if (errno != ENOENT)
+				warn("W: open(%s)", req->lockv[i]);
+			continue;
+		}
+		while (flock(lk->lock_fd[i], LOCK_SH) < 0) {
+			if (errno == EINTR)
+				continue;
+			warn("W: flock(%s, LOCK_SH)", req->lockv[i]);
+			break;
+		}
+	}
+	return lk;
+}
+
 static Xapian::MSet enquire_mset(struct req *req, Xapian::Enquire *enq)
 {
 	if (!req->max) {
@@ -264,7 +333,10 @@ static Xapian::MSet enquire_mset(struct req *req, Xapian::Enquire *enq)
 			Xapian::MSet mset = enq->get_mset(req->off, req->max);
 			return mset;
 		} catch (const Xapian::DatabaseModifiedError & e) {
-			req->srch->db->reopen();
+			AUTO_UNLOCK struct open_locks *lk =
+							lock_shared_maybe(req);
+			req->srch->db->reopen(); // may throw
+			NOT_UNUSED(lk);
 		}
 	}
 	return enq->get_mset(req->off, req->max);
@@ -338,7 +410,10 @@ static void apply_roots_filter(struct req *req, Xapian::Query *qry)
 			*qry = Xapian::Query(Xapian::Query::OP_FILTER, *qry, f);
 			return;
 		} catch (const Xapian::DatabaseModifiedError & e) {
+			AUTO_UNLOCK struct open_locks *lk =
+							lock_shared_maybe(req);
 			xdb->reopen();
+			NOT_UNUSED(lk);
 		}
 	}
 }
@@ -417,12 +492,6 @@ static bool write_all(int fd, const struct fbuf *wbuf, size_t len)
 	if (ferror(f) | fclose(f)) \
 		e ? err(e, "ferror|fclose "#f) : perror("ferror|fclose "#f); \
 } while (0)
-
-static void xclose(int fd)
-{
-	if (close(fd) < 0 && errno != EINTR)
-		EABORT("BUG: close");
-}
 
 static size_t off2size(off_t n)
 {
@@ -637,6 +706,8 @@ static void srch_init(struct req *req)
 		srch->qp_flags |= FLAG_PHRASE;
 		i = 0;
 		try {
+			AUTO_UNLOCK struct open_locks *lk =
+							lock_shared_maybe(req);
 			srch->db = new Xapian::Database(req->dirv[i]);
 			if (!lei && is_chert(req->dirv[0]))
 				srch->qp_flags &= ~FLAG_PHRASE;
@@ -647,6 +718,7 @@ static void srch_init(struct req *req)
 					srch->qp_flags &= ~FLAG_PHRASE;
 				srch->db->add_database(Xapian::Database(dir));
 			}
+			NOT_UNUSED(lk);
 			break;
 		} catch (const Xapian::Error & e) {
 			warnx("E: Xapian::Error: %s (%s)",
@@ -738,6 +810,10 @@ static void dispatch(struct req *req)
 			case LONG_MAX: case LONG_MIN: ABORT("-k %s", optarg);
 			}
 			break;
+		case 'l':
+			req->lockv[req->lockc++] = optarg;
+			if (MY_ARG_MAX == req->lockc) ABORT("too many -l");
+			break;
 		case 'm': OPT_U(m, req->max, strtoull, ULLONG_MAX); break;
 		case 'o': OPT_U(o, req->off, strtoull, ULLONG_MAX); break;
 		case 'r': req->relevance = true; break;
@@ -776,12 +852,14 @@ static void dispatch(struct req *req)
 	} else {
 		assert(req->srch != kbuf.srch);
 		srch_free(kbuf.srch);
+		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(req);
 		req->srch->db->reopen();
+		NOT_UNUSED(lk);
 	}
 	if (req->timeout_sec)
 		alarm(req->timeout_sec > UINT_MAX ?
 			UINT_MAX : (unsigned)req->timeout_sec);
-	cur_srch = req->srch; // set global for *FieldProcessor
+	cur_req = req; // set global for *FieldProcessor
 	try {
 		if (!req->fn(req))
 			warnx("`%s' failed", req->argv[0]);
@@ -843,7 +921,7 @@ static void req_cleanup(void *ptr)
 {
 	struct req *req = (struct req *)ptr;
 	free(req->lenv);
-	cur_srch = NULL;
+	cur_req = NULL;
 }
 
 static void reopen_logs(void)
