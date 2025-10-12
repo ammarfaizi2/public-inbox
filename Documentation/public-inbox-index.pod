@@ -150,6 +150,16 @@ data to accumulate, resulting on latency spikes from writeback.
 
 Available in public-inbox 1.6.0+.
 
+=item --defrag=MSGCOUNT
+
+Defragment SQLite and Xapian files after C<MSGCOUNT> messages indexed.
+Currently only affects Linux L<btrfs(5)>, but other FSes may be supported
+in the future.
+
+Default: 100000 messages
+
+Available in public-inbox 2.0.0+
+
 =item --dangerous
 
 Speed up initial index by using in-place updates and denying support for

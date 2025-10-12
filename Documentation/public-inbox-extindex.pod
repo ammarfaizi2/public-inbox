@@ -26,6 +26,8 @@ along with L<DBD::SQLite> and L<DBI> Perl modules.
 
 =item --no-fsync
 
+=item --defrag=MSGCOUNT
+
 =item --dangerous
 
 =item --rethread
