@@ -137,7 +137,7 @@ sub partial_enter ($) {
 	my ($ctx) = @_;
 	bless $ctx, __PACKAGE__; # for ExtMsg->event_step
 	return $ctx->event_step if $ctx->{env}->{'pi-httpd.app'};
-	$ctx->event_step(1) while $ctx->{-wcb};
+	$ctx->event_step while $ctx->{-wcb}; # generic PSGI
 }
 
 sub partial_prepare ($@) {
@@ -193,12 +193,10 @@ sub ext_msg {
 
 # called via PublicInbox::DS::event_loop
 sub event_step {
-	my ($ctx, $sync) = @_;
+	my ($ctx) = @_;
 	# can't find a partial match in current inbox, try the others:
 	my $ibx = shift @{$ctx->{again}} or return finalize_partial($ctx);
-	unless (partial_ibx_start($ctx, $ibx)) {
-		PublicInbox::DS::requeue($ctx) unless $sync;
-	}
+	partial_ibx_start $ctx, $ibx;
 }
 
 sub finalize_exact {
