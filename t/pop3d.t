@@ -249,8 +249,10 @@ EOF
 
 		$np3 = Net::POP3->new(@np3_args, %o);
 		ok($np3->starttls, 'STLS works before APOP');
-		ok($np3->apop($u, 'anonymous'), "APOP UUID\@$mailbox w/ STLS");
-
+		my $nr = $np3->apop($u, 'anonymous');
+		ok $nr, "APOP UUID\@$mailbox w/ STLS" or
+			diag(explain({nr => $nr, pop3 => \%{*$np3}},
+				errno => "$!"));
 		# undocumented:
 		ok($np3->_NOOP, 'NOOP works') if $np3->can('_NOOP');
 	}
