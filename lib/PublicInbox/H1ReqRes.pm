@@ -354,7 +354,7 @@ sub send_req_body { # called by flush_write
 		$self->requeue if push(@{$self->{wbuf}}, \&send_req_body) == 1;
 	} else {
 		delete $self->{req_left};
-		pass_res_hdr $self;
+		$self->write(\&pass_res_hdr);
 	}
 }
 
