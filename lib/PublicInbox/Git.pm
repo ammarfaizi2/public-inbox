@@ -8,7 +8,7 @@
 # There are also API changes to simplify our usage and data set.
 package PublicInbox::Git;
 use strict;
-use v5.10.1;
+use v5.10.1; # TODO: check unicode_strings compat
 use parent qw(Exporter PublicInbox::DS);
 use PublicInbox::DS qw(now);
 use autodie qw(socketpair sysread sysseek truncate);
@@ -672,7 +672,7 @@ sub close {
 }
 
 package PublicInbox::GitCheck; # only for git <2.36
-use v5.12;
+use v5.10.1; # TODO: change PublicInbox::Git to v5.12
 our @ISA = qw(PublicInbox::Git);
 no warnings 'once';
 

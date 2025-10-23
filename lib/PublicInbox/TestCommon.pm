@@ -364,8 +364,11 @@ sub key2sub ($) {
 		$pkg =~ s/([a-z])([a-z0-9]+)(\.t)?\z/\U$1\E$2/;
 		$pkg .= "_T" if $3;
 		$pkg =~ tr/-.//d;
+		my $tmpdir = tmpdir;
+		my $pl = "$tmpdir/$pkg.pl";
 		$pkg = "PublicInbox::TestScript::$pkg";
-		eval <<EOF;
+		require PublicInbox::IO;
+		PublicInbox::IO::write_file('>', $pl, <<EOF);
 package $pkg;
 use strict;
 use subs qw(exit);
@@ -379,7 +382,11 @@ sub main {
 }
 1;
 EOF
-		die "E: $f failed: $@" if $@;
+		# `require' on a file gives us a new scope which
+		# `eval' can't, so we do that to ensure we don't have
+		# conflicting `use VERSION' statements which become fatal
+		# in Perl v5.44 :<
+		require $pl;
 		$pkg->can('main');
 	}
 }
