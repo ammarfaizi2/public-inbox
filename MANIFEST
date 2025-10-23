@@ -477,6 +477,7 @@ t/eml_content_disposition.t
 t/eml_content_type.t
 t/epoll.t
 t/extindex-psgi.t
+t/extmsg_event_step_regression.t
 t/extsearch.t
 t/fail-bin/spamc
 t/fake_inotify.t
