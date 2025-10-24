@@ -326,11 +326,13 @@ EOM
 		open STDERR, '>&', $fh;
 		STDERR->autoflush(1);
 		STDOUT->autoflush(1);
+		my $have_inline;
 		eval {
 			require Inline;
+			$have_inline = 1;
 			Inline->import(C => $all_libc, BUILD_NOISY => 1);
 		};
-		my $err = $@;
+		my $err = $have_inline ? $@ : ($all_libc = undef);
 		open(STDERR, '>&', $olderr);
 		open(STDOUT, '>&', $oldout);
 		if ($err) {
