@@ -159,9 +159,10 @@ The open file descriptor limit (C<RLIMIT_NOFILE>, C<ulimit -n> in L<sh(1)>,
 C<LimitNOFILE=> in L<systemd.exec(5)>) may need to be raised to
 accommodate many concurrent clients.
 
-Transport Layer Security (IMAPS, NNTPS, or via STARTTLS) significantly
-increases memory use of client sockets, be sure to account for that in
-capacity planning.
+Transport Layer Security (HTTPS, IMAPS, NNTPS, or via STARTTLS)
+significantly increases memory use of client sockets, be sure to account
+for that in capacity planning.  Switching L<https://public-inbox.org/>
+to a 64-bit userspace reduced libcrypto.so (OpenSSL) CPU use by ~70%.
 
 Bursts of small object allocations late in process life contribute to
 fragmentation of the heap due to arenas (slabs) used internally by Perl.
