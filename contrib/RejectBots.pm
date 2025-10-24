@@ -1,9 +1,7 @@
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: GPL-3.0+ <https://www.gnu.org/licenses/gpl-3.0.txt>
 #
-# Plack/PSGI middleware to reject aggressive scrapers, requires
-# public-inbox-(httpd|netd) to detect persistent connections
-# via $env->{'pi-httpd.request_nr'}.
+# Plack/PSGI middleware to reject aggressive bots
 package RejectBots;
 use v5.12;
 use parent qw(Plack::Middleware);
@@ -22,20 +20,7 @@ sub call {
 	my ($self, $env) = @_;
 	my $ua = $env->{HTTP_USER_AGENT} // '';
 	return [ 403, [], [] ] if $ua =~ /$bad_ua/o;
-	my $uri;
-	if ($env->{PATH_INFO} !~ m!(?:/\.well-known/|\.css\z)! &&
-			$ua =~ m!\A(?:Mozilla|Opera)/! &&
-			defined($uri = $env->{REQUEST_URI}) &&
-			($env->{HTTP_REFERER} // '') !~ /\Q$uri\E\z/ &&
-			!$env->{'pi-httpd.request_nr'}) {
-		my $body = <<EOM;
-Requiring persistent connection to access: $uri ...
-EOM
-		[ 200, [ 'Refresh' => 1, 'Content-Type' => 'text/plain',
-			'Content-Length' => length($body) ], [ $body ] ]
-	} else {
-		$self->app->($env);
-	}
+	$self->app->($env);
 }
 
 1;
