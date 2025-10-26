@@ -300,6 +300,7 @@ test-asan : pure_all
 
 VG_OPT = -v --trace-children=yes --track-fds=yes
 VG_OPT += --leak-check=yes --track-origins=yes
+VG_OPT += \$(VG_EXTRA)
 test-valgrind : pure_all
 	TEST_XH_CXX_ONLY=1 VALGRIND="valgrind \$(VG_OPT)" \\
 		prove -bvw \$(XH_TESTS)
