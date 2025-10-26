@@ -103,9 +103,9 @@ sub read_err ($$;$) {
 				scalar(@{$self->{wbuf}});
 		$self->{res_left} = $len if defined $len;
 	} elsif (defined $len) {
-		die "W: upstream terminated while reading response ($len)";
+		die "W: upstream terminated while reading response ($len)\n";
 	} else {
-		die 'W: upstream terminated while reading response';
+		die "W: upstream terminated while reading response\n";
 	}
 	undef;
 }
