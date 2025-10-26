@@ -180,6 +180,7 @@ my $test = sub {
 };
 
 my @NO_CXX = (1);
+my $cxx_tested;
 unless ($ENV{TEST_XH_CXX_ONLY}) {
 	my $ar = $test->($^X, qw[-w -MPublicInbox::XapHelper -e
 			PublicInbox::XapHelper::start('-j0')]);
@@ -194,8 +195,9 @@ SKIP: {
 	if ($@) {
 		xbail "C++ build failed: $@" if $ENV{TEST_XH_CXX_ONLY};
 		skip "XapHelperCxx build: $@", 1;
+	} else {
+		$cxx_tested = 1;
 	}
-
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
 	my $ar = $test->(@$cmd, '-j0');
 	$ar = $test->(@$cmd, '-j1');
@@ -340,9 +342,7 @@ for my $n (@NO_CXX) {
 	is $nr_out, scalar(@oids), "output count matches $xhc->{impl}" or
 		diag explain(\@res, \@err);
 
-	SKIP: {
-		$xhc->{impl} =~ /cxx/i or
-			skip "`thread:' field processor requires C++", 1;
+	if ($xhc->{impl} =~ /cxx/i) {
 		require PublicInbox::XhcMset;
 		my $over = $thr->over;
 		my @thr_idx = glob("$thr->{inboxdir}/xap*/?");
@@ -391,16 +391,22 @@ for my $n (@NO_CXX) {
 			scalar(@art),
 			'thread:MSGID works on ghosts';
 
-		my $nr = $ENV{TEST_LEAK_NR} or skip 'TEST_LEAK_NR unset', 1;
-		$ENV{VALGRIND} or diag
+		SKIP: {
+			my $nr = $ENV{TEST_LEAK_NR} or
+					skip 'TEST_LEAK_NR unset', 1;
+			$ENV{VALGRIND} or diag
 "W: `VALGRIND=' unset w/ TEST_LEAK_NR (using -fsanitize?)";
-		for (1..$nr) {
-			$retrieve->('thread:thread-root@example wildfires');
-			$retrieve->('thread:"{ s:broken }" wildfires');
+			for (1..$nr) {
+				$retrieve->(
+					'thread:thread-root@example wildfires');
+				$retrieve->('thread:"{ s:broken }" wildfires');
+			}
 		}
+	} elsif (!$cxx_tested) {
+		diag 'thread: field processor requires C++';
 	}
-
-	if ($ENV{TEST_XH_TIMEOUT}) {
+	SKIP: {
+		skip 'TEST_XH_TIMEOUT unset', 1 if !$ENV{TEST_XH_TIMEOUT};
 		diag 'testing timeouts...';
 		for my $j (qw(0 1)) {
 			my $t0 = now;
