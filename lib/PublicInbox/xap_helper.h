@@ -277,6 +277,7 @@ static void unlock_ensure(void *ptr)
 	for (int i = 0; i < lk->req->lockc; i++)
 		if (lk->lock_fd[i] >= 0)
 			xclose(lk->lock_fd[i]); // implicit LOCK_UN
+	free(lk);
 }
 
 static struct open_locks *lock_shared_maybe(struct req *req)
