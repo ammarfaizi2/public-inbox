@@ -6,6 +6,7 @@
 // TODO: consider making PublicInbox::CodeSearchIdx emit binary
 // (20 or 32-bit) OIDs instead of ASCII hex.  It would require
 // more code in both Perl and C++, though...
+#include "khashl.h"
 
 // assumes trusted data from same host
 static inline unsigned int hex2uint(char c)
