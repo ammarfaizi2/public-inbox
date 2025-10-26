@@ -78,10 +78,13 @@ ok(run_script([qw(-cindex -L medium --dangerous -q -d),
 	"$tmp/med", '-g', $zp, '-g', "$tmp/wt0"]), 'cindex external medium');
 
 
+my $compact_ok;
 SKIP: {
 	have_xapian_compact 2;
-	# ok(run_script([qw(-compact -q), "$tmp/ext"]), 'compact on full');
-	# ok(run_script([qw(-compact -q), "$tmp/med"]), 'compact on medium');
+	$compact_ok = ok(run_script([qw(-compact -q), "$tmp/ext"]),
+			'compact on full')  &&
+		ok(run_script([qw(-compact -q), "$tmp/med"]),
+			'compact on medium');
 }
 
 my $no_metadata_set = sub {
@@ -95,7 +98,8 @@ my $no_metadata_set = sub {
 	}
 };
 
-{
+SKIP: {
+	skip 'xapian-compact missing or broken', 1 if !$compact_ok;
 	my $mid_size = sum(map { -s $_ } glob("$tmp/med/cidx*/*/*"));
 	my $full_size = sum(map { -s $_ } glob("$tmp/ext/cidx*/*/*"));
 	ok($full_size > $mid_size, 'full size > mid size') or
@@ -108,6 +112,8 @@ my $no_metadata_set = sub {
 	$full_size = sum(map { -s $_ } glob("$tmp/ext/cidx*/*/*"));
 	ok($full_size > $mid_size, 'full size > mid size after reindex') or
 		diag "full=$full_size mid=$mid_size";
+}
+{
 	my $csrch = PublicInbox::CodeSearch->new("$tmp/med");
 	my ($xdb0, @xdb) = $csrch->xdb_shards_flat;
 	$no_metadata_set->(0, [], [ $xdb0 ]);
