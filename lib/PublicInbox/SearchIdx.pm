@@ -41,7 +41,7 @@ our $DB_NO_SYNC = 0;
 our $DB_DANGEROUS = 0;
 our $CHECKPOINT_INTVL = 15; # seconds
 our $DEFRAG_NR = 100000; # document count
-our $SHARD_SPLIT_AT = 450000; # document count
+our $SHARD_SPLIT_AT = 100000; # document count
 our $BATCH_BYTES = $ENV{XAPIAN_FLUSH_THRESHOLD} ? 0x7fffffff :
 	# assume a typical 64-bit system has 8x more RAM than a
 	# typical 32-bit system:
