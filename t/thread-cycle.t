@@ -61,7 +61,7 @@ my ($simples, $smsgs) = $make_objs->(
 my $st = thread_to_s($smsgs);
 
 SKIP: {
-	skip 'Mail::Thread missing', 1 unless $mt;
+	require_mods 'Mail::Thread', 1;
 	check_mt($st, $simples, 'Mail::Thread output matches');
 }
 
@@ -81,14 +81,14 @@ my @backwards = (
 ($simples, $smsgs) = $make_objs->(@backwards);
 my $backward = thread_to_s($smsgs);
 SKIP: {
-	skip 'Mail::Thread missing', 1 unless $mt;
+	require_mods 'Mail::Thread', 1;
 	check_mt($backward, $simples, 'matches Mail::Thread backwards');
 }
 ($simples, $smsgs) = $make_objs->(reverse @backwards);
 my $forward = thread_to_s($smsgs);
 unless ('Mail::Thread sorts by Date') {
 	SKIP: {
-		skip 'Mail::Thread missing', 1 unless $mt;
+		require_mods 'Mail::Thread', 1;
 		check_mt($forward, $simples, 'matches Mail::Thread forwards');
 	}
 }
