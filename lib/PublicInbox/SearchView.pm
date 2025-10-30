@@ -247,32 +247,35 @@ sub search_nav_bot { # also used by WwwListing for searching extindex miscidx
 	} else {
 		$rv .= "No more results, only $total";
 	}
-	my ($next, $join, $prev, $nd, $pd);
-
+	my ($next, $join, $prev, $nd, $pd, $min, $max);
+	if ($q->{r}) { # bogus % if somebody manually entered in OOB o=$OFFSET
+		$min = $q->{-min_pct} // 0;
+		$max = $q->{-max_pct} // 100;
+	}
 	if ($o >= 0) { # sort descending
 		my $n = $o + $l;
 		if ($n < $total) {
 			$next = $q->qs_html(o => $n, l => $l);
-			$nd = $q->{r} ? "[&lt;= $q->{-min_pct}%]" : '(older)';
+			$nd = defined($min) ? "[&lt;= $min%]" : '(older)';
 		}
 		if ($o > 0) {
 			$join = $n < $total ? ' | ' : "\t";
 			my $p = $o - $l;
 			$prev = $q->qs_html(o => ($p > 0 ? $p : 0));
-			$pd = $q->{r} ? "[&gt;= $q->{-max_pct}%]" : '(newer)';
+			$pd = defined($max) ? "[&gt;= $max%]" : '(newer)';
 		}
 	} else { # o < 0, sort ascending
 		my $n = $o - $l;
 
 		if (-$n < $total) {
 			$next = $q->qs_html(o => $n, l => $l);
-			$nd = $q->{r} ? "[&lt;= $q->{-min_pct}%]" : '(newer)';
+			$nd = defined($min) ? "[&lt;= $min%]" : '(newer)';
 		}
 		if ($o < -1) {
 			$join = -$n < $total ? ' | ' : "\t";
 			my $p = $o + $l;
 			$prev = $q->qs_html(o => ($p < 0 ? $p : 0));
-			$pd = $q->{r} ? "[&gt;= $q->{-max_pct}%]" : '(older)';
+			$pd = defined($max) ? "[&gt;= $max%]" : '(older)';
 		}
 	}
 
