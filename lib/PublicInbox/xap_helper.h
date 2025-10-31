@@ -202,11 +202,6 @@ struct req { // argv and pfxv point into global rbuf
 	bool asc; // ascending sort
 };
 
-struct worker {
-	pid_t pid;
-	unsigned nr;
-};
-
 struct fbuf {
 	FILE *fp;
 	char *ptr;
