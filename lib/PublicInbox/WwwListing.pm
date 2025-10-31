@@ -210,8 +210,7 @@ EOM
 
 sub psgi_triple {
 	my ($ctx) = @_;
-	my $h = [ 'Content-Type', 'text/html; charset=UTF-8',
-			'Content-Length', undef ];
+	my $h = [ 'Content-Type', 'text/html; charset=UTF-8' ];
 	my $gzf = gzf_maybe($h, $ctx->{env});
 	my $zfh = $gzf->zfh;
 	print $zfh '<html><head><title>public-inbox listing</title>',
@@ -240,7 +239,7 @@ sub psgi_triple {
 qq(This is a listing of public inboxes, see the `mirror' link of each inbox
 for instructions on how to mirror all the data and code on this site.) .
 			'</pre></body></html>');
-	$h->[3] = length($out);
+	push @$h, 'Content-Length', length($out);
 	[ $code, $h, [ $out ] ];
 }
 

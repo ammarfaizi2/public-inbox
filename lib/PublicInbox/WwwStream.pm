@@ -231,8 +231,7 @@ sub html_done ($;@) {
 
 sub html_oneshot ($$;@) {
 	my ($ctx, $code) = @_[0, 1];
-	my $res_hdr = [ 'Content-Type' => 'text/html; charset=UTF-8',
-		'Content-Length' => undef ];
+	my $res_hdr = [ 'Content-Type' => 'text/html; charset=UTF-8' ];
 	bless $ctx, __PACKAGE__;
 	$ctx->{gz} = PublicInbox::GzipFilter::gz_or_noop($res_hdr, $ctx->{env});
 	my @top;
@@ -241,7 +240,7 @@ sub html_oneshot ($$;@) {
 		$ctx->{base_url} = base_url($ctx);
 	};
 	my $bdy = $ctx->zflush(@top, @_[2..$#_], _html_end($ctx));
-	$res_hdr->[3] = length($bdy);
+	push @$res_hdr, 'Content-Length', length($bdy);
 	[ $code, $res_hdr, [ $bdy ] ]
 }
 
