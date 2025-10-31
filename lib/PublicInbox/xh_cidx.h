@@ -267,7 +267,6 @@ static bool cmd_dump_roots(struct req *req)
 	if (asize < est) ABORT("too many entries: %zu", est);
 	drt.entries = (char **)xcalloc(asize, sizeof(char *));
 	size_t tot = split2argv(drt.entries, (char *)drt.mm_ptr, size, asize);
-	if (tot <= 0) return false; // split2argv already warned on error
 	drt.root2id = root2id_init();
 	root2id_cm_resize(drt.root2id, est);
 	for (size_t i = 0; i < tot; ) {

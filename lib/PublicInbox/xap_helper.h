@@ -945,6 +945,8 @@ static void recv_loop(void) // worker process loop
 			continue;
 		if (req.fp[1])
 			stderr_set(req.fp[1]);
+
+		// MY_ARG_MAX limits the return value of SPLIT2ARGV
 		req.argc = (int)SPLIT2ARGV(req.argv, rbuf, len);
 		dispatch(&req);
 		ERR_CLOSE(req.fp[0], 0);
