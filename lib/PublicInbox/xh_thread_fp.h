@@ -21,7 +21,6 @@ static enum exc_iter xpand_col_iter(Xapian::Query *xqry,
 	} catch (const Xapian::DatabaseModifiedError &e) {
 		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(cur_req);
 		cur_req->srch->db->reopen();
-		NOT_UNUSED(lk);
 		return ITER_RETRY;
 	} catch (const Xapian::DocNotFoundError &e) { // oh well...
 		warnx("doc not found: %s", e.get_description().c_str());

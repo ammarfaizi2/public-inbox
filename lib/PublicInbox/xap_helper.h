@@ -264,9 +264,9 @@ static void xclose(int fd)
 		EABORT("BUG: close");
 }
 
-// NOT_UNUSED keeps clang happy (tested 14.0.5 on FreeBSD)
-#define NOT_UNUSED(v) (void)v
-#define AUTO_UNLOCK __attribute__((__cleanup__(unlock_ensure)))
+// __attribute__((__unused__)) keeps clang happy (tested 14.0.5 on FreeBSD)
+#define AUTO_UNLOCK __attribute__((__cleanup__(unlock_ensure))) \
+		__attribute__((__unused__))
 static void unlock_ensure(void *ptr)
 {
 	struct open_locks **lk_ = (struct open_locks **)ptr;
@@ -337,7 +337,6 @@ static Xapian::MSet enquire_mset(struct req *req, Xapian::Enquire *enq)
 			AUTO_UNLOCK struct open_locks *lk =
 							lock_shared_maybe(req);
 			req->srch->db->reopen(); // may throw
-			NOT_UNUSED(lk);
 		}
 	}
 	return enq->get_mset(req->off, req->max);
@@ -414,7 +413,6 @@ static void apply_roots_filter(struct req *req, Xapian::Query *qry)
 			AUTO_UNLOCK struct open_locks *lk =
 							lock_shared_maybe(req);
 			xdb->reopen();
-			NOT_UNUSED(lk);
 		}
 	}
 }
@@ -719,7 +717,6 @@ static void srch_init(struct req *req)
 					srch->qp_flags &= ~FLAG_PHRASE;
 				srch->db->add_database(Xapian::Database(dir));
 			}
-			NOT_UNUSED(lk);
 			break;
 		} catch (const Xapian::Error & e) {
 			warnx("E: Xapian::Error: %s (%s)",
@@ -855,7 +852,6 @@ static void dispatch(struct req *req)
 		srch_free(kbuf.srch);
 		AUTO_UNLOCK struct open_locks *lk = lock_shared_maybe(req);
 		req->srch->db->reopen();
-		NOT_UNUSED(lk);
 	}
 	if (req->timeout_sec)
 		alarm(req->timeout_sec > UINT_MAX ?
