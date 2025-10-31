@@ -184,7 +184,10 @@ sub response_write {
 
 	for (my $i = 0; $i < @$headers; $i += 2) {
 		my $k = $headers->[$i];
-		my $v = $headers->[$i + 1];
+		my $v = $headers->[$i + 1] // do {
+			warn "@$env{qw(REQUEST_METHOD REQUEST_URI)} $k undef";
+			next;
+		};
 		next if $k =~ /\A(?:Connection|Date)\z/i;
 
 		$len = $v if $k =~ /\AContent-Length\z/i;
