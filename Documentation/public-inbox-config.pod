@@ -174,6 +174,8 @@ May be specified more than once for M:N mapping of code repos to
 inboxes.  If enabled, diff hunk headers in patch emails will
 link to the line numbers of blobs.
 
+Unnecessary with L<public-inbox-cindex(1)/--join>
+
 Default: none
 
 =item publicinbox.<name>.altid
@@ -370,15 +372,25 @@ respectively
 
 Default: none
 
+=item cindex.$NAME.topdir
+
+=item cindex.$NAME.localprefix
+
+See L<public-inbox-cindex(1)>
+
 =item coderepo.<nick>.dir
 
 The path to a git repository for "publicinbox.<name>.coderepo"
 Absolute pathnames longer than 244 bytes cannot be indexed
 with L<public-inbox-cindex(1)>
 
+Unnecessary with L<public-inbox-cindex(1)/--join>
+
 =item coderepo.<nick>.cgitUrl
 
 The URL of the cgit instance associated with the coderepo.
+
+Unnecessary with L<public-inbox-cindex(1)/--join>
 
 Default: none
 
@@ -554,6 +566,8 @@ external indices
 Identical to L</publicinbox.E<lt>nameE<gt>.coderepo>, but for
 external indices.  Code repos may be freely associated with
 any number of public inboxes and external indices.
+
+Unnecessary with L<public-inbox-cindex(1)/--join>
 
 =back
 

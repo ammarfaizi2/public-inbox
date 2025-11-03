@@ -1,24 +1,35 @@
 =head1 NAME
 
-public-inbox-cindex - create and update code repository search indices
+public-inbox-cindex - create and update coderepo search indices
 
 =head1 SYNOPSIS
 
-public-inbox-cindex [OPTIONS] -g GIT_DIR [-g GIT_DIR]...
+public-inbox-cindex -d EXTDIR [OPTIONS] --join
 
-public-inbox-cindex [OPTIONS] --update
+public-inbox-cindex -d EXTDIR [OPTIONS] --update
+
+public-inbox-cindex [OPTIONS] -g GIT_DIR [-g GIT_DIR]...
 
 =head1 DESCRIPTION
 
 public-inbox-cindex creates and updates the Xapian search index for
-git code repository (C<coderepo>) search.  It can also associate
-(fuzzy join) coderepos with Xapian-indexed inboxes.  It only indexes
-commit messages and diffs as they would show up in an email.  It
-does not index the contents of blobs directly.
+git code repository (C<coderepo>) search.  It can associate
+(fuzzy join) coderepos with Xapian-indexed inboxes to enable blob
+reconstruction in the C<$INBOX_URL/$BLOB_OID/s/>) WWW endpoint.
+It only indexes commit messages and diffs as they would show up in
+an email.  It does not currently index the contents of blobs directly.
 
 Like inbox indices, coderepo indices can either be internal or external
 to a coderepo.  Either way, they're both created and updated through
-public-inbox-cindex.
+public-inbox-cindex.  External indices via L</-d EXTDIR> are recommended
+for sites hosting multiple coderepos with common history.
+
+Currently, public-inbox-cindex exists mainly to save WWW admins the
+trouble of associating hundreds/thousands of inboxes and coderepos
+with each other via C<publicinbox.*.coderepo> and C<coderepo.*.dir>
+directives in L<public-inbox-config(5)>).  Eventually, it will
+allow L<lei-rediff(1)> functionality to be ported to the WWW UI and
+allow searching commits in coderepos directly via WWW interface.
 
 Once the initial indices are created by public-inbox-cindex,
 the L</--update> switch will incrementally update them.
@@ -31,9 +42,19 @@ the L</--update> switch will incrementally update them.
 
 Use the given directory as an external index.  External indices are
 generally recommended to internal indices since they do not need
-write access to any code repositories themselves.  They are highly
-recommended when many repositories share a common history or if
+write access to any coderepos themselves.  They are highly
+recommended when many coderepos share a common history or if
 there is an M:N relationship between inboxes and coderepos.
+
+=item -g GIT_DIR
+
+=item --git-dir=GIT_DIR
+
+When not using L</-d EXTDIR>, the cindex will be written to
+C<$GIT_DIR/public-inbox-cindex>.  May also be combined with L</-d
+EXTDIR> to index a single (or subset of) git coderepos.
+
+May be specified multiple times.
 
 =item -j JOBS
 
@@ -46,6 +67,22 @@ shards will be created.
 
 Default: the number of existing Xapian shards
 
+=item --join
+
+Attempt a fuzzy association of all inboxes and coderepos to
+enhance the WWW interface.  See L</EXAMPLE> below.
+
+A C++ compiler, L<xapian-delve(1)> and Xapian development files
+(e.g. libxapian-dev or xapian-core-devel) will make this operation
+orders of magnitude faster.
+
+This operation should be rerun whenever inboxes or coderepos are
+added or removed, or when one project merges with another.
+
+Web servers running PublicInbox::WWW (e.g. L<public-inbox-netd(1)> or
+L<public-inbox-httpd(1)>) currently need to be restarted to pick up
+new (or expire old) associations.
+
 =item --reindex
 
 Forces a re-index of all commits.  This can be used for in-place
@@ -55,12 +92,14 @@ upgrades and bugfixes while read-only processes are utilizing the index.
 
 =item -u
 
-Incrementally index all previously-indexed coderepos.
+Incrementally index all previously-indexed coderepos without
+checking for new ones.
 
 =item --prune
 
 Unindexes commits which are no longer accessible via git.
-Use this after L<git-gc(1)> (or L<git-prune(1)>).
+Use this after L<git-gc(1)> (or L<git-prune(1)>), or if coderepos
+are removed.
 
 =item --no-fsync
 
@@ -73,6 +112,26 @@ Use this after L<git-gc(1)> (or L<git-prune(1)>).
 These affect the coderepo index the same way they affect
 inbox indices.  See L<public-inbox-index(1)>.
 
+A smaller value of C<--max-size> (e.g. C<--max-size=10m>)
+is highly recommended to limit memory usage for gigantic
+commits.
+
+=item --project-list=FILE
+
+The same project list used by cgit, gitweb, grokmirror and
+L<public-inbox-clone(1)>.  Requires L</--project-root=DIRECTORY>.
+
+=item --project-root=DIRECTORY
+
+=item -r DIRECTORY
+
+Specifies the top-level directory for projects in L</--project-list=FILE>.
+
+=item --exclude (GLOB|PATH)
+
+Exclude given coderepos when using L</--project-list=FILE>.
+May be specified multiple times.
+
 =back
 
 =head1 FILES
@@ -80,7 +139,7 @@ inbox indices.  See L<public-inbox-index(1)>.
 For internal indices, the Xapian DB is stored in
 C<$GIT_DIR/public-inbox-cindex>.
 
-External indices are stored wherever L</-d> EXTDIR points.
+External indices are stored wherever L</-d EXTDIR> points.
 
 =head1 CONFIGURATION
 
@@ -92,6 +151,25 @@ External indices are stored wherever L</-d> EXTDIR points.
 
 These configuration knobs affect the coderepo index the same way
 they affect inbox indices.  See L<public-inbox-index(1)>.
+
+=item cindex.$NAME.topdir
+
+Directory where an external coderepo index was created (with
+L</-d EXTDIR>).
+
+C<$NAME> is the URL prefix (without leading/trailing slashes)
+for all coderepos in the WWW interface, an empty string (C<"">)
+is allowed when repos are stored at the toplevel.
+
+Combined with L<cindex.$NAME.localprefix>, this allows admins
+to avoid specifying a separate L<coderepo.$NICK.dir> entry
+for every coderepo indexed.
+
+=item cindex.$NAME.localprefix
+
+The local directory name prefix of all coderepos to be displayed
+in the WWW interface.  This is typically a subdirectory in
+L</--project-root=DIRECTORY>
 
 =back
 
@@ -117,6 +195,46 @@ Use C<publicinbox.indexBatchSize> instead.
 
 Occasionally, public-inbox will update its schema version and
 require a full reindex by running this command with L</--reindex>.
+
+=head1 EXAMPLE
+
+Assuming you have an "all" extindex for your inboxes and store
+coderepos in C</path/to/repos>, the contents of your C<PI_CONFIG>
+file should include something like this:
+
+	[extindex "all"]
+		topdir = /path/to/eidx-all
+	[cindex "pub"]
+		localprefix = /path/to/repos/pub
+	        topdir = /path/to/cidx-all
+
+Assuming you're using a cgit/gitweb/grokmirror/L<public-inbox-clone(1)>
+compatible L<--project-list|public-inbox-clone(1)/--project-list=FILE>,
+you can periodically use L</--join> when new coderepos are added,
+deleted, or when one project merges with another:
+
+	public-inbox-cindex -d /path/to/cidx-all --max-size=10m \
+		-L medium --join \
+		--exclude='**/uninteresting-a.git' \
+		--exclude='**/uninteresting-b.git' \
+		--project-list=/path/to/repos/projects.list \
+		--project-root=/path/to/repos
+
+After this (and restarting the webserver), a project in
+C</path/to/pub/project.git> should be visible via
+C<https://$HOSTNAME/pub/project.git> from a WWW instance and the
+bottom of the project.git HTML page should display a list of
+C<associated public inboxes>.   When viewing patch emails in any
+associated inbox, diff hunk headers (those C<@@ -123,4 +123,4 @@>
+lines) will link to C<$INBOX_URL/$BLOB_OID/s/> URLs which attempt
+to display the blob (reconstructing blobs from patch emails if
+necessary).
+
+Since C<--join> is expensive and (coderepo|inbox) additions/removals
+are rare, incrementally updating the index can be done more quickly
+with L</--update>:
+
+	public-inbox-cindex -d /path/to/cidx-all --max-size=10m --update
 
 =head1 CONTACT
 
