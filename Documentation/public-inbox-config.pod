@@ -335,7 +335,7 @@ Default: none
 
 Same as C<publicinbox.imapserver>, but for the hostname(s) of the
 L<public-inbox-nntpd(1)> instance.  This affects C<Xref:> headers
-in responses.  As of public-inbox 2.0, this can be overriden on
+in responses.  As of public-inbox 2.0, this can be overridden on
 the C<public-inbox-netd(1)> command-line via
 C<--listen nntp://$ADDRESS:$PORT/?servername=example.com>
 
