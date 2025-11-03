@@ -30,7 +30,7 @@ GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
 		commit-interval|commit=i
 		batch_size|batch-size=s max_size|max-size=s
 		include|I=s@ only=s@ all show:s@
-		project-list=s exclude=s@ project-root|r=s
+		project-list|projectslist=s exclude=s@ project-root|r=s
 		git-dir|g=s@
 		sort-parallel=s sort-compress-program=s sort-buffer-size=s
 		d=s update|u scan! prune dry-run|n C=s@ help|h))
@@ -68,6 +68,7 @@ EOM
 --project-list does not accept additional --git-dir directories
 (@{$opt->{'git-dir'}})
 EOM
+	$pl = 'projects.list' if $pl eq ''; # same as public-inbox-clone(1)
 	open my $fh, '<', $pl or die "open($pl): $!\n";
 	chomp(@git_dirs = <$fh>);
 	$pfx .= '/';
