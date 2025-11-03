@@ -126,7 +126,7 @@ C<--all> is as follows:
 		coderepo = bar
 
 Putting an C<extindex> entry in the config allows L<PublicInbox::WWW>.
-You can have any number of C<extentry.$NAME> sections where C<$NAME>
+You can have any number of C<extindex.$NAME> sections where C<$NAME>
 is something other than C<all> to display a union of several inboxes.
 
 It is strongly recommended any public inboxes indexed by this command
