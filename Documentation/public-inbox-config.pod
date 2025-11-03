@@ -187,14 +187,13 @@ C<gmane:1234>.  This is useful to allow looking up legacy serial IDs
 It must be specified in the form of
 C<serial:$USER_PREFIX:file=$SQLITE_FILENAME> where C<$USER_PREFIX> is a
 lowercase prefix like C<gmane> for search queries, and
-C<$SQLITE_FILENAME> is points to an SQLite DB.  C<$SQLITE_FILENAME> may
+C<$SQLITE_FILENAME> points to an SQLite DB.  C<$SQLITE_FILENAME> may
 be an absolute path or a path relative to C<INBOXDIR> for v2 inboxes or
 C<INBOXDIR/public-inbox> for v1 inboxes.
 
-The schema of C<$SQLITE_FILENAME> should be the same as a
+The schema of C<$SQLITE_FILENAME> should be the same as for
 C<msgmap.sqlite3>.  See C<scripts/xhdr-num2mid> in the public-inbox
-source tree for an example of how to generate such a mapping from
-via NNTP.
+source tree for an example of how to generate such a mapping via NNTP.
 
 This is a noop with C<indexlevel=basic>
 

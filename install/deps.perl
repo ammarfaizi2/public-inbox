@@ -104,7 +104,7 @@ $profiles->{'www-thread'} = [ @{$profiles->{v2essential}}, qw(Plack) ];
 # common profile for PublicInbox::WWW
 $profiles->{'www-search'} = [ @{$profiles->{'www-thread'}}, qw(Xapian) ];
 
-# bare mininum for lei
+# bare minimum for lei
 $profiles->{'lei-core'} = [ @{$profiles->{v2essential}}, qw(Xapian) ];
 push @{$profiles->{'lei-core'}}, 'Inline::C' if $^O ne 'linux';
 
@@ -261,7 +261,7 @@ if ($pkg_fmt =~ /\A(?:pkg_add|pkgin)\z/) {
 	}
 }
 
-my %inst_check = ( # subs which return true if a package is intalled
+my %inst_check = ( # subs which return true if a package is installed
 	apk => sub { system(qw(apk info -q -e), $_[0]) == 0 },
 	deb => sub { system("dpkg -s $_[0] >/dev/null 2>&1") == 0 },
 	pkg => sub { system(qw(pkg info -q), $_[0]) == 0 },

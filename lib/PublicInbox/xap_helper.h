@@ -7,7 +7,7 @@
  * C (not C++) is used as much as possible to lower the contribution
  * barrier for hackers who mainly know C (this includes the maintainer).
  * Yes, that means we use C stdlib stuff like open_memstream
- * instead their equivalents in the C++ stdlib :P
+ * instead of their equivalents in the C++ stdlib :P
  * Everything here is an unstable internal API of public-inbox and
  * NOT intended for ordinary users; only public-inbox hackers
  */

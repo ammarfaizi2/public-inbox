@@ -54,7 +54,7 @@ As of public-inbox 2.0, C<servername=> and C<serverport=> may
 also be specified on a per listener basis.  For HTTP(S),
 these ensure full URLs are generated properly for HTTP clients
 which omit the HTTP C<Host:> header.  For NNTP(S), C<servername=>
-is printed in the the greeting and used for generating C<Xref:>
+is printed in the greeting and used for generating C<Xref:>
 headers, overriding the L<public-inbox-config(5)/publicinbox.nntpserver>
 directive.
 

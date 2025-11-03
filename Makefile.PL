@@ -276,7 +276,7 @@ Makefile.PL : MANIFEST
 	touch -r MANIFEST \$@
 	\$(PERLRUN) \$@
 
-# Install symlinks to ~/bin (which is hopefuly in PATH) which point to
+# Install symlinks to ~/bin (which is hopefully in PATH) which point to
 # this source tree.
 # prefix + bindir matches git.git Makefile:
 prefix = \$(HOME)

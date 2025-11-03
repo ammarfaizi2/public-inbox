@@ -183,7 +183,7 @@ sub mp_descend ($$) {
 	# "multipart" messages can exist w/o a body
 	my $bdy = ($nr ? delete($self->{bdy}) : \(body_raw($self))) or return;
 
-	# Cut at the the first epilogue, not subsequent ones.
+	# Cut at the first epilogue, not subsequent ones.
 	# *sigh* just the regexp match alone seems to bump RSS by
 	# length($$bdy) on a ~30M string:
 	my $epilogue_missing;

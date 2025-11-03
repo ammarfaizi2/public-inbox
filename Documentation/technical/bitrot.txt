@@ -20,7 +20,7 @@ programming languages and APIs of our implementation.
   However, we only depend on its stability to maintain a stable,
   bidirectional mapping of Message-IDs to NNTP article numbers
   in msgmap.sqlite3.  lei uses it to maintain mail source mappings,
-  but lei itself is not-yet-ready for reliably storing private mail.
+  but lei itself is not yet ready for reliably storing private mail.
 
   [1] https://www.loc.gov/preservation/digital/formats/fdd/fdd000461.shtml
 
@@ -31,7 +31,7 @@ programming languages and APIs of our implementation.
   When relying on the `syscall' perlop, be sure to hard code the
   actual numbers used for syscalls instead of relying on the
   symbolic name => number mapping at compilation time.  FreeBSD (and
-  probably others) will assign different numbers to the same name
+  probably others) will assign different numbers to the same
   name (e.g. SYS_kevent changed from 363 to 560, while
   SYS_freebsd11_kevent continues to map to 363 in FreeBSD 12+).
 

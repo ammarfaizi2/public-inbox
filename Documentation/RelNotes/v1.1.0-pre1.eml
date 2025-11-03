@@ -272,7 +272,7 @@ Eric Wong (Contractor, The Linux Foundation) (239):
       feed: respect feedmax, again
       v1: remove articles from overview DB
       compact: do not merge v2 repos by default
-      v2writable: reduce partititions by one
+      v2writable: reduce partitions by one
       search: preserve References in Xapian smsg for x=t view
       v2: generate better Message-IDs for duplicates
       v2: improve deduplication checks

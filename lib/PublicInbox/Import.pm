@@ -331,7 +331,7 @@ sub drop_unwanted_headers ($) {
 		$eml->header_set($_);
 	}
 
-	# We don't want public-inbox readers to be able to unsubcribe the
+	# We don't want public-inbox readers to be able to unsubscribe the
 	# address which does archiving.  WARNING: this breaks DKIM if the
 	# mailing list sender follows RFC 8058, section 4; but breaking DKIM
 	# (or have senders ignore RFC 8058 sec. 4) is preferable to having

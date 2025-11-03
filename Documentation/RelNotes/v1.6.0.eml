@@ -14,7 +14,7 @@ come in 1.7.
 
 The read-only httpd and nntpd daemons no longer block the event
 loop when retrieving blobs from git, making better use of SMP
-systems while accomodating slow storage.
+systems while accommodating slow storage.
 
 Indexing can be now be tuned to give somewhat usable performance
 on HDD storage, though we can't defy the laws of physics, either.
