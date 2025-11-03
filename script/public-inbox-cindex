@@ -29,7 +29,7 @@ GetOptions($opt, qw(quiet|q verbose|v+ reindex jobs|j=i fsync|sync! dangerous
 		cow! indexlevel|index-level|L=s join:s@
 		commit-interval|commit=i
 		batch_size|batch-size=s max_size|max-size=s
-		include|I=s@ only=s@ all show:s@
+		include-inbox|I=s@ only-inbox=s@ all-inboxes show:s@
 		project-list|projectslist=s exclude=s@ project-root|r=s
 		git-dir|g=s@
 		sort-parallel=s sort-compress-program=s sort-buffer-size=s

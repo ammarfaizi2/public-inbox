@@ -1234,18 +1234,19 @@ EOM
 			warn "W: `$_' is not a public inbox, skipping\n";
 			();
 		}
-	} (@{$self->{-opt}->{include} // []});
-	my $all = $self->{-opt}->{all};
-	if (my $only = $self->{-opt}->{only}) {
+	} (@{$self->{-opt}->{'include-inbox'} // []});
+	my $all = $self->{-opt}->{'all-inboxes'};
+	if (my $only = $self->{-opt}->{'only-inbox'}) {
 		die <<'' if $all;
-E: --all is incompatible with --only
+E: --all-inboxes is incompatible with --only-inbox
 
 		$incl{rel2abs_collapsed($_)} = undef for @$only;
 	}
 	unless (keys(%incl)) {
 		$all = 1;
 		warn <<EOM unless $self->{opt}->{quiet};
-# --all implied since no inboxes were specified with --only or --include
+# --all-inboxes implied since no inboxes were specified with
+# --only-inbox= or --include-inbox=
 EOM
 	}
 	$self->{-opt}->{-pi_cfg}->each_inbox(\&_prep_ibx, $self, \%incl, $all);
