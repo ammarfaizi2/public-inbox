@@ -235,7 +235,7 @@ Support for other parameters is not finalized and subject to change.
 
 This is a noop with C<indexlevel=basic>
 
-New in public-inbox 2.0.0 (PENDING)
+New in public-inbox 2.0+
 
 Default: none
 
@@ -428,7 +428,7 @@ or /usr/share/cgit/
 =item publicinbox.cgit
 
 Controls whether or not and how C<cgit> is used for serving coderepos.
-New in public-inbox 2.0.0 (PENDING).
+New in public-inbox 2.0+.
 
 =over 8
 
@@ -504,7 +504,7 @@ C<publicInbox.wwwListing=all>
 
 Default: false
 
-New in public-inbox 2.0.0 (PENDING).
+New in public-inbox 2.0+
 
 =item publicinbox.grokmanifest
 
@@ -606,7 +606,7 @@ will be returned when the queue depth is exceeded.
 
 Default: 32
 
-New in public-inbox 2.0+ (PENDING)
+New in public-inbox 2.0+
 
 =item publicinboxlimiter.<name>.rlimitCore
 

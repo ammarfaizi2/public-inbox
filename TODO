@@ -102,11 +102,6 @@ all need to be considered for everything we introduce.)
 * better test cases, make faster by reusing more setup
   code across tests
 
-* large mbox/Maildir/MH/NNTP spool import (in lei, but not
-  for public-facing inboxes)
-
-* MH import support (read-only, at least)
-
 * Read-only WebDAV interface to the git repo so it can be mounted
   via davfs2 or fusedav to avoid full clones.
   davfs2 needs Range: request support for this to be feasible:

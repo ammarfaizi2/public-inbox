@@ -136,7 +136,7 @@ will use C<publicinbox.$NAME.inboxdir> as an internal key which can
 cause needless reindexing and require L<--gc> if inboxes are relocated.
 
 Per-inbox C<publicinbox.$NAME.altid> config is only supported as of
-public-inbox 2.0+ (PENDING).
+public-inbox 2.0+.
 
 See L<public-inbox-config(5)> for more details.
 
