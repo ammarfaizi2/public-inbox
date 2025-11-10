@@ -10,10 +10,18 @@ my @EXE_FILES = grep(m!^script/!, @manifest);
 my $v = {};
 my $t = {};
 
+# XXX drop "PENDING" in .pod before updating this!
+my $version = '3.0.0.PENDING';
+
 # do not sort
-my @RELEASES = qw(v1.9.0
+my @RELEASES = qw(v2.0.0 v1.9.0
 	v1.8.0 v1.7.0 v1.6.1 v1.6.0 v1.5.0 v1.4.0 v1.3.0 v1.2.0
 	v1.1.0-pre1 v1.0.0);
+if ($version =~ /\A[0-9\.]+\z/) {
+	grep(/\Av\Q$version\E\z/, @RELEASES) or die <<EOM;
+E: \@RELEASES does not include `$version' in $0
+EOM
+}
 
 $v->{news_deps} = [ map { "Documentation/RelNotes/$_.eml" } @RELEASES ];
 $v->{txt} = [ qw(INSTALL README COPYING TODO HACKING) ];
@@ -144,9 +152,7 @@ my $check_lexgrog = $lexgrog ? 'check-lexgrog' : '';
 
 WriteMakefile(
 	NAME => 'PublicInbox', # n.b. camel-case is not our choice
-
-	# XXX drop "PENDING" in .pod before updating this!
-	VERSION => '2.0.0',
+	VERSION => $version,
 
 	AUTHOR => 'public-inbox hackers <meta@public-inbox.org>',
 	ABSTRACT => 'an "archives first" approach to mailing lists',
