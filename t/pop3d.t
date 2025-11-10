@@ -242,6 +242,7 @@ EOF
 			'TOP numlines=1');
 
 		$msg = $np3->top(2, 10000);
+		ok $np3->quit, 'QUIT works after TOP'; # needed for later APOP?
 		$msg = join('', @$msg);
 		$msg =~ s/\r\n/\n/g;
 		is_deeply(PublicInbox::Eml->new($msg), $patch,
