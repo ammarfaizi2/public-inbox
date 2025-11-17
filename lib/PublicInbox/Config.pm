@@ -17,6 +17,7 @@ use PublicInbox::Git qw(git_exe);
 use PublicInbox::Spawn qw(popen_rd run_qx);
 our $LD_PRELOAD = $ENV{LD_PRELOAD}; # only valid at startup
 our $DEDUPE; # set to {} to dedupe or clear cache
+use autodie qw(closedir);
 
 sub _array ($) { ref($_[0]) eq 'ARRAY' ? $_[0] : [ $_[0] ] }
 
@@ -276,6 +277,7 @@ sub scan_path_coderepo {
 		my $dir = "$path/$dn";
 		scan_path_coderepo($self, $base, $dir) if -d $dir;
 	}
+	closedir $dh;
 }
 
 sub scan_tree_coderepo ($$) {

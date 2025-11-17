@@ -13,7 +13,7 @@
 package PublicInbox::WWW;
 use strict;
 use v5.10.1;
-use autodie qw(chdir opendir);
+use autodie qw(chdir closedir opendir);
 use PublicInbox::Config;
 use PublicInbox::Git;
 use PublicInbox::Hval;
@@ -704,6 +704,7 @@ sub stylesheets_prepare ($$) {
 			};
 			chdir $dh;
 			my @css = grep /\.css\z/i, readdir $dh;
+			closedir $dh;
 			for my $fn (@css) {
 				my ($key) = ($fn =~ m!([^/]+?)(?:\.css)?\z!i);
 				next if $css_map->{$key};

@@ -4,7 +4,7 @@
 # pretends to be like LeiDedupe and also PublicInbox::Inbox
 package PublicInbox::LeiSavedSearch;
 use v5.12;
-use autodie qw(opendir);
+use autodie qw(closedir opendir);
 use parent qw(PublicInbox::Lock);
 use PublicInbox::Git qw(git_exe);
 use PublicInbox::OverIdx;
@@ -61,6 +61,7 @@ sub lss_dir_for ($$;$) {
 		my ($c, $o, @st);
 		opendir(my $dh, $lss_dir);
 		my @d = sort(grep(!/\A\.\.?\z/, readdir($dh)));
+		closedir $dh;
 		my $re = qr/\A\Q$pfx\E-\./;
 		for my $d (grep(/$re/, @d), grep(!/$re/, @d)) {
 			my $f = "$lss_dir/$d/lei.saved-search";
@@ -89,6 +90,7 @@ sub list {
 		my $p = "$lss_dir/$d/lei.saved-search";
 		say $fh "\tpath = ", cquote_val($p) if -f $p;
 	}
+	closedir $dh;
 	$fh->flush or die "$fh->flush: $!";
 	my $cfg = $lei->cfg_dump($fh->filename);
 	my $out = $cfg ? $cfg->get_all('lei.q.output') : [];

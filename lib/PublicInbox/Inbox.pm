@@ -5,6 +5,7 @@
 package PublicInbox::Inbox;
 use strict;
 use v5.10.1;
+use autodie qw(closedir);
 use PublicInbox::Git;
 use PublicInbox::MID qw(mid2path);
 use PublicInbox::Eml;
@@ -117,6 +118,7 @@ sub max_git_epoch {
 			my $max = max(map {
 				substr($_, 0, -4) + 0; # drop ".git" suffix
 			} grep(/\A[0-9]+\.git\z/, readdir($dh))) // return;
+			closedir $dh;
 			$cur = $self->{-max_git_epoch} = $max;
 		}
 	}

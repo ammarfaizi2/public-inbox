@@ -276,9 +276,9 @@ sub prepare_run {
 		if ($opt->{cow}) { # make existing $DIR/{xap,ei}* CoW
 			my $dfd = dup(fileno($dh)) // die "dup: $!";
 			open my $fh, '<&='.$dfd;
-			closedir $dh;
 			PublicInbox::Syscall::yesdatacow_fh($fh);
 		}
+		closedir $dh;
 		die "No Xapian shards found in $old\n" unless @old_shards;
 		@old_shards = sort { $a <=> $b } @old_shards;
 		my ($src, $max_shard);

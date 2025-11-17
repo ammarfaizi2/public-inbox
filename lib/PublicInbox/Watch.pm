@@ -597,6 +597,7 @@ sub fs_scan_step {
 			unshift @{$self->{scan_q}}, [ $dir, $dh ];
 			last;
 		} else {
+			closedir $dh;
 			warn "# done scanning $dir\n";
 		}
 	}

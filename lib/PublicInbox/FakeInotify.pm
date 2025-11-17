@@ -114,7 +114,7 @@ sub read {
 			next;
 		}
 		if (-d _ && $new_st[10] > ($old_ctime - dir_adj($old_ctime))) {
-			opendir(my $fh, $path) or do {
+			opendir(my $dh, $path) or do {
 				if ($! == ENOENT || $! == ENOTDIR) {
 					push @$ret, gone($self, $ident, $path);
 				} else {
@@ -122,13 +122,14 @@ sub read {
 				}
 				next;
 			};
-			@new_st = stat($fh) or die "fstat($path): $!";
+			@new_st = stat($dh) or die "fstat($path): $!";
 			if ("$old_dev $old_ino" ne "@new_st[0,1]") {
 				push @$ret, gone($self, $ident, $path);
 				next;
 			}
 			$w->[2] = $new_st[10];
-			on_dir_change($self, $ret, $fh, $path, $dir_delete);
+			on_dir_change($self, $ret, $dh, $path, $dir_delete);
+			closedir $dh;
 		} elsif ($new_st[10] > $old_ctime) { # regular files, etc
 			$w->[2] = $new_st[10];
 			push @$ret, bless(\$path,

@@ -7,6 +7,7 @@
 package PublicInbox::MdirReader;
 use strict;
 use v5.10.1;
+use autodie qw(closedir);
 use PublicInbox::InboxWritable qw(eml_from_path);
 use PublicInbox::SHA qw(sha256_hex);
 
@@ -47,6 +48,7 @@ sub maildir_each_file {
 			next if index($fl, 'T') >= 0; # no Trashed messages
 			$cb->($pfx.$bn, $fl, @arg);
 		}
+		closedir $dh;
 	}
 }
 
@@ -71,6 +73,7 @@ sub maildir_each_eml {
 			my $eml = eml_from_path($f) or next;
 			$cb->($f, [], $eml, @arg);
 		}
+		closedir $dh;
 	}
 	$pfx = $dir . 'cur/';
 	opendir my $dh, $pfx or return;
@@ -83,6 +86,7 @@ sub maildir_each_eml {
 		my @kw = sort(map { $c2kw{$_} // () } split(//, $fl));
 		$cb->($f, \@kw, $eml, @arg);
 	}
+	closedir $dh;
 }
 
 sub new { bless {}, __PACKAGE__ }
