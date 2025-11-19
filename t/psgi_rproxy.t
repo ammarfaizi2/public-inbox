@@ -6,12 +6,18 @@ use Socket ();
 use POSIX ();
 use PublicInbox::Spawn qw(popen_rd);
 use PublicInbox::IO qw(write_file);
-my $curl = require_cmd 'curl';
+my $_curl = require_cmd 'curl';
+my @curl = ($_curl, qw(--max-time 30));
 require_mods qw(-httpd Plack::Builder HTTP::Parser::XS);
 my $psgi = "./t/httpd-corner.psgi";
 my $tmpdir = tmpdir;
-my $fifo = "$tmpdir/fifo";
-POSIX::mkfifo($fifo, 0777) // xbail "mkfifo: $!";
+my $fifo_new = sub {
+	state $nr = 0;
+	my $fifo = "$tmpdir/fifo.$nr";
+	++$nr;
+	POSIX::mkfifo($fifo, 0777) // xbail "mkfifo: $!";
+	$fifo;
+};
 my $unix_dest = "$tmpdir/u.sock";
 my ($back_out, $back_err) = ("$tmpdir/back.out", "$tmpdir/back.err");
 my ($front_out, $front_err) = ("$tmpdir/front.out", "$tmpdir/front.err");
@@ -44,7 +50,8 @@ my $front_cmd = [ '-httpd', '-W0',
 my $front_td = start_script($front_cmd, {}, { 3 => $front_tcp });
 
 for my $opt (map { (['-0', @$_], $_) } (['-HHost:nobuffer.example'], [])) {
-	my $cmd = [ $curl, @$opt, "-HX-Check-Fifo:$fifo",
+	my $fifo = $fifo_new->();
+	my $cmd = [ @curl, @$opt, "-HX-Check-Fifo:$fifo",
 		qw(-NsSf), "$front_url/slow-header" ];
 	my $rd = popen_rd $cmd;
 	open my $f, '>', $fifo;
@@ -55,7 +62,8 @@ for my $opt (map { (['-0', @$_], $_) } (['-HHost:nobuffer.example'], [])) {
 	$rd->close or xbail "curl failed: $?";
 	is $buf, "hello\n", "got expected response w/ (@$opt)";
 
-	$cmd = [ $curl, "-HX-Check-Fifo:$fifo", @$opt,
+	$fifo = $fifo_new->();
+	$cmd = [ @curl, "-HX-Check-Fifo:$fifo", @$opt,
 		qw(-NsSf), "$front_url/slow-body" ];
 	$rd = popen_rd $cmd;
 	open $f, '>', $fifo;
@@ -78,7 +86,7 @@ for my $opt (map { (['-0', @$_], $_) } (['-HHost:nobuffer.example'], [])) {
 	my $csum = '78e50e186b04c8fe1defaa098f1c192181b3d837';
 	for my $exp (map { (['-HExpect:', @$_], $_) } (
 			['-HHost:nobuffer.example'], [])) {
-		my $cmd = [ $curl, @$exp, qw(--tcp-nodelay -NsSf),
+		my $cmd = [ @curl, @$exp, qw(--tcp-nodelay -NsSf),
 			"$front_url/sha1", '-T-' ];
 		pipe(my $r, my $w);
 		my $rd = popen_rd $cmd, undef, { 0 => $r };
@@ -105,17 +113,17 @@ for my $opt (map { (['-0', @$_], $_) } (['-HHost:nobuffer.example'], [])) {
 
 # HTTP/1.1-only
 for my $host (['-HHost:nobuffer.example'], []) {
-	my $cmd = [ $curl, @$host, qw(-NsSf), "$front_url/getline-die" ];
+	my $cmd = [ @curl, @$host, qw(-NsSf), "$front_url/getline-die" ];
 	xsys $cmd, undef, { 2 => \(my $cerr = '') };
 	is($? >> 8, 18, "curl @$host saw partial response on getline-die") or
 		diag $cerr;
 
-	$cmd = [ $curl, @$host, qw(-NsSf), "$front_url/close-die" ];
+	$cmd = [ @curl, @$host, qw(-NsSf), "$front_url/close-die" ];
 	xsys $cmd, undef, { 2 => \($cerr = '') };
 	is($? >> 8, 18, "curl @$host saw partial response on close-die") or
 		diag $cerr;
 
-	$cmd = [ $curl, @$host, qw(-NsSf), "$front_url/callback-truncated" ];
+	$cmd = [ @curl, @$host, qw(-NsSf), "$front_url/callback-truncated" ];
 	xsys $cmd, undef, { 1 => \(my $cout = ''), 2 => \($cerr = '') };
 	is($? >> 8, 18,
 		"curl @$host saw partial response on truncated response") or
