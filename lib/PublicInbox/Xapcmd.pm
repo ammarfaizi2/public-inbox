@@ -472,6 +472,7 @@ sub xapian_write_prep ($) {
 	my $flag = eval($PublicInbox::Search::Xap.'::DB_CREATE()');
 	die if $@;
 	$flag |= $PublicInbox::SearchIdx::DB_NO_SYNC if !$opt->{fsync};
+	$flag |= $PublicInbox::SearchIdx::DB_DANGEROUS;
 	(\%PublicInbox::Search::X, $flag);
 }
 
