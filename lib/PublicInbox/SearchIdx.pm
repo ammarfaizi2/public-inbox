@@ -255,7 +255,7 @@ EOM
 			$self->{-opt}->{'split-at'} = $cur;
 		} else {
 			$cur ||= $new // $SHARD_SPLIT_AT;
-			$xdb->set_metadata('split-at', $cur);
+			$xdb->set_metadata('split-at', "$cur");
 			$self->{-do_join_splits} = 1;
 		}
 		$self->{-doc_max} = $xdb->get_lastdocid || $cur;
