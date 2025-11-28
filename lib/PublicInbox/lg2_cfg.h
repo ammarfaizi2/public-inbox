@@ -19,16 +19,16 @@
 void cfgwr_commit(const char *f, AV *todo)
 {
 	I32 i, todo_max = av_len(todo);
-	SV **sv;
 	git_config *cfg;
 	const git_error *e;
 	const char *cmd0, *name, *val, *re;
 	int rc = git_config_open_ondisk(&cfg, f);
 	STRLEN dlen;
-	AV *cmd;
 
 	for (i = 0; rc == GIT_OK && i <= todo_max; i++) {
-		sv = av_fetch(todo, i, 0);
+		SV **sv = av_fetch(todo, i, 0);
+		AV *cmd;
+
 		/* leaks on internal bugs: */
 		if (!SvROK(*sv)) croak("BUG: not a ref");
 		cmd = (AV *)SvRV(*sv);

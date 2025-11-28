@@ -682,7 +682,6 @@ static void srch_init_extra(struct srch *srch, struct req *req)
 
 static void srch_init(struct req *req)
 {
-	int i;
 	struct srch *srch = req->srch;
 	const unsigned FLAG_PHRASE = Xapian::QueryParser::FLAG_PHRASE;
 	srch->qp_flags = Xapian::QueryParser::FLAG_BOOLEAN |
@@ -697,8 +696,8 @@ static void srch_init(struct req *req)
 		shard_nfd = nfd;
 	}
 	for (int retried = 0; retried < 2; retried++) {
+		int i = 0;
 		srch->qp_flags |= FLAG_PHRASE;
-		i = 0;
 		try {
 			AUTO_UNLOCK struct open_locks *lk =
 							lock_shared_maybe(req);
