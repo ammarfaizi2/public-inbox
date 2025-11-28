@@ -885,7 +885,7 @@ static void stderr_set(FILE *tmp_err)
 	}
 }
 
-static void stderr_restore(FILE *tmp_err)
+static void stderr_restore(void)
 {
 #if STDERR_ASSIGNABLE
 	stderr = orig_err;
@@ -950,7 +950,7 @@ static void recv_loop(void) // worker process loop
 		dispatch(&req);
 		ERR_CLOSE(req.fp[0], 0);
 		if (req.fp[1]) {
-			stderr_restore(req.fp[1]);
+			stderr_restore();
 			ERR_CLOSE(req.fp[1], 0);
 		}
 		if (worker_needs_reopen) {
