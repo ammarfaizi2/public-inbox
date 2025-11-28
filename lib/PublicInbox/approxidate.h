@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <time.h>
 typedef int64_t git_time_t; // libgit2 include/git2/types.h
+#ifdef __cplusplus
+#	define EMPTY_STRUCT_INIT {}
+#else
+#	define EMPTY_STRUCT_INIT { 0 }
+#endif // C++
 
 // libgit2 src/util/util.h
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*x))
@@ -824,7 +829,7 @@ static git_time_t approxidate_str(const char *date, time_t time_sec,
 {
 	int number = 0;
 	int touched = 0;
-	struct tm tm = {0}, now;
+	struct tm tm = EMPTY_STRUCT_INIT, now;
 
 	localtime_r(&time_sec, &tm);
 	now = tm;
