@@ -1,5 +1,5 @@
 #!perl -w
-# Copyright (C) 2019-2021 all contributors <meta@public-inbox.org>
+# Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
 use strict;
 use v5.10.1;
@@ -47,6 +47,10 @@ for my $R (qw(2 4 1 3 3)) {
 	ok(run_script($cmd, $env), "xcpdb -R$R");
 	my @new_shards = grep(m!/\d+\z!, glob("$ibx->{inboxdir}/xap*/*"));
 	is(scalar(@new_shards), $R, 'resharded to two shards');
+	is $ibx->search->xdb->get_metadata('has_threadid'),
+		'1', 'has_threadid set';
+	is $ibx->search->xdb->get_metadata('indexlevel'),
+		'medium', 'indexlevel preserved';
 	my $mset = $ibx->search->mset('s:this');
 	my $msgs = $ibx->search->mset_to_smsg($ibx, $mset);
 	is(scalar(@$msgs), $ndoc, 'got expected docs after resharding');

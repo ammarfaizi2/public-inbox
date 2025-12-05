@@ -598,11 +598,15 @@ sub cpdb ($$$) { # cb_spawn callback
 			my $lc = $src->get_metadata('last_commit');
 			$dst->set_metadata('last_commit', $lc) if $lc;
 
-			# only the first xapian shard (0) gets 'indexlevel'
+			# only the first xapian shard (0) gets metadata
 			if ($new =~ m!/(?:xapian[0-9]+|(?:ei|xap)[0-9]+/0)\b!) {
 				my $l = $src->get_metadata('indexlevel');
 				$l eq 'medium' and
 					$dst->set_metadata('indexlevel', $l);
+				for my $k (qw(has_threadid skip_docdata)) {
+					my $v = $src->get_metadata($k);
+					$dst->set_metadata($k, $v) if $v;
+				}
 			}
 			if ($pr_data) {
 				my $tot = $src->get_doccount;
