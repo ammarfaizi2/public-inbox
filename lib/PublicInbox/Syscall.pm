@@ -19,6 +19,7 @@ package PublicInbox::Syscall;
 use v5.12;
 use parent qw(Exporter);
 use bytes qw(length substr);
+use Carp qw(croak);
 use POSIX qw(ENOENT ENOSYS EINVAL O_NONBLOCK);
 use Socket qw(SOL_SOCKET SCM_RIGHTS);
 use Config;
@@ -26,6 +27,7 @@ our %SIGNUM = (WINCH => 28); # most Linux, {Free,Net,Open}BSD, *Darwin
 our ($INOTIFY, %CONST);
 my $FSWORD_T = 'l!'; # for unpack, tested on x86 and x86-64, `q' on x32
 use List::Util qw(sum);
+use Errno qw(EINTR);
 
 # $VERSION = '0.25'; # Sys::Syscall version
 our @EXPORT_OK = qw(epoll_create
@@ -377,6 +379,7 @@ sub epoll_pwait_mod4 {
 	my $ct = syscall($SYS_epoll_pwait, $epfd, $epoll_pwait_events,
 			$maxevents, $timeout_msec,
 			$oldset ? ($$oldset, $SIGSET_SIZE) : (undef, 0));
+	croak "epoll_pwait: $!" if $ct == -1 && $! != EINTR;
 	for (0..$ct - 1) {
 		# 12-byte struct epoll_event
 		# 4 bytes uint32_t events mask (skipped, useless to us)
@@ -399,6 +402,7 @@ sub epoll_pwait_mod8 {
 	my $ct = syscall($SYS_epoll_pwait, $epfd, $epoll_pwait_events,
 			$maxevents, $timeout_msec,
 			$oldset ? ($$oldset, $SIGSET_SIZE) : (undef, 0));
+	croak "epoll_pwait: $!" if $ct == -1 && $! != EINTR;
 	for (0..$ct - 1) {
 		# 16-byte struct epoll_event
 		# 4 bytes uint32_t events mask (skipped, useless to us)
