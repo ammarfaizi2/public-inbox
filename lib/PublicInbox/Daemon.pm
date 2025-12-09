@@ -6,13 +6,13 @@
 # and/or lossy connections.
 package PublicInbox::Daemon;
 use v5.12;
-use autodie qw(chdir open pipe setsockopt);
+use autodie qw(chdir fcntl open pipe setsockopt);
 use Getopt::Long qw(:config gnu_getopt no_ignore_case auto_abbrev);
 use IO::Handle; # ->autoflush
 use IO::Socket;
 use File::Spec;
 use IO::Poll qw(POLLERR POLLIN POLLHUP);
-use POSIX qw(WNOHANG :signal_h F_SETFD);
+use POSIX qw(WNOHANG :signal_h F_SETFD FD_CLOEXEC);
 use Socket qw(IPPROTO_TCP SOL_SOCKET);
 STDOUT->autoflush(1);
 STDERR->autoflush(1);
@@ -113,6 +113,7 @@ sub open_log_path ($$) { # my ($fh, $path) = @_; # $_[0] is modified
 	if (defined $_[0]) {
 		open my $tmp_fh, '>>', $_[1];
 		POSIX::dup2(fileno($tmp_fh), fileno($_[0])) or die "dup2: $!";
+		fcntl($_[0], F_SETFD, FD_CLOEXEC) if fileno($_[0]) > 2;
 	} else {
 		open $_[0], '>>', $_[1];
 	}
@@ -540,7 +541,7 @@ sub upgrade { # $_[0] = signal name or number (unused)
 		foreach my $s (@listeners) {
 			# @listeners are globs with workers, PI::L w/o workers
 			$s = $s->{sock} if ref($s) eq 'PublicInbox::Listener';
-			fcntl($s, F_SETFD, 0) // die "F_SETFD: $!";
+			fcntl $s, F_SETFD, 0;
 		}
 		exec @CMD;
 		die "Failed to exec: $!\n";
