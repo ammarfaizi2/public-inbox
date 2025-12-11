@@ -687,8 +687,11 @@ sub awaitpid {
 	$AWAIT_PIDS{$pid} = \@cb_args if @cb_args;
 	# provide synchronous API
 	if (defined(wantarray) || (!$in_loop && !@cb_args)) {
-		my $ret = waitpid($pid, 0);
+		my $ret = waitpid($pid, 0); # n.b. Perl auto retries on EINTR
 		if ($ret == $pid) {
+			# prevent IO::Uncompress::Base::close from giving $!
+			# to IO::Uncompress::Base::saveErrorString:
+			$! = 0;
 			my $cb_args = delete $AWAIT_PIDS{$pid};
 			@cb_args = @$cb_args if !@cb_args && $cb_args;
 			await_cb($pid, @cb_args);
