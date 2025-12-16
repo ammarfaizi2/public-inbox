@@ -673,8 +673,12 @@ sub show ($$;$) {
 		$l;
 	};
 	sub {
-		$ctx->{-wcb} = $_[0]; # HTTP write callback
-		$limiter->may_start(\&start_solver, $ctx, \&html_page);
+		# $_[0] is HTTP write callback
+		# deep copy $ctx to workaround leak in Perl 5.40.x series
+		# (v5.42.0 and <= 5.38.x are unaffected, fixed in perl.git
+		# 90595091f22dad07b381fd02ff1fb7e158fd8915:
+		my $xctx = { %$ctx, -wcb => $_[0] };
+		$limiter->may_start(\&start_solver, $xctx, \&html_page);
 	};
 }
 
