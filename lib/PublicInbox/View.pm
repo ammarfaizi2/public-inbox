@@ -24,6 +24,7 @@ use POSIX qw(strftime);
 use Time::Local qw(timegm);
 use PublicInbox::Smsg qw(subject_normalized);
 use PublicInbox::ContentHash qw(content_hash);
+use PublicInbox::Leak;
 use constant COLS => 72;
 use constant INDENT => '  ';
 use constant TCHILD => '` ';
@@ -1362,6 +1363,7 @@ sub diff_msg {
 				$mid, "</a>&gt;\n\n";
 	sub {
 		$ctx->attach($_[0]->([200, delete $ctx->{-res_hdr}]));
+		push @{$ctx->{-leak}}, noleak;
 		$md->begin_mail_diff;
 	};
 }

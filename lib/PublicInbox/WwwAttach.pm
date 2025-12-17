@@ -8,6 +8,7 @@ use v5.10.1;
 use parent qw(PublicInbox::GzipFilter);
 use PublicInbox::Hval qw(psgi_base_url);
 use PublicInbox::Eml;
+use PublicInbox::Leak;
 
 sub referer_match ($) {
 	my ($ctx) = @_;
@@ -93,6 +94,7 @@ sub get_attach ($$$) {
 	if ($ctx->{smsg} = $ctx->{ibx}->smsg_by_mid($ctx->{mid})) {
 		return sub { # public-inbox-httpd-only
 			$ctx->{wcb} = $_[0];
+			push @{$ctx->{-leak}}, noleak;
 			scan_attach($ctx);
 		} if $ctx->{env}->{'pi-httpd.app'};
 		# generic PSGI:
