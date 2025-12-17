@@ -7,7 +7,6 @@ use v5.12;
 use PublicInbox::Qspawn;
 use PublicInbox::ViewVCS;
 use PublicInbox::WwwStatic qw(r);
-use PublicInbox::Leak;
 
 # Not using standard mime types since the compressed tarballs are
 # special or do not match my /etc/mime.types.  Choose what gitweb
@@ -79,7 +78,6 @@ sub srv {
 	@{$ctx->{-try}} = @try;
 	sub {
 		$ctx->{env}->{'qspawn.wcb'} = $_[0];
-		push @{$ctx->{-leak}}, noleak;
 		PublicInbox::ViewVCS::do_check_async($ctx, \&ver_check, @try);
 	}
 }

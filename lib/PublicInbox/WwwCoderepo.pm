@@ -24,7 +24,6 @@ use PublicInbox::OnDestroy;
 use URI::Escape qw(uri_escape_utf8);
 use autodie qw(fcntl open);
 use PublicInbox::Git qw(git_exe);
-use PublicInbox::Leak;
 
 my @EACH_REF = (git_exe, qw(for-each-ref --sort=-creatordate),
 		"--format=%(HEAD)%00".join('%00', map { "%($_)" }
@@ -238,7 +237,6 @@ sub set_readme { # git->cat_async callback
 
 sub summary ($$) {
 	my ($ctx, $wcb) = @_;
-	push @{$ctx->{-leak}}, noleak;
 	$ctx->{-wcb} = $wcb; # PublicInbox::HTTP::{Identity,Chunked}
 	my $tip = $ctx->{qp}->{h}; # same as cgit
 	if (defined $tip && $tip eq '') {

@@ -34,7 +34,6 @@ use PublicInbox::Aspawn qw(run_await);
 use PublicInbox::Syscall qw(EPOLLIN);
 use PublicInbox::InputStream;
 use Carp qw(carp confess);
-use PublicInbox::Leak;
 
 # n.b.: we get EAGAIN with public-inbox-httpd, and EINTR on other PSGI servers
 use Errno qw(EAGAIN EINTR);
@@ -282,7 +281,6 @@ sub psgi_yield {
 		# PublicInbox::HTTP, the chunked_wcb or identity_wcb callback),
 		# but other HTTP servers are supported:
 		$env->{'qspawn.wcb'} = $_[0];
-		push @{$env->{'pi-httpd.leak'}}, noleak;
 		start($self, $limiter, \&_yield_start);
 	}
 }

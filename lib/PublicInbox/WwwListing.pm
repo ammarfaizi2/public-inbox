@@ -12,7 +12,6 @@ use PublicInbox::ConfigIter;
 use PublicInbox::WwwStream;
 use URI::Escape qw(uri_escape_utf8);
 use PublicInbox::MID qw(mid_escape);
-use PublicInbox::Leak;
 
 sub ibx_entry {
 	my ($ctx, $ibx, $ce) = @_;
@@ -157,7 +156,6 @@ sub response {
 						\&list_match_i, $re, $ctx);
 		sub {
 			$ctx->{-wcb} = $_[0]; # HTTP server callback
-			push @{$ctx->{-leak}}, noleak;
 			$ctx->{env}->{'pi-httpd.app'} ?
 					$iter->event_step : $iter->each_section;
 		}

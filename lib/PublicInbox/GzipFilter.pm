@@ -22,7 +22,6 @@ use PublicInbox::CompressNoop;
 use PublicInbox::Eml;
 use PublicInbox::GitAsyncCat;
 use Carp qw(carp);
-use PublicInbox::Leak;
 
 our @EXPORT_OK = qw(gzf_maybe);
 # Compress::Raw::Zlib uses MAX_MEM_LEVEL (9) while zlib DEF_MEM_LEVEL is 8;
@@ -59,7 +58,6 @@ sub psgi_response {
 		$http->{forward} = $self;
 		sub {
 			my ($wcb) = @_; # -httpd provided write callback
-			push @{$self->{-leak}}, noleak;
 			$self->{wcb_args} = [ $code, $res_hdr, $wcb ];
 			$self->can('async_next')->($http); # start stepping
 		};

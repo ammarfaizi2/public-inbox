@@ -13,7 +13,6 @@ use PublicInbox::WwwStream qw(html_oneshot);
 use PublicInbox::Smsg;
 our $MIN_PARTIAL_LEN = 14; # for 'XXXXXXXXXX.fsf' msgids gnus generates
 use B qw(cstring);
-use PublicInbox::Leak;
 
 # TODO: user-configurable
 our @EXT_URL = map { ascii_html($_) } (
@@ -146,7 +145,6 @@ sub partial_prepare ($@) {
 	$ctx->{again} = \@try_ibxish;
 	sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server write callback
-		push @{$ctx->{-leak}}, noleak;
 		partial_enter $ctx;
 	}
 }
@@ -179,7 +177,6 @@ sub ext_msg {
 			lc 'publicinbox.nameIsUrl'} ? ($ctx->{env}) : ();
 	ext_msg_ALL($ctx) // sub {
 		$ctx->{-wcb} = $_[0]; # HTTP server write callback
-		push @{$ctx->{-leak}}, noleak;
 
 		if ($ctx->{env}->{'pi-httpd.app'}) {
 			require PublicInbox::ConfigIter;
