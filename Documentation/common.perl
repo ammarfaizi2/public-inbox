@@ -1,14 +1,15 @@
 #!perl -w
 # Copyright (C) all contributors <meta@public-inbox.org>
 # License: AGPL-3.0+ <https://www.gnu.org/licenses/agpl-3.0.txt>
-use strict;
-use autodie qw(seek);
+use v5.12;
+use autodie qw(close open seek truncate);
 use Fcntl qw(SEEK_SET);
 use PublicInbox::Search;
+use PublicInbox::IO qw(read_all);
 my $addr = 'meta@public-inbox.org';
 for my $pod (@ARGV) {
-	open my $fh, '+<', $pod or die "open($pod): $!";
-	my $s = do { local $/; <$fh> } // die "read $!";
+	open my $fh, '+<', $pod;
+	my $s = read_all $fh;
 	my $orig = $s;
 	$s =~ s!^=head1 COPYRIGHT\n.+?^=head1([^\n]+)\n!=head1 COPYRIGHT
 
@@ -40,9 +41,9 @@ L<http://4uok3hntl7oi7b4uf4rtfwefqeexfzil2w6kgk2jn5z2f764irre7byd.onion/meta/>
 		utime($t, $t, $fh);
 	} else {
 		seek $fh, 0, SEEK_SET;
-		truncate($fh, 0) or die "truncate: $!";
-		print $fh $s or die "print: $!";
-		close $fh or die "close: $!";
+		truncate $fh, 0;
+		print $fh $s;
+		close $fh;
 	}
 }
 
