@@ -3,7 +3,7 @@ Subject: [ANNOUNCE] public-inbox 2.0.0
 MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
 Content-Disposition: inline
-Message-ID: <2025-11-07T234637Z-public-inbox-2.2.0-rele@sed>
+Message-ID: <20251107235945.M850058@sed>
 
 This release includes several new features and fixes; mostly
 around improved integration between inboxes and coderepos for
