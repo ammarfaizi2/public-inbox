@@ -1,0 +1,68 @@
+To: meta@public-inbox.org
+Subject: [ANNOUNCE] public-inbox 2.1.0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Disposition: inline
+
+This is mainly a bugfix and Perl 5 bug workaround release on top
+of 2.0.0.
+
+The biggest fix is a workaround for Perl v5.40.x users (doesn't
+affect v5.42.0+) to fix a leak and control flow bug in git blob
+reconstruction from patch emails in our web UI.  Had our control
+flow not been tied to Perl's refcounting, this leak would've gone
+undetected for much longer.  This only affects users with coderepos
+configured and associated with inboxes.
+<https://yhbt.net/mirrors/perl.git/90595091f22dad07b381fd02ff1fb7e158fd8915/s/>
+
+The new in 2.0.0+ `--split-shards' feature now works on the
+SWIG Xapian bindings.  <https://trac.xapian.org/ticket/841>
+
+public-inbox-xcpdb preserves `has_threadid' and `skip_docdata'
+Xapian metadata across reshards.  This has been a long-standing
+bug but only noticed by Konstantin recently.  See
+https://public-inbox.org/meta/d937b906500374083a6af84c6c6442f50225ab90/s/
+for a quick workaround for indices damaged by this bug.
+
+`waitpid' calls which set $! to EINTR (which Perl auto-retries on) no
+longer cause close failures when lei reads gzipped mboxes.  This was
+noticed on a *BSD system without IO::KQueue, but it may affect others.
+
+epoll_pwait errors now croak to catch EINVAL bugs caused by
+alternative build systems (e.g. perl-cross) which misreport
+$Config{sig_count}.
+
+The FD_CLOEXEC flag is now set for per-port `out=' and `err='
+files.  As usual, stdout and stderr remain open across execve(2).
+
+There are also some minor C/C++ code cleanups in the xap_helper and
+libgit2 helpers.
+
+Upgrading:
+
+  lei users must "lei daemon-kill" after installation to load
+  new code.  Normal daemons (read-only, and public-inbox-watch)
+  will also need restarts, of course, but there are no
+  backwards-incompatible data format changes so rolling back to
+  older versions is harmless.
+
+Compatibility:
+
+  No incompatible changes.
+
+New users + hackers:
+
+  The install/ directory includes tools to automate installation and
+  removal of dependencies for stripped-down or full setups.  See
+  install/README for more details.
+
+  devel/try-lei now exists for testing out an empty lei instance
+  without writing to an existing one.
+
+Thanks again to Konstantin Ryabitsev and Leah Neukirchen for
+their invaluable bug reports.
+
+Please report bugs via plain-text mail to: meta@public-inbox.org
+
+See archives at https://public-inbox.org/meta/ for all history.
+See https://public-inbox.org/TODO for what the future holds.
