@@ -146,6 +146,7 @@ sub cb_spawn ($$$$) {
 	my ($cb, $ibxish, $args, $opt) = @_; # $cb = cpdb() or compact()
 	my $pid = PublicInbox::DS::fork_persist;
 	return $pid if $pid > 0;
+	$SIG{PIPE} = 'DEFAULT'; # warn may fail
 	$SIG{__DIE__} = sub { warn @_; _exit(1) }; # don't jump up stack
 	$cb->($ibxish, $args, $opt);
 	_exit(0);
