@@ -3,6 +3,7 @@ Subject: [ANNOUNCE] public-inbox 2.1.0
 MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
 Content-Disposition: inline
+Message-ID: <20251225094822-public-inbox-2.1.0-rele@sed>
 
 This is mainly a bugfix and Perl 5 bug workaround release on top
 of 2.0.0.

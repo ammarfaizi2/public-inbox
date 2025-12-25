@@ -11,10 +11,10 @@ my $v = {};
 my $t = {};
 
 # XXX drop "PENDING" in .pod before updating this!
-my $version = '3.0.0.PENDING';
+my $version = '2.1.0';
 
 # do not sort
-my @RELEASES = qw(v2.0.0 v1.9.0
+my @RELEASES = qw(v2.1.0 v2.0.0 v1.9.0
 	v1.8.0 v1.7.0 v1.6.1 v1.6.0 v1.5.0 v1.4.0 v1.3.0 v1.2.0
 	v1.1.0-pre1 v1.0.0);
 if ($version =~ /\A[0-9\.]+\z/) {
