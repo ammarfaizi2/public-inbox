@@ -16,6 +16,7 @@ use strict;
 use v5.10.1;
 use parent qw(PublicInbox::Lock PublicInbox::IPC);
 use autodie qw(open pipe);
+use Socket qw(MSG_EOR);
 use PublicInbox::ExtSearchIdx;
 use PublicInbox::SearchIdx;
 use PublicInbox::Eml;
@@ -623,7 +624,7 @@ sub _commit ($$) {
 	eval { $self->{priv_eidx}->$cmd };
 	push(@err, "E: priv_eidx $cmd: $@\n") if $@;
 	print { $errfh // \*STDERR } @err;
-	send($lei_sock, 'child_error 256', 0) if @err && $lei_sock;
+	send($lei_sock, 'child_error 256', MSG_EOR) if @err && $lei_sock;
 	xchg_stderr($self);
 	die @err if @err;
 	# $lei_sock goes out-of-scope and script/lei can terminate

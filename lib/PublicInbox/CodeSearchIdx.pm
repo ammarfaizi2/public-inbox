@@ -74,6 +74,7 @@ use Compress::Zlib qw(compress);
 use Carp qw(croak);
 use Time::Local qw(timegm);
 use Errno qw(EINTR);
+use Socket qw(MSG_EOR);
 use autodie qw(close pipe open seek sysseek);
 our $DO_QUIT = 15; # signal number
 our (
@@ -229,7 +230,7 @@ sub xsend ($$) { # move to PerlIO if we need to
 	my ($s, $buf) = @_;
 	my $n;
 	while (1) {
-		$n = send $s, $buf, 0;
+		$n = send $s, $buf, MSG_EOR;
 		return $n if defined $n;
 		next if $! == EINTR;
 		croak "send: $!";

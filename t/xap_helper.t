@@ -5,7 +5,7 @@ use v5.12;
 use PublicInbox::TestCommon;
 require_mods(qw(DBD::SQLite Xapian +SCM_RIGHTS)); # TODO: FIFO support?
 use PublicInbox::Spawn qw(spawn);
-use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM);
+use Socket qw(AF_UNIX SOCK_SEQPACKET SOCK_STREAM MSG_EOR);
 require PublicInbox::AutoReap;
 use PublicInbox::IPC;
 require PublicInbox::XapClient;
@@ -91,7 +91,7 @@ my $doreq = sub {
 	pipe(my $x, my $y);
 	my $buf = join("\0", @arg, '');
 	my @fds = (fileno($y), fileno($err));
-	my $n = $PublicInbox::IPC::send_cmd->($s, \@fds, $buf, 0) //
+	my $n = $PublicInbox::IPC::send_cmd->($s, \@fds, $buf, MSG_EOR) //
 		xbail "send: $!";
 	my $exp = length($buf);
 	$exp == $n or xbail "req @arg sent short ($n != $exp)";

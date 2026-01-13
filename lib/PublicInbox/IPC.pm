@@ -12,15 +12,21 @@ use v5.12;
 use parent qw(Exporter);
 use autodie qw(close pipe read send socketpair);
 use Errno qw(EAGAIN EINTR);
-use Carp qw(croak);
+use Carp qw(croak carp);
 use PublicInbox::DS qw(awaitpid);
 use PublicInbox::IO qw(read_all);
 use PublicInbox::Spawn;
 use PublicInbox::OnDestroy;
 use PublicInbox::WQWorker;
-use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET);
+use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET MSG_EOR);
 use Scalar::Util qw(blessed reftype);
-my $MY_MAX_ARG_STRLEN = 4096 * 33; # extra 4K for serialization
+
+# Linux accepts over 128K, but FreeBSD 15.0 recvmsg(2) seems capped
+# at 64K (IOW, it splits the buffer across multiple recvmsg calls
+# even when the first call is sufficiently large and the corresponding
+# sendmsg(2) was a single send on a larger buffer.
+my $MY_MAX_ARG_LEN = 65536;
+
 our @EXPORT_OK = qw(ipc_freeze ipc_thaw nproc_shards);
 my ($enc, $dec);
 # ->imports at BEGIN turns sereal_*_with_object into custom ops on 5.14+
@@ -321,7 +327,7 @@ sub ipc_sibling_atfork_child {
 
 sub recv_and_run {
 	my ($self, $s2, $len, $full_stream) = @_;
-	my @fds = $recv_cmd->($s2, my $buf, $len // $MY_MAX_ARG_STRLEN);
+	my @fds = $recv_cmd->($s2, my $buf, $len // $MY_MAX_ARG_LEN);
 	return if scalar(@fds) && !defined($fds[0]);
 	my $n = length($buf) or return 0;
 	my $nfd = 0;
@@ -379,9 +385,11 @@ sub wq_broadcast {
 	my ($self, $sub, @args) = @_;
 	my $wkr = $self->{-wq_workers} or Carp::confess('no -wq_workers');
 	my $buf = ipc_freeze([$sub, @args]);
+	my $len = length($buf);
+	carp "W: buffer of $len may be too large\n" if $len > 4096;
 	for my $bcast1 (values %$wkr) {
 		my $sock = $bcast1 // $self->{-wq_s1} // next;
-		send($sock, $buf, 0);
+		send($sock, $buf, MSG_EOR);
 		# XXX shouldn't have to deal with EMSGSIZE here...
 	}
 }
@@ -391,7 +399,7 @@ sub stream_in_full ($$$) {
 	socketpair(my $r, my $w, AF_UNIX, SOCK_STREAM, 0);
 	my $n = $send_cmd->($s1, [ fileno($r) ],
 			ipc_freeze(['do_sock_stream', length($buf)]),
-			0) // croak "sendmsg: $!";
+			MSG_EOR) // croak "sendmsg: $!";
 	undef $r;
 	$n = $send_cmd->($w, $fds, $buf, 0) // croak "sendmsg: $!";
 	print $w substr($buf, $n) if $n < length($buf); # need > 2G on Linux
@@ -403,10 +411,10 @@ sub wq_io_do { # always async
 	my $s1 = $self->{-wq_s1} or Carp::confess('no -wq_s1');
 	my $fds = [ map { fileno($_) } @$ios ];
 	my $buf = ipc_freeze([$sub, @args]);
-	if (length($buf) > $MY_MAX_ARG_STRLEN) {
+	if (length($buf) > $MY_MAX_ARG_LEN) {
 		stream_in_full($s1, $fds, $buf);
 	} else {
-		my $n = $send_cmd->($s1, $fds, $buf, 0);
+		my $n = $send_cmd->($s1, $fds, $buf, MSG_EOR);
 		return if defined($n); # likely
 		$!{ETOOMANYREFS} and croak "sendmsg: $! (check RLIMIT_NOFILE)";
 		$!{EMSGSIZE} ? stream_in_full($s1, $fds, $buf) :
@@ -447,7 +455,7 @@ sub wq_nonblock_do { # always async
 	my $buf = ipc_freeze([$sub, @args]);
 	if ($self->{wqb}) { # saturated once, assume saturated forever
 		$self->{wqb}->flush_send($buf);
-	} elsif (!defined $send_cmd->($self->{-wq_s1}, [], $buf, 0)) {
+	} elsif (!defined $send_cmd->($self->{-wq_s1}, [], $buf, MSG_EOR)) {
 		if ($!{EAGAIN} || $!{ENOBUFS} || $!{ENOMEM}) {
 			PublicInbox::WQBlocked->new($self, $buf);
 		} else {

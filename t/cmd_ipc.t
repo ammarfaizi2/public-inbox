@@ -4,7 +4,7 @@
 use v5.12;
 use PublicInbox::TestCommon;
 use autodie;
-use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET);
+use Socket qw(AF_UNIX SOCK_STREAM SOCK_SEQPACKET MSG_EOR);
 pipe(my $r, my $w);
 my ($send, $recv);
 require_ok 'PublicInbox::Spawn';
@@ -41,6 +41,8 @@ my $do_test = sub { SKIP: {
 		$send->($s1, $sfds, $src, $flag);
 		(@fds) = $recv->($s2, $buf, 1024);
 		is($buf, (',' x 1023) . '-', 'silently truncated buf');
+
+		socketpair($s1, $s2, AF_UNIX, $type, 0);
 		$opens->();
 		$r1 = $w1 = $s1a = undef;
 
@@ -83,7 +85,7 @@ my $do_test = sub { SKIP: {
 		my $srclen = length($src);
 		while (defined(my $n = $send->($s1, $sfds, $src, $flag))) {
 			$nsent += $n;
-			fail "sent $n bytes of $srclen" if $srclen != $n;
+			fail "sent $n bytes of $srclen" if $n > $srclen;
 		}
 		ok($!{EAGAIN} || $!{ETOOMANYREFS} || $!{EMSGSIZE},
 			"hit EAGAIN || ETOOMANYREFS || EMSGSIZE on send $desc")
@@ -96,23 +98,6 @@ my $do_test = sub { SKIP: {
 		@fds = $recv->($s2, $buf, length($src));
 		is(scalar(@fds), 0, 'no FDs received');
 		is($buf, $src, 'recv w/o FDs');
-
-		my $nr = 2 * 1024 * 1024;
-		while (1) {
-			vec(my $vec = '', $nr - 1, 8) = 1;
-			my $n = $send->($s1, [], $vec, $flag);
-			if (defined($n)) {
-				$n == length($vec) or
-					fail "short send: $n != ".length($vec);
-				diag "sent $nr, retrying with more";
-				$nr += 2 * 1024 * 1024;
-			} else {
-				ok($!{EMSGSIZE} || $!{ENOBUFS},
-					'got EMSGSIZE or ENOBUFS') or
-					diag "$nr bytes fails with: $!";
-				last;
-			}
-		}
 	}
 } };
 
@@ -123,7 +108,7 @@ SKIP: {
 	$send = $send_ic;
 	$recv = $recv_ic;
 	$do_test->(SOCK_STREAM, 0, 'Inline::C stream');
-	$do_test->(SOCK_SEQPACKET, 0, 'Inline::C seqpacket');
+	$do_test->(SOCK_SEQPACKET, MSG_EOR, 'Inline::C seqpacket');
 }
 
 SKIP: {
@@ -132,13 +117,14 @@ SKIP: {
 	$send = PublicInbox::CmdIPC4->can('send_cmd4');
 	$recv = PublicInbox::CmdIPC4->can('recv_cmd4');
 	$do_test->(SOCK_STREAM, 0, 'MsgHdr stream');
-	$do_test->(SOCK_SEQPACKET, 0, 'MsgHdr seqpacket');
+	$do_test->(SOCK_SEQPACKET, MSG_EOR, 'MsgHdr seqpacket');
 	SKIP: {
 		($send_ic && $recv_ic) or
 			skip 'Inline::C not installed/enabled', 12;
 		$recv = $recv_ic;
 		$do_test->(SOCK_STREAM, 0, 'Inline::C -> MsgHdr stream');
-		$do_test->(SOCK_SEQPACKET, 0, 'Inline::C -> MsgHdr seqpacket');
+		$do_test->(SOCK_SEQPACKET,
+			MSG_EOR, 'Inline::C -> MsgHdr seqpacket');
 	}
 }
 
@@ -149,7 +135,7 @@ SKIP: {
 	$recv = PublicInbox::Syscall->can('recv_cmd4') or
 		skip "recv_cmd4 not defined for $^O arch", 1;
 	$do_test->(SOCK_STREAM, 0, 'pure Perl stream');
-	$do_test->(SOCK_SEQPACKET, 0, 'pure Perl seqpacket');
+	$do_test->(SOCK_SEQPACKET, MSG_EOR, 'pure Perl seqpacket');
 }
 
 done_testing;

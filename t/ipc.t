@@ -139,7 +139,7 @@ for my $t ('worker', 'worker again') {
 		is(readline($rb), $exp, "SHA big for EMSGSIZE ($t)");
 
 		# to hit the WQWorker recv_and_run length
-		substr($bigger, my $MY_MAX_ARG_STRLEN = 4096 * 33, -1) = '';
+		substr($bigger, my $MY_MAX_ARG_LEN = 65536, -1) = '';
 		$ipc->wq_io_do('test_sha', [ $wa, $wb ], $bigger);
 		$exp = sha1_hex($bigger)."\n";
 		is(readline($rb), $exp, "SHA WQWorker limit ($t)");

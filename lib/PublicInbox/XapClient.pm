@@ -9,7 +9,7 @@
 package PublicInbox::XapClient;
 use v5.12;
 use PublicInbox::Spawn qw(spawn);
-use Socket qw(AF_UNIX SOCK_SEQPACKET);
+use Socket qw(AF_UNIX SOCK_SEQPACKET MSG_EOR);
 use PublicInbox::IPC;
 use autodie qw(pipe socketpair);
 our $tries = -1; # set to zero by read-only daemon
@@ -19,7 +19,8 @@ sub mkreq {
 	my @fds = map fileno($_), @$ios;
 	my $buf = join("\0", @arg, '');
 	my $n = $PublicInbox::IPC::send_cmd->($self->{io},
-				\@fds, $buf, 0, $tries) // die "send_cmd: $!";
+				\@fds, $buf, MSG_EOR, $tries)
+				// die "send_cmd: $!";
 	$n == length($buf) or die "send_cmd: $n != ".length($buf);
 }
 

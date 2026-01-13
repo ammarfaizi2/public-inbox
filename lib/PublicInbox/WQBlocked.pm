@@ -6,6 +6,7 @@ package PublicInbox::WQBlocked;
 use v5.12;
 use parent qw(PublicInbox::DS);
 use PublicInbox::Syscall qw(EPOLLOUT EPOLLONESHOT);
+use Socket qw(MSG_EOR);
 use PublicInbox::IPC;
 use Carp ();
 
@@ -24,7 +25,7 @@ sub flush_send {
 		} else {
 			my $wq_s1 = $self->{sock};
 			my $n = $PublicInbox::IPC::send_cmd->($wq_s1, [], $buf,
-								0);
+								MSG_EOR);
 			next if defined($n);
 			if ($!{EAGAIN}) {
 				PublicInbox::DS::epwait($wq_s1,

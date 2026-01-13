@@ -11,7 +11,7 @@ use parent qw(PublicInbox::DS PublicInbox::LeiExternal
 	PublicInbox::LeiQuery);
 use autodie qw(bind chdir listen open pipe socket socketpair syswrite unlink);
 use Getopt::Long ();
-use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un);
+use Socket qw(AF_UNIX SOCK_SEQPACKET pack_sockaddr_un MSG_EOR);
 use Errno qw(EPIPE EAGAIN ECONNREFUSED ENOENT ECONNRESET EINTR);
 use Cwd qw(getcwd);
 use POSIX qw(strftime);
@@ -497,7 +497,7 @@ sub send_gently ($$) {
 	my ($s, $buf) = @_;
 	my $n;
 	while (1) {
-		$n = send $s, $buf, 0;
+		$n = send $s, $buf, MSG_EOR;
 		return $n if defined($n) || $! != EINTR;
 	}
 }
@@ -1067,7 +1067,7 @@ sub send_exec_cmd { # tell script/lei to execute a command
 	$PublicInbox::IPC::send_cmd->(
 			$self->{sock} // die('lei client gone'),
 			[ map { fileno($_) } @$io ],
-			exec_buf($cmd, $env), 0) //
+			exec_buf($cmd, $env), MSG_EOR) //
 		Carp::croak("sendmsg: $!");
 }
 
@@ -1161,7 +1161,7 @@ sub accept_dispatch { # Listener {post_accept} callback
 	do {
 		poll_in $sock, 60_000 or return send_gently $sock,
 						'timed out waiting to recv FDs';
-		# (4096 * 33) >MAX_ARG_STRLEN
+		# (4096 * 33) >(old) MY_MAX_ARG_LEN, TODO: 64K
 		@fds = $PublicInbox::IPC::recv_cmd->($sock, $buf, 4096 * 33)
 			or return; # EOF
 	} while (!defined($fds[0]) && $! == EAGAIN);
@@ -1615,7 +1615,7 @@ sub cfg_dump ($$) {
 sub request_umask { # assumes client is trusted and fast
 	my ($lei) = @_;
 	my $s = $lei->{sock} // return;
-	send($s, 'umask', 0) // die "send: $!";
+	send($s, 'umask', MSG_EOR) // die "send: $!";
 	my ($v, $r, $u);
 	do { # n.b. poll_in returns -1 on EINTR
 		vec($v = '', fileno($s), 1) = 1;
