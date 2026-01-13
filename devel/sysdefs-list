@@ -62,7 +62,13 @@ __DATA__
 #ifdef HAVE_SYS_FILIO_H
 #	include <sys/filio.h>
 #endif
+#if defined(__FreeBSD__) && __FreeBSD__ >= 15
+#	define HAZ_INOTIFY
+#	include <sys/inotify.h>
+#	include <sys/specialfd.h>
+#endif
 #ifdef __linux__
+#	define HAZ_INOTIFY
 #	include <linux/fs.h>
 #	include <sys/epoll.h>
 #	include <sys/inotify.h>
@@ -107,11 +113,9 @@ int main(void)
 	printf("'sizeof(size_t)' => %zu,\n", sizeof(size_t));
 	printf("'sizeof(off_t)' => %zu,\n", sizeof(off_t));
 
-#ifdef __linux__
-	D(SYS_epoll_create1);
-	D(SYS_epoll_ctl);
-	MAYBE D(SYS_epoll_pwait);
-
+#ifdef HAZ_INOTIFY
+	D(SYS_inotify_rm_watch);
+	X(IN_NONBLOCK);
 	X(IN_CLOEXEC);
 	X(IN_ACCESS);
 	X(IN_ALL_EVENTS);
@@ -137,10 +141,22 @@ int main(void)
 	X(IN_OPEN);
 	X(IN_Q_OVERFLOW);
 	X(IN_UNMOUNT);
+	STRUCT_BEGIN(struct inotify_event);
+		PR_NUM(wd);
+		PR_NUM(mask);
+		PR_NUM(cookie);
+		PR_NUM(len);
+		PR_OFF(name);
+	STRUCT_END;
+#endif /* HAZ_INOTIFY */
+
+#ifdef __linux__
+	D(SYS_epoll_create1);
+	D(SYS_epoll_ctl);
+	MAYBE D(SYS_epoll_pwait);
 
 	D(SYS_inotify_init1);
 	D(SYS_inotify_add_watch);
-	D(SYS_inotify_rm_watch);
 
 	D(SYS_prctl);
 	D(SYS_fstatfs);
@@ -156,18 +172,21 @@ int main(void)
 		PR_NUM(data.u64);
 	STRUCT_END;
 
-	STRUCT_BEGIN(struct inotify_event);
-		PR_NUM(wd);
-		PR_NUM(mask);
-		PR_NUM(cookie);
-		PR_NUM(len);
-		PR_OFF(name);
-	STRUCT_END;
-
 	STRUCT_BEGIN(struct statfs);
 		PR_NUM(f_type);
 	STRUCT_END;
 #endif /* Linux, any other OSes with stable syscalls? */
+
+/* FreeBSD 15+ has inotify, maybe others will follow */
+#if defined(__FreeBSD__) && __FreeBSD__ >= 15
+	D(SYS___specialfd);
+	D(SPECIALFD_INOTIFY);
+	STRUCT_BEGIN(struct specialfd_inotify);
+		PR_NUM(flags);
+	STRUCT_END;
+	D(SYS_inotify_add_watch_at);
+	D(AT_FDCWD);
+#endif /* FreeBSD >= 15 */
 
 	D(SIGWINCH);
 	MAYBE X(FIONREAD);

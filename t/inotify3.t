@@ -4,7 +4,9 @@
 use v5.12; use PublicInbox::TestCommon;
 use Config;
 use POSIX qw(uname);
-plan skip_all => 'inotify is Linux-only' if $^O ne 'linux';
+use PublicInbox::Syscall;
+plan skip_all => 'inotify is Linux and FreeBSD 15+ only'
+	unless $PublicInbox::Syscall::INOTIFY;
 unless (eval { require PublicInbox::Inotify3 }) {
 	my (undef, undef, undef, undef, $machine) = uname();
 	diag '<cppsymbols>';

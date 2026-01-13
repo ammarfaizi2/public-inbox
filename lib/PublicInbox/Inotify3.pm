@@ -3,7 +3,7 @@
 
 # Implements most Linux::Inotify2 functionality we need in pure Perl
 # Anonymous sub support isn't supported since it's expensive in the
-# best case and likely leaky in older Perls (e.g. 5.16.3)
+# best case and likely leaky in some Perls (e.g. 5.16.3, 5.40.x)
 package PublicInbox::Inotify3;
 use v5.12;
 use autodie qw(open);
@@ -15,8 +15,9 @@ use Scalar::Util ();
 use constant $PublicInbox::Syscall::INOTIFY;
 our %events;
 
-# extracted from devel/sysdefs-list output, these should be arch-independent
 BEGIN {
+# extracted from devel/sysdefs-list output, these should be arch-independent
+# for Linux and also FreeBSD 15+
 %events = (
 	IN_ACCESS => 0x1,
 	IN_ALL_EVENTS => 0xfff,
@@ -51,11 +52,31 @@ require PublicInbox::In3Watch; # uses SYS_inotify_rm_watch
 use constant autocancel =>
 	(IN_IGNORED|IN_UNMOUNT|IN_ONESHOT|IN_DELETE_SELF);
 
+if (defined $PublicInbox::Syscall::INOTIFY->{SYS_inotify_init1}) {
+	eval <<'EOS' or die $@;
+
 sub new {
-	open my $fh, '+<&=', syscall(SYS_inotify_init1, IN_CLOEXEC);
+	open my $fh, "+<&=", syscall SYS_inotify_init1, IN_CLOEXEC;
 	bless { fh => $fh }, __PACKAGE__;
 }
 
+sub inotify_add_watch ($$$) { syscall SYS_inotify_add_watch, @_ }
+1;
+EOS
+} elsif (defined $PublicInbox::Syscall::INOTIFY->{SYS___specialfd}) {
+	eval <<'EOS' or die $@;
+sub new {
+	my $args = pack "L", IN_CLOEXEC; # struct specialfd_inotify
+	open my $fh, "+<&=", syscall SYS___specialfd, SPECIALFD_INOTIFY,
+					$args, length $args;
+	bless { fh => $fh }, __PACKAGE__;
+}
+sub inotify_add_watch ($$$) {
+	syscall SYS_inotify_add_watch_at, $_[0], AT_FDCWD, $_[1], $_[2];
+}
+1;
+EOS
+}
 sub read {
 	my ($self) = @_;
 	my (@ret, $wd, $mask, $len, $name, $size, $buf);
@@ -97,7 +118,7 @@ sub blocking { shift->{fh}->blocking(@_) }
 sub watch {
 	my ($self, $name, $mask, $cb) = @_;
 	croak "E: $cb not supported" if $cb; # too much memory
-	my $wd = syscall(SYS_inotify_add_watch, $self->fileno, $name, $mask);
+	my $wd = inotify_add_watch($self->fileno, $name, $mask);
 	return if $wd < 0;
 	my $w = bless [ $wd, $mask, $name, $self ], 'PublicInbox::In3Watch';
 	$self->{w}->{$wd} = $w;

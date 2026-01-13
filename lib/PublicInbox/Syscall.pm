@@ -66,14 +66,17 @@ our ($SYS_epoll_create,
 my $SYS_fstatfs; # don't need fstatfs64, just statfs.f_type
 my ($FS_IOC_GETFLAGS, $FS_IOC_SETFLAGS, $SYS_writev,
 	$BTRFS_IOC_DEFRAG);
+our ($machine, $kver);
 my $SFD_CLOEXEC = 02000000; # Perl does not expose O_CLOEXEC
 our $no_deprecated = 0;
+BEGIN {
+	(undef, undef, my $release, undef, $machine) = POSIX::uname();
+	($kver) = ($release =~ /([0-9]+(?:\.(?:[0-9]+))+)/);
+	$kver = eval("v$kver") // die "bad release=$release from uname";
+}
 
 if ($^O eq "linux") {
 	$F_SETPIPE_SZ = 1031;
-	my (undef, undef, $release, undef, $machine) = POSIX::uname();
-	my ($kver) = ($release =~ /([0-9]+(?:\.(?:[0-9]+))+)/);
-	$kver = eval("v$kver") // v2.6;
 	$SYS_renameat2 = 0 if $kver lt v3.15;
 	$SYS_epoll_pwait = 0 if $kver lt v2.6.19;
 	# whether the machine requires 64-bit numbers to be on 8-byte
@@ -332,6 +335,16 @@ BEGIN {
 		# dragonfly uses TCPS_ESTABLISHED==5, but it lacks TCP_INFO,
 		# so leave it unset on dfly
 		$CONST{TCP_ESTABLISHED} = 4 if $^O ne 'dragonfly';
+	}
+	if ($^O eq 'freebsd' && $kver ge v15.0) {
+		$INOTIFY = {
+			IN_CLOEXEC => 0x100000, # different from Linux :P
+			SYS___specialfd => 577,
+			AT_FDCWD => -100, # XXX we may use elsewhere
+			SPECIALFD_INOTIFY => 2,
+			SYS_inotify_add_watch_at => 593,
+			SYS_inotify_rm_watch => 594,
+		}
 	}
 	$CONST{CMSG_ALIGN_size} = SIZEOF_size_t;
 	$CONST{SIZEOF_cmsghdr} //= 0;
