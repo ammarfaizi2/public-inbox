@@ -127,6 +127,7 @@ int cat_oid(SV *self, int fd, SV *oidsv)
 			}
 				/* fall-through */
 			case EINTR:
+				PERL_ASYNC_CHECK();
 				err = 0;
 			}
 		} else { /* w == 0 */
