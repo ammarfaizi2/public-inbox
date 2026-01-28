@@ -124,6 +124,11 @@ my $client = sub {
 		$res = $cb->(GET("/all/topics_$c.html"));
 		is($res->code, 200, "topics_$c.html on extindex");
 	}
+
+	for my $name (qw(all m2t)) {
+		$res = $cb->(GET("/$name/666/"));
+		is $res->code, 404, "$name on short, non-existent msgid";
+	}
 };
 test_psgi(sub { $www->call(@_) }, $client);
 %$env = (%$env, TMPDIR => $tmpdir, PI_CONFIG => $pi_config);

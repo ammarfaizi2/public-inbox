@@ -57,8 +57,12 @@ sub partial_cb { # async_mset cb
 sub partial_ibx_start ($$) {
 	my ($ctx, $ibx) = @_;
 	my $mid = $ctx->{mid};
-	return if length($mid) < $MIN_PARTIAL_LEN;
-	my $srch = $ibx->isrch or return;
+	return finalize_partial($ctx) if length($mid) < $MIN_PARTIAL_LEN;
+	my $srch;
+	while (!defined($srch = $ibx->isrch)) {
+		$ibx = shift @{$ctx->{again}} or last;
+	}
+	return finalize_partial($ctx) if !$srch;
 	my @try = ("m:$mid*");
 	# some email obfuscators may replace parts of addresses with "..."
 	# and confuse the QP into attempting to parse a range op:
