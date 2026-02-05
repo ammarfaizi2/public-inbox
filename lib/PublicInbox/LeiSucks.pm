@@ -55,8 +55,7 @@ sub lei_sucks {
 	} else {
 		push @out, "Xapian not available: $@\n";
 	}
-	require PublicInbox::XapClient;
-	my $xhc = PublicInbox::XapClient::start_helper(qw(-l -j0));
+	my $xhc = $lei->spawn_tmp_xh;
 	push(@out, $xhc ? "xap_helper: $xhc->{impl}\n"
 			: "xap_helper not available\n");
 	push @out, "public-inbox blob OIDs of loaded features:\n";

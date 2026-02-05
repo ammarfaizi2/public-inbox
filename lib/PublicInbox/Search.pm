@@ -407,24 +407,36 @@ sub date_parse_finalize {
 		$1 eq '%s' ? $t : strftime($1, gmtime($t))/sge;
 }
 
-# n.b. argv never has NUL, though we'll need to filter it out
+# Try to make raw lei CLI args work more like the HTML <input> element.
+# That is, that phrases quoted to keep the CLI happy (e.g. sh/bash/zsh)
+# don't need extra (nested) quoting to make Xapian see the quotes for a phrase.
+# n.b. argv never has NULL, though we'll need to filter it out
 # if this $argv isn't from a command execution
 sub query_argv_to_string {
 	my (undef, $git, $argv) = @_;
-	return "@$argv" if $XHC && $XHC->{impl} eq 'PublicInbox::XapHelperCxx';
-	my $to_parse;
-	my $tmp = join(' ', map {;
-		if (s!\b(d|rt|dt):(\S+)\z!date_parse_prepare(
+	if ($XHC && $XHC->{impl} eq 'PublicInbox::XapHelperCxx') {
+		join ' ', map {;
+			if (/\s/) { # n.b. $1 may be `('
+				s/(.*?)\b(\w+:)// ? qq{$1$2"$_"} : qq{"$_"};
+			} else {
+				$_
+			}
+		} @$argv;
+	} else {
+		my $to_parse;
+		my $tmp = join ' ', map {;
+			if (s!\b(d|rt|dt):(\S+)\z!date_parse_prepare(
 						$to_parse //= [], $1, $2)!sge) {
-			$_;
-		} elsif (/\s/) {
-			s/(.*?)\b(\w+:)// ? qq{$1$2"$_"} : qq{"$_"};
-		} else {
-			$_
-		}
-	} @$argv);
-	date_parse_finalize($git, $to_parse, $tmp) if $to_parse;
-	$tmp
+				$_;
+			} elsif (/\s/) { # n.b. $1 may be `('
+				s/(.*?)\b(\w+:)// ? qq{$1$2"$_"} : qq{"$_"};
+			} else {
+				$_
+			}
+		} @$argv;
+		date_parse_finalize($git, $to_parse, $tmp) if $to_parse;
+		$tmp
+	}
 }
 
 # this is for the WWW "q=" query parameter and "lei q --stdin"

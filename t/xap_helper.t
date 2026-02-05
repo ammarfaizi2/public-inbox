@@ -115,7 +115,12 @@ my $test = sub {
 	$r = $doreq->($s, qw(test_inspect -d), $int[0], @ciol);
 	my %cinfo = map { split(/=/, $_, 2) } split(/ /, do { local $/; <$r> });
 	is($cinfo{has_threadid}, '0', 'has_threadid false for cindex');
-	is($cinfo{pid}, $info{pid}, 'PID unchanged for cindex');
+	my $lei_mode = grep /\A-l\z/, @cmd;
+	if ($lei_mode) {
+		isnt $cinfo{pid}, $info{pid}, 'PID changed in lei mode';
+	} else {
+		is $cinfo{pid}, $info{pid}, 'PID unchanged for cindex';
+	}
 
 	my @dump = (qw(dump_ibx -A XDFID), @ibx_shard_args, qw(13 z:0..));
 	$r = $doreq->($s, @dump);
@@ -132,7 +137,7 @@ my $test = sub {
 	is($stats, "mset.size=6 nr_out=6\n", 'mset.size reported') or
 		diag "res=$res";
 
-	return wantarray ? ($ar, $s) : $ar if $cinfo{pid} == $pid;
+	return wantarray ? ($ar, $s) : $ar if $cinfo{pid} == $pid || $lei_mode;
 
 	# test worker management:
 	kill('TERM', $cinfo{pid});
@@ -201,6 +206,7 @@ SKIP: {
 	@NO_CXX = $ENV{TEST_XH_CXX_ONLY} ? (0) : (0, 1);
 	my $ar = $test->(@$cmd, '-j0');
 	$ar = $test->(@$cmd, '-j1');
+	$ar = $test->(@$cmd, qw(-l));
 };
 
 require PublicInbox::CodeSearch;

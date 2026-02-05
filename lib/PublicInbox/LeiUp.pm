@@ -31,6 +31,7 @@ sub up1 ($$) {
 	my $lse = $lei->{lse} // die 'BUG: {lse} missing';
 	my $rawstr = $lss->{-cfg}->{'lei.internal.rawstr'} //
 		(scalar(@$q) == 1 && substr($q->[0], -1) eq "\n");
+	$lei->spawn_tmp_xh; # for query_approxidate|query_argv_to_string
 	if ($rawstr) {
 		die <<EOM if scalar(@$q) > 1;
 $f: lei.q has multiple values (@$q) (out=$out)

@@ -76,6 +76,7 @@ sub cfg_ext ($) {
 
 sub lxs_prepare {
 	my ($self) = @_;
+	$self->spawn_tmp_xh;
 	require PublicInbox::LeiXSearch;
 	# prepare any number of LeiXSearch || LeiSearch || Inbox || URL
 	my $lxs = $self->{lxs} = PublicInbox::LeiXSearch->new;

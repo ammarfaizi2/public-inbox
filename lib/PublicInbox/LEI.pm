@@ -1336,7 +1336,7 @@ sub can_stay_alive { # PublicInbox::DS::post_loop_do cb
 	$n + scalar(keys(%PublicInbox::DS::AWAIT_PIDS));
 }
 
-sub clear_tmp_xh { # awaitpid cb, called in lei worker
+sub clear_tmp_xh { # awaitpid cb, called in lei-daemon
 	my ($pid) = @_;
 	my ($e, $s, @m) = ($? >> 8, $? & 127);
 	push @m, " status=$e" if $e && $e != 66; # EX_NOINPUT ok
@@ -1345,12 +1345,15 @@ sub clear_tmp_xh { # awaitpid cb, called in lei worker
 	undef $PublicInbox::Search::XHC;
 }
 
-sub spawn_tmp_xh { # called in lei worker processes
+sub spawn_tmp_xh { # called in top-level lei-daemon
 	$PublicInbox::Search::XHC //= eval {
 		my $xhc = PublicInbox::XapClient::start_helper(qw(-l -j0));
 		awaitpid($xhc->{io}->attached_pid, \&clear_tmp_xh) if $xhc;
 		$xhc;
-	} || warn("E: $@ (will attempt to continue w/o Xapian helper)\n");
+	} || do {
+		warn("E: $@ (will attempt to continue w/o Xapian helper)\n");
+		undef;
+	}
 }
 
 # lei(1) calls this when it can't connect
@@ -1411,6 +1414,7 @@ sub lazy_start {
 			$exit_code //= eval("POSIX::SIG$_[0] + 128") if @_;
 			$dir_idle->close if $dir_idle; # EPOLL_CTL_DEL
 			$dir_idle = undef; # let RC take care of it
+			$PublicInbox::Search::XHC = undef; # ditto
 			eval 'PublicInbox::LeiNoteEvent::flush_task()';
 			my $lis = $pil or exit($exit_code // 0);
 			# closing eof_p triggers \&noop wakeup

@@ -192,7 +192,6 @@ sub query_one_mset { # for --threads and l2m w/o sort
 	ref($min) and return warn("$maxk=$min has multiple values\n");
 	($min =~ /[^0-9]/) and return warn("$maxk=$min not numeric\n");
 	my $first_ids;
-	$lei->spawn_tmp_xh; # per-worker
 	do {
 		$mset = eval { sync_mset $srch, $mo };
 		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
@@ -255,7 +254,6 @@ sub query_combined_mset { # non-parallel for non-"--threads" users
 		attach_external($self, $loc);
 	}
 	my $each_smsg = $lei->{ovv}->ovv_each_smsg_cb($lei);
-	$lei->spawn_tmp_xh; # per-worker
 	do {
 		$mset = eval { sync_mset $self, $mo };
 		return $lei->child_error(22 << 8, "E: $@") if $@; # 22 from curl
