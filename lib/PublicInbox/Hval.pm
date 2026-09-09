@@ -57,9 +57,19 @@ sub src_escape ($) {
 	$_[0] = $enc_ascii->encode($_[0], Encode::HTMLCREF);
 }
 
+# %xhtml_map maps \x09 and \x0a to themselves, so they need no substitution
+# at all; every other byte in the class below does change.  `&' must be
+# escaped first so the `&' introduced by the later replacements is not
+# escaped twice, and no control-char replacement introduces [<>&'"].
 sub ascii_html {
 	my ($s) = @_;
-	$s =~ s/([<>&'"\x7f\x00-\x1f])/$xhtml_map{$1}/sge;
+	$s =~ s/&/&#38;/g;
+	$s =~ s/</&lt;/g;
+	$s =~ s/>/&gt;/g;
+	$s =~ s/"/&#34;/g;
+	$s =~ s/'/&#39;/g;
+	$s =~ s/([\x00-\x08\x0b-\x1f\x7f])/$xhtml_map{$1}/sge
+		if $s =~ tr/\x00-\x08\x0b-\x1f\x7f//;
 	$enc_ascii->encode($s, Encode::HTMLCREF);
 }
 
