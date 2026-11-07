@@ -28,4 +28,64 @@ my $tws = PublicInbox::View::fold_addresses($orig.' ');
 $tws =~ s/ \z//;
 is($tws, $res, 'not thrown off by trailing whitespace');
 
+# diffstat anchors are only made for git diffs, and must not leak from one
+# message to the next: a non-git diff after a git one used to link its
+# diffstat to anchors which were never created
+{
+	require PublicInbox::Eml;
+	my $git = PublicInbox::Eml->new(<<'EOM');
+From: a@example.com
+Subject: [PATCH 1/2] add foo
+Message-ID: <git@example.com>
+
+---
+ foo | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/foo b/foo
+index 0000000..257cc56 100644
+--- a/foo
++++ b/foo
+@@ -0,0 +1 @@
++foo
+EOM
+	my $quilt = <<'EOM';
+From: a@example.com
+Subject: [PATCH 2/2] add bar
+Message-ID: <quilt@example.com>
+
+---
+ bar | 1 +
+ 1 file changed, 1 insertion(+)
+
+--- a/bar
++++ b/bar
+@@ -0,0 +1 @@
++bar
+EOM
+	my $render = sub {
+		my ($ctx, $eml, $mhref) = @_;
+		$ctx->{mhref} = $mhref;
+		$ctx->{changed_href} = '#e1';
+		my $beg = length($ctx->{pbuf} // '');
+		$eml->each_part(\&PublicInbox::View::add_text_body, $ctx, 1);
+		close(delete $ctx->{zfh});
+		substr($ctx->{pbuf}, $beg);
+	};
+	my $new_ctx = sub {
+		bless { ibx => { name => 'test' } }, 'PublicInbox::WwwStream'
+	};
+	my $alone = $render->($new_ctx->(), PublicInbox::Eml->new($quilt),
+				'../quilt/');
+	my $ctx = $new_ctx->();
+	my $git_html = $render->($ctx, $git, '../git/');
+	like($git_html, qr/href=#[^>]+>foo</, 'git diffstat is linked');
+	my $after = $render->($ctx, PublicInbox::Eml->new($quilt),
+				'../quilt/');
+	is($after, $alone, 'non-git diff renders the same after a git diff');
+	my %id = map { $_ => 1 } ($after =~ /\bid=([^\s>]+)/g);
+	my @dangling = grep { !$id{$_} } ($after =~ /href=#([^\s>"]+)/g);
+	is_deeply(\@dangling, [], 'no links to missing anchors');
+}
+
 done_testing();

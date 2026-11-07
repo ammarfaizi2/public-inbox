@@ -664,8 +664,14 @@ sub add_text_body { # callback for each_part
 		$idx =~ tr!.!/!; # compatibility with previous versions
 		$ctx->{-apfx} = $upfx . $idx;
 
-		# do attr => filename mappings for diffstats in git diffs:
-		$ctx->{-anchors} = {} if $s =~ /^diff --git /sm;
+		# do attr => filename mappings for diffstats in git diffs,
+		# and don't let those of an earlier part or message link
+		# this diffstat to anchors this diff won't create:
+		if ($s =~ /^diff --git /sm) {
+			$ctx->{-anchors} = {};
+		} else {
+			delete $ctx->{-anchors};
+		}
 		$diff = 1;
 		delete $ctx->{-long_path};
 	};
