@@ -57,20 +57,24 @@ sub src_escape ($) {
 	$_[0] = $enc_ascii->encode($_[0], Encode::HTMLCREF);
 }
 
-# %xhtml_map maps \x09 and \x0a to themselves, so they need no substitution
-# at all; every other byte in the class below does change.  `&' must be
-# escaped first so the `&' introduced by the later replacements is not
-# escaped twice, and no control-char replacement introduces [<>&'"].
+my %html_meta = ('&' => '&#38;', '<' => '&lt;', '>' => '&gt;',
+		'"' => '&#34;', "'" => '&#39;');
+
+# One pass replaces each HTML metacharacter exactly once, so the `&' of an
+# entity is never escaped again.  %xhtml_map maps \x09 and \x0a to
+# themselves, so they need no substitution at all; every other byte in the
+# class below does change, and no control-char replacement introduces
+# [<>&'"].  The ASCII encoder only changes anything when there is
+# non-ASCII to turn into character references.
 sub ascii_html {
 	my ($s) = @_;
-	$s =~ s/&/&#38;/g;
-	$s =~ s/</&lt;/g;
-	$s =~ s/>/&gt;/g;
-	$s =~ s/"/&#34;/g;
-	$s =~ s/'/&#39;/g;
+	$s =~ s/([&<>"'])/$html_meta{$1}/g;
 	$s =~ s/([\x00-\x08\x0b-\x1f\x7f])/$xhtml_map{$1}/sge
 		if $s =~ tr/\x00-\x08\x0b-\x1f\x7f//;
-	$enc_ascii->encode($s, Encode::HTMLCREF);
+	return $enc_ascii->encode($s, Encode::HTMLCREF)
+		if $s =~ /[^\x00-\x7f]/;
+	utf8::downgrade($s); # as ->encode would have
+	$s;
 }
 
 # returns a protocol-relative URL string

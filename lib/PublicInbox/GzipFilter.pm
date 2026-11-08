@@ -26,12 +26,13 @@ use Carp qw(carp);
 our @EXPORT_OK = qw(gzf_maybe);
 # Compress::Raw::Zlib uses MAX_MEM_LEVEL (9) while zlib DEF_MEM_LEVEL is 8;
 # choose the zlib default because C:R:Z is excessive.
-# -Level 4 rather than the zlib default of 6: measured on real patch mail,
-# level 4 deflates ~12% faster for ~1% more bytes on the wire.  Since we
-# deflate inside the event loop (see the IPC note above), the CPU saved is
-# CPU returned to other clients on the same worker.
+# -Level 2 rather than the zlib default of 6: measured on real thread pages,
+# level 2 deflates ~25% faster than level 4 and ~50% faster than 6, for
+# ~11% and ~18% more bytes on the wire; level 1 is no faster than 2 but
+# larger.  Since we deflate inside the event loop (see the IPC note above),
+# the CPU saved is CPU returned to other clients on the same worker.
 my %OPT = (-WindowBits => 15 + 16, -AppendOutput => 1, -MemLevel => 8,
-	-Level => 4);
+	-Level => 2);
 my @GZIP_HDRS = qw(Vary Accept-Encoding Content-Encoding gzip);
 
 sub new { bless {}, shift } # qspawn filter

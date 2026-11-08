@@ -120,6 +120,15 @@ sub linkify_mids {
 	!ge;
 }
 
-sub to_html { linkify_2($_[0], ascii_html(linkify_1(@_))) }
+sub to_html {
+	# $LINK_RE needs a "://", and most text has none: diff hunks, quoted
+	# replies.  linkify_1 would change nothing there, and linkify_2 could
+	# only match a placeholder which nobody can guess without $SALT.
+	return ascii_html($_[1]) if index($_[1], '://') < 0;
+	linkify_1($_[0], $_[1]); # in place, no copy of a possibly huge string
+	my $s = ascii_html($_[1]);
+	linkify_2($_[0], $s);
+	$s;
+}
 
 1;
